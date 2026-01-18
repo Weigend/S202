@@ -1,136 +1,102 @@
-# S202 Code Analyzer - VS Code Quickstart
+# S202 Code Analyzer - Quickstart
 
-## 🚀 In 5 Schritten zum Start
+## 🚀 In 3 Schritten starten
 
 ### 1. Terminal öffnen
 ```bash
 cd /home/johannes/Programieren/Structure202
-code .
 ```
 
-### 2. Integriertes Terminal in VS Code
-Drücke `` Ctrl+` `` um das integrierte Terminal zu öffnen
-
-### 3. Anwendung starten
+### 2. Anwendung bauen & starten
 ```bash
 mvn javafx:run
 ```
 
-**Oder Alternative:** 
-- Öffne Kommandopalette (`Ctrl+Shift+P`)
-- Suche: `Maven: Run from Terminal`
-- Wähle: `s202-code-analyzer [jarrun]`
+Alternativ im VS Code:
+- Drücke `Ctrl+Shift+P` → `Maven: Run from Terminal`
 
-### 4. JavaFX-Fenster erscheint
-```
-┌─────────────────────────────────────────────┐
-│  S202 Code Analyzer - Architecture Viewer   │
-├─────────────────────────────────────────────┤
-│ [📂 Load JAR]   [3] [🔄 Refresh]           │
-├─────────────────────────────────────────────┤
-│                                             │
-│  (Warte auf JAR-Datei...)                  │
-│                                             │
-└─────────────────────────────────────────────┘
-```
+### 3. JAR-Datei laden
+Klick auf **📂 Load JAR** im UI und wähle eine `.jar`-Datei:
+- Eigenständig gebaute JAR aus `target/`
+- Oder System JARs (z.B. `/usr/lib/jvm/java-17-openjdk/`)
+- Das Tool analysiert sofort die Struktur
 
-### 5. JAR-Datei analysieren
-- Klicke **📂 Load JAR**
-- Wähle eine `.jar`-Datei (z.B. aus `target/` oder System JARs)
-- Das Tool analysiert Bytecode und zeigt Struktur
-
-## 📝 Beispiel: Analyse der eigenen S202 JAR
+## 📝 Beispiel: Analyse der S202 selbst
 
 ```bash
-# Zuerst bauen (optional)
+# JAR bauen
 mvn clean package -DskipTests
 
-# Dann im Tool: "Load JAR" → target/s202-code-analyzer-1.0.0.jar
+# Tool starten
+mvn javafx:run
+
+# Im UI: Load JAR → target/s202-code-analyzer-1.0.0.jar
 ```
 
-Du siehst dann die S202-eigene Struktur:
+Die S202-Architektur wird angezeigt:
 ```
 📦 de
   📦 weigend
     📦 s202
-      📦 analysis
-        📄 ArchitectureModelBuilder
-        📄 BytecodeAnalyzer
-        📄 DependencyGraphBuilder
-      📦 io
-        📄 JarLoader
-      📦 model
-        📄 ClassDependency
-        📄 CyclicDependency
-        📄 JavaClass
-        📄 JavaPackage
-      📦 ui
-        📄 AnalyzerApplication
-        📄 ArchitectureTreeCell
-        📄 ArchitectureTreeItem
-        📄 ArchitectureView
-      📦 example
-        📄 AnalyzerExample
+      ├── 📦 model         (Layer 0 - keine Abhängigkeiten)
+      ├── 📦 io            (Layer 1 - nutzt model)
+      ├── 📦 analysis      (Layer 1 - nutzt model)
+      ├── 📦 ui            (Layer 2 - nutzt analysis, io)
+      └── 📦 example       (Layer 1 - nutzt analysis)
 ```
 
-## 🎯 Funktionen
+**Layer-Bedeutung:**
+- Layer 0 = Unabhängige Pakete (model)
+- Layer 1 = Hängen von Layer 0 ab (io, analysis)
+- Layer 2 = Hängen von Layer 1+ ab (ui)
 
-| Feature | Hotkey | Beschreibung |
-|---------|--------|-------------|
-| **Load JAR** | Klick | Datei-Dialog für JAR-Auswahl |
-| **Auto-Expand** | Spinner | Tiefe 1-10 (Default: 3) |
-| **Refresh** | 🔄 Klick | UI aktualisieren |
-| **Tree Expand** | ▶ Klick | Pakete auf/zuklappen |
+## 🎯 Hauptfunktionen
 
-## 🔧 Debug-Mode
+| Feature | Funktion |
+|---------|----------|
+| **Load JAR** | Datei-Dialog für JAR-Auswahl |
+| **Auto-Expand Spinner** | Hierarchie-Tiefe (1-10, Default: 3) |
+| **Package Tree** | Hierarchische Baumansicht |
+| **Layer Layout** | Pakete horizontal nach Schicht angeordnet |
+| **Parent Wrapping** | Zeigt vollständige Paket-Hierarchie |
+| **Status Bar** | Klassen, Pakete, erkannte Zyklen |
 
-Für Debugging mit Breakpoints:
+## 🔍 Verständnis: Architektur-Schichten
 
-1. Öffne [AnalyzerApplication.java](src/main/java/de/weigend/s202/ui/AnalyzerApplication.java)
-2. Klicke auf eine Zeilennummer → Roter Punkt
-3. Drücke `F5` → Debug-Session startet
-4. Nutze Debug-Panel (`Ctrl+Shift+D`) für Watches
+Das Tool sortiert Pakete in **Layer** basierend auf Abhängigkeitstiefe:
 
-## 💡 Tipps
+- **Layer 0** = Basispakete ohne externe Abhängigkeiten (z.B. `model`)
+- **Layer 1** = Hängen von Layer 0 ab (z.B. `io`, `analysis`)
+- **Layer 2+** = Hängen von tieferen Schichten ab (z.B. `ui`)
 
-- **Große JAR-Dateien?** → Tiefe auf 2 setzen für schnelleres Laden
-- **Viel RAM nötig?**
-  ```bash
-  export MAVEN_OPTS="-Xmx2g"
-  mvn javafx:run
-  ```
+**Grafisch:** Pakete der gleichen Schicht stehen **nebeneinander** (horizontal).
 
-- **Projekt neu bauen?**
-  ```bash
-  mvn clean install
-  ```
+## 🔧 Tipps & Tricks
 
-- **Tests ausführen?**
-  ```bash
-  mvn test
-  ```
+| Problem | Lösung |
+|---------|--------|
+| **JAR lädt nicht** | Schau im Terminal nach Fehler-Ausgabe |
+| **Struktur wird nicht angezeigt** | JAR muss valide .class-Dateien enthalten |
+| **Große JAR laden?** | Reduce Auto-Expand Depth auf 2 |
+| **RAM-Probleme?** | `export MAVEN_OPTS="-Xmx2g"` vor Start |
+| **Tests ausführen?** | `mvn test` |
+| **Projekt neu bauen?** | `mvn clean install` |
 
-## 📚 Weitere Ressourcen
+## 📚 Weitere Infos
 
-- [README.md](README.md) - Vollständige Dokumentation
-- [VS_CODE_SETUP.md](VS_CODE_SETUP.md) - Detailliertes Setup-Guide
-- [src/main/java/](src/main/java/) - Quellcode mit JavaDoc
+- **Vollständige Doku**: [README.md](README.md)
+- **VS Code Setup**: [VS_CODE_SETUP.md](VS_CODE_SETUP.md)
+- **Quellcode**: [src/main/java/](src/main/java/)
 
 ## ❓ FAQ
 
-**F: Wo finde ich JAR-Dateien zum Testen?**
-A: In `target/` (nach Maven Build), oder System JARs:
-- Linux: `/usr/lib/jvm/java-17-openjdk/`
-- Java's `rt.jar` (falls Java 8)
+**F: Wo sind JAR-Dateien zum Testen?**
+- `target/` (nach Maven Build)
+- System JARs: `/usr/lib/jvm/java-17-openjdk/lib/`
 
-**F: Tool lädt JAR nicht?**
-A: Schau in den Status-Bar für Fehler-Messages und Terminal-Output
+**F: Warum zeigt es keine Abhängigkeiten?**
+- Manche JARs haben keine internen Cross-Package Dependencies
+- Versuche größere JARs wie `java.base` oder `java.util.logging`
 
-**F: Struktur wird nicht angezeigt?**
-A: Stelle sicher, dass die JAR valide .class-Dateien enthält
-
-**F: Performance-Probleme?**
-A: 
-- Reduziere Auto-Expand Depth
-- Nutze größeres Heap: `-Xmx2g`
-- Oder nutze kleinere JARs zum Testen
+**F: Kann ich eine bestimmte Paket-Struktur exportieren?**
+- Noch nicht - Export-Feature ist in der TODO-Liste (PlantUML, SVG, etc.)

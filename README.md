@@ -4,12 +4,14 @@ Ein JavaFX-basiertes Tool zur Analyse von Java-Bytecode und Visualisierung der A
 
 ## Features
 
-- **Bytecode-Analyse**: Parst Java .class-Dateien mit ASM-Bibliothek
+- **Bytecode-Analyse**: Parst Java .class-Dateien mit ASM 9.6
 - **Abhängigkeitserkennung**: Extrahiert Klassen- und Paket-Abhängigkeiten
 - **Zyklische Abhängigkeiten**: Automatische Erkennung und Aggregation von Zyklen
-- **Hierarchische Visualisierung**: Aufklappbare Pakete und Klassen mit Tree-View
-- **Auto-Expand**: Konfigurierbare Tiefe für automatisches Aufklappen (typisch 3 Ebenen)
-- **Top-Down Layout**: Abhängige Pakete über ihren Abhängigkeiten dargestellt
+- **Architektur-Layering**: Topologische Sortierung - Pakete nach Abhängigkeitstiefe angeordnet
+- **Hierarchische Visualisierung**: Aufklappbare Pakete und Klassen mit JavaFX TreeView
+- **Parent Package Wrapping**: Vollständige Paket-Hierarchie (z.B. de → weigend → s202)
+- **Horizontal Layer Layout**: Pakete der gleichen Schicht nebeneinander angeordnet
+- **Auto-Expand**: Konfigurierbare Tiefe für automatisches Aufklappen (1-10 Ebenen, Default: 3)
 
 ## Projektstruktur
 
@@ -17,25 +19,31 @@ Ein JavaFX-basiertes Tool zur Analyse von Java-Bytecode und Visualisierung der A
 src/
 ├── main/
 │   ├── java/de/weigend/s202/
-│   │   ├── model/               # Datenmodelle
+│   │   ├── model/               # Datenmodelle (UI-frei)
 │   │   │   ├── ClassDependency.java
 │   │   │   ├── JavaClass.java
 │   │   │   ├── JavaPackage.java
 │   │   │   └── CyclicDependency.java
-│   │   ├── analysis/            # Analyse-Logik
-│   │   │   ├── BytecodeAnalyzer.java
+│   │   ├── io/                  # JAR-Handling
+│   │   │   ├── JarLoader.java
+│   │   │   └── BytecodeAnalyzer.java
+│   │   ├── analysis/            # Analyse-Logik (UI-frei)
 │   │   │   ├── DependencyGraphBuilder.java
-│   │   │   └── ArchitectureModelBuilder.java
-│   │   └── ui/                  # JavaFX UI
-│   │       ├── ArchitectureView.java
-│   │       ├── ArchitectureTreeCell.java
-│   │       ├── ArchitectureTreeItem.java
-│   │       └── AnalyzerApplication.java
+│   │   │   ├── ArchitectureModelBuilder.java
+│   │   │   └── LayerAssigner.java
+│   │   ├── ui/                  # JavaFX UI
+│   │   │   ├── AnalyzerApplication.java
+│   │   │   ├── ArchitectureView.java
+│   │   │   ├── PackageTreeView.java
+│   │   │   ├── ArchitectureTreeCell.java
+│   │   │   └── ArchitectureGraphView.java
+│   │   └── example/             # Beispiel-Code
+│   │       └── AnalyzerExample.java
 │   └── resources/
 └── test/
     └── java/de/weigend/s202/
         ├── model/               # Unit Tests für Modelle
-        └── analysis/            # Unit Tests für Analyse
+        └── analysis/            # Unit Tests für Analyse (35 Tests)
 ```
 
 ## Dependencies
@@ -82,34 +90,42 @@ java -jar target/s202-code-analyzer-1.0.0.jar
 - Keine Abhängigkeiten zu UI oder ASM
 - Vollständig mit Unit Tests abgesichert
 
-#### 2. **Analysis Layer** (`de.weigend.s202.analysis`)
-- `BytecodeAnalyzer`: Konvertiert .class → JavaClass Modelle
-- `DependencyGraphBuilder`: Konstruiert Abhängigkeitsgraph
-- `ArchitectureModelBuilder`: Erstellt UI-Modell mit Sortierung und Filterung
+#### 2. **IO Layer** (`de.weigend.s202.io`)
+- `JarLoader`: Laden und Verarbeitung von JAR-Dateien
+- `BytecodeAnalyzer`: Konvertiert .class → JavaClass Modelle mit ASM
 
-#### 3. **UI Layer** (`de.weigend.s202.ui`)
-- `ArchitectureView`: Hauptkomponente mit TreeView
-- `ArchitectureTreeCell`: Custom TreeCell für Styling
-- `AnalyzerApplication`: Entry Point
+#### 3. **Analysis Layer** (`de.weigend.s202.analysis`)
+- `DependencyGraphBuilder`: Konstruiert Abhängigkeitsgraph aus JavaClasses
+- `LayerAssigner`: Berechnet architektonische Layer via topologische Sortierung
+- `ArchitectureModelBuilder`: Erstellt UI-Datenmodell mit Parent-Wrapping und Layer-Zuordnung
+
+#### 4. **UI Layer** (`de.weigend.s202.ui`)
+- `AnalyzerApplication`: Entry Point und JAR-Lade-Controller
+- `ArchitectureView`: Hauptkomponente mit UI-Koordination
+- `PackageTreeView`: TreeView mit hierarchischem Layout und horizontaler Layer-Anordnung
+- `ArchitectureTreeCell`: Custom TreeCell für Styling und Toggle-Buttons
+- `ArchitectureGraphView`: Alternative Graphen-Visualisierung (optional)
 
 ### Datenfluss
 
 ```
-.class Dateien
+.class Dateien (aus JAR)
      ↓
-BytecodeAnalyzer (ASM)
+JarLoader → BytecodeAnalyzer (ASM 9.6)
      ↓
 JavaClass + ClassDependency (Modelle)
      ↓
 DependencyGraphBuilder
      ↓
-JavaPackage Hierarchie + Cycles
+JavaPackage Hierarchie + Zyklen-Erkennung
      ↓
-ArchitectureModelBuilder
+LayerAssigner (topologische Sortierung)
      ↓
-ArchitectureNode (für UI)
+ArchitectureModelBuilder (mit Parent-Wrapping)
      ↓
-ArchitectureView (JavaFX)
+ArchitectureNode Baum (Fachmodell für UI)
+     ↓
+PackageTreeView (JavaFX mit horizontaler Layer-Anordnung)
 ```
 
 ## Verwendung
@@ -167,6 +183,7 @@ architectureView.setArchitectureRoot(model);
 ### File Loader
 - **📂 Load JAR Button**: Öffnet File-Dialog zur Auswahl von JAR-Dateien
 - **Automatische Analyse**: Extrahiert alle .class-Dateien und analysiert Abhängigkeiten
+- **Zyklus-Erkennung**: Zeigt Anzahl der erkannten Zyklen
 - **Fehlerbehandlung**: Informiert Benutzer über Analysen-Fehler
 
 ### Auto-Expand Controls
@@ -174,11 +191,13 @@ architectureView.setArchitectureRoot(model);
 - **Hierarchisches Laden**: Automatisches Expandieren basierend auf Tiefe-Einstellung
 - **Status Bar**: Zeigt Anzahl Klassen, Pakete und erkannte Zyklen
 
-### Baum-Ansicht
-- **📦 Pakete**: Fett, blau, mit Abhängigkeitscount
-- **📄 Klassen**: Regulär, schwarz
-- **Aufklapp-Symbole**: Nur für Knoten mit Kindern
-- **On-Demand Loading**: Effizienter für große JAR-Dateien
+### Hierarchische Baumansicht mit Layer-Layout
+- **Horizontal sortiert**: Pakete der gleichen Architektur-Schicht stehen nebeneinander
+- **Parent-Wrapping**: Vollständige Paket-Hierarchie angezeigt (z.B. de → weigend → s202)
+- **Layer-Berechnung**: Automatische Sortierung nach Abhängigkeitstiefe
+- **📦 Pakete**: Fett, blau, mit Toggle-Button
+- **📄 Klassen**: Regulär, schwarz, ohne Expander
+- **Aufklapp-Symbole**: Kompakte 20x20 Buttons für Pakete mit Kindern
 
 ## Testing
 
@@ -217,10 +236,11 @@ code .
 
 ## Erweiterungsmöglichkeiten (TODO)
 
-1. **Cycle Visualization**: Grafische Pfeile für zyklische Abhängigkeiten
-2. **Filtering**: Filter nach Package-Namen, Abhängigkeitstyp
-3. **Export**: Export als Graphviz DOT oder PlantUML
-4. **Statistics**: Abhängigkeitsmetriken und Komplexitätsanalyse
-5. **Reflection Support**: Erkennung von dynamischen Abhängigkeiten
-6. **Dependency Graph**: Visuelle Pfeile zwischen Paketen
-7. **Context Menu**: Rechtsklick-Optionen für Copy, Expand All, etc.
+1. **Dependency Graph Visualization**: Visuelle Pfeile zwischen Paketen/Klassen
+2. **Cycle Highlighting**: Farbliche Hervorhebung von Zyklen
+3. **Advanced Filtering**: Nach Package-Namen, Layer, Abhängigkeitstyp
+4. **Export**: SVG, PDF, PlantUML, Graphviz DOT
+5. **Search & Find**: Text-Suche nach Packages/Klassen
+6. **Statistics Dashboard**: Metriken (Kohäsion, Kopplung, etc.)
+7. **Context Menu**: Rechtsklick-Optionen (Copy, Expand All, etc.)
+8. **Logging Framework**: SLF4J statt System.out
