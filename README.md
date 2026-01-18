@@ -2,6 +2,8 @@
 
 Ein JavaFX-basiertes Tool zur Analyse von Java-Bytecode und Visualisierung der Architektur mit Abhängigkeitserkennung.
 
+![UI Screenshot](ui.png)
+
 ## Features
 
 - **Bytecode-Analyse**: Parst Java .class-Dateien mit ASM 9.6
