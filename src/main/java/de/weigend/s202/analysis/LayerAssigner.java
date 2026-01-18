@@ -99,7 +99,7 @@ public class LayerAssigner {
         
         // Find layer for each package by calculating the maximum distance to a leaf
         for (String pkgName : packageInfoMap.keySet()) {
-            layers.put(pkgName, calculatePackageLayer(pkgName, internalDeps, new HashMap<>()));
+            layers.put(pkgName, calculatePackageLayer(pkgName, internalDeps, new HashMap<>(), new HashSet<>()));
         }
         
         return layers;
@@ -107,11 +107,20 @@ public class LayerAssigner {
     
     /**
      * Calculates the layer of a package by finding the longest path to a leaf.
+     * Handles cyclic dependencies by detecting cycles during traversal.
      * Package with longest dependency path = layer 0 (top).
      */
-    private int calculatePackageLayer(String pkgName, Map<String, Set<String>> internalDeps, Map<String, Integer> cache) {
+    private int calculatePackageLayer(String pkgName, Map<String, Set<String>> internalDeps, 
+                                     Map<String, Integer> cache, Set<String> visiting) {
+        // Already calculated
         if (cache.containsKey(pkgName)) {
             return cache.get(pkgName);
+        }
+        
+        // Cycle detected: currently visiting this package
+        if (visiting.contains(pkgName)) {
+            System.out.println("    -> CYCLE DETECTED at " + pkgName + ", assigning layer 0");
+            return 0;  // Break cycle by assigning layer 0
         }
         
         Set<String> deps = internalDeps.get(pkgName);
@@ -124,13 +133,19 @@ public class LayerAssigner {
             return 0;
         }
         
+        // Mark as visiting
+        visiting.add(pkgName);
+        
         // Layer = 1 + max layer of dependencies
         int maxDepLayer = 0;
         for (String dep : deps) {
-            int depLayer = calculatePackageLayer(dep, internalDeps, cache);
+            int depLayer = calculatePackageLayer(dep, internalDeps, cache, visiting);
             System.out.println("    -> dep " + dep + " has layer " + depLayer);
             maxDepLayer = Math.max(maxDepLayer, depLayer);
         }
+        
+        // Done visiting
+        visiting.remove(pkgName);
         
         int layer = maxDepLayer + 1;
         System.out.println("    -> calculated layer=" + layer);
