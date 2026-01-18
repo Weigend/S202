@@ -27,11 +27,16 @@ public class ArchitectureModelBuilder {
         // Add dependency information BEFORE wrapping
         addAllDependencies(rootNode, rootPackage);
         
-        // Now wrap it with parent packages (they will have empty dependencies, which is OK)
-        ArchitectureNode wrappedRoot = wrapWithParentPackages(rootNode, rootPackage);
+        // Only wrap with parent packages if the package has deep hierarchy (3+ levels)
+        String fullName = rootPackage.getPackageName();
+        String[] parts = fullName.split("\\.");
+        ArchitectureNode finalRoot = rootNode;
+        if (parts.length >= 3) {
+            finalRoot = wrapWithParentPackages(rootNode, rootPackage);
+        }
         
-        sortNodesByDependencies(wrappedRoot);
-        return wrappedRoot;
+        sortNodesByDependencies(finalRoot);
+        return finalRoot;
     }
     
     /**
