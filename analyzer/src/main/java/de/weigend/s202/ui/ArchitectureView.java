@@ -18,7 +18,7 @@ import java.util.Objects;
  * Main UI component for displaying the architecture graph.
  */
 public class ArchitectureView extends BorderPane {
-    private PackageTreeView treeView;
+    private LevelBasedLayoutView layoutView;
     private Label statusLabel;
     private Spinner<Integer> depthSpinner;
     private Stage parentStage;
@@ -34,10 +34,10 @@ public class ArchitectureView extends BorderPane {
         HBox toolbar = createToolbar();
         setTop(toolbar);
 
-        // Center: Tree View
-        treeView = new PackageTreeView();
+        // Center: Level-based layout view
+        layoutView = new LevelBasedLayoutView();
         
-        setCenter(treeView);
+        setCenter(layoutView);
 
         // Bottom: Status bar
         statusLabel = new Label("Ready");
@@ -110,7 +110,7 @@ public class ArchitectureView extends BorderPane {
         // We pass empty classified edges for now; violations will be added later
         java.util.List<ClassifiedEdge> classifiedEdges = new java.util.ArrayList<>();
         
-        treeView.setArchitectureRoot(rootNode, classifiedEdges);
+        layoutView.setArchitectureRoot(rootNode, classifiedEdges);
         setStatus("Architecture loaded: " + rootNode.getSimpleName());
     }
 
