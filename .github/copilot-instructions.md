@@ -46,7 +46,8 @@ The codebase enforces **strict separation of concerns** across 4 layers:
 - `PackageTreeView`: TreeView component with hierarchical expansion and canvas-based violation rendering
 - `ArchitectureTreeCell`: Custom cell renderer with styling
 - `ArchitectureTreeItem`: TreeItem implementation for hierarchical architecture nodes
-- **Data flow**: JAR → BytecodeAnalyzer → DependencyModel → CalculatedModel → ArchitectureModelBuilder → ArchitectureNode tree → PackageTreeView
+- **Data flow**: JAR → RawAnalyzer → LevelCalculator → UIModelBuilder → ArchitectureNode tree → PackageTreeView
+- **Important**: UI **only depends on UIModel**, not on JavaClass/JavaPackage
 
 ## Critical Data Flows
 
@@ -69,13 +70,17 @@ JavaPackage (raw hierarchy)
   → CalculatedModel (decorated with layers, violations, cycles)
 ```
 
-### 3. **UI Rendering**
+### 3. **UI Rendering (Modern Pipeline - Jan 2026)**
 ```
 CalculatedModel
-  → ArchitectureModelBuilder.buildModel() (recursive node creation + wrapping)
+  → UIModelBuilder.build() (organize elements by level)
+  → UIModel (List<List<UIElementInfo>> organized by level)
+  → AnalyzerApplication.buildArchitectureNodeFromUIModel() (convert to tree)
   → ArchitectureNode tree (with dependencies embedded)
   → PackageTreeView (hierarchical display with violation overlay canvas)
 ```
+
+**Important**: The UI **no longer depends on JavaClass/JavaPackage**. All UI operations use the modern UIModel pipeline.
 
 ## Key Conventions & Patterns
 
