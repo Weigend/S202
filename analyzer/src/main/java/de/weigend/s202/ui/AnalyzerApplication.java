@@ -218,7 +218,15 @@ public class AnalyzerApplication extends Application {
     private String findCommonRootPackage(Set<String> packageNames) {
         if (packageNames.isEmpty()) return "root";
 
-        List<String> packages = new ArrayList<>(packageNames);
+        // Filter out the artificial "root" package to avoid duplication
+        List<String> packages = new ArrayList<>();
+        for (String pkg : packageNames) {
+            if (!"root".equals(pkg)) {
+                packages.add(pkg);
+            }
+        }
+        
+        if (packages.isEmpty()) return "root";
         String root = packages.get(0);
         
         for (String pkg : packages) {
@@ -258,11 +266,14 @@ public class AnalyzerApplication extends Application {
             }
         }
 
-        // Find and add subpackages
+        // Find and add subpackages (skip the artificial "root" package)
         String packagePrefix = currentPackage.isEmpty() ? "" : currentPackage + ".";
         Set<String> subpackages = new HashSet<>();
         
         for (String pkg : elementsByPackage.keySet()) {
+            // Skip the artificial "root" package to avoid duplication
+            if ("root".equals(pkg)) continue;
+            
             if (pkg.startsWith(packagePrefix) && !pkg.equals(currentPackage)) {
                 String relativePkg = pkg.substring(packagePrefix.length());
                 if (!relativePkg.contains(".")) {
