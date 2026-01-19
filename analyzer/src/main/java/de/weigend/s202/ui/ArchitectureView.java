@@ -1,7 +1,6 @@
 package de.weigend.s202.ui;
 
 import de.weigend.s202.analysis.ArchitectureModelBuilder.ArchitectureNode;
-import de.weigend.s202.analysis.LayerAssigner;
 import de.weigend.s202.analysis.scc.EdgeClassification.ClassifiedEdge;
 import javafx.geometry.Insets;
 import javafx.scene.control.*;
@@ -102,16 +101,14 @@ public class ArchitectureView extends BorderPane {
 
     /**
      * Sets the root node of the architecture graph.
+     * Uses the modern analysis pipeline (no layer recalculation needed).
      */
     public void setArchitectureRoot(ArchitectureNode rootNode) {
         Objects.requireNonNull(rootNode, "rootNode cannot be null");
         
-        // Calculate and assign layers before displaying
-        LayerAssigner layerAssigner = new LayerAssigner();
-        layerAssigner.assignLayers(rootNode);
-        
-        // Get classified edges (including violations)
-        java.util.List<ClassifiedEdge> classifiedEdges = layerAssigner.getClassifiedEdges();
+        // In the modern pipeline, layers are already calculated by LevelCalculator
+        // We pass empty classified edges for now; violations will be added later
+        java.util.List<ClassifiedEdge> classifiedEdges = new java.util.ArrayList<>();
         
         treeView.setArchitectureRoot(rootNode, classifiedEdges);
         setStatus("Architecture loaded: " + rootNode.getSimpleName());

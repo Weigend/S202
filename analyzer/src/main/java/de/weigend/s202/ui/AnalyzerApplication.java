@@ -178,24 +178,26 @@ public class AnalyzerApplication extends Application {
         for (int level = 0; level < uiModel.getLevelCount(); level++) {
             for (UIModel.UIElementInfo element : uiModel.getElementsAtLevel(level)) {
                 String parentPackage = getParentPackage(element.fullName);
-                if (parentPackage == null) {
-                    parentPackage = "root";
+                if (parentPackage == null || parentPackage.isEmpty()) {
+                    parentPackage = "";
                 }
                 elementsByPackage.computeIfAbsent(parentPackage, k -> new ArrayList<>()).add(element);
             }
         }
 
-        // Build root node from the deepest common package
-        String rootPackageName = findCommonRootPackage(elementsByPackage.keySet());
+        // Ensure we have placeholder entries for every parent package to display full hierarchy
+        addParentPackagePlaceholders(elementsByPackage);
+
+        // Build from a synthetic root node to provide a consistent tree structure
         ArchitectureNode rootNode = new ArchitectureNode(
-            rootPackageName,
-            rootPackageName.isEmpty() ? "root" : rootPackageName.substring(rootPackageName.lastIndexOf('.') + 1),
+            "root",
+            "root",
             ArchitectureModelBuilder.NodeType.PACKAGE,
             true
         );
 
-        // Recursively build package hierarchy
-        buildPackageHierarchy(rootNode, elementsByPackage, rootPackageName, calculatedModel);
+        // Recursively build package hierarchy starting at the synthetic root
+        buildPackageHierarchy(rootNode, elementsByPackage, "", calculatedModel);
 
         return rootNode;
     }
@@ -213,30 +215,31 @@ public class AnalyzerApplication extends Application {
     }
 
     /**
-     * Find the common root package from all package names.
+     * Ensure placeholder entries exist for each parent package so that the UI can
+     * render the complete package hierarchy (including synthetic parent nodes).
      */
-    private String findCommonRootPackage(Set<String> packageNames) {
-        if (packageNames.isEmpty()) return "root";
+    private void addParentPackagePlaceholders(Map<String, List<UIModel.UIElementInfo>> elementsByPackage) {
+        Set<String> existingPackages = new HashSet<>(elementsByPackage.keySet());
+        for (String pkg : existingPackages) {
+            if (pkg == null || pkg.isEmpty()) {
+                continue;
+            }
 
-        // Filter out the artificial "root" package to avoid duplication
-        List<String> packages = new ArrayList<>();
-        for (String pkg : packageNames) {
-            if (!"root".equals(pkg)) {
-                packages.add(pkg);
+            String current = pkg;
+            while (true) {
+                int lastDot = current.lastIndexOf('.');
+                if (lastDot <= 0) {
+                    break;
+                }
+                current = current.substring(0, lastDot);
+                elementsByPackage.computeIfAbsent(current, k -> new ArrayList<>());
+            }
+
+            // Ensure the top-level package without dots exists
+            if (!pkg.contains(".")) {
+                elementsByPackage.computeIfAbsent(pkg, k -> new ArrayList<>());
             }
         }
-        
-        if (packages.isEmpty()) return "root";
-        String root = packages.get(0);
-        
-        for (String pkg : packages) {
-            while (!pkg.startsWith(root) && !root.isEmpty()) {
-                int lastDot = root.lastIndexOf('.');
-                root = lastDot > 0 ? root.substring(0, lastDot) : "";
-            }
-        }
-        
-        return root;
     }
 
     /**
@@ -271,10 +274,15 @@ public class AnalyzerApplication extends Application {
         Set<String> subpackages = new HashSet<>();
         
         for (String pkg : elementsByPackage.keySet()) {
-            // Skip the artificial "root" package
-            if ("root".equals(pkg)) continue;
-            
-            if (pkg.startsWith(packagePrefix) && !pkg.equals(currentPackage)) {
+            if (pkg == null || pkg.isEmpty()) {
+                continue;
+            }
+
+            if (currentPackage.isEmpty()) {
+                if (!pkg.contains(".")) {
+                    subpackages.add(pkg);
+                }
+            } else if (pkg.startsWith(packagePrefix) && !pkg.equals(currentPackage)) {
                 String relativePkg = pkg.substring(packagePrefix.length());
                 if (!relativePkg.contains(".")) {
                     subpackages.add(pkg);
@@ -284,7 +292,8 @@ public class AnalyzerApplication extends Application {
 
         // Recursively process subpackages
         for (String subpkg : subpackages) {
-            String subpkgSimpleName = subpkg.substring(subpkg.lastIndexOf('.') + 1);
+            int lastDot = subpkg.lastIndexOf('.');
+            String subpkgSimpleName = lastDot >= 0 ? subpkg.substring(lastDot + 1) : subpkg;
             ArchitectureNode subpkgNode = new ArchitectureNode(
                 subpkg,
                 subpkgSimpleName,
