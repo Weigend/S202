@@ -11,7 +11,10 @@ import java.util.*;
 /**
  * Analyzes bytecode of a Java class to extract dependencies.
  * Uses ASM library for bytecode parsing.
+ * 
+ * @deprecated Use {@link de.weigend.s202.analysis.raw.RawAnalyzer} instead.
  */
+@Deprecated
 public class BytecodeAnalyzer {
 
     /**

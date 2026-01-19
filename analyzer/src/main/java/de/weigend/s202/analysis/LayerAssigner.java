@@ -13,15 +13,20 @@ import java.util.*;
  * Assigns architectural layers to all nodes in the tree.
  * Layers are assigned based on package dependencies using SCC analysis and topological sorting.
  * 
- * The algorithm:
- * 1. Stabilizes dependencies by sorting neighbors
- * 2. Computes SCCs using Tarjan's algorithm
- * 3. Builds SCC DAG
- * 4. Performs topological sort with stable tie-breaking
- * 5. Computes levels using longest path in DAG
- * 6. Maps nodes to levels
+ * @deprecated Use {@link de.weigend.s202.analysis.calculated.LevelCalculator} instead.
  */
+@Deprecated
 public class LayerAssigner {
+    /**
+     * The algorithm:
+     * 1. Stabilizes dependencies by sorting neighbors
+     * 2. Computes SCCs using Tarjan's algorithm
+     * 3. Builds SCC DAG
+     * 4. Performs topological sort with stable tie-breaking
+     * 5. Computes levels using longest path in DAG
+     * 6. Maps nodes to levels
+     */
+    
     private List<StronglyConnectedComponent> sccs;
     private Map<String, Integer> nodeToSccId;
     private Map<String, Integer> nodeToLevel;
@@ -29,15 +34,15 @@ public class LayerAssigner {
     
     /**
      * Assigns layers to all nodes in the architecture tree.
-     * Recursive processing to handle nested packages.
+     * Treats both packages and classes as nodes with dependencies.
      */
     public void assignLayers(ArchitectureNode rootNode) {
-        // First, collect all packages with their dependency information
-        Map<String, PackageInfo> packageInfoMap = new HashMap<>();
-        collectPackageInfo(rootNode, packageInfoMap);
+        // Collect all nodes (packages and classes) with their dependencies
+        Map<String, NodeInfo> nodeInfoMap = new HashMap<>();
+        collectNodeInfo(rootNode, nodeInfoMap);
         
         // Stabilize dependencies: sort all neighbors
-        Map<String, Set<String>> stableGraph = stabilizeDependencies(packageInfoMap);
+        Map<String, Set<String>> stableGraph = stabilizeDependencies(nodeInfoMap);
         
         // Calculate layers using SCC-based approach
         Map<String, Integer> layers = calculateLayersWithSCC(stableGraph);
@@ -47,38 +52,37 @@ public class LayerAssigner {
     }
     
     /**
-     * Collects all packages and their dependencies.
+     * Collects all nodes (packages and classes) and their dependencies.
      */
-    private void collectPackageInfo(ArchitectureNode node, Map<String, PackageInfo> infoMap) {
-        if (node.getType() == NodeType.PACKAGE) {
-            String fullName = node.getFullName();
-            PackageInfo info = new PackageInfo(fullName);
-            
-            // Normalize dependencies to full package names (should already be full names from ArchitectureNode)
-            Set<String> deps = node.getDependencies();
-            if (deps != null) {
-                info.dependencies = new HashSet<>(deps);
-            }
-            
-            infoMap.put(fullName, info);
+    private void collectNodeInfo(ArchitectureNode node, Map<String, NodeInfo> infoMap) {
+        String fullName = node.getFullName();
+        NodeInfo info = new NodeInfo(fullName, node.getType());
+        
+        // Get dependencies from the node
+        Set<String> deps = node.getDependencies();
+        if (deps != null) {
+            info.dependencies = new HashSet<>(deps);
         }
         
+        infoMap.put(fullName, info);
+        
+        // Recursively collect from children (both packages and classes)
         for (ArchitectureNode child : node.getChildren()) {
-            collectPackageInfo(child, infoMap);
+            collectNodeInfo(child, infoMap);
         }
     }
     
     /**
      * Stabilizes dependencies by sorting all neighbors for consistent iteration order.
      */
-    private Map<String, Set<String>> stabilizeDependencies(Map<String, PackageInfo> packageInfoMap) {
+    private Map<String, Set<String>> stabilizeDependencies(Map<String, NodeInfo> nodeInfoMap) {
         Map<String, Set<String>> stableGraph = new TreeMap<>();
         
-        for (String pkgName : packageInfoMap.keySet()) {
-            Set<String> deps = packageInfoMap.get(pkgName).dependencies;
+        for (String nodeName : nodeInfoMap.keySet()) {
+            Set<String> deps = nodeInfoMap.get(nodeName).dependencies;
             // Use TreeSet for sorted, stable iteration
             Set<String> sortedDeps = new TreeSet<>(deps);
-            stableGraph.put(pkgName, sortedDeps);
+            stableGraph.put(nodeName, sortedDeps);
         }
         
         return stableGraph;
@@ -154,110 +158,18 @@ public class LayerAssigner {
     }
     
     /**
-     * Calculates layers using reverse topological sort (legacy method).
-     * Kept for backward compatibility.
-     * 
-     * Calculates layers using reverse topological sort.
-     * Layer 0 = packages that depend on many others (top layer - e.g., UI)
-     * Layer N = packages with fewer/no dependencies (bottom layer - e.g., Model)
-     */
-    private Map<String, Integer> calculateLayers(Map<String, PackageInfo> packageInfoMap) {
-        Map<String, Integer> layers = new HashMap<>();
-        
-        // Build reverse dependency graph: package -> packages that depend on it
-        Map<String, Set<String>> reverseDeps = new HashMap<>();
-        Map<String, Set<String>> internalDeps = new HashMap<>();
-        
-        System.out.println("=== DEPENDENCY COLLECTION ===");
-        for (String pkgName : packageInfoMap.keySet()) {
-            reverseDeps.put(pkgName, new HashSet<>());
-            Set<String> deps = new HashSet<>();
-            Set<String> allDeps = packageInfoMap.get(pkgName).dependencies;
-            System.out.println("  Package: " + pkgName);
-            System.out.println("    All dependencies: " + allDeps);
-            
-            for (String dep : allDeps) {
-                if (packageInfoMap.containsKey(dep)) {
-                    deps.add(dep);
-                    System.out.println("      -> INTERNAL: " + dep);
-                } else {
-                    System.out.println("      -> EXTERNAL: " + dep);
-                }
-            }
-            internalDeps.put(pkgName, deps);
-            System.out.println("    Internal deps: " + deps);
-        }
-        System.out.println("=== END DEPENDENCY COLLECTION ===\n");
-        
-        // Build reverse dependencies
-        for (String pkgName : internalDeps.keySet()) {
-            for (String dep : internalDeps.get(pkgName)) {
-                reverseDeps.get(dep).add(pkgName);
-            }
-        }
-        
-        // Find layer for each package by calculating the maximum distance to a leaf
-        for (String pkgName : packageInfoMap.keySet()) {
-            layers.put(pkgName, calculatePackageLayer(pkgName, internalDeps, new HashMap<>(), new HashSet<>()));
-        }
-        
-        return layers;
-    }
-    
-    /**
-     * Calculates the layer of a package by finding the longest path to a leaf.
-     * Handles cyclic dependencies by detecting cycles during traversal.
-     * Package with longest dependency path = layer 0 (top).
-     */
-    private int calculatePackageLayer(String pkgName, Map<String, Set<String>> internalDeps, 
-                                     Map<String, Integer> cache, Set<String> visiting) {
-        // Already calculated
-        if (cache.containsKey(pkgName)) {
-            return cache.get(pkgName);
-        }
-        
-        // Cycle detected: currently visiting this package
-        if (visiting.contains(pkgName)) {
-            System.out.println("    -> CYCLE DETECTED at " + pkgName + ", assigning layer 0");
-            return 0;  // Break cycle by assigning layer 0
-        }
-        
-        Set<String> deps = internalDeps.get(pkgName);
-        System.out.println("  CALC_LAYER: " + pkgName + " -> deps=" + deps);
-        
-        if (deps == null || deps.isEmpty()) {
-            // Leaf package (no internal dependencies)
-            System.out.println("    -> is LEAF, layer=0");
-            cache.put(pkgName, 0);
-            return 0;
-        }
-        
-        // Mark as visiting
-        visiting.add(pkgName);
-        
-        // Layer = 1 + max layer of dependencies
-        int maxDepLayer = 0;
-        for (String dep : deps) {
-            int depLayer = calculatePackageLayer(dep, internalDeps, cache, visiting);
-            System.out.println("    -> dep " + dep + " has layer " + depLayer);
-            maxDepLayer = Math.max(maxDepLayer, depLayer);
-        }
-        
-        // Done visiting
-        visiting.remove(pkgName);
-        
-        int layer = maxDepLayer + 1;
-        System.out.println("    -> calculated layer=" + layer);
-        cache.put(pkgName, layer);
-        return layer;
-    }
-    
-    /**
      * Assigns calculated layers to nodes in the tree.
      */
     private void assignLayersToNodes(ArchitectureNode node, Map<String, Integer> layers) {
-        if (node.getType() == NodeType.PACKAGE && layers.containsKey(node.getFullName())) {
-            node.setLayer(layers.get(node.getFullName()));
+        String fullName = node.getFullName();
+        if (layers.containsKey(fullName)) {
+            node.setLayer(layers.get(fullName));
+        }
+        
+        // Calculate class-level layers within this package
+        if (node.getType() == NodeType.PACKAGE) {
+            System.out.println("DEBUG assignLayersToNodes: Package " + node.getSimpleName() + " has " + node.getChildren().size() + " children");
+            assignClassLayers(node);
         }
         
         for (ArchitectureNode child : node.getChildren()) {
@@ -266,14 +178,134 @@ public class LayerAssigner {
     }
     
     /**
+     * Assigns layers to classes within a package based on their inter-class dependencies.
+     */
+    private void assignClassLayers(ArchitectureNode packageNode) {
+        System.out.println("DEBUG: assignClassLayers called for " + packageNode.getSimpleName());
+        System.out.println("  Children count: " + packageNode.getChildren().size());
+        
+        for (ArchitectureNode child : packageNode.getChildren()) {
+            System.out.println("  Child: " + child.getSimpleName() + " type=" + child.getType());
+        }
+        
+        List<ArchitectureNode> classNodes = new ArrayList<>();
+        
+        // Collect all class children
+        for (ArchitectureNode child : packageNode.getChildren()) {
+            if (child.getType() == NodeType.CLASS) {
+                classNodes.add(child);
+            }
+        }
+        
+        System.out.println("DEBUG: Found " + classNodes.size() + " class nodes");
+        
+        if (classNodes.isEmpty()) return;
+        
+        System.out.println("DEBUG: Calculating class layers for package " + packageNode.getSimpleName());
+        System.out.println("  Classes: " + classNodes.stream().map(ArchitectureNode::getSimpleName).toList());
+        
+        // Build dependency graph for classes within this package
+        Map<String, Set<String>> classDependencies = new HashMap<>();
+        
+        for (ArchitectureNode classNode : classNodes) {
+            Set<String> deps = classNode.getDependencies();
+            System.out.println("  " + classNode.getSimpleName() + " full dependencies: " + deps);
+            
+            if (deps == null) deps = new HashSet<>();
+            
+            // Filter to only dependencies within this package
+            Set<String> internalDeps = new HashSet<>();
+            for (String dep : deps) {
+                System.out.println("    Checking dep: " + dep);
+                // Check if this dependency is another class in this package
+                for (ArchitectureNode other : classNodes) {
+                    System.out.println("      vs " + other.getFullName());
+                    if (other.getFullName().equals(dep)) {
+                        internalDeps.add(other.getFullName());
+                        System.out.println("      ✓ MATCH (exact)");
+                        break;
+                    } else if (other.getSimpleName().equals(dep)) {
+                        internalDeps.add(other.getFullName());
+                        System.out.println("      ✓ MATCH (simple name)");
+                        break;
+                    }
+                }
+            }
+            
+            System.out.println("  " + classNode.getSimpleName() + " INTERNAL dependencies: " + internalDeps);
+            classDependencies.put(classNode.getFullName(), internalDeps);
+        }
+        
+        // Calculate layers using longest path (reverse: leaf classes get layer 0)
+        Map<String, Integer> classLayers = calculateClassLayers(classNodes, classDependencies);
+        
+        // Assign calculated layers
+        for (ArchitectureNode classNode : classNodes) {
+            Integer layer = classLayers.get(classNode.getFullName());
+            if (layer != null) {
+                classNode.setLayer(layer);
+                System.out.println("  Class " + classNode.getSimpleName() + " → Layer " + layer);
+            }
+        }
+    }
+    
+    /**
+     * Calculates layers for classes using longest path algorithm.
+     */
+    private Map<String, Integer> calculateClassLayers(List<ArchitectureNode> classNodes, 
+                                                       Map<String, Set<String>> dependencies) {
+        Map<String, Integer> classLayers = new HashMap<>();
+        Map<String, Integer> memo = new HashMap<>();
+        
+        // Calculate layer for each class (longest path to leaf)
+        for (ArchitectureNode classNode : classNodes) {
+            classLayers.put(classNode.getFullName(), calculateClassLayerRecursive(
+                classNode.getFullName(), dependencies, memo));
+        }
+        
+        return classLayers;
+    }
+    
+    /**
+     * Recursively calculates layer for a single class.
+     */
+    private int calculateClassLayerRecursive(String className, 
+                                              Map<String, Set<String>> dependencies,
+                                              Map<String, Integer> memo) {
+        if (memo.containsKey(className)) {
+            return memo.get(className);
+        }
+        
+        Set<String> deps = dependencies.getOrDefault(className, new HashSet<>());
+        
+        if (deps.isEmpty()) {
+            // Leaf node: layer 0
+            memo.put(className, 0);
+            return 0;
+        }
+        
+        // Layer = 1 + max(layer of dependencies)
+        int maxDepLayer = deps.stream()
+            .mapToInt(dep -> calculateClassLayerRecursive(dep, dependencies, memo))
+            .max()
+            .orElse(-1);
+        
+        int layer = maxDepLayer + 1;
+        memo.put(className, layer);
+        return layer;
+    }
+    
+    /**
      * Helper class to store package information during calculation.
      */
-    private static class PackageInfo {
+    private static class NodeInfo {
         String name;
+        NodeType type;
         Set<String> dependencies;
         
-        PackageInfo(String name) {
+        NodeInfo(String name, NodeType type) {
             this.name = name;
+            this.type = type;
             this.dependencies = new HashSet<>();
         }
     }

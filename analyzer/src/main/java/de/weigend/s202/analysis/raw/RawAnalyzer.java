@@ -30,11 +30,7 @@ public class RawAnalyzer {
             jarFile.entries().asIterator().forEachRemaining(entry -> {
                 if (entry.getName().endsWith(".class") && !entry.isDirectory()) {
                     try {
-                        byte[] classBytes = Files.readAllBytes(
-                            Paths.get(jarPath).resolve(entry.getName())
-                        );
-                        // Try from JAR stream instead
-                        classBytes = jarFile.getInputStream(entry).readAllBytes();
+                        byte[] classBytes = jarFile.getInputStream(entry).readAllBytes();
                         analyzeClass(entry.getName(), classBytes, model);
                     } catch (Exception e) {
                         System.err.println("Warning: Could not analyze " + entry.getName() + ": " + e.getMessage());
