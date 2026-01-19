@@ -2,6 +2,7 @@ package de.weigend.s202.ui;
 
 import de.weigend.s202.analysis.ArchitectureModelBuilder.ArchitectureNode;
 import de.weigend.s202.analysis.LayerAssigner;
+import de.weigend.s202.analysis.scc.EdgeClassification.ClassifiedEdge;
 import javafx.geometry.Insets;
 import javafx.scene.control.*;
 import javafx.scene.layout.BorderPane;
@@ -109,7 +110,10 @@ public class ArchitectureView extends BorderPane {
         LayerAssigner layerAssigner = new LayerAssigner();
         layerAssigner.assignLayers(rootNode);
         
-        treeView.setArchitectureRoot(rootNode);
+        // Get classified edges (including violations)
+        java.util.List<ClassifiedEdge> classifiedEdges = layerAssigner.getClassifiedEdges();
+        
+        treeView.setArchitectureRoot(rootNode, classifiedEdges);
         setStatus("Architecture loaded: " + rootNode.getSimpleName());
     }
 

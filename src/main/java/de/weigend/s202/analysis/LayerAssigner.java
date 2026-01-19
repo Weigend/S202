@@ -2,14 +2,30 @@ package de.weigend.s202.analysis;
 
 import de.weigend.s202.analysis.ArchitectureModelBuilder.ArchitectureNode;
 import de.weigend.s202.analysis.ArchitectureModelBuilder.NodeType;
+import de.weigend.s202.analysis.scc.StronglyConnectedComponent;
+import de.weigend.s202.analysis.scc.TarjanSCCFinder;
+import de.weigend.s202.analysis.scc.SCCDAGBuilder;
+import de.weigend.s202.analysis.scc.EdgeClassification;
 
 import java.util.*;
 
 /**
  * Assigns architectural layers to all nodes in the tree.
- * Layers are assigned based on package dependencies using topological sorting.
+ * Layers are assigned based on package dependencies using SCC analysis and topological sorting.
+ * 
+ * The algorithm:
+ * 1. Stabilizes dependencies by sorting neighbors
+ * 2. Computes SCCs using Tarjan's algorithm
+ * 3. Builds SCC DAG
+ * 4. Performs topological sort with stable tie-breaking
+ * 5. Computes levels using longest path in DAG
+ * 6. Maps nodes to levels
  */
 public class LayerAssigner {
+    private List<StronglyConnectedComponent> sccs;
+    private Map<String, Integer> nodeToSccId;
+    private Map<String, Integer> nodeToLevel;
+    private List<EdgeClassification.ClassifiedEdge> classifiedEdges;
     
     /**
      * Assigns layers to all nodes in the architecture tree.
@@ -20,18 +36,14 @@ public class LayerAssigner {
         Map<String, PackageInfo> packageInfoMap = new HashMap<>();
         collectPackageInfo(rootNode, packageInfoMap);
         
-        System.out.println("\n=== LAYER ASSIGNER START ===");
-        System.out.println("Found " + packageInfoMap.size() + " packages");
+        // Stabilize dependencies: sort all neighbors
+        Map<String, Set<String>> stableGraph = stabilizeDependencies(packageInfoMap);
         
-        // Calculate layers using topological sort
-        Map<String, Integer> layers = calculateLayers(packageInfoMap);
-        
-        System.out.println("Calculated layers:");
-        layers.forEach((pkg, layer) -> System.out.println("  " + pkg + " -> Layer " + layer));
+        // Calculate layers using SCC-based approach
+        Map<String, Integer> layers = calculateLayersWithSCC(stableGraph);
         
         // Assign layers to nodes
         assignLayersToNodes(rootNode, layers);
-        System.out.println("=== LAYER ASSIGNER END ===\n");
     }
     
     /**
@@ -48,7 +60,6 @@ public class LayerAssigner {
                 info.dependencies = new HashSet<>(deps);
             }
             
-            System.out.println("COLLECT: Package=" + fullName + ", RawDeps=" + deps);
             infoMap.put(fullName, info);
         }
         
@@ -58,6 +69,94 @@ public class LayerAssigner {
     }
     
     /**
+     * Stabilizes dependencies by sorting all neighbors for consistent iteration order.
+     */
+    private Map<String, Set<String>> stabilizeDependencies(Map<String, PackageInfo> packageInfoMap) {
+        Map<String, Set<String>> stableGraph = new TreeMap<>();
+        
+        for (String pkgName : packageInfoMap.keySet()) {
+            Set<String> deps = packageInfoMap.get(pkgName).dependencies;
+            // Use TreeSet for sorted, stable iteration
+            Set<String> sortedDeps = new TreeSet<>(deps);
+            stableGraph.put(pkgName, sortedDeps);
+        }
+        
+        return stableGraph;
+    }
+    
+    /**
+     * Calculates layers using SCC analysis and topological sort.
+     * Returns a mapping of package names to their assigned levels.
+     */
+    private Map<String, Integer> calculateLayersWithSCC(Map<String, Set<String>> stableGraph) {
+        // Step 1: Find SCCs using Tarjan's algorithm
+        TarjanSCCFinder sccFinder = new TarjanSCCFinder(stableGraph);
+        this.sccs = sccFinder.findSCCs();
+        
+        // Build node -> SCC mapping
+        this.nodeToSccId = buildNodeToSccMapping();
+        
+        // Step 2: Build SCC DAG
+        SCCDAGBuilder dagBuilder = new SCCDAGBuilder(sccs, stableGraph);
+        dagBuilder.buildDAG();
+        
+        // Step 3: Assign levels to SCCs using longest path
+        dagBuilder.assignLevels();
+        
+        List<StronglyConnectedComponent> sortedSccs = dagBuilder.getSortedSCCs();
+        
+        // Step 4: Map nodes to their levels
+        this.nodeToLevel = mapNodesToLevels();
+        
+        // Step 5: Classify edges for UI rendering
+        EdgeClassification edgeClassifier = new EdgeClassification(nodeToLevel, nodeToSccId, stableGraph);
+        this.classifiedEdges = edgeClassifier.classifyAllEdges();
+        
+        int violations = 0, normal = 0, intra = 0;
+        for (EdgeClassification.ClassifiedEdge edge : classifiedEdges) {
+            if (edge.type == EdgeClassification.EdgeType.VIOLATION) {
+                violations++;
+            } else if (edge.type == EdgeClassification.EdgeType.INTRA_SCC) {
+                intra++;
+            } else {
+                normal++;
+            }
+        }
+        System.out.println("Summary: " + violations + " violations, " + normal + " normal, " + intra + " intra-SCC");
+        
+        return nodeToLevel;
+    }
+    
+    /**
+     * Builds mapping from node names to their SCC IDs.
+     */
+    private Map<String, Integer> buildNodeToSccMapping() {
+        Map<String, Integer> mapping = new HashMap<>();
+        for (StronglyConnectedComponent scc : sccs) {
+            for (String member : scc.getMembers()) {
+                mapping.put(member, scc.getId());
+            }
+        }
+        return mapping;
+    }
+    
+    /**
+     * Maps each node to its level based on its SCC's level.
+     */
+    private Map<String, Integer> mapNodesToLevels() {
+        Map<String, Integer> mapping = new HashMap<>();
+        for (StronglyConnectedComponent scc : sccs) {
+            for (String member : scc.getMembers()) {
+                mapping.put(member, scc.getLevel());
+            }
+        }
+        return mapping;
+    }
+    
+    /**
+     * Calculates layers using reverse topological sort (legacy method).
+     * Kept for backward compatibility.
+     * 
      * Calculates layers using reverse topological sort.
      * Layer 0 = packages that depend on many others (top layer - e.g., UI)
      * Layer N = packages with fewer/no dependencies (bottom layer - e.g., Model)
@@ -177,5 +276,24 @@ public class LayerAssigner {
             this.name = name;
             this.dependencies = new HashSet<>();
         }
+    }
+    
+    /**
+     * Getters for SCC analysis results (used by UI and other components).
+     */
+    public List<StronglyConnectedComponent> getSCCs() {
+        return sccs != null ? new ArrayList<>(sccs) : new ArrayList<>();
+    }
+    
+    public Map<String, Integer> getNodeToSccId() {
+        return nodeToSccId != null ? new HashMap<>(nodeToSccId) : new HashMap<>();
+    }
+    
+    public Map<String, Integer> getNodeToLevel() {
+        return nodeToLevel != null ? new HashMap<>(nodeToLevel) : new HashMap<>();
+    }
+    
+    public List<EdgeClassification.ClassifiedEdge> getClassifiedEdges() {
+        return classifiedEdges != null ? new ArrayList<>(classifiedEdges) : new ArrayList<>();
     }
 }

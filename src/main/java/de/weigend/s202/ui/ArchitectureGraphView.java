@@ -2,6 +2,8 @@ package de.weigend.s202.ui;
 
 import de.weigend.s202.analysis.ArchitectureModelBuilder.ArchitectureNode;
 import de.weigend.s202.analysis.ArchitectureModelBuilder.NodeType;
+import de.weigend.s202.analysis.scc.EdgeClassification.ClassifiedEdge;
+import de.weigend.s202.analysis.scc.EdgeClassification.EdgeType;
 import javafx.geometry.Bounds;
 import javafx.scene.canvas.Canvas;
 import javafx.scene.canvas.GraphicsContext;
@@ -26,6 +28,7 @@ public class ArchitectureGraphView extends Canvas {
     private Map<String, PackageBox> boxByPackageName;
     private Map<String, Boolean> expandedState;
     private Set<String> projectPackageNames;
+    private List<ClassifiedEdge> classifiedEdges;
     private double contentHeight;
     private double contentWidth;
 
@@ -34,6 +37,7 @@ public class ArchitectureGraphView extends Canvas {
         this.boxByPackageName = new HashMap<>();
         this.expandedState = new HashMap<>();
         this.projectPackageNames = new HashSet<>();
+        this.classifiedEdges = new ArrayList<>();
         
         // Bind canvas size to parent
         widthProperty().addListener((obs, oldVal, newVal) -> redraw());
@@ -47,7 +51,15 @@ public class ArchitectureGraphView extends Canvas {
      * Sets the root architecture node and triggers visualization.
      */
     public void setArchitectureRoot(ArchitectureNode rootNode) {
+        setArchitectureRoot(rootNode, new ArrayList<>());
+    }
+
+    /**
+     * Sets the root architecture node with classified edges for violation visualization.
+     */
+    public void setArchitectureRoot(ArchitectureNode rootNode, List<ClassifiedEdge> classifiedEdges) {
         this.rootNode = Objects.requireNonNull(rootNode, "rootNode cannot be null");
+        this.classifiedEdges = classifiedEdges != null ? classifiedEdges : new ArrayList<>();
         this.packageBoxes.clear();
         this.boxByPackageName.clear();
         this.expandedState.clear();
@@ -75,6 +87,7 @@ public class ArchitectureGraphView extends Canvas {
         System.out.println("DEBUG: Extracted " + packageBoxes.size() + " packages");
         System.out.println("DEBUG: Project packages: " + projectPackageNames);
         System.out.println("DEBUG: Canvas size: " + getWidth() + "x" + getHeight());
+        System.out.println("DEBUG: Classified edges: " + classifiedEdges.size());
         
         // Redraw (layout is done during drawing)
         redraw();
@@ -161,7 +174,13 @@ public class ArchitectureGraphView extends Canvas {
             return;
         }
         
-        // Recursively draw the root and its children
+        // First, draw dependency lines (so they appear behind boxes)
+        drawDependencyLines(gc);
+        
+        // Then draw violation lines (red dashed lines)
+        drawViolationLines(gc);
+        
+        // Finally, draw package boxes on top
         double[] yPos = {PADDING};  // Use array to pass by reference in recursive call
         for (ArchitectureNode child : rootNode.getChildren()) {
             if (child.getType() == NodeType.PACKAGE) {
@@ -314,6 +333,79 @@ public class ArchitectureGraphView extends Canvas {
             new double[]{y, y + arrowSize, y + arrowSize},
             3
         );
+    }
+
+    /**
+     * Draws violation lines (red dashed lines for upward dependencies).
+     */
+    private void drawViolationLines(GraphicsContext gc) {
+        // Filter for VIOLATION edges only
+        for (ClassifiedEdge edge : classifiedEdges) {
+            if (edge.type == EdgeType.VIOLATION) {
+                PackageBox sourceBox = findBoxByPackageName(edge.from);
+                PackageBox targetBox = findBoxByPackageName(edge.to);
+                
+                if (sourceBox != null && targetBox != null && sourceBox != targetBox) {
+                    drawViolationArrow(gc, sourceBox, targetBox);
+                }
+            }
+        }
+    }
+
+    /**
+     * Draws a red dashed arrow for a violation (upward dependency).
+     */
+    private void drawViolationArrow(GraphicsContext gc, PackageBox source, PackageBox target) {
+        // Start point: right side of source box
+        double x1 = source.x + source.width;
+        double y1 = source.y + source.height / 2;
+        
+        // End point: right side of target box  
+        double x2 = target.x + target.width;
+        double y2 = target.y + target.height / 2;
+        
+        // Set red color and dashed stroke
+        gc.setStroke(Color.web("#FF0000"));  // Red
+        gc.setLineWidth(2);
+        gc.setLineDashes(5, 5);  // Dashed line pattern
+        
+        // Curved line going around the right side
+        double controlX = Math.max(x1, x2) + 50;
+        
+        // Draw the curved violation line
+        gc.beginPath();
+        gc.moveTo(x1, y1);
+        gc.bezierCurveTo(
+            controlX, y1,      // Control point 1
+            controlX, y2,      // Control point 2
+            x2, y2             // End point
+        );
+        gc.stroke();
+        
+        // Draw arrow head (red)
+        double arrowSize = 10;
+        gc.setFill(Color.web("#FF0000"));
+        
+        // Calculate direction for arrow head
+        double angle = Math.atan2(y2 - y1, x2 - x1);
+        double arrowX = x2 - arrowSize * Math.cos(angle);
+        double arrowY = y2 - arrowSize * Math.sin(angle);
+        
+        // Draw arrowhead as a filled polygon
+        double[] xs = {
+            x2,
+            arrowX - arrowSize * Math.sin(angle) / 2,
+            arrowX + arrowSize * Math.sin(angle) / 2
+        };
+        double[] ys = {
+            y2,
+            arrowY + arrowSize * Math.cos(angle) / 2,
+            arrowY - arrowSize * Math.cos(angle) / 2
+        };
+        gc.fillPolygon(xs, ys, 3);
+        
+        // Reset line dashes to solid
+        gc.setLineDashes();
     }
 
     /**

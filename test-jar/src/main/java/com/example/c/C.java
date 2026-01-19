@@ -1,11 +1,10 @@
 package com.example.c;
 
-/**
- * Class C in package c.
- * C has no internal dependencies.
- */
+import com.example.a.A;
+
 public class C {
-    public void execute() {
-        System.out.println("Executing C");
-    }
+    private A a = new A();
+    
+    public C() {}
+    public void execute() { }
 }
