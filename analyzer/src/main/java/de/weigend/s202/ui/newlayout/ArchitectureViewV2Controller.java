@@ -22,37 +22,17 @@ public class ArchitectureViewV2Controller {
     private ScrollPane scrollPane;
 
     @FXML
-    private VBox mainContent;
-
-    @FXML
     private void initialize() {
-        // CSS will be loaded if needed
-        if (mainContent != null) {
-            mainContent.getStylesheets().add(
-                getClass().getResource("css/architecture-style.css").toExternalForm()
-            );
-            
-            // VBox sollte volle Breite nutzen
-            mainContent.setMaxWidth(Double.MAX_VALUE);
-            
-            // Dynamically add test content using ArchitectureContainer
-            addTestContent();
-        }
+        // Dynamically add test content using LevelPackageBox
+        addTestContent();
     }
 
     /**
      * Add test content using LevelPackageBox (hierarchical nesting).
      */
     private void addTestContent() {
-        mainContent = new VBox(10);
-        mainContent.setStyle("-fx-background-color: #ffffff; -fx-padding: 20;");
-        mainContent.setMaxWidth(Double.MAX_VALUE);
-        mainContent.setMaxHeight(Double.MAX_VALUE);
-        VBox.setVgrow(mainContent, Priority.ALWAYS);
-        
         // Create first level with name
         LevelPackageBox level1 = new LevelPackageBox("Level 1");
-        VBox.setVgrow(level1, Priority.ALWAYS);
         
         // Populate with test elements (9 elements in 4 levels)
         level1.addToLevel(1, new LevelClassBox("Element 1.1"));
@@ -74,8 +54,7 @@ public class ArchitectureViewV2Controller {
         // Add nested structure to level 2 (as Element 2.2, alongside Element 2.1)
         level1.addToLevel(2, nestedLevel);
         
-        mainContent.getChildren().add(level1);
-        scrollPane.setContent(mainContent);
+        scrollPane.setContent(level1);
     }
 
     /**
