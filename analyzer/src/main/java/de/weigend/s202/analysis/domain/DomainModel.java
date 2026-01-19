@@ -1,11 +1,11 @@
-package de.weigend.s202.analysis.calculated;
+package de.weigend.s202.analysis.domain;
 
 import java.util.*;
 
 /**
  * Model containing calculated level information for classes and packages.
  */
-public class CalculatedModel {
+public class DomainModel {
     private final Map<String, CalculatedElementInfo> classes = new HashMap<>();
     private final Map<String, CalculatedElementInfo> packages = new HashMap<>();
 

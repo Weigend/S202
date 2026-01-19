@@ -1,4 +1,4 @@
-package de.weigend.s202.analysis.raw;
+package de.weigend.s202.analysis.input;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -11,17 +11,17 @@ import java.nio.file.Paths;
 import static org.junit.jupiter.api.Assertions.*;
 
 /**
- * Unit tests for RawAnalyzer.
+ * Unit tests for InputAnalyzer.
  * Tests bytecode analysis, dependency extraction, and package hierarchy building.
  */
-class RawAnalyzerTest {
+class InputAnalyzerTest {
     
-    private RawAnalyzer analyzer;
+    private InputAnalyzer analyzer;
     private String testJarPath;
 
     @BeforeEach
     void setUp() {
-        analyzer = new RawAnalyzer();
+        analyzer = new InputAnalyzer();
         // Use the test-example JAR file - resolve relative to project root
         testJarPath = "../test-example/target/test-example-1.0.0.jar";
     }

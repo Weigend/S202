@@ -1,7 +1,7 @@
-package de.weigend.s202.analysis.calculated;
+package de.weigend.s202.analysis.domain;
 
-import de.weigend.s202.analysis.raw.DependencyModel;
-import de.weigend.s202.analysis.raw.RawAnalyzer;
+import de.weigend.s202.analysis.input.DependencyModel;
+import de.weigend.s202.analysis.input.InputAnalyzer;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
@@ -18,7 +18,7 @@ class LevelCalculatorTest {
     
     private LevelCalculator calculator;
     private DependencyModel rawModel;
-    private CalculatedModel calculatedModel;
+    private DomainModel calculatedModel;
     private String testJarPath;
 
     @BeforeEach
@@ -27,7 +27,7 @@ class LevelCalculatorTest {
         testJarPath = "../test-example/target/test-example-1.0.0.jar";
         
         // Load the raw model first
-        RawAnalyzer analyzer = new RawAnalyzer();
+        InputAnalyzer analyzer = new InputAnalyzer();
         rawModel = analyzer.analyze(testJarPath);
         
         // Calculate the model
@@ -36,7 +36,7 @@ class LevelCalculatorTest {
 
     @Test
     void testCalculateReturnsNonNullModel() {
-        assertNotNull(calculatedModel, "CalculatedModel should not be null");
+        assertNotNull(calculatedModel, "DomainModel should not be null");
     }
 
     @Test
@@ -99,7 +99,7 @@ class LevelCalculatorTest {
         boolean consistent = calculatedModel.getAllClasses().values().stream()
             .allMatch(classInfo -> {
                 for (String depName : classInfo.dependencies) {
-                    CalculatedModel.CalculatedElementInfo dep = calculatedModel.getClass(depName);
+                    DomainModel.CalculatedElementInfo dep = calculatedModel.getClass(depName);
                     if (dep == null) continue; // External dependency
                     if (classInfo.level <= dep.level) {
                         return false; // Violation: dependent has same or lower level than dependency
@@ -117,7 +117,7 @@ class LevelCalculatorTest {
         boolean consistent = calculatedModel.getAllPackages().values().stream()
             .allMatch(pkgInfo -> {
                 for (String depName : pkgInfo.dependencies) {
-                    CalculatedModel.CalculatedElementInfo dep = calculatedModel.getPackage(depName);
+                    DomainModel.CalculatedElementInfo dep = calculatedModel.getPackage(depName);
                     if (dep == null) continue; // External dependency
                     if (pkgInfo.level <= dep.level) {
                         return false; // Violation: dependent has same or lower level than dependency
@@ -135,7 +135,7 @@ class LevelCalculatorTest {
         boolean dependentsCorrect = calculatedModel.getAllClasses().values().stream()
             .allMatch(classInfo -> {
                 for (String depName : classInfo.dependencies) {
-                    CalculatedModel.CalculatedElementInfo dep = calculatedModel.getClass(depName);
+                    DomainModel.CalculatedElementInfo dep = calculatedModel.getClass(depName);
                     if (dep != null && !dep.dependents.contains(classInfo.fullName)) {
                         return false;
                     }
@@ -152,7 +152,7 @@ class LevelCalculatorTest {
         boolean dependentsCorrect = calculatedModel.getAllPackages().values().stream()
             .allMatch(pkgInfo -> {
                 for (String depName : pkgInfo.dependencies) {
-                    CalculatedModel.CalculatedElementInfo dep = calculatedModel.getPackage(depName);
+                    DomainModel.CalculatedElementInfo dep = calculatedModel.getPackage(depName);
                     if (dep != null && !dep.dependents.contains(pkgInfo.fullName)) {
                         return false;
                     }
@@ -171,7 +171,7 @@ class LevelCalculatorTest {
 
     @Test
     void testCalculateGroupsByLevel() {
-        Map<Integer, java.util.List<CalculatedModel.CalculatedElementInfo>> byLevel = 
+        Map<Integer, java.util.List<DomainModel.CalculatedElementInfo>> byLevel = 
             calculatedModel.getElementsByLevel();
         
         assertNotNull(byLevel, "Should return non-null map of elements by level");
@@ -181,7 +181,7 @@ class LevelCalculatorTest {
 
     @Test
     void testCalculateLevel0HasElements() {
-        Map<Integer, java.util.List<CalculatedModel.CalculatedElementInfo>> byLevel = 
+        Map<Integer, java.util.List<DomainModel.CalculatedElementInfo>> byLevel = 
             calculatedModel.getElementsByLevel();
         
         assertTrue(byLevel.get(0).size() > 0, "Level 0 should have at least one element");
@@ -267,7 +267,7 @@ class LevelCalculatorTest {
     void testCalculateMultipleCallsConsistent() throws IOException {
         // Multiple calls with same input should produce same results
         LevelCalculator calculator2 = new LevelCalculator();
-        CalculatedModel model2 = calculator2.calculate(rawModel);
+        DomainModel model2 = calculator2.calculate(rawModel);
         
         // Compare number of classes and packages
         assertEquals(
@@ -299,28 +299,28 @@ class LevelCalculatorTest {
 
     @Test
     void testDomainClassAIsLevel0() {
-        CalculatedModel.CalculatedElementInfo classA = calculatedModel.getClass("com.example.A");
+        DomainModel.CalculatedElementInfo classA = calculatedModel.getClass("com.example.A");
         assertNotNull(classA, "Class com.example.A should exist");
         assertEquals(0, classA.level, "Class A should be at level 0 (no dependencies)");
     }
 
     @Test
     void testDomainClassBIsLevel1() {
-        CalculatedModel.CalculatedElementInfo classB = calculatedModel.getClass("com.example.B");
+        DomainModel.CalculatedElementInfo classB = calculatedModel.getClass("com.example.B");
         assertNotNull(classB, "Class com.example.B should exist");
         assertEquals(1, classB.level, "Class B should be at level 1 (depends on A)");
     }
 
     @Test
     void testDomainClassCIsLevel2() {
-        CalculatedModel.CalculatedElementInfo classC = calculatedModel.getClass("com.example.C");
+        DomainModel.CalculatedElementInfo classC = calculatedModel.getClass("com.example.C");
         assertNotNull(classC, "Class com.example.C should exist");
         assertEquals(2, classC.level, "Class C should be at level 2 (depends on B)");
     }
 
     @Test
     void testDomainClassBDependsOnA() {
-        CalculatedModel.CalculatedElementInfo classB = calculatedModel.getClass("com.example.B");
+        DomainModel.CalculatedElementInfo classB = calculatedModel.getClass("com.example.B");
         assertNotNull(classB, "Class B should exist");
         assertTrue(classB.dependencies.contains("com.example.A"), 
             "Class B should depend on Class A");
@@ -328,7 +328,7 @@ class LevelCalculatorTest {
 
     @Test
     void testDomainClassCDependsOnB() {
-        CalculatedModel.CalculatedElementInfo classC = calculatedModel.getClass("com.example.C");
+        DomainModel.CalculatedElementInfo classC = calculatedModel.getClass("com.example.C");
         assertNotNull(classC, "Class C should exist");
         assertTrue(classC.dependencies.contains("com.example.B"), 
             "Class C should depend on Class B");
@@ -336,7 +336,7 @@ class LevelCalculatorTest {
 
     @Test
     void testDomainClassAHasNoDependencies() {
-        CalculatedModel.CalculatedElementInfo classA = calculatedModel.getClass("com.example.A");
+        DomainModel.CalculatedElementInfo classA = calculatedModel.getClass("com.example.A");
         assertNotNull(classA, "Class A should exist");
         assertTrue(classA.dependencies.isEmpty(), 
             "Class A should have no dependencies");
@@ -344,7 +344,7 @@ class LevelCalculatorTest {
 
     @Test
     void testDomainPackageComExampleIsLevel0() {
-        CalculatedModel.CalculatedElementInfo pkgComExample = calculatedModel.getPackage("com.example");
+        DomainModel.CalculatedElementInfo pkgComExample = calculatedModel.getPackage("com.example");
         assertNotNull(pkgComExample, "Package com.example should exist");
         assertEquals(0, pkgComExample.level, 
             "Package com.example should be at level 0 (only internal dependencies)");
@@ -352,7 +352,7 @@ class LevelCalculatorTest {
 
     @Test
     void testDomainPackageComIsLevel0() {
-        CalculatedModel.CalculatedElementInfo pkgCom = calculatedModel.getPackage("com");
+        DomainModel.CalculatedElementInfo pkgCom = calculatedModel.getPackage("com");
         assertNotNull(pkgCom, "Package com should exist");
         assertEquals(0, pkgCom.level, 
             "Package com should be at level 0");
@@ -369,14 +369,14 @@ class LevelCalculatorTest {
 
     @Test
     void testDomainClassAHasDependent() {
-        CalculatedModel.CalculatedElementInfo classA = calculatedModel.getClass("com.example.A");
+        DomainModel.CalculatedElementInfo classA = calculatedModel.getClass("com.example.A");
         assertTrue(classA.dependents.contains("com.example.B"), 
             "Class A should have B as dependent");
     }
 
     @Test
     void testDomainClassBHasAsDependency() {
-        CalculatedModel.CalculatedElementInfo classB = calculatedModel.getClass("com.example.B");
+        DomainModel.CalculatedElementInfo classB = calculatedModel.getClass("com.example.B");
         assertTrue(classB.dependents.contains("com.example.C"), 
             "Class B should have C as dependent");
     }
@@ -390,7 +390,7 @@ class LevelCalculatorTest {
     @Test
     void testDomainLevelDistribution() {
         // Verify level distribution: Level 0 has 1 class, Level 1 has 1 class, Level 2 has 1 class
-        Map<Integer, java.util.List<CalculatedModel.CalculatedElementInfo>> byLevel = 
+        Map<Integer, java.util.List<DomainModel.CalculatedElementInfo>> byLevel = 
             calculatedModel.getElementsByLevel();
         
         // Filter to only classes in com.example

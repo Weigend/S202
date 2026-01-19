@@ -1,4 +1,4 @@
-package de.weigend.s202.analysis.raw;
+package de.weigend.s202.analysis.input;
 
 import java.util.*;
 

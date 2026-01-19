@@ -1,4 +1,4 @@
-package de.weigend.s202.analysis.raw;
+package de.weigend.s202.analysis.input;
 
 import org.objectweb.asm.ClassReader;
 import org.objectweb.asm.ClassVisitor;
@@ -17,7 +17,7 @@ import java.util.jar.JarFile;
  * Analyzes Java bytecode from JAR files and extracts dependency information.
  * This is the raw analysis layer - NO layer calculation, NO UI dependencies.
  */
-public class RawAnalyzer {
+public class InputAnalyzer {
 
     /**
      * Analyzes a JAR file and returns raw dependency model.

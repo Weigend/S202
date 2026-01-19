@@ -1,13 +1,13 @@
 package de.weigend.s202.ui;
 
-import de.weigend.s202.analysis.ArchitectureModelBuilder;
-import de.weigend.s202.analysis.ArchitectureModelBuilder.ArchitectureNode;
-import de.weigend.s202.analysis.calculated.CalculatedModel;
-import de.weigend.s202.analysis.calculated.LevelCalculator;
-import de.weigend.s202.analysis.raw.DependencyModel;
-import de.weigend.s202.analysis.raw.RawAnalyzer;
-import de.weigend.s202.analysis.ui.UIModel;
-import de.weigend.s202.analysis.ui.UIModelBuilder;
+import de.weigend.s202.ui.model.ArchitectureModelBuilder;
+import de.weigend.s202.ui.model.ArchitectureModelBuilder.ArchitectureNode;
+import de.weigend.s202.analysis.domain.DomainModel;
+import de.weigend.s202.analysis.domain.LevelCalculator;
+import de.weigend.s202.analysis.input.DependencyModel;
+import de.weigend.s202.analysis.input.InputAnalyzer;
+import de.weigend.s202.ui.model.UIModel;
+import de.weigend.s202.ui.model.UIModelBuilder;
 import javafx.application.Application;
 import javafx.geometry.Insets;
 import javafx.scene.Scene;
@@ -31,7 +31,7 @@ import java.util.Set;
  */
 public class AnalyzerApplication extends Application {
     private ArchitectureView architectureView;
-    private RawAnalyzer rawAnalyzer;
+    private InputAnalyzer rawAnalyzer;
     private LevelCalculator levelCalculator;
     private UIModelBuilder uiModelBuilder;
     private ArchitectureModelBuilder architectureModelBuilder;
@@ -40,7 +40,7 @@ public class AnalyzerApplication extends Application {
     @Override
     public void start(Stage primaryStage) {
         this.primaryStage = primaryStage;
-        this.rawAnalyzer = new RawAnalyzer();
+        this.rawAnalyzer = new InputAnalyzer();
         this.levelCalculator = new LevelCalculator();
         this.uiModelBuilder = new UIModelBuilder();
         this.architectureModelBuilder = new ArchitectureModelBuilder();
@@ -121,7 +121,7 @@ public class AnalyzerApplication extends Application {
 
     /**
      * Loads a JAR file and updates the architecture view using the new pipeline:
-     * RawAnalyzer -> LevelCalculator -> UIModelBuilder -> ArchitectureModelBuilder
+     * InputAnalyzer -> LevelCalculator -> UIModelBuilder -> ArchitectureModelBuilder
      */
     public void loadJarFile(File jarFile) {
         if (jarFile == null) return;
@@ -139,7 +139,7 @@ public class AnalyzerApplication extends Application {
             }
 
             // Step 2: Calculate architectural levels based on dependency topology
-            CalculatedModel calculatedModel = levelCalculator.calculate(rawModel);
+            DomainModel calculatedModel = levelCalculator.calculate(rawModel);
 
             // Step 3: Build UI model (organize by levels)
             UIModel uiModel = uiModelBuilder.build(calculatedModel);
@@ -170,7 +170,7 @@ public class AnalyzerApplication extends Application {
      * Converts UIModel back into ArchitectureNode tree structure for TreeView visualization.
      * This maintains compatibility with PackageTreeView while using the new analysis pipeline.
      */
-    private ArchitectureNode buildArchitectureNodeFromUIModel(UIModel uiModel, CalculatedModel calculatedModel) {
+    private ArchitectureNode buildArchitectureNodeFromUIModel(UIModel uiModel, DomainModel calculatedModel) {
         // Group elements by package hierarchy
         Map<String, List<UIModel.UIElementInfo>> elementsByPackage = new HashMap<>();
         
@@ -248,7 +248,7 @@ public class AnalyzerApplication extends Application {
     private void buildPackageHierarchy(ArchitectureNode parentNode, 
                                       Map<String, List<UIModel.UIElementInfo>> elementsByPackage,
                                       String currentPackage,
-                                      CalculatedModel calculatedModel) {
+                                      DomainModel calculatedModel) {
         // Add only CLASSES (not packages) as direct children of this package
         List<UIModel.UIElementInfo> directElements = elementsByPackage.get(currentPackage);
         if (directElements != null) {

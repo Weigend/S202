@@ -1,4 +1,4 @@
-package de.weigend.s202.analysis;
+package de.weigend.s202.ui.model;
 
 import java.util.*;
 

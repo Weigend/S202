@@ -1,6 +1,6 @@
 package de.weigend.s202.ui;
 
-import de.weigend.s202.analysis.ArchitectureModelBuilder.ArchitectureNode;
+import de.weigend.s202.ui.model.ArchitectureModelBuilder.ArchitectureNode;
 import de.weigend.s202.analysis.scc.EdgeClassification.ClassifiedEdge;
 import javafx.geometry.Insets;
 import javafx.scene.control.*;

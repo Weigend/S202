@@ -1,6 +1,6 @@
-package de.weigend.s202.analysis.ui;
+package de.weigend.s202.ui.model;
 
-import de.weigend.s202.analysis.calculated.CalculatedModel;
+import de.weigend.s202.analysis.domain.DomainModel;
 
 import java.util.*;
 
@@ -10,9 +10,9 @@ import java.util.*;
 public class UIModelBuilder {
 
     /**
-     * Builds a UIModel from a CalculatedModel.
+     * Builds a UIModel from a DomainModel.
      */
-    public UIModel build(CalculatedModel calculatedModel) {
+    public UIModel build(DomainModel calculatedModel) {
         UIModel uiModel = new UIModel();
 
         // Find maximum level
@@ -25,7 +25,7 @@ public class UIModelBuilder {
         }
 
         // Add classes to their levels
-        for (CalculatedModel.CalculatedElementInfo classInfo : calculatedModel.getAllClasses().values()) {
+        for (DomainModel.CalculatedElementInfo classInfo : calculatedModel.getAllClasses().values()) {
             UIModel.UIElementInfo uiElement = new UIModel.UIElementInfo(
                 classInfo.fullName,
                 classInfo.simpleName,
@@ -38,7 +38,7 @@ public class UIModelBuilder {
         }
 
         // Add packages to their levels
-        for (CalculatedModel.CalculatedElementInfo pkgInfo : calculatedModel.getAllPackages().values()) {
+        for (DomainModel.CalculatedElementInfo pkgInfo : calculatedModel.getAllPackages().values()) {
             UIModel.UIElementInfo uiElement = new UIModel.UIElementInfo(
                 pkgInfo.fullName,
                 pkgInfo.simpleName,

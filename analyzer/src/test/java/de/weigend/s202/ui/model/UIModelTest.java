@@ -1,9 +1,9 @@
-package de.weigend.s202.analysis.ui;
+package de.weigend.s202.ui.model;
 
-import de.weigend.s202.analysis.calculated.CalculatedModel;
-import de.weigend.s202.analysis.raw.DependencyModel;
-import de.weigend.s202.analysis.raw.RawAnalyzer;
-import de.weigend.s202.analysis.calculated.LevelCalculator;
+import de.weigend.s202.analysis.domain.DomainModel;
+import de.weigend.s202.analysis.input.DependencyModel;
+import de.weigend.s202.analysis.input.InputAnalyzer;
+import de.weigend.s202.analysis.domain.LevelCalculator;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
@@ -27,14 +27,14 @@ class UIModelTest {
         builder = new UIModelBuilder();
         testJarPath = "../test-example/target/test-example-1.0.0.jar";
         
-        // Build the full chain: RawAnalyzer -> LevelCalculator -> UIModelBuilder
-        RawAnalyzer analyzer = new RawAnalyzer();
+        // Build the full chain: InputAnalyzer -> LevelCalculator -> UIModelBuilder
+        InputAnalyzer analyzer = new InputAnalyzer();
         DependencyModel rawModel = analyzer.analyze(testJarPath);
         
         LevelCalculator calculator = new LevelCalculator();
-        CalculatedModel calculatedModel = calculator.calculate(rawModel);
+        DomainModel domainModel = calculator.calculate(rawModel);
         
-        uiModel = builder.build(calculatedModel);
+        uiModel = builder.build(domainModel);
     }
 
     // ===== Generic Tests =====
