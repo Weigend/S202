@@ -59,8 +59,37 @@ public class AnalyzerApplication extends Application {
         // Show stage
         primaryStage.show();
 
-        // Initialize with empty view
-        architectureView.setStatus("Ready to analyze bytecode. Click 'Load JAR' to begin.");
+        // Check for JAR file from multiple sources
+        String jarFilePath = null;
+        
+        // 1. Check environment variable
+        jarFilePath = System.getenv("APP_JAR");
+        
+        // 2. Check system property
+        if (jarFilePath == null || jarFilePath.isEmpty()) {
+            jarFilePath = System.getProperty("app.jar");
+        }
+        
+        // 3. Check application arguments
+        if ((jarFilePath == null || jarFilePath.isEmpty()) && !getParameters().getRaw().isEmpty()) {
+            jarFilePath = getParameters().getRaw().get(0);
+        }
+        
+        if (jarFilePath != null && !jarFilePath.isEmpty() && !jarFilePath.equals(".")) {
+            File jarFile = new File(jarFilePath);
+            if (jarFile.exists()) {
+                // Load JAR immediately, using Platform.runLater to ensure UI thread
+                javafx.application.Platform.runLater(() -> {
+                    loadJarFile(jarFile);
+                });
+            } else {
+                String errorMsg = "Error: JAR file not found at " + jarFilePath;
+                architectureView.setStatus(errorMsg);
+            }
+        } else {
+            // Initialize with empty view
+            architectureView.setStatus("Ready to analyze bytecode. Click 'Load JAR' to begin.");
+        }
     }
 
     private VBox createHeader() {
