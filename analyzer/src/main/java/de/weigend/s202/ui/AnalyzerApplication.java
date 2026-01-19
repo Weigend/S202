@@ -266,12 +266,12 @@ public class AnalyzerApplication extends Application {
             }
         }
 
-        // Find and add subpackages (skip the artificial "root" package)
+        // Find and add subpackages
         String packagePrefix = currentPackage.isEmpty() ? "" : currentPackage + ".";
         Set<String> subpackages = new HashSet<>();
         
         for (String pkg : elementsByPackage.keySet()) {
-            // Skip the artificial "root" package to avoid duplication
+            // Skip the artificial "root" package
             if ("root".equals(pkg)) continue;
             
             if (pkg.startsWith(packagePrefix) && !pkg.equals(currentPackage)) {
