@@ -1,6 +1,7 @@
 package de.weigend.s202.ui;
 
 import de.weigend.s202.ui.model.ArchitectureModelBuilder.ArchitectureNode;
+import de.weigend.s202.ui.model.UIModel;
 import de.weigend.s202.analysis.scc.EdgeClassification.ClassifiedEdge;
 import javafx.geometry.Insets;
 import javafx.scene.control.*;
@@ -18,7 +19,7 @@ import java.util.Objects;
  * Main UI component for displaying the architecture graph.
  */
 public class ArchitectureView extends BorderPane {
-    private LevelBasedLayoutView layoutView;
+    private PackageTreeView treeView;
     private Label statusLabel;
     private Spinner<Integer> depthSpinner;
     private Stage parentStage;
@@ -34,10 +35,10 @@ public class ArchitectureView extends BorderPane {
         HBox toolbar = createToolbar();
         setTop(toolbar);
 
-        // Center: Level-based layout view
-        layoutView = new LevelBasedLayoutView();
+        // Center: Package tree view (hierarchical with expand/collapse)
+        treeView = new PackageTreeView();
         
-        setCenter(layoutView);
+        setCenter(treeView);
 
         // Bottom: Status bar
         statusLabel = new Label("Ready");
@@ -100,17 +101,23 @@ public class ArchitectureView extends BorderPane {
     }
 
     /**
+     * Sets the UIModel for level-based layout display.
+     * This is the modern way to display the architecture analysis.
+     */
+    public void setUIModel(UIModel uiModel) {
+        Objects.requireNonNull(uiModel, "uiModel cannot be null");
+        // treeView doesn't use UIModel directly - it gets ArchitectureNode tree
+        setStatus("Architecture loaded: " + uiModel.getLevelCount() + " levels");
+    }
+
+    /**
      * Sets the root node of the architecture graph.
-     * Uses the modern analysis pipeline (no layer recalculation needed).
+     * Uses the modern analysis pipeline (levels already calculated by LevelCalculator).
      */
     public void setArchitectureRoot(ArchitectureNode rootNode) {
         Objects.requireNonNull(rootNode, "rootNode cannot be null");
-        
-        // In the modern pipeline, layers are already calculated by LevelCalculator
-        // We pass empty classified edges for now; violations will be added later
         java.util.List<ClassifiedEdge> classifiedEdges = new java.util.ArrayList<>();
-        
-        layoutView.setArchitectureRoot(rootNode, classifiedEdges);
+        treeView.setArchitectureRoot(rootNode, classifiedEdges);
         setStatus("Architecture loaded: " + rootNode.getSimpleName());
     }
 
@@ -145,3 +152,4 @@ public class ArchitectureView extends BorderPane {
         depthSpinner.getValueFactory().setValue(depth);
     }
 }
+

@@ -144,11 +144,10 @@ public class AnalyzerApplication extends Application {
             // Step 3: Build UI model (organize by levels)
             UIModel uiModel = uiModelBuilder.build(calculatedModel);
 
-            // Step 4: Build architecture node tree for visualization
-            // We still use ArchitectureModelBuilder for hierarchical tree structure
+            // Step 4: Build architecture node tree for visualization (hierarchical structure)
             ArchitectureNode model = buildArchitectureNodeFromUIModel(uiModel, calculatedModel);
 
-            // Display in UI
+            // Step 5: Display in UI
             architectureView.setArchitectureRoot(model);
             
             String message = String.format(
