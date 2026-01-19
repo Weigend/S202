@@ -4,14 +4,12 @@ import javafx.fxml.FXML;
 import javafx.fxml.FXMLLoader;
 import javafx.scene.control.ScrollPane;
 import javafx.scene.layout.BorderPane;
-import javafx.scene.layout.Priority;
-import javafx.scene.layout.VBox;
 
 import java.io.IOException;
 
 /**
  * Main controller for the new architecture visualization layout.
- * Dynamically creates HBox rows with test elements.
+ * Demo mode only - shows hardcoded test data for UI testing.
  */
 public class ArchitectureViewV2Controller {
 
@@ -23,16 +21,16 @@ public class ArchitectureViewV2Controller {
 
     @FXML
     private void initialize() {
-        // Dynamically add test content using LevelPackageBox
+        // Demo mode - show hardcoded test content
         addTestContent();
     }
 
     /**
-     * Add test content using LevelPackageBox (hierarchical nesting).
+     * Add demo/test content (hardcoded hierarchical structure).
      */
     private void addTestContent() {
         // Create first level with name
-        LevelPackageBox level1 = new LevelPackageBox("Level 1");
+        LevelPackageBox level1 = new LevelPackageBox("Root Package");
         
         // Populate with test elements (9 elements in 4 levels)
         level1.addToLevel(1, new LevelClassBox("Element 1.1"));
@@ -75,3 +73,4 @@ public class ArchitectureViewV2Controller {
         return rootPane;
     }
 }
+

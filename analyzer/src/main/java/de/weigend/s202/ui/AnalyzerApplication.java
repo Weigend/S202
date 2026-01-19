@@ -47,26 +47,15 @@ public class AnalyzerApplication extends Application {
 
         primaryStage.setTitle("S202 Code Analyzer - Architecture Viewer");
 
-        // Create main container
         BorderPane root = new BorderPane();
-
-        // Create header
         VBox header = createHeader();
         root.setTop(header);
 
-        // Create architecture view
-        architectureView = new ArchitectureView(primaryStage);
-        
-        // Set callback for when user selects a JAR file
-        architectureView.setOnFileSelected(this::loadJarFile);
-        
-        root.setCenter(architectureView);
+        // Load original layout by default
+        loadOldLayout(root);
 
-        // Create scene
         Scene scene = new Scene(root, 1200, 800);
         primaryStage.setScene(scene);
-
-        // Show stage
         primaryStage.show();
 
         // Check for JAR file from multiple sources
@@ -102,11 +91,23 @@ public class AnalyzerApplication extends Application {
         }
     }
 
+    /**
+     * Load the original ArchitectureView layout.
+     */
+    private void loadOldLayout(BorderPane root) {
+        architectureView = new ArchitectureView(primaryStage);
+        architectureView.setOnFileSelected(this::loadJarFile);
+        root.setCenter(architectureView);
+    }
+
+
+
     private VBox createHeader() {
         VBox header = new VBox(10);
         header.setPadding(new Insets(15));
         header.setStyle("-fx-background-color: #f5f5f5; -fx-border-color: #cccccc; -fx-border-width: 0 0 1 0;");
 
+        // Title area
         Label titleLabel = new Label("S202 Code Analyzer");
         titleLabel.setStyle("-fx-font-size: 18; -fx-font-weight: bold;");
 
@@ -127,13 +128,18 @@ public class AnalyzerApplication extends Application {
         if (jarFile == null) return;
 
         try {
-            architectureView.setStatus("Analyzing: " + jarFile.getName() + " (this may take a moment)...");
+            if (architectureView != null) {
+                architectureView.setStatus("Analyzing: " + jarFile.getName() + " (this may take a moment)...");
+            }
 
             // Step 1: Raw analysis - extract classes and dependencies from bytecode
             DependencyModel rawModel = rawAnalyzer.analyze(jarFile.getAbsolutePath());
             
             if (rawModel.getAllClasses().isEmpty()) {
-                architectureView.setStatus("Error: No classes found in JAR file");
+                String errorMsg = "Error: No classes found in JAR file";
+                if (architectureView != null) {
+                    architectureView.setStatus(errorMsg);
+                }
                 showErrorDialog("No Classes Found", "The JAR file does not contain any .class files");
                 return;
             }
@@ -144,22 +150,25 @@ public class AnalyzerApplication extends Application {
             // Step 3: Build UI model (organize by levels)
             UIModel uiModel = uiModelBuilder.build(calculatedModel);
 
-            // Step 4: Build architecture node tree for visualization (hierarchical structure)
-            ArchitectureNode model = buildArchitectureNodeFromUIModel(uiModel, calculatedModel);
-
-            // Step 5: Display in UI
-            architectureView.setArchitectureRoot(model);
-            
-            String message = String.format(
-                "Loaded %d classes | %d levels | Max level %d",
-                rawModel.getAllClasses().size(),
-                uiModel.getLevelCount(),
-                uiModel.getMaxLevel()
-            );
-            architectureView.setStatus(message);
+            // Step 4: Display in the UI with new LevelPackageBox layout
+            if (architectureView != null) {
+                // Populate with UIModel data (dynamic level-based layout)
+                architectureView.setUIModel(uiModel);
+                
+                String message = String.format(
+                    "Loaded %d classes | %d levels | Max level %d",
+                    rawModel.getAllClasses().size(),
+                    uiModel.getLevelCount(),
+                    uiModel.getMaxLevel()
+                );
+                architectureView.setStatus(message);
+            }
 
         } catch (Exception e) {
-            architectureView.setStatus("Error: " + e.getMessage());
+            String errorMsg = "Error: " + e.getMessage();
+            if (architectureView != null) {
+                architectureView.setStatus(errorMsg);
+            }
             showErrorDialog("Analysis Error", "Failed to analyze JAR file:\n" + e.getMessage());
             e.printStackTrace();
         }
@@ -303,6 +312,7 @@ public class AnalyzerApplication extends Application {
             buildPackageHierarchy(subpkgNode, elementsByPackage, subpkg, calculatedModel);
         }
     }
+
 
     /**
      * Shows an error dialog to the user.

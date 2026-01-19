@@ -121,10 +121,26 @@ public class InputAnalyzer {
                           String superName, String[] interfaces) {
             // Convert bytecode name (com/example/Class) to source name (com.example.Class)
             this.currentClassName = convertClassName(name);
-            String[] parts = currentClassName.split("\\.");
+            
+            // Skip inner classes (contain $)
+            // OPEN POINT: Inner classes are currently ignored. This means that dependencies
+            // from/to inner classes are not tracked separately. Inner class dependencies are
+            // implicitly attributed to the outer class.
+            // TODO: Consider whether inner class analysis should be supported as a separate feature
+            if (currentClassName.contains("$")) {
+                return;
+            }
+            
+            // Handle inner classes: extract outer class name before $
+            String classNameForPackage = currentClassName;
+            if (currentClassName.contains("$")) {
+                classNameForPackage = currentClassName.substring(0, currentClassName.indexOf("$"));
+            }
+            
+            String[] parts = classNameForPackage.split("\\.");
             this.currentSimpleName = parts[parts.length - 1];
-            this.currentPackageName = currentClassName.substring(0,
-                currentClassName.lastIndexOf("."));
+            this.currentPackageName = classNameForPackage.substring(0,
+                classNameForPackage.lastIndexOf("."));
 
             // Create ClassInfo
             this.currentClassInfo = new DependencyModel.ClassInfo(

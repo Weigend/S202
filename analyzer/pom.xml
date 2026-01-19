@@ -84,7 +84,7 @@
                 <artifactId>javafx-maven-plugin</artifactId>
                 <version>0.0.8</version>
                 <configuration>
-                    <mainClass>de.weigend.s202.ui.newlayout.ArchitectureViewV2Demo</mainClass>
+                    <mainClass>de.weigend.s202.ui.AnalyzerApplication</mainClass>
                 </configuration>
             </plugin>
         </plugins>
