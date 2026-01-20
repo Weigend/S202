@@ -1,10 +1,11 @@
 package com.example1;
 
 /**
- * Class X - Simple class in example1 package
+ * Standalone class in example1 package.
+ * Used by com.example2.E to demonstrate cross-package dependencies.
  */
 public class X {
-    public String getName() {
-        return "Class X";
+    public void doSomething() {
+        System.out.println("X.doSomething()");
     }
 }

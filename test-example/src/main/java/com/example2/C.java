@@ -1,17 +1,13 @@
 package com.example2;
 
 /**
- * Class C - Depends on D
- * Part of diamond dependency: A -> C -> D
+ * Middle class in diamond dependency pattern.
+ * Depends on D (like B).
  */
 public class C {
     private D d = new D();
     
-    public String getName() {
-        return "Class C";
-    }
-    
-    public String getDInfo() {
-        return d.getName();
+    public void methodC() {
+        d.baseMethod();
     }
 }

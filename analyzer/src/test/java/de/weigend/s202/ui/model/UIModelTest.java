@@ -193,7 +193,8 @@ class UIModelTest {
 
     @Test
     void testDomainMaxLevelIs2() {
-        assertEquals(2, uiModel.getMaxLevel(), "Max level should be 2 (A->B->C chain)");
+        // Max level is now 3 due to example2.E depending on the A->B->C chain
+        assertEquals(3, uiModel.getMaxLevel(), "Max level should be 3 (com.example2.E depends on A->B->C chain)");
     }
 
     @Test

@@ -4,30 +4,22 @@ import com.example.B;
 import com.example1.X;
 
 /**
- * Class E - Uses two classes and has primary dependency on A from example2 (Level 2)
- * Dependencies:
- *   - com.example2.A (Level 2 - makes E Level 3)
- *   - com.example.B (Level 1)
- *   - com.example1.X (Level 0)
+ * Cross-package dependency class.
+ * E depends on:
+ * - com.example2.A (same package)
+ * - com.example.B (different package)
+ * - com.example1.X (different package)
+ * 
+ * This demonstrates how packages should be leveled based on their internal dependencies.
  */
 public class E {
-    private A a = new A();  // A from example2 (Level 2)
-    private B b = new B();  // B from example (Level 1)
-    private X x = new X();  // X from example1 (Level 0)
+    private A example2A = new A();
+    private B exampleB = new B();
+    private X example1X = new X();
     
-    public String getName() {
-        return "Class E";
-    }
-    
-    public String getAInfo() {
-        return a.getName();
-    }
-    
-    public String getBInfo() {
-        return b.getName();
-    }
-    
-    public String getXInfo() {
-        return x.getName();
+    public void complexMethod() {
+        example2A.methodA();
+        exampleB.getAInfo();
+        example1X.doSomething();
     }
 }

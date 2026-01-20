@@ -1,10 +1,12 @@
 package com.example2;
 
 /**
- * Class D - No dependencies (leaf in diamond pattern)
+ * Base class in diamond dependency pattern (example2).
+ * D <- B <- A
+ * D <- C <- A
  */
 public class D {
-    public String getName() {
-        return "Class D";
+    public void baseMethod() {
+        System.out.println("D.baseMethod()");
     }
 }

@@ -134,6 +134,7 @@ public class AnalyzerApplication extends Application {
 
             // Step 1: Raw analysis - extract classes and dependencies from bytecode
             DependencyModel rawModel = rawAnalyzer.analyze(jarFile.getAbsolutePath());
+            System.err.println("[AnalyzerApplication] rawModel packages: " + rawModel.getAllPackageNames());
             
             if (rawModel.getAllClasses().isEmpty()) {
                 String errorMsg = "Error: No classes found in JAR file";

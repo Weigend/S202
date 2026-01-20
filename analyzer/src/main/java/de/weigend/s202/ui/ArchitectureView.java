@@ -167,7 +167,8 @@ public class ArchitectureView extends BorderPane {
                 }
                 
                 // Ensure all parent packages exist in the hierarchy
-                ensurePackageHierarchy(parentPackage, packageContainers, rootLevel, element.level);
+                // Pass the full UIModel so we can look up package levels
+                ensurePackageHierarchy(parentPackage, packageContainers, rootLevel, uiModel);
                 
                 // Get parent container (should now exist)
                 LevelPackageBox parentContainer = packageContainers.get(parentPackage);
@@ -186,12 +187,14 @@ public class ArchitectureView extends BorderPane {
                     if (!packageContainers.containsKey(element.fullName)) {
                         LevelPackageBox packageBox = new LevelPackageBox(element.simpleName, element.level);
                         packageContainers.put(element.fullName, packageBox);
-                        parentContainer.addToLevel(level + 1, packageBox);
+                        // Add to the correct architectural level, not the iteration level
+                        parentContainer.addToLevel(element.level, packageBox);
                     }
                 } else if ("CLASS".equals(element.type)) {
                     // Create class element
                     LevelClassBox classBox = new LevelClassBox(element.simpleName, element.level);
-                    parentContainer.addToLevel(level + 1, classBox);
+                    // Add to the correct architectural level, not the iteration level
+                    parentContainer.addToLevel(element.level, classBox);
                 }
                 
                 // Mark element as added
@@ -211,18 +214,18 @@ public class ArchitectureView extends BorderPane {
      * @param packageName The package name to ensure exists
      * @param packageContainers Map of existing containers
      * @param rootLevel The root package box
-     * @param elementLevel The level of the element that owns this package
+     * @param uiModel The UIModel containing all element data
      */
     private void ensurePackageHierarchy(String packageName, 
                                        java.util.Map<String, LevelPackageBox> packageContainers,
                                        LevelPackageBox rootLevel,
-                                       int elementLevel) {
+                                       UIModel uiModel) {
         if (packageName == null || packageName.isEmpty()) {
             return;
         }
         
         if (packageContainers.containsKey(packageName)) {
-            return; // Already exists
+            return; // Already exists - don't recreate with wrong level!
         }
         
         // Split the package into parts
@@ -234,18 +237,37 @@ public class ArchitectureView extends BorderPane {
             currentPkg = currentPkg.isEmpty() ? part : currentPkg + "." + part;
             
             if (!packageContainers.containsKey(currentPkg)) {
-                // Create missing package container with the same level as the element
-                LevelPackageBox packageBox = new LevelPackageBox(part, elementLevel);
+                // Package doesn't exist yet - look up its level from the UIModel
+                int packageLevel = findPackageLevelInUIModel(currentPkg, uiModel);
+                
+                LevelPackageBox packageBox = new LevelPackageBox(part, packageLevel);
                 packageContainers.put(currentPkg, packageBox);
                 
-                // Add to parent
+                // Add to parent at the correct architectural level
                 LevelPackageBox parentContainer = packageContainers.get(previousPkg);
                 if (parentContainer != null) {
-                    // Use level 1 for created packages (they should appear at top)
-                    parentContainer.addToLevel(1, packageBox);
+                    parentContainer.addToLevel(packageLevel, packageBox);
+                } else {
+                    // No parent container, add to root
+                    rootLevel.addToLevel(packageLevel, packageBox);
                 }
             }
         }
+    }
+    
+    /**
+     * Look up a package's level in the UIModel.
+     */
+    private int findPackageLevelInUIModel(String packageName, UIModel uiModel) {
+        for (int level = 0; level < uiModel.getLevelCount(); level++) {
+            for (UIModel.UIElementInfo elem : uiModel.getElementsAtLevel(level)) {
+                if ("PACKAGE".equals(elem.type) && packageName.equals(elem.fullName)) {
+                    return elem.level;
+                }
+            }
+        }
+        // Package not found in UIModel - default to 0
+        return 0;
     }
     
     /**

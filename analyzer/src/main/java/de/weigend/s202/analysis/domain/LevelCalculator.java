@@ -1,13 +1,32 @@
 package de.weigend.s202.analysis.domain;
 
 import de.weigend.s202.analysis.input.DependencyModel;
+import de.weigend.s202.analysis.strategy.LevelCalculationStrategyContext;
 
 import java.util.*;
 
 /**
  * Calculates architectural levels for classes and packages based on dependencies.
+ * Uses pluggable strategies for flexible level calculation algorithms.
  */
 public class LevelCalculator {
+    
+    private final LevelCalculationStrategyContext strategyContext;
+    
+    /**
+     * Create a calculator with default strategies.
+     */
+    public LevelCalculator() {
+        this(LevelCalculationStrategyContext.createDefault());
+    }
+    
+    /**
+     * Create a calculator with custom strategies.
+     */
+    public LevelCalculator(LevelCalculationStrategyContext strategyContext) {
+        Objects.requireNonNull(strategyContext, "strategyContext cannot be null");
+        this.strategyContext = strategyContext;
+    }
 
     /**
      * Calculates levels for all classes and packages.
@@ -45,53 +64,45 @@ public class LevelCalculator {
         return model;
     }
 
+    public LevelCalculationStrategyContext getStrategyContext() {
+        return strategyContext;
+    }
+
     /**
-     * Calculates levels for classes using iterative refinement.
+     * Calculates levels for classes using the ClassLevelCalculationStrategy.
      * Level = max(dependency levels) + 1, or 0 if no dependencies.
      */
     private void calculateClassLevels(DomainModel model) {
         Map<String, DomainModel.CalculatedElementInfo> classes = model.getAllClasses();
 
-        // Max 3 iterations per class to avoid infinite loops
-        int maxIterations = classes.size() + 1;
-        boolean changed = true;
-        int iteration = 0;
+        // Build dependency map from the model
+        Map<String, Set<String>> classDependencies = new HashMap<>();
+        for (DomainModel.CalculatedElementInfo classInfo : classes.values()) {
+            classDependencies.put(classInfo.fullName, new HashSet<>(classInfo.dependencies));
+        }
 
-        while (changed && iteration < maxIterations) {
-            changed = false;
-            iteration++;
+        // Use the strategy to calculate class levels
+        Map<String, Integer> calculatedLevels = 
+            strategyContext.getClassLevelStrategy().calculateClassLevels(classDependencies);
 
-            for (DomainModel.CalculatedElementInfo classInfo : classes.values()) {
-                if (classInfo.dependencies.isEmpty()) {
-                    continue; // Already level 0
-                }
-
-                int maxDependencyLevel = -1;
-                for (String depName : classInfo.dependencies) {
-                    DomainModel.CalculatedElementInfo dep = model.getClass(depName);
-                    if (dep != null) {
-                        maxDependencyLevel = Math.max(maxDependencyLevel, dep.level);
-                    }
-                }
-
-                if (maxDependencyLevel >= 0) {
-                    int newLevel = maxDependencyLevel + 1;
-                    if (newLevel != classInfo.level) {
-                        classInfo.setLevel(newLevel);
-                        changed = true;
-                    }
-                }
+        // Apply calculated levels to the model
+        for (Map.Entry<String, Integer> entry : calculatedLevels.entrySet()) {
+            DomainModel.CalculatedElementInfo classInfo = model.getClass(entry.getKey());
+            if (classInfo != null) {
+                classInfo.setLevel(entry.getValue());
             }
         }
     }
 
     /**
      * Calculates levels for packages based on EXTERNAL class dependencies only.
+     * Uses the PackageLevelCalculationStrategy from the strategy context.
      */
     private void calculatePackageLevels(DomainModel model, DependencyModel rawModel) {
         Map<String, DomainModel.CalculatedElementInfo> packages = model.getAllPackages();
 
         // Build external dependency map for each package
+        Map<String, Set<String>> packageDependencies = new HashMap<>();
         for (String packageName : packages.keySet()) {
             DependencyModel.PackageInfo rawPkg = rawModel.getPackage(packageName);
             Set<String> externalPackageDeps = new HashSet<>();
@@ -108,41 +119,21 @@ public class LevelCalculator {
                 }
             }
 
-            // Update package dependencies with external ones
-            DomainModel.CalculatedElementInfo pkgInfo = model.getPackage(packageName);
-            pkgInfo.dependencies.clear();
-            pkgInfo.dependencies.addAll(externalPackageDeps);
+            packageDependencies.put(packageName, externalPackageDeps);
         }
 
-        // Calculate package levels using same algorithm as classes
-        boolean changed = true;
-        int iteration = 0;
-        int maxIterations = packages.size() + 1;
+        // Use the strategy to calculate package levels
+        Map<String, Integer> calculatedLevels = 
+            strategyContext.getPackageLevelStrategy().calculatePackageLevels(packageDependencies);
 
-        while (changed && iteration < maxIterations) {
-            changed = false;
-            iteration++;
-
-            for (DomainModel.CalculatedElementInfo pkgInfo : packages.values()) {
-                if (pkgInfo.dependencies.isEmpty()) {
-                    continue;
-                }
-
-                int maxDependencyLevel = -1;
-                for (String depName : pkgInfo.dependencies) {
-                    DomainModel.CalculatedElementInfo dep = model.getPackage(depName);
-                    if (dep != null) {
-                        maxDependencyLevel = Math.max(maxDependencyLevel, dep.level);
-                    }
-                }
-
-                if (maxDependencyLevel >= 0) {
-                    int newLevel = maxDependencyLevel + 1;
-                    if (newLevel != pkgInfo.level) {
-                        pkgInfo.setLevel(newLevel);
-                        changed = true;
-                    }
-                }
+        // Apply calculated levels to the model
+        for (Map.Entry<String, Integer> entry : calculatedLevels.entrySet()) {
+            DomainModel.CalculatedElementInfo pkgInfo = model.getPackage(entry.getKey());
+            if (pkgInfo != null) {
+                pkgInfo.setLevel(entry.getValue());
+                // Update dependencies for the model
+                pkgInfo.dependencies.clear();
+                pkgInfo.dependencies.addAll(packageDependencies.get(entry.getKey()));
             }
         }
     }
