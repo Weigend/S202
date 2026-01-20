@@ -17,7 +17,16 @@ public class LevelClassBox extends Label {
      * @param name The class name to display
      */
     public LevelClassBox(String name) {
-        super(name);
+        this(name, -1);
+    }
+
+    /**
+     * Create a new LevelClassBox with the given name and level.
+     * @param name The class name to display
+     * @param level The architectural level (-1 means not specified)
+     */
+    public LevelClassBox(String name, int level) {
+        super(level >= 0 ? name + " (L:" + level + ")" : name);
         
         // Styling
         this.setStyle("-fx-font-size: 12; -fx-border-color: #0066cc; -fx-border-width: 2; -fx-padding: 8; -fx-background-color: #e6f0ff;");

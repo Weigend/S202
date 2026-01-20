@@ -167,7 +167,7 @@ public class ArchitectureView extends BorderPane {
                 }
                 
                 // Ensure all parent packages exist in the hierarchy
-                ensurePackageHierarchy(parentPackage, packageContainers, rootLevel);
+                ensurePackageHierarchy(parentPackage, packageContainers, rootLevel, element.level);
                 
                 // Get parent container (should now exist)
                 LevelPackageBox parentContainer = packageContainers.get(parentPackage);
@@ -184,13 +184,13 @@ public class ArchitectureView extends BorderPane {
                 if ("PACKAGE".equals(element.type)) {
                     // Create package container only if not already created
                     if (!packageContainers.containsKey(element.fullName)) {
-                        LevelPackageBox packageBox = new LevelPackageBox(element.simpleName);
+                        LevelPackageBox packageBox = new LevelPackageBox(element.simpleName, element.level);
                         packageContainers.put(element.fullName, packageBox);
                         parentContainer.addToLevel(level + 1, packageBox);
                     }
                 } else if ("CLASS".equals(element.type)) {
                     // Create class element
-                    LevelClassBox classBox = new LevelClassBox(element.simpleName);
+                    LevelClassBox classBox = new LevelClassBox(element.simpleName, element.level);
                     parentContainer.addToLevel(level + 1, classBox);
                 }
                 
@@ -208,10 +208,15 @@ public class ArchitectureView extends BorderPane {
     /**
      * Ensures that all parent packages in a hierarchy exist.
      * Creates missing package containers as needed.
+     * @param packageName The package name to ensure exists
+     * @param packageContainers Map of existing containers
+     * @param rootLevel The root package box
+     * @param elementLevel The level of the element that owns this package
      */
     private void ensurePackageHierarchy(String packageName, 
                                        java.util.Map<String, LevelPackageBox> packageContainers,
-                                       LevelPackageBox rootLevel) {
+                                       LevelPackageBox rootLevel,
+                                       int elementLevel) {
         if (packageName == null || packageName.isEmpty()) {
             return;
         }
@@ -229,8 +234,8 @@ public class ArchitectureView extends BorderPane {
             currentPkg = currentPkg.isEmpty() ? part : currentPkg + "." + part;
             
             if (!packageContainers.containsKey(currentPkg)) {
-                // Create missing package container
-                LevelPackageBox packageBox = new LevelPackageBox(part);
+                // Create missing package container with the same level as the element
+                LevelPackageBox packageBox = new LevelPackageBox(part, elementLevel);
                 packageContainers.put(currentPkg, packageBox);
                 
                 // Add to parent

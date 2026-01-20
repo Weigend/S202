@@ -33,8 +33,17 @@ public class LevelPackageBox extends VBox {
      * @param levelName The name to display in the header
      */
     public LevelPackageBox(String levelName) {
+        this(levelName, -1);
+    }
+
+    /**
+     * Create a new LevelPackageBox with empty content area and a header.
+     * @param levelName The name to display in the header
+     * @param level The architectural level (-1 means not specified)
+     */
+    public LevelPackageBox(String levelName, int level) {
         super(5);
-        this.levelName = levelName;
+        this.levelName = level >= 0 ? levelName + " (L:" + level + ")" : levelName;
         this.setStyle("-fx-background-color: #fffacd; -fx-border-color: #999999; -fx-border-width: 2; -fx-padding: 0;");
         this.setPadding(new Insets(0));
         this.setMaxWidth(Double.MAX_VALUE);
@@ -102,6 +111,7 @@ public class LevelPackageBox extends VBox {
     /**
      * Add a node (LevelClassBox, LevelPackageBox, etc.) to a specific level.
      * Creates the HBox for this level if it doesn't exist yet.
+     * Levels are displayed in DESCENDING order (higher levels at top).
      * @param levelNumber The level number (1-based)
      * @param node The node to add (typically LevelClassBox or LevelPackageBox)
      */
@@ -116,7 +126,10 @@ public class LevelPackageBox extends VBox {
             hbox.setMaxHeight(Double.MAX_VALUE);
             hbox.setAlignment(Pos.CENTER);
             VBox.setVgrow(hbox, Priority.ALWAYS);  // Make HBox grow vertically in parent VBox
-            contentContainer.getChildren().add(hbox);
+            
+            // Insert new HBox at correct position (descending order = highest level first)
+            insertLevelRowAtCorrectPosition(levelNumber, hbox);
+            
             return hbox;
         });
         
@@ -127,6 +140,26 @@ public class LevelPackageBox extends VBox {
             HBox.setHgrow(node, Priority.ALWAYS);
         }
         levelRow.getChildren().add(node);
+    }
+    
+    /**
+     * Insert a level row at the correct position to maintain descending order.
+     * Higher level numbers should appear first (at top).
+     */
+    private void insertLevelRowAtCorrectPosition(int newLevelNumber, HBox hbox) {
+        // Find insertion index based on descending order
+        int insertIndex = 0;
+        for (int i = 0; i < contentContainer.getChildren().size(); i++) {
+            Node child = contentContainer.getChildren().get(i);
+            // Try to find the level number for this child
+            for (Integer levelNum : levelRows.keySet()) {
+                if (levelRows.get(levelNum) == child && levelNum > newLevelNumber) {
+                    insertIndex = i + 1;
+                    break;
+                }
+            }
+        }
+        contentContainer.getChildren().add(insertIndex, hbox);
     }
 }
 
