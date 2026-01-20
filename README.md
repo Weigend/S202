@@ -2,7 +2,7 @@
 
 Ein JavaFX-basiertes Tool zur Analyse von Java-Bytecode und Visualisierung der Architektur mit Abhängigkeitserkennung.
 
-![UI Screenshot](ui.png)
+![UI Screenshot](docs/Beispiel.png)
 
 ## Features
 
@@ -15,37 +15,6 @@ Ein JavaFX-basiertes Tool zur Analyse von Java-Bytecode und Visualisierung der A
 - **Horizontal Layer Layout**: Pakete der gleichen Schicht nebeneinander angeordnet
 - **Auto-Expand**: Konfigurierbare Tiefe für automatisches Aufklappen (1-10 Ebenen, Default: 3)
 
-## Projektstruktur
-
-```
-src/
-├── main/
-│   ├── java/de/weigend/s202/
-│   │   ├── model/               # Datenmodelle (UI-frei)
-│   │   │   ├── ClassDependency.java
-│   │   │   ├── JavaClass.java
-│   │   │   ├── JavaPackage.java
-│   │   │   └── CyclicDependency.java
-│   │   ├── io/                  # JAR-Handling
-│   │   │   ├── JarLoader.java
-│   │   │   └── BytecodeAnalyzer.java
-│   │   ├── analysis/            # Analyse-Logik (UI-frei)
-│   │   │   ├── DependencyGraphBuilder.java
-│   │   │   ├── ArchitectureModelBuilder.java
-│   │   │   └── LayerAssigner.java
-│   │   ├── ui/                  # JavaFX UI
-│   │   │   ├── AnalyzerApplication.java
-│   │   │   ├── ArchitectureView.java
-│   │   │   ├── PackageTreeView.java
-│   │   │   ├── ArchitectureTreeCell.java
-│   │   │   └── ArchitectureGraphView.java
-│   │   └── example/             # Beispiel-Code
-│   │       └── AnalyzerExample.java
-│   └── resources/
-└── test/
-    └── java/de/weigend/s202/
-        ├── model/               # Unit Tests für Modelle
-        └── analysis/            # Unit Tests für Analyse (35 Tests)
 ```
 
 ## Dependencies
