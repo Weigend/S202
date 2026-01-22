@@ -1,0 +1,96 @@
+# Level-Berechnungsstrategien
+
+## Übersicht
+
+S202 berechnet für jede Klasse und jedes Paket ein **Level** (Schicht). Das Level gibt an, wie "tief" ein Element in der Abhängigkeitshierarchie liegt:
+
+- **Level 0** = Basis-Elemente ohne Abhängigkeiten (Blätter)
+- **Level 1** = Elemente, die nur von Level-0-Elementen abhängen
+- **Level N** = Elemente, die von Level-(N-1)-Elementen abhängen
+
+## Algorithmus
+
+Beide Strategien (`BasicClassLevelCalculationStrategy` und `BasicPackageLevelCalculationStrategy`) funktionieren identisch:
+
+### Schritt 1: Initialisierung
+Alle Elemente starten mit Level 0.
+
+```
+A → 0
+B → 0
+C → 0
+```
+
+### Schritt 2: Iterative Berechnung
+Der Algorithmus iteriert, bis sich keine Levels mehr ändern:
+
+```
+Für jedes Element:
+    1. Sammle die Levels aller Abhängigkeiten
+    2. Berechne neues Level = max(Abhängigkeits-Levels) + 1
+    3. Falls Level sich ändert → weitere Iteration nötig
+```
+
+### Schritt 3: Aggregation
+Die **SimpleMaxAggregationStrategy** berechnet:
+
+```
+Level = max(alle Dependency-Levels) + 1
+
+Beispiel:
+  A hängt ab von B (Level 0) und C (Level 1)
+  → A.level = max(0, 1) + 1 = 2
+```
+
+## Beispiel
+
+Gegeben:
+```
+A → B, C
+B → D
+C → (keine)
+D → (keine)
+```
+
+Iteration 1:
+```
+D: keine Deps → Level 0
+C: keine Deps → Level 0
+B: Dep D=0 → Level max(0)+1 = 1
+A: Deps B=1, C=0 → Level max(1,0)+1 = 2
+```
+
+Ergebnis:
+```
+Level 0: C, D
+Level 1: B
+Level 2: A
+```
+
+## Zyklen-Behandlung
+
+Bei Zyklen (A → B → A) konvergiert der Algorithmus durch das Iterations-Limit (`maxIterations`). Elemente im Zyklus erhalten das gleiche Level.
+
+**Hinweis**: Für echte Zykluserkennung wird separat der Tarjan-SCC-Algorithmus verwendet (siehe `analysis/scc/`).
+
+## Code-Struktur
+
+```
+analysis/strategy/
+├── ClassAggregationStrategy.java       # Interface für Aggregation
+├── ClassLevelCalculationStrategy.java  # Interface für Klassen-Level
+├── PackageLevelCalculationStrategy.java # Interface für Paket-Level
+├── aggregation/
+│   └── SimpleMaxAggregationStrategy.java  # max + 1
+└── impl/
+    ├── BasicClassLevelCalculationStrategy.java
+    └── BasicPackageLevelCalculationStrategy.java
+```
+
+## Erweiterbarkeit
+
+Durch das Strategy-Pattern können alternative Berechnungen implementiert werden:
+
+- **WeightedAggregationStrategy**: Gewichteter Durchschnitt statt Maximum
+- **MedianAggregationStrategy**: Median der Dependency-Levels
+- **CustomAggregationStrategy**: Projekt-spezifische Logik
