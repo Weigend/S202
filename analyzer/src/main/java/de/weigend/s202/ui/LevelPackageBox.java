@@ -26,6 +26,17 @@ public class LevelPackageBox extends VBox {
     private String levelName;
     private Map<Integer, HBox> levelRows;
     private boolean transparent;  // Map to manage HBox containers by level number
+    
+    // Static callback for notifying when expand/collapse changes
+    private static Runnable onExpandChangeCallback = null;
+    
+    /**
+     * Sets a global callback that is called whenever any LevelPackageBox is expanded/collapsed.
+     * Used to refresh dependency arrows in ArchitectureView.
+     */
+    public static void setOnExpandChangeCallback(Runnable callback) {
+        onExpandChangeCallback = callback;
+    }
 
     /**
      * Create a new LevelPackageBox with empty content area and a header.
@@ -120,6 +131,16 @@ public class LevelPackageBox extends VBox {
             toggleIcon.setText("+");
             contentContainer.setVisible(false);
             contentContainer.setManaged(false);
+        }
+        
+        // Notify callback (used to refresh dependency arrows)
+        System.out.println("[DEBUG] toggleExpanded called, callback=" + (onExpandChangeCallback != null));
+        if (onExpandChangeCallback != null) {
+            // Use Platform.runLater to ensure layout is updated first
+            javafx.application.Platform.runLater(() -> {
+                System.out.println("[DEBUG] Callback executing");
+                onExpandChangeCallback.run();
+            });
         }
     }
 

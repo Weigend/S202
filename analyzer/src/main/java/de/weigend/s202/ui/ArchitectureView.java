@@ -199,6 +199,13 @@ public class ArchitectureView extends BorderPane {
         this.currentRootNode = rootNode;
         this.elementRegistry.clear();
         
+        // Set callback to refresh dependency arrows when packages are expanded/collapsed
+        LevelPackageBox.setOnExpandChangeCallback(() -> {
+            if (showDependenciesCheckbox != null && showDependenciesCheckbox.isSelected()) {
+                drawDependencyArrows();
+            }
+        });
+        
         // Map to store package containers by full name for hierarchical organization
         java.util.Map<String, LevelPackageBox> packageContainers = new java.util.HashMap<>();
         
@@ -464,12 +471,12 @@ public class ArchitectureView extends BorderPane {
                 // Get the UI element for this node
                 javafx.scene.Node sourceElement = elementRegistry.get(child.getFullName());
                 
-                if (sourceElement != null && sourceElement.isVisible() && isNodeVisibleInViewport(sourceElement)) {
+                if (sourceElement != null && isNodeActuallyVisible(sourceElement)) {
                     // Draw arrows for each dependency
                     for (String depName : child.getDependencies()) {
                         javafx.scene.Node targetElement = findBestTargetElement(depName);
                         
-                        if (targetElement != null && targetElement.isVisible() && isNodeVisibleInViewport(targetElement)) {
+                        if (targetElement != null && isNodeActuallyVisible(targetElement)) {
                             createDependencyLine(sourceElement, targetElement, child.getFullName(), depName);
                         }
                     }
@@ -488,10 +495,36 @@ public class ArchitectureView extends BorderPane {
     private javafx.scene.Node findBestTargetElement(String targetName) {
         // Only exact match - no parent package fallback
         javafx.scene.Node element = elementRegistry.get(targetName);
-        if (element != null && element.isVisible()) {
+        if (element != null && isNodeActuallyVisible(element)) {
             return element;
         }
         return null;
+    }
+    
+    /**
+     * Checks if a node is actually visible (itself and all parents are visible).
+     * A node is hidden if any parent container is collapsed (visible=false).
+     */
+    private boolean isNodeActuallyVisible(javafx.scene.Node node) {
+        if (node == null) {
+            return false;
+        }
+        
+        // Check this node's visibility
+        if (!node.isVisible()) {
+            return false;
+        }
+        
+        // Check all parents up to the scene root - any invisible parent means this node is hidden
+        javafx.scene.Parent parent = node.getParent();
+        while (parent != null) {
+            if (!parent.isVisible()) {
+                return false;
+            }
+            parent = parent.getParent();
+        }
+        
+        return true;
     }
     
     /**
@@ -499,6 +532,11 @@ public class ArchitectureView extends BorderPane {
      */
     private boolean isNodeVisibleInViewport(javafx.scene.Node node) {
         try {
+            // First check if actually visible in hierarchy
+            if (!isNodeActuallyVisible(node)) {
+                return false;
+            }
+            
             Bounds boundsInScene = node.localToScene(node.getBoundsInLocal());
             Bounds viewportBounds = scrollPane.localToScene(scrollPane.getBoundsInLocal());
             return boundsInScene != null && viewportBounds != null && 
