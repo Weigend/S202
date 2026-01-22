@@ -38,8 +38,9 @@ Dann: **📂 Load JAR** → JAR-Datei auswählen → Architektur wird analysiert
 
 ```
 analyzer/src/main/java/de/weigend/s202/
-├── analysis/       # Analyse-Logik (Level-Berechnung, SCC, Strategien)
-├── io/             # JAR-Loading, Bytecode-Parsing (ASM)
+├── analysis/       # Algorithmen (SCC, Level-Strategien)
+├── domain/         # Kernmodelle (DomainModel, LevelCalculator)
+├── reader/         # JAR-Loading, Dependency-Extraktion
 └── ui/             # JavaFX-Oberfläche
 ```
 

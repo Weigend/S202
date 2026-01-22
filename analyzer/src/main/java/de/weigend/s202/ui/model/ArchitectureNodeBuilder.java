@@ -1,6 +1,6 @@
 package de.weigend.s202.ui.model;
 
-import de.weigend.s202.analysis.domain.DomainModel;
+import de.weigend.s202.domain.DomainModel;
 import de.weigend.s202.ui.model.ArchitectureNode.NodeType;
 
 import java.util.*;

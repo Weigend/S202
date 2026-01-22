@@ -2,10 +2,10 @@ package de.weigend.s202.ui;
 
 import de.weigend.s202.ui.model.ArchitectureNode;
 import de.weigend.s202.ui.model.ArchitectureNodeBuilder;
-import de.weigend.s202.analysis.domain.DomainModel;
-import de.weigend.s202.analysis.domain.LevelCalculator;
-import de.weigend.s202.analysis.input.DependencyModel;
-import de.weigend.s202.analysis.input.InputAnalyzer;
+import de.weigend.s202.domain.DomainModel;
+import de.weigend.s202.domain.LevelCalculator;
+import de.weigend.s202.reader.DependencyModel;
+import de.weigend.s202.reader.InputAnalyzer;
 import javafx.application.Application;
 import javafx.geometry.Insets;
 import javafx.scene.Scene;
@@ -13,7 +13,6 @@ import javafx.scene.control.Alert;
 import javafx.scene.control.Label;
 import javafx.scene.layout.BorderPane;
 import javafx.scene.layout.VBox;
-import javafx.stage.FileChooser;
 import javafx.stage.Stage;
 
 import java.io.File;

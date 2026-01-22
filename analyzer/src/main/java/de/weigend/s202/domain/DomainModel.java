@@ -1,4 +1,4 @@
-package de.weigend.s202.analysis.domain;
+package de.weigend.s202.domain;
 
 import java.util.*;
 

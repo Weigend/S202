@@ -10,15 +10,14 @@ S202 is a **JavaFX-based bytecode analysis and architecture visualization tool**
 ### Package Structure
 ```
 de.weigend.s202/
-├── analysis/           # Analyse-Logik
-│   ├── domain/         # DomainModel, LevelCalculator
-│   ├── input/          # InputAnalyzer (JAR → DependencyModel)
+├── analysis/           # Analyse-Algorithmen
 │   ├── scc/            # Tarjan SCC-Algorithmus
 │   └── strategy/       # Level-Berechnungsstrategien
-├── io/                 # JarLoader, BytecodeAnalyzer (ASM)
+├── domain/             # Kernmodelle (DomainModel, LevelCalculator)
+├── reader/             # JAR → DependencyModel (InputAnalyzer)
 └── ui/                 # JavaFX UI
-    ├── model/          # ArchitectureNode, ArchitectureNodeBuilder
-    └── views/          # ArchitectureView, PackageTreeView
+    ├── model/          # ArchitectureNode, UIModel
+    └── demo/           # Demo-Klassen
 ```
 
 ### Data Pipeline
@@ -30,11 +29,11 @@ JAR → InputAnalyzer → DependencyModel
 ```
 
 ### Key Classes
-- **InputAnalyzer**: Converts JAR to DependencyModel (packages, classes, dependencies)
-- **LevelCalculator**: Computes topological levels with SCC analysis
-- **DomainModel**: Analysis result (levels, violations, cycles)
-- **ArchitectureNode**: UI tree node (package/class with level + dependencies)
-- **ArchitectureNodeBuilder**: Builds UI tree from DomainModel
+- **InputAnalyzer** (`reader/`): Converts JAR to DependencyModel (packages, classes, dependencies)
+- **LevelCalculator** (`domain/`): Computes topological levels with SCC analysis
+- **DomainModel** (`domain/`): Analysis result (levels, violations, cycles)
+- **ArchitectureNode** (`ui/model/`): UI tree node (package/class with level + dependencies)
+- **ArchitectureNodeBuilder** (`ui/model/`): Builds UI tree from DomainModel
 
 ## UI Model
 The unified UI model is `ArchitectureNode` (in `ui/model/`):

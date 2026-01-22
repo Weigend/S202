@@ -1,6 +1,6 @@
-package de.weigend.s202.analysis.domain;
+package de.weigend.s202.domain;
 
-import de.weigend.s202.analysis.input.DependencyModel;
+import de.weigend.s202.reader.DependencyModel;
 import de.weigend.s202.analysis.strategy.LevelCalculationStrategyContext;
 
 import java.util.*;

@@ -1,4 +1,4 @@
-package de.weigend.s202.analysis.domain;
+package de.weigend.s202.domain;
 
 import de.weigend.s202.analysis.strategy.ClassAggregationStrategy;
 import de.weigend.s202.analysis.strategy.LevelCalculationStrategyContext;

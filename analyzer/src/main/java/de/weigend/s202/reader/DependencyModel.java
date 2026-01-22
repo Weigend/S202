@@ -1,4 +1,4 @@
-package de.weigend.s202.input;
+package de.weigend.s202.reader;
 
 import java.util.*;
 

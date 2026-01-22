@@ -1,9 +1,8 @@
 package de.weigend.s202.analysis.debug;
 
-import de.weigend.s202.analysis.input.InputAnalyzer;
-import de.weigend.s202.analysis.input.DependencyModel;
+import de.weigend.s202.reader.InputAnalyzer;
+import de.weigend.s202.reader.DependencyModel;
 
-import java.nio.file.Path;
 import java.util.*;
 
 public class DebugPackageDependencies {

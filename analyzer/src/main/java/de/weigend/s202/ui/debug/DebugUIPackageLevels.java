@@ -1,15 +1,12 @@
 package de.weigend.s202.ui.debug;
 
-import de.weigend.s202.analysis.input.InputAnalyzer;
-import de.weigend.s202.analysis.input.DependencyModel;
-import de.weigend.s202.analysis.domain.LevelCalculator;
-import de.weigend.s202.analysis.domain.DomainModel;
+import de.weigend.s202.reader.InputAnalyzer;
+import de.weigend.s202.reader.DependencyModel;
+import de.weigend.s202.domain.LevelCalculator;
+import de.weigend.s202.domain.DomainModel;
 import de.weigend.s202.ui.model.ArchitectureNode;
 import de.weigend.s202.ui.model.ArchitectureNode.NodeType;
 import de.weigend.s202.ui.model.ArchitectureNodeBuilder;
-
-import java.io.File;
-import java.util.*;
 
 /**
  * Debug test to verify that package levels are correctly propagated to ArchitectureNode tree

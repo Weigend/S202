@@ -1,7 +1,9 @@
-package de.weigend.s202.domain;
+package de.weigend.s202.domain.debug;
 
-import de.weigend.s202.input.InputAnalyzer;
-import de.weigend.s202.input.DependencyModel;
+import de.weigend.s202.domain.DomainModel;
+import de.weigend.s202.domain.LevelCalculator;
+import de.weigend.s202.reader.InputAnalyzer;
+import de.weigend.s202.reader.DependencyModel;
 
 public class TestLevelCalculatorDebug {
     public static void main(String[] args) throws Exception {
