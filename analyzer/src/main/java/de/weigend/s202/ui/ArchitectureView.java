@@ -85,10 +85,7 @@ public class ArchitectureView extends BorderPane {
                 drawDependencyArrows();
             }
         });
-        
-        // Load demo content
-        addTestContent();
-        
+
         setCenter(contentPane);
 
         // Bottom: Status bar
@@ -96,36 +93,7 @@ public class ArchitectureView extends BorderPane {
         statusLabel.getStyleClass().add("status-bar");
         setBottom(statusLabel);
     }
-    
-    /**
-     * Populate the view with demo content (test LevelPackageBox hierarchy).
-     */
-    private void addTestContent() {
-        // Create root package container
-        LevelPackageBox level1 = new LevelPackageBox("Root Package");
-        
-        // Populate with test elements (9 elements in 4 levels)
-        level1.addToLevel(1, new LevelClassBox("Element 1.1"));
-        level1.addToLevel(2, new LevelClassBox("Element 2.1"));
-        level1.addToLevel(3, new LevelClassBox("Element 3.1"));
-        level1.addToLevel(3, new LevelClassBox("Element 3.2"));
-        level1.addToLevel(3, new LevelClassBox("Element 3.3"));
-        level1.addToLevel(4, new LevelClassBox("Element 4.1"));
-        level1.addToLevel(4, new LevelClassBox("Element 4.2"));
-        level1.addToLevel(4, new LevelClassBox("Element 4.3"));
-        level1.addToLevel(4, new LevelClassBox("Element 4.4"));
-        
-        // Create a nested level at position 2.2
-        LevelPackageBox nestedLevel = new LevelPackageBox("Nested Level");
-        nestedLevel.addToLevel(1, new LevelClassBox("Nested 1.1"));
-        nestedLevel.addToLevel(1, new LevelClassBox("Nested 1.2"));
-        nestedLevel.addToLevel(2, new LevelClassBox("Nested 2.1"));
-        
-        // Add nested structure to level 2 (as Element 2.2, alongside Element 2.1)
-        level1.addToLevel(2, nestedLevel);
-        
-        scrollPane.setContent(level1);
-    }
+
 
     private HBox createToolbar() {
         HBox toolbar = new HBox(8);

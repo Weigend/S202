@@ -198,10 +198,10 @@ class ArchitectureNodeTest {
             .anyMatch(e -> "com.example".equals(e.getFullName()) && e.getType() == NodeType.PACKAGE);
         assertTrue(comExampleLevel0, "Package com.example should be in level 0");
         
-        // Package com should be in level 0
-        boolean comLevel0 = rootNode.getNodesAtLevel(0).stream()
+        // Package com should be in level 1 (inherits from child com.example2 which is L1)
+        boolean comLevel1 = rootNode.getNodesAtLevel(1).stream()
             .anyMatch(e -> "com".equals(e.getFullName()) && e.getType() == NodeType.PACKAGE);
-        assertTrue(comLevel0, "Package com should be in level 0");
+        assertTrue(comLevel1, "Package com should be in level 1 (inherits max level of children)");
     }
 
     @Test

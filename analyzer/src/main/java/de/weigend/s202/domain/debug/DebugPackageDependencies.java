@@ -1,4 +1,4 @@
-package de.weigend.s202.analysis.debug;
+package de.weigend.s202.domain.debug;
 
 import de.weigend.s202.reader.InputAnalyzer;
 import de.weigend.s202.reader.DependencyModel;

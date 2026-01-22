@@ -29,7 +29,8 @@ public class ArchitectureViewPackageLevelsTest {
         DomainModel domainModel = calculator.calculate(rawModel);
         
         // Verify DomainModel has correct levels
-        assertEquals(0, domainModel.getPackage("com").level);
+        // Parent packages inherit the max level of their children
+        assertEquals(1, domainModel.getPackage("com").level, "com inherits L1 from child com.example2");
         assertEquals(0, domainModel.getPackage("com.example").level);
         assertEquals(0, domainModel.getPackage("com.example1").level);
         assertEquals(1, domainModel.getPackage("com.example2").level);

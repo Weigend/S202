@@ -35,7 +35,8 @@ public class ArchitectureViewLevelTest {
         assertEquals(4, calculatedModel.getAllPackages().size(), "Should have 4 packages after calculation");
         
         // Verify package levels
-        assertEquals(0, calculatedModel.getAllPackages().get("com").level, "com should be L0");
+        // Parent packages inherit the max level of their children
+        assertEquals(1, calculatedModel.getAllPackages().get("com").level, "com should be L1 (inherits from child com.example2)");
         assertEquals(0, calculatedModel.getAllPackages().get("com.example").level, "com.example should be L0");
         assertEquals(0, calculatedModel.getAllPackages().get("com.example1").level, "com.example1 should be L0");
         assertEquals(1, calculatedModel.getAllPackages().get("com.example2").level, "com.example2 should be L1");

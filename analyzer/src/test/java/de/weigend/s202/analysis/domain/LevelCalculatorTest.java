@@ -353,11 +353,13 @@ class LevelCalculatorTest {
     }
 
     @Test
-    void testDomainPackageComIsLevel0() {
+    void testDomainPackageComInheritsMaxChildLevel() {
         DomainModel.CalculatedElementInfo pkgCom = calculatedModel.getPackage("com");
         assertNotNull(pkgCom, "Package com should exist");
-        assertEquals(0, pkgCom.level, 
-            "Package com should be at level 0");
+        // Parent packages inherit the max level of their children
+        // com.example2 is L1, so com should also be L1
+        assertEquals(1, pkgCom.level, 
+            "Package com should be at level 1 (inherits from child com.example2)");
     }
 
     @Test

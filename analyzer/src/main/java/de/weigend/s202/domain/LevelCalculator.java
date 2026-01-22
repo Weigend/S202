@@ -111,10 +111,10 @@ public class LevelCalculator {
             for (String className : rawPkg.classNames) {
                 DependencyModel.ClassInfo rawClass = rawModel.getClass(className);
                 for (String depClassName : rawClass.dependencies) {
-                    // If dependency is in a different package, add to external deps
-                    DependencyModel.ClassInfo depClass = rawModel.getClass(depClassName);
-                    if (depClass != null && !depClass.packageName.equals(packageName)) {
-                        externalPackageDeps.add(depClass.packageName);
+                    // Extract package name from class name and check if it's a known package
+                    String depPackage = extractPackageName(depClassName);
+                    if (depPackage != null && packages.containsKey(depPackage) && !depPackage.equals(packageName)) {
+                        externalPackageDeps.add(depPackage);
                     }
                 }
             }
@@ -134,6 +134,52 @@ public class LevelCalculator {
                 // Update dependencies for the model
                 pkgInfo.dependencies.clear();
                 pkgInfo.dependencies.addAll(packageDependencies.get(entry.getKey()));
+            }
+        }
+
+        // Propagate levels to parent packages (parent inherits max level of children)
+        propagateLevelsToParentPackages(model, rawModel);
+    }
+
+    /**
+     * Propagates levels from child packages to parent packages.
+     * A parent package should have at least the maximum level of its children.
+     */
+    private void propagateLevelsToParentPackages(DomainModel model, DependencyModel rawModel) {
+        Map<String, DomainModel.CalculatedElementInfo> packages = model.getAllPackages();
+        
+        // Iterate until no changes (handle nested hierarchies)
+        boolean changed = true;
+        int maxIterations = 20;
+        int iterations = 0;
+        
+        while (changed && iterations < maxIterations) {
+            changed = false;
+            iterations++;
+            
+            for (String packageName : packages.keySet()) {
+                DependencyModel.PackageInfo rawPkg = rawModel.getPackage(packageName);
+                if (rawPkg == null || rawPkg.childPackages.isEmpty()) {
+                    continue; // No children, skip
+                }
+                
+                DomainModel.CalculatedElementInfo pkgInfo = packages.get(packageName);
+                int currentLevel = pkgInfo.level;
+                
+                // Find max level among children
+                int maxChildLevel = currentLevel;
+                for (String childPackageName : rawPkg.childPackages) {
+                    DomainModel.CalculatedElementInfo childInfo = model.getPackage(childPackageName);
+                    if (childInfo != null && childInfo.level > maxChildLevel) {
+                        maxChildLevel = childInfo.level;
+                    }
+                }
+                
+                // Update parent if children have higher level
+                if (maxChildLevel > currentLevel) {
+                    pkgInfo.setLevel(maxChildLevel);
+                    changed = true;
+                }
             }
         }
     }
@@ -161,5 +207,18 @@ public class LevelCalculator {
                 }
             }
         }
+    }
+
+    /**
+     * Extracts the package name from a fully qualified class name.
+     * @param className fully qualified class name (e.g., "de.weigend.s202.reader.InputAnalyzer")
+     * @return package name (e.g., "de.weigend.s202.reader") or null if no package
+     */
+    private String extractPackageName(String className) {
+        if (className == null || !className.contains(".")) {
+            return null; // Default package or invalid
+        }
+        int lastDot = className.lastIndexOf('.');
+        return className.substring(0, lastDot);
     }
 }
