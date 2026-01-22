@@ -7,7 +7,7 @@
 <?import javafx.scene.layout.BorderPane?>
 
 <BorderPane fx:id="rootPane" xmlns="http://javafx.com/javafx" xmlns:fx="http://javafx.com/fxml"
-            fx:controller="de.weigend.s202.ui.newlayout.ArchitectureViewV2Controller">
+            fx:controller="de.weigend.s202.ui.demo.ArchitectureViewDemoController">
 
     <!-- ScrollPane in center - skaliert mit dem Fenster -->
     <center>

@@ -1,5 +1,7 @@
-package de.weigend.s202.ui.newlayout;
+package de.weigend.s202.ui.demo;
 
+import de.weigend.s202.ui.LevelClassBox;
+import de.weigend.s202.ui.LevelPackageBox;
 import javafx.fxml.FXML;
 import javafx.fxml.FXMLLoader;
 import javafx.scene.control.ScrollPane;
@@ -11,7 +13,7 @@ import java.io.IOException;
  * Main controller for the new architecture visualization layout.
  * Demo mode only - shows hardcoded test data for UI testing.
  */
-public class ArchitectureViewV2Controller {
+public class ArchitectureViewDemoController {
 
     @FXML
     private BorderPane rootPane;
@@ -58,9 +60,9 @@ public class ArchitectureViewV2Controller {
     /**
      * Load the FXML and return the controller.
      */
-    public static ArchitectureViewV2Controller loadView() throws IOException {
+    public static ArchitectureViewDemoController loadView() throws IOException {
         FXMLLoader loader = new FXMLLoader(
-            ArchitectureViewV2Controller.class.getResource("fxml/architecture-view-v2.fxml")
+            ArchitectureViewDemoController.class.getResource("fxml/architecture-view-v2.fxml")
         );
         loader.load();
         return loader.getController();

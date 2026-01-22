@@ -4,14 +4,15 @@ import de.weigend.s202.analysis.input.InputAnalyzer;
 import de.weigend.s202.analysis.input.DependencyModel;
 import de.weigend.s202.analysis.domain.LevelCalculator;
 import de.weigend.s202.analysis.domain.DomainModel;
-import de.weigend.s202.ui.model.UIModel;
-import de.weigend.s202.ui.model.UIModelBuilder;
+import de.weigend.s202.ui.model.ArchitectureNode;
+import de.weigend.s202.ui.model.ArchitectureNode.NodeType;
+import de.weigend.s202.ui.model.ArchitectureNodeBuilder;
 
 import java.io.File;
 import java.util.*;
 
 /**
- * Debug test to verify that package levels are correctly propagated to UIModel
+ * Debug test to verify that package levels are correctly propagated to ArchitectureNode tree
  */
 public class DebugUIPackageLevels {
     public static void main(String[] args) throws Exception {
@@ -32,18 +33,20 @@ public class DebugUIPackageLevels {
             System.out.println("  " + pkg.fullName + " -> L" + pkg.level);
         }
         
-        // Step 3: Build UI model
-        UIModelBuilder builder = new UIModelBuilder();
-        UIModel uiModel = builder.build(domainModel);
+        // Step 3: Build architecture node tree
+        ArchitectureNodeBuilder builder = new ArchitectureNodeBuilder();
+        ArchitectureNode rootNode = builder.build(domainModel);
         
-        System.out.println("\nUIModel levels:");
-        for (int level = 0; level < uiModel.getLevelCount(); level++) {
-            System.out.println("  Level " + level + " (" + uiModel.getElementsAtLevel(level).size() + " elements):");
-            for (UIModel.UIElementInfo elem : uiModel.getElementsAtLevel(level)) {
-                if ("PACKAGE".equals(elem.type)) {
-                    System.out.println("    - " + elem.fullName + " (L" + elem.level + ")");
-                }
-            }
+        System.out.println("\nArchitectureNode tree (packages only):");
+        printPackageNodes(rootNode, "");
+    }
+    
+    private static void printPackageNodes(ArchitectureNode node, String indent) {
+        if (node.getType() == NodeType.PACKAGE && !"root".equals(node.getFullName())) {
+            System.out.println(indent + "- " + node.getFullName() + " (L" + node.getLevel() + ")");
+        }
+        for (ArchitectureNode child : node.getChildren()) {
+            printPackageNodes(child, indent + "  ");
         }
     }
 }

@@ -1,16 +1,11 @@
 package de.weigend.s202.ui;
 
-import de.weigend.s202.ui.model.ArchitectureModelBuilder.ArchitectureNode;
-import de.weigend.s202.ui.model.UIModel;
-import de.weigend.s202.ui.newlayout.LevelPackageBox;
-import de.weigend.s202.ui.newlayout.LevelClassBox;
-import de.weigend.s202.analysis.scc.EdgeClassification.ClassifiedEdge;
+import de.weigend.s202.ui.model.ArchitectureNode;
+import de.weigend.s202.ui.model.ArchitectureNode.NodeType;
 import javafx.geometry.Insets;
 import javafx.scene.control.*;
 import javafx.scene.layout.BorderPane;
 import javafx.scene.layout.HBox;
-import javafx.scene.layout.Priority;
-import javafx.scene.layout.VBox;
 import javafx.stage.FileChooser;
 import javafx.stage.Stage;
 
@@ -139,12 +134,11 @@ public class ArchitectureView extends BorderPane {
     }
 
     /**
-     * Sets the UIModel for level-based layout display.
-     * Populates the ScrollPane with a LevelPackageBox hierarchy based on UIModel data.
-     * This is the modern way to display the architecture analysis.
+     * Sets the ArchitectureNode root for level-based layout display.
+     * Populates the ScrollPane with a LevelPackageBox hierarchy.
      */
-    public void setUIModel(UIModel uiModel) {
-        Objects.requireNonNull(uiModel, "uiModel cannot be null");
+    public void setArchitectureRoot(ArchitectureNode rootNode) {
+        Objects.requireNonNull(rootNode, "rootNode cannot be null");
         
         // Create root package container
         LevelPackageBox rootLevel = new LevelPackageBox("Root Package");
@@ -154,78 +148,77 @@ public class ArchitectureView extends BorderPane {
         packageContainers.put("", rootLevel);
         
         // Set to track which elements have been added to their parents
-        // This prevents duplicates when an element appears in multiple levels
         java.util.Set<String> elementsAddedToParent = new java.util.HashSet<>();
         
-        // Iterate through levels and add elements
-        for (int level = 0; level < uiModel.getLevelCount(); level++) {
-            for (UIModel.UIElementInfo element : uiModel.getElementsAtLevel(level)) {
-                // Determine parent package
-                String parentPackage = getParentPackage(element.fullName);
-                if (parentPackage == null) {
-                    parentPackage = "";
-                }
-                
-                // Ensure all parent packages exist in the hierarchy
-                // Pass the full UIModel so we can look up package levels
-                ensurePackageHierarchy(parentPackage, packageContainers, rootLevel, uiModel);
-                
-                // Get parent container (should now exist)
-                LevelPackageBox parentContainer = packageContainers.get(parentPackage);
-                if (parentContainer == null) {
-                    parentContainer = rootLevel;
-                }
-                
-                // Only add element if not already added (prevents duplicates)
-                if (elementsAddedToParent.contains(element.fullName)) {
-                    continue;
-                }
-                
-                // Create appropriate element based on type
-                if ("PACKAGE".equals(element.type)) {
-                    // Create package container only if not already created
-                    if (!packageContainers.containsKey(element.fullName)) {
-                        LevelPackageBox packageBox = new LevelPackageBox(element.simpleName, element.level);
-                        packageContainers.put(element.fullName, packageBox);
-                        // Add to the correct architectural level, not the iteration level
-                        parentContainer.addToLevel(element.level, packageBox);
-                    }
-                } else if ("CLASS".equals(element.type)) {
-                    // Create class element
-                    LevelClassBox classBox = new LevelClassBox(element.simpleName, element.level);
-                    // Add to the correct architectural level, not the iteration level
-                    parentContainer.addToLevel(element.level, classBox);
-                }
-                
-                // Mark element as added
-                elementsAddedToParent.add(element.fullName);
-            }
-        }
+        // Recursively process the architecture tree
+        processArchitectureNode(rootNode, packageContainers, rootLevel, elementsAddedToParent);
         
         // Replace content with populated hierarchy
         scrollPane.setContent(rootLevel);
         
-        setStatus("Architecture loaded: " + uiModel.getLevelCount() + " levels");
+        setStatus("Architecture loaded: " + rootNode.getLevelCount() + " levels");
+    }
+    
+    /**
+     * Recursively processes an ArchitectureNode and its children to build the UI hierarchy.
+     */
+    private void processArchitectureNode(ArchitectureNode node,
+                                        java.util.Map<String, LevelPackageBox> packageContainers,
+                                        LevelPackageBox rootLevel,
+                                        java.util.Set<String> elementsAddedToParent) {
+        for (ArchitectureNode child : node.getChildren()) {
+            // Skip if already processed
+            if (elementsAddedToParent.contains(child.getFullName())) {
+                continue;
+            }
+            
+            // Determine parent package
+            String parentPackage = getParentPackage(child.getFullName());
+            if (parentPackage == null) {
+                parentPackage = "";
+            }
+            
+            // Ensure parent hierarchy exists
+            ensurePackageHierarchy(parentPackage, packageContainers, rootLevel, node);
+            
+            // Get parent container
+            LevelPackageBox parentContainer = packageContainers.get(parentPackage);
+            if (parentContainer == null) {
+                parentContainer = rootLevel;
+            }
+            
+            if (child.getType() == NodeType.PACKAGE) {
+                // Create package container if not already created
+                if (!packageContainers.containsKey(child.getFullName())) {
+                    LevelPackageBox packageBox = new LevelPackageBox(child.getSimpleName(), child.getLevel());
+                    packageContainers.put(child.getFullName(), packageBox);
+                    parentContainer.addToLevel(child.getLevel(), packageBox);
+                }
+                // Recursively process children
+                processArchitectureNode(child, packageContainers, rootLevel, elementsAddedToParent);
+            } else if (child.getType() == NodeType.CLASS) {
+                // Create class element
+                LevelClassBox classBox = new LevelClassBox(child.getSimpleName(), child.getLevel());
+                parentContainer.addToLevel(child.getLevel(), classBox);
+            }
+            
+            elementsAddedToParent.add(child.getFullName());
+        }
     }
     
     /**
      * Ensures that all parent packages in a hierarchy exist.
-     * Creates missing package containers as needed.
-     * @param packageName The package name to ensure exists
-     * @param packageContainers Map of existing containers
-     * @param rootLevel The root package box
-     * @param uiModel The UIModel containing all element data
      */
     private void ensurePackageHierarchy(String packageName, 
                                        java.util.Map<String, LevelPackageBox> packageContainers,
                                        LevelPackageBox rootLevel,
-                                       UIModel uiModel) {
+                                       ArchitectureNode rootNode) {
         if (packageName == null || packageName.isEmpty()) {
             return;
         }
         
         if (packageContainers.containsKey(packageName)) {
-            return; // Already exists - don't recreate with wrong level!
+            return;
         }
         
         // Split the package into parts
@@ -237,8 +230,8 @@ public class ArchitectureView extends BorderPane {
             currentPkg = currentPkg.isEmpty() ? part : currentPkg + "." + part;
             
             if (!packageContainers.containsKey(currentPkg)) {
-                // Package doesn't exist yet - look up its level from the UIModel
-                int packageLevel = findPackageLevelInUIModel(currentPkg, uiModel);
+                // Look up package level from architecture tree
+                int packageLevel = findPackageLevelInTree(currentPkg, rootNode);
                 
                 LevelPackageBox packageBox = new LevelPackageBox(part, packageLevel);
                 packageContainers.put(currentPkg, packageBox);
@@ -248,7 +241,6 @@ public class ArchitectureView extends BorderPane {
                 if (parentContainer != null) {
                     parentContainer.addToLevel(packageLevel, packageBox);
                 } else {
-                    // No parent container, add to root
                     rootLevel.addToLevel(packageLevel, packageBox);
                 }
             }
@@ -256,18 +248,19 @@ public class ArchitectureView extends BorderPane {
     }
     
     /**
-     * Look up a package's level in the UIModel.
+     * Look up a package's level in the architecture tree.
      */
-    private int findPackageLevelInUIModel(String packageName, UIModel uiModel) {
-        for (int level = 0; level < uiModel.getLevelCount(); level++) {
-            for (UIModel.UIElementInfo elem : uiModel.getElementsAtLevel(level)) {
-                if ("PACKAGE".equals(elem.type) && packageName.equals(elem.fullName)) {
-                    return elem.level;
-                }
+    private int findPackageLevelInTree(String packageName, ArchitectureNode node) {
+        if (node.getFullName().equals(packageName) && node.getType() == NodeType.PACKAGE) {
+            return node.getLevel();
+        }
+        for (ArchitectureNode child : node.getChildren()) {
+            int level = findPackageLevelInTree(packageName, child);
+            if (level >= 0) {
+                return level;
             }
         }
-        // Package not found in UIModel - default to 0
-        return 0;
+        return 0; // Default if not found
     }
     
     /**
@@ -278,18 +271,6 @@ public class ArchitectureView extends BorderPane {
         
         int lastDot = fullName.lastIndexOf('.');
         return fullName.substring(0, lastDot);
-    }
-
-    /**
-     * Sets the root node of the architecture graph.
-     * Uses the modern analysis pipeline (levels already calculated by LevelCalculator).
-     * For now, still shows demo content - future integration with UIModel.
-     */
-    public void setArchitectureRoot(ArchitectureNode rootNode) {
-        Objects.requireNonNull(rootNode, "rootNode cannot be null");
-        // TODO: Convert ArchitectureNode tree to LevelPackageBox hierarchy
-        // For now, keep showing demo content
-        setStatus("Architecture loaded: " + rootNode.getSimpleName());
     }
 
     /**

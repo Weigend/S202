@@ -1,7 +1,7 @@
 package de.weigend.s202.ui;
 
-import de.weigend.s202.ui.model.ArchitectureModelBuilder.ArchitectureNode;
-import de.weigend.s202.ui.model.ArchitectureModelBuilder.NodeType;
+import de.weigend.s202.ui.model.ArchitectureNode;
+import de.weigend.s202.ui.model.ArchitectureNode.NodeType;
 import de.weigend.s202.analysis.scc.EdgeClassification.ClassifiedEdge;
 import javafx.geometry.Insets;
 import javafx.geometry.Pos;
@@ -136,7 +136,7 @@ public class HierarchicalLevelBoxView extends StackPane {
         
         for (ArchitectureNode child : packageNode.getChildren()) {
             if (child.getType() == NodeType.CLASS) {
-                int level = child.getLayer();
+                int level = child.getLevel();
                 classesByLevel.computeIfAbsent(level, k -> new ArrayList<>()).add(child);
             } else if (child.getType() == NodeType.PACKAGE) {
                 subPackages.add(child);
@@ -242,7 +242,7 @@ public class HierarchicalLevelBoxView extends StackPane {
         box.getChildren().add(name);
         
         // Level info
-        int level = classNode.getLayer();
+        int level = classNode.getLevel();
         Text levelInfo = new Text("Level: " + level);
         levelInfo.setStyle("-fx-font-size: 9; -fx-fill: #666666;");
         box.getChildren().add(levelInfo);

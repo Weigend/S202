@@ -1,4 +1,4 @@
-package de.weigend.s202.ui.newlayout;
+package de.weigend.s202.ui.demo;
 
 import javafx.application.Application;
 import javafx.scene.Scene;
@@ -12,12 +12,12 @@ import java.io.IOException;
  * 
  * For integration with the main analyzer, use ArchitectureViewV2Controller directly.
  */
-public class ArchitectureViewV2App extends Application {
+public class ArchitectureViewDemoApp extends Application {
 
     @Override
     public void start(Stage primaryStage) throws IOException {
         // Load the FXML-based view
-        ArchitectureViewV2Controller controller = ArchitectureViewV2Controller.loadView();
+        ArchitectureViewDemoController controller = ArchitectureViewDemoController.loadView();
         
         // Create a scene with the root node
         Scene scene = new Scene(controller.getRootNode(), 1200, 800);

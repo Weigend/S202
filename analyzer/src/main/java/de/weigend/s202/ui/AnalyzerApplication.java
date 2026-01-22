@@ -1,13 +1,11 @@
 package de.weigend.s202.ui;
 
-import de.weigend.s202.ui.model.ArchitectureModelBuilder;
-import de.weigend.s202.ui.model.ArchitectureModelBuilder.ArchitectureNode;
+import de.weigend.s202.ui.model.ArchitectureNode;
+import de.weigend.s202.ui.model.ArchitectureNodeBuilder;
 import de.weigend.s202.analysis.domain.DomainModel;
 import de.weigend.s202.analysis.domain.LevelCalculator;
 import de.weigend.s202.analysis.input.DependencyModel;
 import de.weigend.s202.analysis.input.InputAnalyzer;
-import de.weigend.s202.ui.model.UIModel;
-import de.weigend.s202.ui.model.UIModelBuilder;
 import javafx.application.Application;
 import javafx.geometry.Insets;
 import javafx.scene.Scene;
@@ -19,12 +17,6 @@ import javafx.stage.FileChooser;
 import javafx.stage.Stage;
 
 import java.io.File;
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.HashSet;
-import java.util.List;
-import java.util.Map;
-import java.util.Set;
 
 /**
  * Main application entry point for the S202 Code Analyzer.
@@ -33,8 +25,7 @@ public class AnalyzerApplication extends Application {
     private ArchitectureView architectureView;
     private InputAnalyzer rawAnalyzer;
     private LevelCalculator levelCalculator;
-    private UIModelBuilder uiModelBuilder;
-    private ArchitectureModelBuilder architectureModelBuilder;
+    private ArchitectureNodeBuilder architectureNodeBuilder;
     private Stage primaryStage;
 
     @Override
@@ -42,8 +33,7 @@ public class AnalyzerApplication extends Application {
         this.primaryStage = primaryStage;
         this.rawAnalyzer = new InputAnalyzer();
         this.levelCalculator = new LevelCalculator();
-        this.uiModelBuilder = new UIModelBuilder();
-        this.architectureModelBuilder = new ArchitectureModelBuilder();
+        this.architectureNodeBuilder = new ArchitectureNodeBuilder();
 
         primaryStage.setTitle("S202 Code Analyzer - Architecture Viewer");
 
@@ -122,7 +112,7 @@ public class AnalyzerApplication extends Application {
 
     /**
      * Loads a JAR file and updates the architecture view using the new pipeline:
-     * InputAnalyzer -> LevelCalculator -> UIModelBuilder -> ArchitectureModelBuilder
+     * InputAnalyzer -> LevelCalculator -> ArchitectureNodeBuilder
      */
     public void loadJarFile(File jarFile) {
         if (jarFile == null) return;
@@ -148,19 +138,18 @@ public class AnalyzerApplication extends Application {
             // Step 2: Calculate architectural levels based on dependency topology
             DomainModel calculatedModel = levelCalculator.calculate(rawModel);
 
-            // Step 3: Build UI model (organize by levels)
-            UIModel uiModel = uiModelBuilder.build(calculatedModel);
+            // Step 3: Build architecture node tree
+            ArchitectureNode rootNode = architectureNodeBuilder.build(calculatedModel);
 
-            // Step 4: Display in the UI with new LevelPackageBox layout
+            // Step 4: Display in the UI
             if (architectureView != null) {
-                // Populate with UIModel data (dynamic level-based layout)
-                architectureView.setUIModel(uiModel);
+                architectureView.setArchitectureRoot(rootNode);
                 
                 String message = String.format(
                     "Loaded %d classes | %d levels | Max level %d",
                     rawModel.getAllClasses().size(),
-                    uiModel.getLevelCount(),
-                    uiModel.getMaxLevel()
+                    rootNode.getLevelCount(),
+                    rootNode.getMaxLevel()
                 );
                 architectureView.setStatus(message);
             }
@@ -174,146 +163,6 @@ public class AnalyzerApplication extends Application {
             e.printStackTrace();
         }
     }
-
-    /**
-     * Converts UIModel back into ArchitectureNode tree structure for TreeView visualization.
-     * This maintains compatibility with PackageTreeView while using the new analysis pipeline.
-     */
-    private ArchitectureNode buildArchitectureNodeFromUIModel(UIModel uiModel, DomainModel calculatedModel) {
-        // Group elements by package hierarchy
-        Map<String, List<UIModel.UIElementInfo>> elementsByPackage = new HashMap<>();
-        
-        // Collect all packages and classes
-        for (int level = 0; level < uiModel.getLevelCount(); level++) {
-            for (UIModel.UIElementInfo element : uiModel.getElementsAtLevel(level)) {
-                String parentPackage = getParentPackage(element.fullName);
-                if (parentPackage == null || parentPackage.isEmpty()) {
-                    parentPackage = "";
-                }
-                elementsByPackage.computeIfAbsent(parentPackage, k -> new ArrayList<>()).add(element);
-            }
-        }
-
-        // Ensure we have placeholder entries for every parent package to display full hierarchy
-        addParentPackagePlaceholders(elementsByPackage);
-
-        // Build from a synthetic root node to provide a consistent tree structure
-        ArchitectureNode rootNode = new ArchitectureNode(
-            "root",
-            "root",
-            ArchitectureModelBuilder.NodeType.PACKAGE,
-            true
-        );
-
-        // Recursively build package hierarchy starting at the synthetic root
-        buildPackageHierarchy(rootNode, elementsByPackage, "", calculatedModel);
-
-        return rootNode;
-    }
-
-    /**
-     * Extract parent package name from a fully qualified name.
-     */
-    private String getParentPackage(String fullName) {
-        if (!fullName.contains(".")) return null;
-        
-        int lastDot = fullName.lastIndexOf('.');
-        if (lastDot <= 0) return null;
-        
-        return fullName.substring(0, lastDot);
-    }
-
-    /**
-     * Ensure placeholder entries exist for each parent package so that the UI can
-     * render the complete package hierarchy (including synthetic parent nodes).
-     */
-    private void addParentPackagePlaceholders(Map<String, List<UIModel.UIElementInfo>> elementsByPackage) {
-        Set<String> existingPackages = new HashSet<>(elementsByPackage.keySet());
-        for (String pkg : existingPackages) {
-            if (pkg == null || pkg.isEmpty()) {
-                continue;
-            }
-
-            String current = pkg;
-            while (true) {
-                int lastDot = current.lastIndexOf('.');
-                if (lastDot <= 0) {
-                    break;
-                }
-                current = current.substring(0, lastDot);
-                elementsByPackage.computeIfAbsent(current, k -> new ArrayList<>());
-            }
-
-            // Ensure the top-level package without dots exists
-            if (!pkg.contains(".")) {
-                elementsByPackage.computeIfAbsent(pkg, k -> new ArrayList<>());
-            }
-        }
-    }
-
-    /**
-     * Recursively builds package hierarchy tree from UIModel elements.
-     */
-    private void buildPackageHierarchy(ArchitectureNode parentNode, 
-                                      Map<String, List<UIModel.UIElementInfo>> elementsByPackage,
-                                      String currentPackage,
-                                      DomainModel calculatedModel) {
-        // Add only CLASSES (not packages) as direct children of this package
-        List<UIModel.UIElementInfo> directElements = elementsByPackage.get(currentPackage);
-        if (directElements != null) {
-            for (UIModel.UIElementInfo element : directElements) {
-                // Only add CLASS elements; packages are handled separately as subpackages
-                if ("CLASS".equals(element.type)) {
-                    ArchitectureNode childNode = new ArchitectureNode(
-                        element.fullName,
-                        element.simpleName,
-                        ArchitectureModelBuilder.NodeType.CLASS,
-                        false
-                    );
-                    
-                    // Set dependencies
-                    childNode.setDependencies(element.dependencies);
-                    parentNode.addChild(childNode);
-                }
-            }
-        }
-
-        // Find and add subpackages
-        String packagePrefix = currentPackage.isEmpty() ? "" : currentPackage + ".";
-        Set<String> subpackages = new HashSet<>();
-        
-        for (String pkg : elementsByPackage.keySet()) {
-            if (pkg == null || pkg.isEmpty()) {
-                continue;
-            }
-
-            if (currentPackage.isEmpty()) {
-                if (!pkg.contains(".")) {
-                    subpackages.add(pkg);
-                }
-            } else if (pkg.startsWith(packagePrefix) && !pkg.equals(currentPackage)) {
-                String relativePkg = pkg.substring(packagePrefix.length());
-                if (!relativePkg.contains(".")) {
-                    subpackages.add(pkg);
-                }
-            }
-        }
-
-        // Recursively process subpackages
-        for (String subpkg : subpackages) {
-            int lastDot = subpkg.lastIndexOf('.');
-            String subpkgSimpleName = lastDot >= 0 ? subpkg.substring(lastDot + 1) : subpkg;
-            ArchitectureNode subpkgNode = new ArchitectureNode(
-                subpkg,
-                subpkgSimpleName,
-                ArchitectureModelBuilder.NodeType.PACKAGE,
-                true
-            );
-            parentNode.addChild(subpkgNode);
-            buildPackageHierarchy(subpkgNode, elementsByPackage, subpkg, calculatedModel);
-        }
-    }
-
 
     /**
      * Shows an error dialog to the user.

@@ -4,8 +4,9 @@ import de.weigend.s202.analysis.input.InputAnalyzer;
 import de.weigend.s202.analysis.input.DependencyModel;
 import de.weigend.s202.analysis.domain.DomainModel;
 import de.weigend.s202.analysis.domain.LevelCalculator;
-import de.weigend.s202.ui.model.UIModel;
-import de.weigend.s202.ui.model.UIModelBuilder;
+import de.weigend.s202.ui.model.ArchitectureNode;
+import de.weigend.s202.ui.model.ArchitectureNode.NodeType;
+import de.weigend.s202.ui.model.ArchitectureNodeBuilder;
 
 /**
  * Simulates exactly what AnalyzerApplication does when you load a JAR.
@@ -32,35 +33,45 @@ public class DebugRealUIFlow {
             System.err.println("[DEBUG]     - " + pkg.fullName + " -> L" + pkg.level);
         }
         
-        System.err.println("\n[DEBUG] Step 3: UIModelBuilder.build()");
-        UIModelBuilder uiModelBuilder = new UIModelBuilder();
-        UIModel uiModel = uiModelBuilder.build(calculatedModel);
-        System.err.println("[DEBUG]   UIModel total elements: " + uiModel.getTotalElementCount());
-        System.err.println("[DEBUG]   UIModel level count: " + uiModel.getLevelCount());
+        System.err.println("\n[DEBUG] Step 3: ArchitectureNodeBuilder.build()");
+        ArchitectureNodeBuilder builder = new ArchitectureNodeBuilder();
+        ArchitectureNode rootNode = builder.build(calculatedModel);
+        System.err.println("[DEBUG]   Total nodes: " + rootNode.getTotalNodeCount());
+        System.err.println("[DEBUG]   Level count: " + rootNode.getLevelCount());
         
         System.err.println("\n[DEBUG] Step 4: Check what ArchitectureView would receive");
-        System.err.println("[DEBUG]   UIModel packages:");
-        for (int level = 0; level < uiModel.getLevelCount(); level++) {
-            for (UIModel.UIElementInfo elem : uiModel.getElementsAtLevel(level)) {
-                if ("PACKAGE".equals(elem.type)) {
-                    System.err.println("[DEBUG]     - " + elem.fullName + " (type=" + elem.type + ", level=" + elem.level + ")");
-                }
-            }
-        }
+        System.err.println("[DEBUG]   Package nodes:");
+        printPackageNodes(rootNode, "");
         
         System.err.println("\n[DEBUG] FINAL RESULT:");
         System.err.println("[DEBUG]   Expected com.example2 at level 1");
-        boolean found = false;
-        for (int level = 0; level < uiModel.getLevelCount(); level++) {
-            for (UIModel.UIElementInfo elem : uiModel.getElementsAtLevel(level)) {
-                if ("com.example2".equals(elem.fullName)) {
-                    System.err.println("[DEBUG]   FOUND: " + elem.fullName + " at level " + elem.level);
-                    found = true;
-                }
+        ArchitectureNode example2 = findNodeByName(rootNode, "com.example2");
+        if (example2 != null) {
+            System.err.println("[DEBUG]   FOUND: " + example2.getFullName() + " at level " + example2.getLevel());
+        } else {
+            System.err.println("[DEBUG]   ERROR: com.example2 not found in ArchitectureNode tree!");
+        }
+    }
+    
+    private static void printPackageNodes(ArchitectureNode node, String indent) {
+        if (node.getType() == NodeType.PACKAGE && !"root".equals(node.getFullName())) {
+            System.err.println("[DEBUG]     " + indent + node.getFullName() + " (level=" + node.getLevel() + ")");
+        }
+        for (ArchitectureNode child : node.getChildren()) {
+            printPackageNodes(child, indent + "  ");
+        }
+    }
+    
+    private static ArchitectureNode findNodeByName(ArchitectureNode node, String fullName) {
+        if (fullName.equals(node.getFullName())) {
+            return node;
+        }
+        for (ArchitectureNode child : node.getChildren()) {
+            ArchitectureNode found = findNodeByName(child, fullName);
+            if (found != null) {
+                return found;
             }
         }
-        if (!found) {
-            System.err.println("[DEBUG]   ERROR: com.example2 not found in UIModel!");
-        }
+        return null;
     }
 }

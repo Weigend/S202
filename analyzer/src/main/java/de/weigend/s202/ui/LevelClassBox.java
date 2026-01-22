@@ -1,4 +1,4 @@
-package de.weigend.s202.ui.newlayout;
+package de.weigend.s202.ui;
 
 import javafx.geometry.Pos;
 import javafx.scene.control.Label;

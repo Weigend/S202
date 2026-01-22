@@ -4,14 +4,15 @@ import de.weigend.s202.analysis.input.InputAnalyzer;
 import de.weigend.s202.analysis.input.DependencyModel;
 import de.weigend.s202.analysis.domain.DomainModel;
 import de.weigend.s202.analysis.domain.LevelCalculator;
-import de.weigend.s202.ui.model.UIModel;
-import de.weigend.s202.ui.model.UIModelBuilder;
+import de.weigend.s202.ui.model.ArchitectureNode;
+import de.weigend.s202.ui.model.ArchitectureNode.NodeType;
+import de.weigend.s202.ui.model.ArchitectureNodeBuilder;
 import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.*;
 
 /**
- * Test that verifies ArchitectureView.setUIModel() correctly displays packages with their calculated levels.
+ * Test that verifies ArchitectureView.setArchitectureRoot() correctly displays packages with their calculated levels.
  */
 public class ArchitectureViewLevelTest {
     
@@ -39,26 +40,32 @@ public class ArchitectureViewLevelTest {
         assertEquals(0, calculatedModel.getAllPackages().get("com.example1").level, "com.example1 should be L0");
         assertEquals(1, calculatedModel.getAllPackages().get("com.example2").level, "com.example2 should be L1");
         
-        // Step 3: Build UIModel
-        UIModelBuilder uiModelBuilder = new UIModelBuilder();
-        UIModel uiModel = uiModelBuilder.build(calculatedModel);
-        assertEquals(13, uiModel.getTotalElementCount(), "Should have 13 elements (9 classes + 4 packages)");
+        // Step 3: Build ArchitectureNode tree
+        ArchitectureNodeBuilder builder = new ArchitectureNodeBuilder();
+        ArchitectureNode rootNode = builder.build(calculatedModel);
+        assertEquals(14, rootNode.getTotalNodeCount(), "Should have 14 nodes (9 classes + 4 packages + 1 root)");
         
-        // Verify UIModel has packages with correct levels
-        boolean foundCom2AtL1 = false;
-        for (int level = 0; level < uiModel.getLevelCount(); level++) {
-            for (UIModel.UIElementInfo elem : uiModel.getElementsAtLevel(level)) {
-                if ("com.example2".equals(elem.fullName)) {
-                    System.err.println("[TEST] Found com.example2 in UIModel at level " + level + ", elem.level=" + elem.level);
-                    assertEquals(1, elem.level, "com.example2 in UIModel should have level 1");
-                    foundCom2AtL1 = true;
-                }
+        // Verify ArchitectureNode has packages with correct levels
+        ArchitectureNode com2Node = findNodeByName(rootNode, "com.example2");
+        assertNotNull(com2Node, "com.example2 should be found in ArchitectureNode tree");
+        assertEquals(NodeType.PACKAGE, com2Node.getType(), "com.example2 should be a PACKAGE");
+        assertEquals(1, com2Node.getLevel(), "com.example2 should have level 1");
+        
+        System.err.println("[TEST] Found com.example2 in ArchitectureNode at level " + com2Node.getLevel());
+        System.err.println("[TEST] ✓ All ArchitectureNode verifications passed");
+        System.err.println("[TEST] When ArchitectureView.setArchitectureRoot() is called, it will use this tree");
+    }
+    
+    private ArchitectureNode findNodeByName(ArchitectureNode node, String fullName) {
+        if (fullName.equals(node.getFullName())) {
+            return node;
+        }
+        for (ArchitectureNode child : node.getChildren()) {
+            ArchitectureNode found = findNodeByName(child, fullName);
+            if (found != null) {
+                return found;
             }
         }
-        assertTrue(foundCom2AtL1, "com.example2 should be found in UIModel at level 1");
-        
-        System.err.println("[TEST] ✓ All UIModel verifications passed");
-        System.err.println("[TEST] When ArchitectureView.setUIModel() is called, it will use this UIModel");
-        System.err.println("[TEST] Watch debug output for package creation with correct levels");
+        return null;
     }
 }

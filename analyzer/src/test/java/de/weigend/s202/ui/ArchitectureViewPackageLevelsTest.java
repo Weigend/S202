@@ -4,8 +4,9 @@ import de.weigend.s202.analysis.input.InputAnalyzer;
 import de.weigend.s202.analysis.input.DependencyModel;
 import de.weigend.s202.analysis.domain.LevelCalculator;
 import de.weigend.s202.analysis.domain.DomainModel;
-import de.weigend.s202.ui.model.UIModel;
-import de.weigend.s202.ui.model.UIModelBuilder;
+import de.weigend.s202.ui.model.ArchitectureNode;
+import de.weigend.s202.ui.model.ArchitectureNode.NodeType;
+import de.weigend.s202.ui.model.ArchitectureNodeBuilder;
 import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.*;
@@ -16,7 +17,7 @@ import static org.junit.jupiter.api.Assertions.*;
 public class ArchitectureViewPackageLevelsTest {
 
     @Test
-    public void testPackageLevelsInUIModel() throws Exception {
+    public void testPackageLevelsInArchitectureNode() throws Exception {
         String jarPath = "../test-example/target/test-example-1.0.0.jar";
         
         // Step 1: Analyze
@@ -33,23 +34,29 @@ public class ArchitectureViewPackageLevelsTest {
         assertEquals(0, domainModel.getPackage("com.example1").level);
         assertEquals(1, domainModel.getPackage("com.example2").level);
         
-        // Step 3: Build UI model
-        UIModelBuilder builder = new UIModelBuilder();
-        UIModel uiModel = builder.build(domainModel);
+        // Step 3: Build architecture node tree
+        ArchitectureNodeBuilder builder = new ArchitectureNodeBuilder();
+        ArchitectureNode rootNode = builder.build(domainModel);
         
-        // Verify UIModel has correct levels
-        // Find com.example2 and verify it's at level 1
-        boolean found_example2_at_level1 = false;
-        for (int level = 0; level < uiModel.getLevelCount(); level++) {
-            for (UIModel.UIElementInfo elem : uiModel.getElementsAtLevel(level)) {
-                if ("com.example2".equals(elem.fullName)) {
-                    System.out.println("Found com.example2 at UIModel level " + level + " with elem.level=" + elem.level);
-                    assertEquals(1, elem.level, "com.example2 should have level 1");
-                    assertEquals(1, level, "com.example2 should be at UIModel level 1");
-                    found_example2_at_level1 = true;
-                }
+        // Verify ArchitectureNode has correct levels
+        ArchitectureNode example2Node = findNodeByName(rootNode, "com.example2");
+        assertNotNull(example2Node, "com.example2 should be found");
+        assertEquals(NodeType.PACKAGE, example2Node.getType(), "com.example2 should be a PACKAGE");
+        assertEquals(1, example2Node.getLevel(), "com.example2 should have level 1");
+        
+        System.out.println("Found com.example2 at level " + example2Node.getLevel());
+    }
+    
+    private ArchitectureNode findNodeByName(ArchitectureNode node, String fullName) {
+        if (fullName.equals(node.getFullName())) {
+            return node;
+        }
+        for (ArchitectureNode child : node.getChildren()) {
+            ArchitectureNode found = findNodeByName(child, fullName);
+            if (found != null) {
+                return found;
             }
         }
-        assertTrue(found_example2_at_level1, "com.example2 should be found at level 1");
+        return null;
     }
 }

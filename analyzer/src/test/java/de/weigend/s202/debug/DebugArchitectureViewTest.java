@@ -4,8 +4,8 @@ import de.weigend.s202.analysis.input.InputAnalyzer;
 import de.weigend.s202.analysis.input.DependencyModel;
 import de.weigend.s202.analysis.domain.DomainModel;
 import de.weigend.s202.analysis.domain.LevelCalculator;
-import de.weigend.s202.ui.model.UIModel;
-import de.weigend.s202.ui.model.UIModelBuilder;
+import de.weigend.s202.ui.model.ArchitectureNode;
+import de.weigend.s202.ui.model.ArchitectureNodeBuilder;
 import de.weigend.s202.ui.ArchitectureView;
 import javafx.application.Application;
 import javafx.scene.Scene;
@@ -33,16 +33,16 @@ public class DebugArchitectureViewTest extends Application {
         DomainModel calculatedModel = levelCalculator.calculate(rawModel);
         System.err.println("[TEST]   Calculated packages: " + calculatedModel.getAllPackages().size());
         
-        System.err.println("\n[TEST] Step 3: UIModelBuilder.build()");
-        UIModelBuilder uiModelBuilder = new UIModelBuilder();
-        UIModel uiModel = uiModelBuilder.build(calculatedModel);
-        System.err.println("[TEST]   UIModel total elements: " + uiModel.getTotalElementCount());
+        System.err.println("\n[TEST] Step 3: ArchitectureNodeBuilder.build()");
+        ArchitectureNodeBuilder builder = new ArchitectureNodeBuilder();
+        ArchitectureNode rootNode = builder.build(calculatedModel);
+        System.err.println("[TEST]   ArchitectureNode total nodes: " + rootNode.getTotalNodeCount());
         
-        System.err.println("\n[TEST] Step 4: Create ArchitectureView and set UIModel");
+        System.err.println("\n[TEST] Step 4: Create ArchitectureView and set ArchitectureNode");
         ArchitectureView architectureView = new ArchitectureView(primaryStage);
-        System.err.println("[TEST]   Calling setUIModel()...");
-        architectureView.setUIModel(uiModel);
-        System.err.println("[TEST]   setUIModel() completed");
+        System.err.println("[TEST]   Calling setArchitectureRoot()...");
+        architectureView.setArchitectureRoot(rootNode);
+        System.err.println("[TEST]   setArchitectureRoot() completed");
         
         // Display the view
         Scene scene = new Scene(architectureView, 1000, 600);
