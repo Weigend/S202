@@ -41,10 +41,18 @@ public class LevelClassBox extends Label {
 
     /**
      * Select this box and deselect the previously selected one.
+     * Clicking again on the same box will deselect it (toggle behavior).
      */
     public void select() {
+        // If clicking on already selected element, deselect it
+        if (globalSelectedLabel == this) {
+            deselect();
+            globalSelectedLabel = null;
+            return;
+        }
+        
         // Deselect previous label globally
-        if (globalSelectedLabel != null && globalSelectedLabel != this) {
+        if (globalSelectedLabel != null) {
             if (globalSelectedLabel instanceof LevelClassBox) {
                 ((LevelClassBox) globalSelectedLabel).deselect();
             }
@@ -53,7 +61,9 @@ public class LevelClassBox extends Label {
         // Select this label
         globalSelectedLabel = this;
         this.getStyleClass().remove("class-box");
-        this.getStyleClass().add("class-box-selected");
+        if (!this.getStyleClass().contains("class-box-selected")) {
+            this.getStyleClass().add("class-box-selected");
+        }
     }
 
     /**
@@ -61,6 +71,8 @@ public class LevelClassBox extends Label {
      */
     public void deselect() {
         this.getStyleClass().remove("class-box-selected");
-        this.getStyleClass().add("class-box");
+        if (!this.getStyleClass().contains("class-box")) {
+            this.getStyleClass().add("class-box");
+        }
     }
 }

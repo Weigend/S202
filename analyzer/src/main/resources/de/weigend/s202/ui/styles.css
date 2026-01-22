@@ -73,6 +73,24 @@
     -fx-font-size: 9px;
 }
 
+.package-box-transparent {
+    -fx-background-color: transparent;
+    -fx-border-color: transparent;
+    -fx-border-width: 0;
+    -fx-padding: 0;
+    -fx-font-size: 9px;
+}
+
+.package-box-transparent > * {
+    -fx-background-color: transparent;
+}
+
+/* Package name label */
+.package-name {
+    -fx-font-weight: bold;
+    -fx-font-size: 9px;
+}
+
 .package-box .header {
     -fx-padding: 3;
     -fx-font-size: 9px;

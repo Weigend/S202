@@ -17,7 +17,7 @@ public class LevelCalculator {
      * Create a calculator with default strategies.
      */
     public LevelCalculator() {
-        this(LevelCalculationStrategyContext.createDefault());
+        this(LevelCalculationStrategyFactory.createDefault());
     }
     
     /**

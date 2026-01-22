@@ -24,7 +24,8 @@ public class LevelPackageBox extends VBox {
     private VBox contentContainer;
     private boolean isExpanded = true;
     private String levelName;
-    private Map<Integer, HBox> levelRows;  // Map to manage HBox containers by level number
+    private Map<Integer, HBox> levelRows;
+    private boolean transparent;  // Map to manage HBox containers by level number
 
     /**
      * Create a new LevelPackageBox with empty content area and a header.
@@ -40,9 +41,26 @@ public class LevelPackageBox extends VBox {
      * @param level The architectural level (-1 means not specified)
      */
     public LevelPackageBox(String levelName, int level) {
+        this(levelName, level, false);
+    }
+    
+    /**
+     * Create a new LevelPackageBox with empty content area and a header.
+     * @param levelName The name to display in the header
+     * @param level The architectural level (-1 means not specified)
+     * @param transparent If true, shows with no background and no border (for pass-through packages)
+     */
+    public LevelPackageBox(String levelName, int level, boolean transparent) {
         super(3);
         this.levelName = level >= 0 ? levelName + " (L:" + level + ")" : levelName;
-        this.getStyleClass().add("package-box");
+        this.transparent = transparent;
+        
+        // Apply styles directly - CSS doesn't override VBox defaults reliably
+        if (transparent) {
+            this.setStyle("-fx-background-color: #fffef8; -fx-border-width: 0;");
+        } else {
+            this.setStyle("-fx-background-color: #fffacd; -fx-border-color: #999999; -fx-border-width: 1;");
+        }
         this.setPadding(new Insets(0));
         this.setMaxWidth(Double.MAX_VALUE);
         
@@ -54,7 +72,7 @@ public class LevelPackageBox extends VBox {
         
         // Create content container for all rows
         contentContainer = new VBox(6);
-        contentContainer.setPadding(new Insets(6, 6, 6, 20));
+        contentContainer.setPadding(transparent ? new Insets(0, 0, 0, 10) : new Insets(6, 6, 6, 20));
         contentContainer.setMaxWidth(Double.MAX_VALUE);
         
         // Add content to this VBox
@@ -66,18 +84,18 @@ public class LevelPackageBox extends VBox {
      */
     private void createHeader() {
         HBox header = new HBox(6);
-        header.setPadding(new Insets(4));
+        header.setPadding(transparent ? new Insets(0) : new Insets(4));
         header.setMaxWidth(Double.MAX_VALUE);
         header.setAlignment(Pos.CENTER_LEFT);
         
-        // Toggle icon
-        toggleIcon = new Label("▼");
+        // Toggle icon (- for expanded, + for collapsed)
+        toggleIcon = new Label("−");
         toggleIcon.getStyleClass().add("toggle-icon");
         toggleIcon.setCursor(javafx.scene.Cursor.HAND);
         
         // Level name label
         Label nameLabel = new Label(levelName);
-        nameLabel.setStyle("-fx-font-weight: bold;");
+        nameLabel.getStyleClass().add("package-name");
         nameLabel.setMaxWidth(Double.MAX_VALUE);
         HBox.setHgrow(nameLabel, Priority.ALWAYS);
         
@@ -95,11 +113,11 @@ public class LevelPackageBox extends VBox {
     private void toggleExpanded() {
         isExpanded = !isExpanded;
         if (isExpanded) {
-            toggleIcon.setText("▼");
+            toggleIcon.setText("−");
             contentContainer.setVisible(true);
             contentContainer.setManaged(true);
         } else {
-            toggleIcon.setText("▶");
+            toggleIcon.setText("+");
             contentContainer.setVisible(false);
             contentContainer.setManaged(false);
         }

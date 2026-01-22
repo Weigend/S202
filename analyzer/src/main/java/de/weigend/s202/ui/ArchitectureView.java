@@ -148,16 +148,19 @@ public class ArchitectureView extends BorderPane {
         javafx.scene.layout.VBox topLevelContainer = new javafx.scene.layout.VBox(8);
         topLevelContainer.setPadding(new Insets(10));
         
+        // Check if top-level packages should be transparent (only one top-level package)
+        boolean topLevelTransparent = shouldChildrenBeTransparent(rootNode);
+        
         // Process children of root directly (skip the root node itself)
         for (ArchitectureNode child : rootNode.getChildren()) {
             if (child.getType() == NodeType.PACKAGE) {
                 // Create top-level package box
-                LevelPackageBox packageBox = new LevelPackageBox(child.getSimpleName(), child.getLevel());
+                LevelPackageBox packageBox = new LevelPackageBox(child.getSimpleName(), child.getLevel(), topLevelTransparent);
                 packageContainers.put(child.getFullName(), packageBox);
                 topLevelContainer.getChildren().add(packageBox);
                 
                 // Recursively process children
-                processArchitectureNode(child, packageContainers, packageBox, elementsAddedToParent);
+                processArchitectureNode(child, packageContainers, packageBox, elementsAddedToParent, rootNode);
             } else if (child.getType() == NodeType.CLASS) {
                 // Top-level class (rare but possible)
                 LevelClassBox classBox = new LevelClassBox(child.getSimpleName(), child.getLevel());
@@ -173,12 +176,30 @@ public class ArchitectureView extends BorderPane {
     }
     
     /**
+     * Checks if a package should be displayed as transparent.
+     * A package is transparent if it is the ONLY sub-package of its parent.
+     * This visually de-emphasizes "pass-through" packages like de.weigend.s202.
+     */
+    private boolean shouldChildrenBeTransparent(ArchitectureNode parentNode) {
+        // Count how many sub-packages the parent has
+        long packageCount = parentNode.getChildren().stream()
+            .filter(c -> c.getType() == NodeType.PACKAGE)
+            .count();
+        // Children are transparent only if there's exactly one sub-package
+        return packageCount == 1;
+    }
+    
+    /**
      * Recursively processes an ArchitectureNode and its children to build the UI hierarchy.
      */
     private void processArchitectureNode(ArchitectureNode node,
                                         java.util.Map<String, LevelPackageBox> packageContainers,
                                         LevelPackageBox rootLevel,
-                                        java.util.Set<String> elementsAddedToParent) {
+                                        java.util.Set<String> elementsAddedToParent,
+                                        ArchitectureNode archRoot) {
+        // Check if child packages should be transparent (node has only one sub-package)
+        boolean childrenTransparent = shouldChildrenBeTransparent(node);
+        
         for (ArchitectureNode child : node.getChildren()) {
             // Skip if already processed
             if (elementsAddedToParent.contains(child.getFullName())) {
@@ -192,7 +213,7 @@ public class ArchitectureView extends BorderPane {
             }
             
             // Ensure parent hierarchy exists
-            ensurePackageHierarchy(parentPackage, packageContainers, rootLevel, node);
+            ensurePackageHierarchy(parentPackage, packageContainers, rootLevel, archRoot);
             
             // Get parent container
             LevelPackageBox parentContainer = packageContainers.get(parentPackage);
@@ -203,12 +224,12 @@ public class ArchitectureView extends BorderPane {
             if (child.getType() == NodeType.PACKAGE) {
                 // Create package container if not already created
                 if (!packageContainers.containsKey(child.getFullName())) {
-                    LevelPackageBox packageBox = new LevelPackageBox(child.getSimpleName(), child.getLevel());
+                    LevelPackageBox packageBox = new LevelPackageBox(child.getSimpleName(), child.getLevel(), childrenTransparent);
                     packageContainers.put(child.getFullName(), packageBox);
                     parentContainer.addToLevel(child.getLevel(), packageBox);
                 }
                 // Recursively process children
-                processArchitectureNode(child, packageContainers, rootLevel, elementsAddedToParent);
+                processArchitectureNode(child, packageContainers, rootLevel, elementsAddedToParent, archRoot);
             } else if (child.getType() == NodeType.CLASS) {
                 // Create class element
                 LevelClassBox classBox = new LevelClassBox(child.getSimpleName(), child.getLevel());
@@ -243,10 +264,14 @@ public class ArchitectureView extends BorderPane {
             currentPkg = currentPkg.isEmpty() ? part : currentPkg + "." + part;
             
             if (!packageContainers.containsKey(currentPkg)) {
-                // Look up package level from architecture tree
+                // Look up package level and check if transparent from architecture tree
                 int packageLevel = findPackageLevelInTree(currentPkg, rootNode);
                 
-                LevelPackageBox packageBox = new LevelPackageBox(part, packageLevel);
+                // Find the parent node to determine if this package should be transparent
+                ArchitectureNode parentNode = previousPkg.isEmpty() ? rootNode : findNodeInTree(previousPkg, rootNode);
+                boolean isTransparent = parentNode != null && shouldChildrenBeTransparent(parentNode);
+                
+                LevelPackageBox packageBox = new LevelPackageBox(part, packageLevel, isTransparent);
                 packageContainers.put(currentPkg, packageBox);
                 
                 // Add to parent at the correct architectural level
@@ -258,6 +283,22 @@ public class ArchitectureView extends BorderPane {
                 }
             }
         }
+    }
+    
+    /**
+     * Find a node by full name in the architecture tree.
+     */
+    private ArchitectureNode findNodeInTree(String fullName, ArchitectureNode node) {
+        if (node.getFullName().equals(fullName)) {
+            return node;
+        }
+        for (ArchitectureNode child : node.getChildren()) {
+            ArchitectureNode found = findNodeInTree(fullName, child);
+            if (found != null) {
+                return found;
+            }
+        }
+        return null;
     }
     
     /**

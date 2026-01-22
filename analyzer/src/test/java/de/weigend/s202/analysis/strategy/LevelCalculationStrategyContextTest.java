@@ -1,5 +1,6 @@
 package de.weigend.s202.analysis.strategy;
 
+import de.weigend.s202.analysis.domain.LevelCalculationStrategyFactory;
 import de.weigend.s202.analysis.strategy.aggregation.SimpleMaxAggregationStrategy;
 import de.weigend.s202.analysis.strategy.aggregation.WeightedAggregationStrategy;
 import de.weigend.s202.analysis.strategy.impl.BasicClassLevelCalculationStrategy;
@@ -12,7 +13,7 @@ class LevelCalculationStrategyContextTest {
     
     @Test
     void testCreateDefault() {
-        LevelCalculationStrategyContext context = LevelCalculationStrategyContext.createDefault();
+        LevelCalculationStrategyContext context = LevelCalculationStrategyFactory.createDefault();
         
         assertNotNull(context);
         assertNotNull(context.getClassLevelStrategy());
@@ -39,7 +40,7 @@ class LevelCalculationStrategyContextTest {
     
     @Test
     void testToString() {
-        LevelCalculationStrategyContext context = LevelCalculationStrategyContext.createDefault();
+        LevelCalculationStrategyContext context = LevelCalculationStrategyFactory.createDefault();
         String description = context.toString();
         
         assertNotNull(description);

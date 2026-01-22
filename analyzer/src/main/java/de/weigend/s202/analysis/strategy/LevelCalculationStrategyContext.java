@@ -1,14 +1,12 @@
 package de.weigend.s202.analysis.strategy;
 
-import de.weigend.s202.analysis.strategy.aggregation.SimpleMaxAggregationStrategy;
-import de.weigend.s202.analysis.strategy.impl.BasicClassLevelCalculationStrategy;
-import de.weigend.s202.analysis.strategy.impl.BasicPackageLevelCalculationStrategy;
-
 import java.util.Objects;
 
 /**
  * Context for managing and applying level calculation strategies.
- * Provides factory methods for common strategy combinations and allows custom configurations.
+ * Allows custom configurations of class and package level calculation strategies.
+ * 
+ * Note: Use LevelCalculationStrategyFactory.createDefault() for default configuration.
  */
 public class LevelCalculationStrategyContext {
     
@@ -30,18 +28,6 @@ public class LevelCalculationStrategyContext {
             "packageLevelStrategy cannot be null");
         this.aggregationStrategy = Objects.requireNonNull(aggregationStrategy, 
             "aggregationStrategy cannot be null");
-    }
-    
-    /**
-     * Factory method: Create a context with default simple strategies.
-     */
-    public static LevelCalculationStrategyContext createDefault() {
-        ClassAggregationStrategy aggregation = new SimpleMaxAggregationStrategy();
-        return new LevelCalculationStrategyContext(
-            new BasicClassLevelCalculationStrategy(aggregation),
-            new BasicPackageLevelCalculationStrategy(aggregation),
-            aggregation
-        );
     }
     
     public ClassLevelCalculationStrategy getClassLevelStrategy() {
