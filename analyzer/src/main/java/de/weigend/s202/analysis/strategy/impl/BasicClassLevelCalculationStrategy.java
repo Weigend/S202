@@ -45,27 +45,23 @@ public class BasicClassLevelCalculationStrategy implements ClassLevelCalculation
                 String className = entry.getKey();
                 Set<String> dependencies = entry.getValue();
                 
-                // Collect dependency levels
+                // Collect dependency levels (only for classes within the analyzed scope)
                 Set<Integer> dependencyLevels = new java.util.HashSet<>();
-                boolean allDependenciesFound = true;
                 
                 for (String depName : dependencies) {
                     if (classLevels.containsKey(depName)) {
+                        // Internal dependency - include its level
                         dependencyLevels.add(classLevels.get(depName));
-                    } else {
-                        allDependenciesFound = false;
-                        break;
                     }
+                    // External dependencies (not in the JAR) are ignored for level calculation
                 }
                 
-                // Calculate new level only if all dependencies are known
-                if (allDependenciesFound) {
-                    int newLevel = aggregationStrategy.aggregate(dependencyLevels);
-                    
-                    if (classLevels.get(className) != newLevel) {
-                        classLevels.put(className, newLevel);
-                        changed = true;
-                    }
+                // Always calculate level based on known internal dependencies
+                int newLevel = aggregationStrategy.aggregate(dependencyLevels);
+                
+                if (classLevels.get(className) != newLevel) {
+                    classLevels.put(className, newLevel);
+                    changed = true;
                 }
             }
         }

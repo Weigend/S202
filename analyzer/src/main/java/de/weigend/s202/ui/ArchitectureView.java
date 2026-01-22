@@ -2,14 +2,23 @@ package de.weigend.s202.ui;
 
 import de.weigend.s202.ui.model.ArchitectureNode;
 import de.weigend.s202.ui.model.ArchitectureNode.NodeType;
+import javafx.geometry.Bounds;
 import javafx.geometry.Insets;
 import javafx.scene.control.*;
 import javafx.scene.layout.BorderPane;
 import javafx.scene.layout.HBox;
+import javafx.scene.layout.Pane;
+import javafx.scene.layout.StackPane;
+import javafx.scene.paint.Color;
+import javafx.scene.shape.Line;
 import javafx.stage.FileChooser;
 import javafx.stage.Stage;
 
 import java.io.File;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 
 /**
@@ -21,6 +30,15 @@ public class ArchitectureView extends BorderPane {
     private Spinner<Integer> depthSpinner;
     private Stage parentStage;
     private java.util.function.Consumer<File> onFileSelected;
+    private CheckBox showDependenciesCheckbox;
+    private Pane dependencyPane;
+    private StackPane contentPane;
+    private ArchitectureNode currentRootNode;
+    private Map<String, javafx.scene.Node> elementRegistry = new HashMap<>();
+    private List<Line> dependencyLines = new ArrayList<>();
+    private Line selectedLine = null;
+    private static final Color DEPENDENCY_COLOR = Color.rgb(64, 64, 64); // Anthrazit
+    private static final double DEPENDENCY_WIDTH = 1.0;
 
     public ArchitectureView(Stage parentStage) {
         this.parentStage = Objects.requireNonNull(parentStage, "parentStage cannot be null");
@@ -32,16 +50,46 @@ public class ArchitectureView extends BorderPane {
         HBox toolbar = createToolbar();
         setTop(toolbar);
 
-        // Center: ScrollPane with LevelPackageBox (hierarchical with levels)
+        // Center: StackPane containing ScrollPane and Pane overlay for dependency arrows
         scrollPane = new ScrollPane();
         scrollPane.setFitToWidth(true);
         scrollPane.setFitToHeight(false);
         scrollPane.setPrefHeight(600);
         
+        // Pane for drawing dependency arrows (on top of scroll content)
+        dependencyPane = new Pane();
+        dependencyPane.setMouseTransparent(false); // Allow mouse events on lines
+        dependencyPane.setPickOnBounds(false); // Only pick on actual shapes
+        
+        // Wrap in StackPane to layer pane on top
+        contentPane = new StackPane();
+        contentPane.getChildren().addAll(scrollPane, dependencyPane);
+        
+        // Resize pane when content changes
+        scrollPane.viewportBoundsProperty().addListener((obs, oldVal, newVal) -> {
+            dependencyPane.setPrefWidth(newVal.getWidth());
+            dependencyPane.setPrefHeight(newVal.getHeight());
+            if (showDependenciesCheckbox != null && showDependenciesCheckbox.isSelected()) {
+                drawDependencyArrows();
+            }
+        });
+        
+        scrollPane.hvalueProperty().addListener((obs, oldVal, newVal) -> {
+            if (showDependenciesCheckbox != null && showDependenciesCheckbox.isSelected()) {
+                drawDependencyArrows();
+            }
+        });
+        
+        scrollPane.vvalueProperty().addListener((obs, oldVal, newVal) -> {
+            if (showDependenciesCheckbox != null && showDependenciesCheckbox.isSelected()) {
+                drawDependencyArrows();
+            }
+        });
+        
         // Load demo content
         addTestContent();
         
-        setCenter(scrollPane);
+        setCenter(contentPane);
 
         // Bottom: Status bar
         statusLabel = new Label("Ready");
@@ -97,10 +145,19 @@ public class ArchitectureView extends BorderPane {
             setStatus("Analyzing with depth: " + depth);
         });
 
-        Separator separator = new Separator();
+        // Checkbox to show/hide dependency arrows
+        showDependenciesCheckbox = new CheckBox("Show Dependencies");
+        showDependenciesCheckbox.setOnAction(e -> {
+            if (showDependenciesCheckbox.isSelected()) {
+                drawDependencyArrows();
+            } else {
+                clearDependencyArrows();
+            }
+        });
 
         toolbar.getChildren().addAll(
-            loadButton, new Separator(), depthLabel, depthSpinner, refreshButton
+            loadButton, new Separator(), depthLabel, depthSpinner, refreshButton,
+            new Separator(), showDependenciesCheckbox
         );
 
         return toolbar;
@@ -138,6 +195,10 @@ public class ArchitectureView extends BorderPane {
     public void setArchitectureRoot(ArchitectureNode rootNode) {
         Objects.requireNonNull(rootNode, "rootNode cannot be null");
         
+        // Store for dependency drawing
+        this.currentRootNode = rootNode;
+        this.elementRegistry.clear();
+        
         // Map to store package containers by full name for hierarchical organization
         java.util.Map<String, LevelPackageBox> packageContainers = new java.util.HashMap<>();
         
@@ -157,6 +218,7 @@ public class ArchitectureView extends BorderPane {
                 // Create top-level package box
                 LevelPackageBox packageBox = new LevelPackageBox(child.getSimpleName(), child.getLevel(), topLevelTransparent);
                 packageContainers.put(child.getFullName(), packageBox);
+                elementRegistry.put(child.getFullName(), packageBox);
                 topLevelContainer.getChildren().add(packageBox);
                 
                 // Recursively process children
@@ -164,6 +226,7 @@ public class ArchitectureView extends BorderPane {
             } else if (child.getType() == NodeType.CLASS) {
                 // Top-level class (rare but possible)
                 LevelClassBox classBox = new LevelClassBox(child.getSimpleName(), child.getLevel());
+                elementRegistry.put(child.getFullName(), classBox);
                 topLevelContainer.getChildren().add(classBox);
             }
             elementsAddedToParent.add(child.getFullName());
@@ -171,6 +234,9 @@ public class ArchitectureView extends BorderPane {
         
         // Replace content with populated hierarchy
         scrollPane.setContent(topLevelContainer);
+        
+        // Clear dependency arrows
+        clearDependencyArrows();
         
         setStatus("Architecture loaded: " + rootNode.getLevelCount() + " levels");
     }
@@ -226,6 +292,7 @@ public class ArchitectureView extends BorderPane {
                 if (!packageContainers.containsKey(child.getFullName())) {
                     LevelPackageBox packageBox = new LevelPackageBox(child.getSimpleName(), child.getLevel(), childrenTransparent);
                     packageContainers.put(child.getFullName(), packageBox);
+                    elementRegistry.put(child.getFullName(), packageBox);
                     parentContainer.addToLevel(child.getLevel(), packageBox);
                 }
                 // Recursively process children
@@ -233,6 +300,7 @@ public class ArchitectureView extends BorderPane {
             } else if (child.getType() == NodeType.CLASS) {
                 // Create class element
                 LevelClassBox classBox = new LevelClassBox(child.getSimpleName(), child.getLevel());
+                elementRegistry.put(child.getFullName(), classBox);
                 parentContainer.addToLevel(child.getLevel(), classBox);
             }
             
@@ -356,6 +424,219 @@ public class ArchitectureView extends BorderPane {
             throw new IllegalArgumentException("Depth must be between 1 and 10");
         }
         depthSpinner.getValueFactory().setValue(depth);
+    }
+    
+    /**
+     * Clears all dependency arrows.
+     */
+    private void clearDependencyArrows() {
+        if (dependencyPane != null) {
+            dependencyPane.getChildren().clear();
+            dependencyLines.clear();
+            selectedLine = null;
+        }
+    }
+    
+    /**
+     * Draws dependency arrows between visible elements.
+     */
+    private void drawDependencyArrows() {
+        if (dependencyPane == null || currentRootNode == null) {
+            return;
+        }
+        
+        // Clear existing lines
+        dependencyPane.getChildren().clear();
+        dependencyLines.clear();
+        selectedLine = null;
+        
+        // Iterate through all registered elements and draw arrows for their dependencies
+        drawDependencyArrowsRecursive(currentRootNode);
+    }
+    
+    /**
+     * Recursively draws arrows for all visible CLASS nodes (not packages).
+     */
+    private void drawDependencyArrowsRecursive(ArchitectureNode node) {
+        for (ArchitectureNode child : node.getChildren()) {
+            // Only draw arrows for CLASS nodes, not packages
+            if (child.getType() == ArchitectureNode.NodeType.CLASS) {
+                // Get the UI element for this node
+                javafx.scene.Node sourceElement = elementRegistry.get(child.getFullName());
+                
+                if (sourceElement != null && sourceElement.isVisible() && isNodeVisibleInViewport(sourceElement)) {
+                    // Draw arrows for each dependency
+                    for (String depName : child.getDependencies()) {
+                        javafx.scene.Node targetElement = findBestTargetElement(depName);
+                        
+                        if (targetElement != null && targetElement.isVisible() && isNodeVisibleInViewport(targetElement)) {
+                            createDependencyLine(sourceElement, targetElement, child.getFullName(), depName);
+                        }
+                    }
+                }
+            }
+            
+            // Recurse into children (packages contain classes)
+            drawDependencyArrowsRecursive(child);
+        }
+    }
+    
+    /**
+     * Finds the target element for a dependency.
+     * Only returns exact matches - no fallback to parent packages.
+     */
+    private javafx.scene.Node findBestTargetElement(String targetName) {
+        // Only exact match - no parent package fallback
+        javafx.scene.Node element = elementRegistry.get(targetName);
+        if (element != null && element.isVisible()) {
+            return element;
+        }
+        return null;
+    }
+    
+    /**
+     * Checks if a node is visible within the current viewport.
+     */
+    private boolean isNodeVisibleInViewport(javafx.scene.Node node) {
+        try {
+            Bounds boundsInScene = node.localToScene(node.getBoundsInLocal());
+            Bounds viewportBounds = scrollPane.localToScene(scrollPane.getBoundsInLocal());
+            return boundsInScene != null && viewportBounds != null && 
+                   boundsInScene.intersects(viewportBounds);
+        } catch (Exception e) {
+            return false;
+        }
+    }
+    
+    /**
+     * Creates a selectable dependency line between source and target.
+     */
+    private void createDependencyLine(javafx.scene.Node source, javafx.scene.Node target, 
+                                       String sourceName, String targetName) {
+        try {
+            // Get bounds relative to the pane/viewport
+            Bounds sourceBounds = source.localToScene(source.getBoundsInLocal());
+            Bounds targetBounds = target.localToScene(target.getBoundsInLocal());
+            Bounds paneBounds = dependencyPane.localToScene(dependencyPane.getBoundsInLocal());
+            
+            if (sourceBounds == null || targetBounds == null || paneBounds == null) {
+                return;
+            }
+            
+            // Calculate start point (center of source)
+            double startX = sourceBounds.getMinX() + sourceBounds.getWidth() / 2 - paneBounds.getMinX();
+            double startY = sourceBounds.getMinY() + sourceBounds.getHeight() / 2 - paneBounds.getMinY();
+            
+            // Calculate end point (center of target)
+            double endX = targetBounds.getMinX() + targetBounds.getWidth() / 2 - paneBounds.getMinX();
+            double endY = targetBounds.getMinY() + targetBounds.getHeight() / 2 - paneBounds.getMinY();
+            
+            // Create the line
+            Line line = new Line(startX, startY, endX, endY);
+            line.setStroke(DEPENDENCY_COLOR);
+            line.setStrokeWidth(DEPENDENCY_WIDTH);
+            
+            // Make line easier to click by adding invisible thick stroke
+            line.setOnMouseEntered(e -> {
+                if (line != selectedLine) {
+                    line.setStroke(Color.GRAY);
+                }
+                line.setCursor(javafx.scene.Cursor.HAND);
+            });
+            
+            line.setOnMouseExited(e -> {
+                if (line != selectedLine) {
+                    line.setStroke(DEPENDENCY_COLOR);
+                }
+                line.setCursor(javafx.scene.Cursor.DEFAULT);
+            });
+            
+            // Click handler for selection
+            line.setOnMouseClicked(e -> {
+                selectLine(line, sourceName, targetName);
+                e.consume();
+            });
+            
+            // Create arrowhead lines
+            double arrowSize = 4;
+            double angle = Math.atan2(endY - startY, endX - startX);
+            
+            double x1 = endX - arrowSize * Math.cos(angle - Math.PI / 6);
+            double y1 = endY - arrowSize * Math.sin(angle - Math.PI / 6);
+            double x2 = endX - arrowSize * Math.cos(angle + Math.PI / 6);
+            double y2 = endY - arrowSize * Math.sin(angle + Math.PI / 6);
+            
+            Line arrow1 = new Line(endX, endY, x1, y1);
+            Line arrow2 = new Line(endX, endY, x2, y2);
+            arrow1.setStroke(DEPENDENCY_COLOR);
+            arrow2.setStroke(DEPENDENCY_COLOR);
+            arrow1.setStrokeWidth(DEPENDENCY_WIDTH);
+            arrow2.setStrokeWidth(DEPENDENCY_WIDTH);
+            arrow1.setMouseTransparent(true);
+            arrow2.setMouseTransparent(true);
+            
+            // Store reference to arrow lines in main line's user data
+            line.setUserData(new Line[]{arrow1, arrow2});
+            
+            dependencyPane.getChildren().addAll(line, arrow1, arrow2);
+            dependencyLines.add(line);
+            
+        } catch (Exception e) {
+            // Ignore drawing errors for elements not in scene
+        }
+    }
+    
+    /**
+     * Selects a dependency line and highlights it.
+     */
+    private void selectLine(Line line, String sourceName, String targetName) {
+        // Deselect previous line
+        if (selectedLine != null && selectedLine != line) {
+            selectedLine.setStroke(DEPENDENCY_COLOR);
+            selectedLine.setStrokeWidth(DEPENDENCY_WIDTH);
+            Line[] arrows = (Line[]) selectedLine.getUserData();
+            if (arrows != null) {
+                arrows[0].setStroke(DEPENDENCY_COLOR);
+                arrows[1].setStroke(DEPENDENCY_COLOR);
+                arrows[0].setStrokeWidth(DEPENDENCY_WIDTH);
+                arrows[1].setStrokeWidth(DEPENDENCY_WIDTH);
+            }
+        }
+        
+        // Toggle selection
+        if (selectedLine == line) {
+            // Deselect
+            line.setStroke(DEPENDENCY_COLOR);
+            line.setStrokeWidth(DEPENDENCY_WIDTH);
+            Line[] arrows = (Line[]) line.getUserData();
+            if (arrows != null) {
+                arrows[0].setStroke(DEPENDENCY_COLOR);
+                arrows[1].setStroke(DEPENDENCY_COLOR);
+                arrows[0].setStrokeWidth(DEPENDENCY_WIDTH);
+                arrows[1].setStrokeWidth(DEPENDENCY_WIDTH);
+            }
+            selectedLine = null;
+            setStatus("Ready");
+        } else {
+            // Select
+            line.setStroke(Color.RED);
+            line.setStrokeWidth(2.0);
+            Line[] arrows = (Line[]) line.getUserData();
+            if (arrows != null) {
+                arrows[0].setStroke(Color.RED);
+                arrows[1].setStroke(Color.RED);
+                arrows[0].setStrokeWidth(2.0);
+                arrows[1].setStrokeWidth(2.0);
+            }
+            selectedLine = line;
+            
+            // Show dependency info in status bar
+            String simpleSource = sourceName.contains(".") ? 
+                sourceName.substring(sourceName.lastIndexOf('.') + 1) : sourceName;
+            String simpleTarget = targetName.contains(".") ? 
+                targetName.substring(targetName.lastIndexOf('.') + 1) : targetName;
+            setStatus("Dependency: " + simpleSource + " → " + simpleTarget);
+        }
     }
 }
 
