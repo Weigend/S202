@@ -1,4 +1,4 @@
-package de.weigend.s202.analysis.input;
+package de.weigend.s202.input;
 
 import org.objectweb.asm.ClassReader;
 import org.objectweb.asm.ClassVisitor;
@@ -6,11 +6,7 @@ import org.objectweb.asm.MethodVisitor;
 import org.objectweb.asm.Opcodes;
 
 import java.io.IOException;
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.nio.file.Paths;
 import java.util.*;
-import java.util.jar.JarEntry;
 import java.util.jar.JarFile;
 
 /**
