@@ -45,6 +45,11 @@ public class AnalyzerApplication extends Application {
         loadOldLayout(root);
 
         Scene scene = new Scene(root, 1200, 800);
+        
+        // Load global CSS styles
+        String css = getClass().getResource("/de/weigend/s202/ui/styles.css").toExternalForm();
+        scene.getStylesheets().add(css);
+        
         primaryStage.setScene(scene);
         primaryStage.show();
 

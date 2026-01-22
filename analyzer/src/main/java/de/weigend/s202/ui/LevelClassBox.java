@@ -28,8 +28,8 @@ public class LevelClassBox extends Label {
     public LevelClassBox(String name, int level) {
         super(level >= 0 ? name + " (L:" + level + ")" : name);
         
-        // Styling
-        this.setStyle("-fx-font-size: 12; -fx-border-color: #0066cc; -fx-border-width: 2; -fx-padding: 8; -fx-background-color: #e6f0ff;");
+        // Styling via CSS class
+        this.getStyleClass().add("class-box");
         this.setMaxWidth(Double.MAX_VALUE);
         this.setAlignment(Pos.CENTER);
         this.setCursor(javafx.scene.Cursor.HAND);
@@ -52,13 +52,15 @@ public class LevelClassBox extends Label {
         
         // Select this label
         globalSelectedLabel = this;
-        this.setStyle("-fx-font-size: 12; -fx-border-color: #ff6600; -fx-border-width: 3; -fx-padding: 8; -fx-background-color: #ffe6cc;");
+        this.getStyleClass().remove("class-box");
+        this.getStyleClass().add("class-box-selected");
     }
 
     /**
      * Deselect this box.
      */
     public void deselect() {
-        this.setStyle("-fx-font-size: 12; -fx-border-color: #0066cc; -fx-border-width: 2; -fx-padding: 8; -fx-background-color: #e6f0ff;");
+        this.getStyleClass().remove("class-box-selected");
+        this.getStyleClass().add("class-box");
     }
 }

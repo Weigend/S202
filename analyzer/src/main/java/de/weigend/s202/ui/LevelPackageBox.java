@@ -40,9 +40,9 @@ public class LevelPackageBox extends VBox {
      * @param level The architectural level (-1 means not specified)
      */
     public LevelPackageBox(String levelName, int level) {
-        super(5);
+        super(3);
         this.levelName = level >= 0 ? levelName + " (L:" + level + ")" : levelName;
-        this.setStyle("-fx-background-color: #fffacd; -fx-border-color: #999999; -fx-border-width: 2; -fx-padding: 0;");
+        this.getStyleClass().add("package-box");
         this.setPadding(new Insets(0));
         this.setMaxWidth(Double.MAX_VALUE);
         
@@ -53,9 +53,8 @@ public class LevelPackageBox extends VBox {
         createHeader();
         
         // Create content container for all rows
-        contentContainer = new VBox(10);
-        contentContainer.setStyle("-fx-background-color: #fffacd;");
-        contentContainer.setPadding(new Insets(10, 10, 10, 30));
+        contentContainer = new VBox(6);
+        contentContainer.setPadding(new Insets(6, 6, 6, 20));
         contentContainer.setMaxWidth(Double.MAX_VALUE);
         
         // Add content to this VBox
@@ -66,19 +65,19 @@ public class LevelPackageBox extends VBox {
      * Create the header with toggle icon and level name.
      */
     private void createHeader() {
-        HBox header = new HBox(10);
-        header.setStyle("-fx-background-color: #fffacd; -fx-padding: 8;");
+        HBox header = new HBox(6);
+        header.setPadding(new Insets(4));
         header.setMaxWidth(Double.MAX_VALUE);
         header.setAlignment(Pos.CENTER_LEFT);
         
         // Toggle icon
         toggleIcon = new Label("▼");
-        toggleIcon.setStyle("-fx-font-size: 10; -fx-font-weight: bold; -fx-text-fill: #333333; -fx-min-width: 15;");
+        toggleIcon.getStyleClass().add("toggle-icon");
         toggleIcon.setCursor(javafx.scene.Cursor.HAND);
         
         // Level name label
         Label nameLabel = new Label(levelName);
-        nameLabel.setStyle("-fx-font-size: 13; -fx-font-weight: bold; -fx-text-fill: #000000;");
+        nameLabel.setStyle("-fx-font-weight: bold;");
         nameLabel.setMaxWidth(Double.MAX_VALUE);
         HBox.setHgrow(nameLabel, Priority.ALWAYS);
         

@@ -1,0 +1,116 @@
+/* S202 Code Analyzer - Global Styles */
+
+.root {
+    -fx-font-size: 9px;
+    -fx-font-family: "System";
+}
+
+/* Toolbar */
+.tool-bar {
+    -fx-padding: 3 6;
+    -fx-spacing: 4;
+    -fx-font-size: 9px;
+}
+
+.tool-bar .button {
+    -fx-font-size: 9px;
+    -fx-padding: 2 6;
+}
+
+.tool-bar .spinner {
+    -fx-pref-width: 55;
+    -fx-font-size: 9px;
+}
+
+.tool-bar .spinner .text-field {
+    -fx-font-size: 9px;
+}
+
+/* TreeView */
+.tree-view {
+    -fx-font-size: 9px;
+}
+
+.tree-cell {
+    -fx-padding: 0;
+    -fx-font-size: 9px;
+}
+
+/* Status Bar */
+.status-bar {
+    -fx-padding: 2 6;
+    -fx-font-size: 9px;
+    -fx-border-color: #cccccc;
+    -fx-border-width: 1 0 0 0;
+}
+
+/* Labels */
+.label {
+    -fx-font-size: 9px;
+}
+
+/* Buttons */
+.button {
+    -fx-font-size: 9px;
+    -fx-padding: 2 6;
+}
+
+/* Spinner */
+.spinner {
+    -fx-font-size: 9px;
+}
+
+.spinner .text-field {
+    -fx-font-size: 9px;
+}
+
+/* Package Boxes */
+.package-box {
+    -fx-background-color: #fffacd;
+    -fx-border-color: #999999;
+    -fx-border-width: 1;
+    -fx-padding: 0;
+    -fx-font-size: 9px;
+}
+
+.package-box .header {
+    -fx-padding: 3;
+    -fx-font-size: 9px;
+}
+
+.package-box .toggle-icon {
+    -fx-font-size: 8px;
+    -fx-font-weight: bold;
+}
+
+/* ScrollPane */
+.scroll-pane {
+    -fx-font-size: 9px;
+}
+
+/* Alerts & Dialogs */
+.alert .content {
+    -fx-font-size: 9px;
+}
+
+/* HBox, VBox */
+.hbox, .vbox {
+    -fx-font-size: 9px;
+}
+
+/* Class Boxes */
+.class-box {
+    -fx-font-size: 9px;
+    -fx-border-color: #0066cc;
+    -fx-border-width: 1;
+    -fx-padding: 4;
+    -fx-background-color: #e6f0ff;
+}
+
+.class-box-selected {
+    -fx-font-size: 9px;
+    -fx-border-color: #ff6600;
+    -fx-border-width: 2;
+    -fx-padding: 4;
+    -fx-background-color: #ffe6cc;
+}

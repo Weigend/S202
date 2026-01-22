@@ -45,7 +45,7 @@ public class ArchitectureView extends BorderPane {
 
         // Bottom: Status bar
         statusLabel = new Label("Ready");
-        statusLabel.setStyle("-fx-padding: 5; -fx-border-color: #cccccc; -fx-border-width: 1 0 0 0;");
+        statusLabel.getStyleClass().add("status-bar");
         setBottom(statusLabel);
     }
     
@@ -80,27 +80,24 @@ public class ArchitectureView extends BorderPane {
     }
 
     private HBox createToolbar() {
-        HBox toolbar = new HBox(10);
-        toolbar.setPadding(new Insets(10));
-        toolbar.setStyle("-fx-border-color: #cccccc; -fx-border-width: 0 0 1 0;");
+        HBox toolbar = new HBox(8);
+        toolbar.setPadding(new Insets(5));
+        toolbar.getStyleClass().add("tool-bar");
 
         Button loadButton = new Button("📂 Load JAR");
-        loadButton.setStyle("-fx-font-size: 11;");
         loadButton.setOnAction(e -> openFileChooser());
 
-        Label depthLabel = new Label("Auto-Expand Depth:");
+        Label depthLabel = new Label("Depth:");
         depthSpinner = new Spinner<>(1, 10, 3);
-        depthSpinner.setPrefWidth(80);
+        depthSpinner.setPrefWidth(55);
 
         Button refreshButton = new Button("🔄 Refresh");
-        refreshButton.setStyle("-fx-font-size: 11;");
         refreshButton.setOnAction(e -> {
             String depth = String.valueOf(depthSpinner.getValue());
             setStatus("Analyzing with depth: " + depth);
         });
 
         Separator separator = new Separator();
-        separator.setStyle("-fx-padding: 0 5; -fx-opacity: 0.3;");
 
         toolbar.getChildren().addAll(
             loadButton, new Separator(), depthLabel, depthSpinner, refreshButton
@@ -136,25 +133,41 @@ public class ArchitectureView extends BorderPane {
     /**
      * Sets the ArchitectureNode root for level-based layout display.
      * Populates the ScrollPane with a LevelPackageBox hierarchy.
+     * The synthetic "root" node is hidden - only its children are displayed.
      */
     public void setArchitectureRoot(ArchitectureNode rootNode) {
         Objects.requireNonNull(rootNode, "rootNode cannot be null");
         
-        // Create root package container
-        LevelPackageBox rootLevel = new LevelPackageBox("Root Package");
-        
         // Map to store package containers by full name for hierarchical organization
         java.util.Map<String, LevelPackageBox> packageContainers = new java.util.HashMap<>();
-        packageContainers.put("", rootLevel);
         
         // Set to track which elements have been added to their parents
         java.util.Set<String> elementsAddedToParent = new java.util.HashSet<>();
         
-        // Recursively process the architecture tree
-        processArchitectureNode(rootNode, packageContainers, rootLevel, elementsAddedToParent);
+        // Container for top-level packages (children of root)
+        javafx.scene.layout.VBox topLevelContainer = new javafx.scene.layout.VBox(8);
+        topLevelContainer.setPadding(new Insets(10));
+        
+        // Process children of root directly (skip the root node itself)
+        for (ArchitectureNode child : rootNode.getChildren()) {
+            if (child.getType() == NodeType.PACKAGE) {
+                // Create top-level package box
+                LevelPackageBox packageBox = new LevelPackageBox(child.getSimpleName(), child.getLevel());
+                packageContainers.put(child.getFullName(), packageBox);
+                topLevelContainer.getChildren().add(packageBox);
+                
+                // Recursively process children
+                processArchitectureNode(child, packageContainers, packageBox, elementsAddedToParent);
+            } else if (child.getType() == NodeType.CLASS) {
+                // Top-level class (rare but possible)
+                LevelClassBox classBox = new LevelClassBox(child.getSimpleName(), child.getLevel());
+                topLevelContainer.getChildren().add(classBox);
+            }
+            elementsAddedToParent.add(child.getFullName());
+        }
         
         // Replace content with populated hierarchy
-        scrollPane.setContent(rootLevel);
+        scrollPane.setContent(topLevelContainer);
         
         setStatus("Architecture loaded: " + rootNode.getLevelCount() + " levels");
     }
