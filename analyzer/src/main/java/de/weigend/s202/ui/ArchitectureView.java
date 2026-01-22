@@ -206,6 +206,13 @@ public class ArchitectureView extends BorderPane {
             }
         });
         
+        // Set callback to refresh dependency arrows when a class is selected/deselected
+        LevelClassBox.setOnSelectionChangeCallback(() -> {
+            if (showDependenciesCheckbox != null && showDependenciesCheckbox.isSelected()) {
+                drawDependencyArrows();
+            }
+        });
+        
         // Map to store package containers by full name for hierarchical organization
         java.util.Map<String, LevelPackageBox> packageContainers = new java.util.HashMap<>();
         
@@ -232,7 +239,7 @@ public class ArchitectureView extends BorderPane {
                 processArchitectureNode(child, packageContainers, packageBox, elementsAddedToParent, rootNode);
             } else if (child.getType() == NodeType.CLASS) {
                 // Top-level class (rare but possible)
-                LevelClassBox classBox = new LevelClassBox(child.getSimpleName(), child.getLevel());
+                LevelClassBox classBox = new LevelClassBox(child.getSimpleName(), child.getLevel(), child.getFullName());
                 elementRegistry.put(child.getFullName(), classBox);
                 topLevelContainer.getChildren().add(classBox);
             }
@@ -306,7 +313,7 @@ public class ArchitectureView extends BorderPane {
                 processArchitectureNode(child, packageContainers, rootLevel, elementsAddedToParent, archRoot);
             } else if (child.getType() == NodeType.CLASS) {
                 // Create class element
-                LevelClassBox classBox = new LevelClassBox(child.getSimpleName(), child.getLevel());
+                LevelClassBox classBox = new LevelClassBox(child.getSimpleName(), child.getLevel(), child.getFullName());
                 elementRegistry.put(child.getFullName(), classBox);
                 parentContainer.addToLevel(child.getLevel(), classBox);
             }
@@ -463,8 +470,11 @@ public class ArchitectureView extends BorderPane {
     
     /**
      * Recursively draws arrows for all visible CLASS nodes (not packages).
+     * If a class is selected, only draws arrows to/from that class.
      */
     private void drawDependencyArrowsRecursive(ArchitectureNode node) {
+        String selectedClass = LevelClassBox.getSelectedClassName();
+        
         for (ArchitectureNode child : node.getChildren()) {
             // Only draw arrows for CLASS nodes, not packages
             if (child.getType() == ArchitectureNode.NodeType.CLASS) {
@@ -474,6 +484,16 @@ public class ArchitectureView extends BorderPane {
                 if (sourceElement != null && isNodeActuallyVisible(sourceElement)) {
                     // Draw arrows for each dependency
                     for (String depName : child.getDependencies()) {
+                        // If a class is selected, only show dependencies involving that class
+                        if (selectedClass != null) {
+                            // Show if: source is selected OR target is selected
+                            boolean isSourceSelected = child.getFullName().equals(selectedClass);
+                            boolean isTargetSelected = depName.equals(selectedClass);
+                            if (!isSourceSelected && !isTargetSelected) {
+                                continue; // Skip this dependency
+                            }
+                        }
+                        
                         javafx.scene.Node targetElement = findBestTargetElement(depName);
                         
                         if (targetElement != null && isNodeActuallyVisible(targetElement)) {

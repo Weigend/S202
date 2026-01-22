@@ -172,6 +172,11 @@ public class InputAnalyzer {
         @Override
         public MethodVisitor visitMethod(int access, String name, String descriptor,
                                          String signature, String[] exceptions) {
+            // Skip if this is an inner class (currentClassInfo is null)
+            if (currentClassInfo == null) {
+                return null;
+            }
+            
             // Register method in class info
             currentClassInfo.addMethod(name, descriptor);
             DependencyModel.MethodInfo methodInfo = currentClassInfo.getMethod(name, descriptor);

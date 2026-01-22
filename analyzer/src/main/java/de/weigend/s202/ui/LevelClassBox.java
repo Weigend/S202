@@ -11,13 +11,16 @@ import javafx.scene.control.Label;
 public class LevelClassBox extends Label {
 
     private static Label globalSelectedLabel;  // Global selection across all instances
+    private static String selectedClassName;   // Full name of selected class
+    private static Runnable onSelectionChangeCallback;  // Callback when selection changes
+    private String fullClassName;  // Full class name for this box
 
     /**
      * Create a new LevelClassBox with the given name.
      * @param name The class name to display
      */
     public LevelClassBox(String name) {
-        this(name, -1);
+        this(name, -1, null);
     }
 
     /**
@@ -26,7 +29,18 @@ public class LevelClassBox extends Label {
      * @param level The architectural level (-1 means not specified)
      */
     public LevelClassBox(String name, int level) {
+        this(name, level, null);
+    }
+    
+    /**
+     * Create a new LevelClassBox with the given name, level and full class name.
+     * @param name The class name to display
+     * @param level The architectural level (-1 means not specified)
+     * @param fullClassName The full class name for dependency matching
+     */
+    public LevelClassBox(String name, int level, String fullClassName) {
         super(level >= 0 ? name + " (L:" + level + ")" : name);
+        this.fullClassName = fullClassName;
         
         // Styling via CSS class
         this.getStyleClass().add("class-box");
@@ -40,6 +54,22 @@ public class LevelClassBox extends Label {
     }
 
     /**
+     * Set callback to be notified when selection changes.
+     * @param callback The callback to invoke (may be null)
+     */
+    public static void setOnSelectionChangeCallback(Runnable callback) {
+        onSelectionChangeCallback = callback;
+    }
+    
+    /**
+     * Get the full class name of the currently selected class.
+     * @return The full class name or null if nothing is selected
+     */
+    public static String getSelectedClassName() {
+        return selectedClassName;
+    }
+    
+    /**
      * Select this box and deselect the previously selected one.
      * Clicking again on the same box will deselect it (toggle behavior).
      */
@@ -48,6 +78,8 @@ public class LevelClassBox extends Label {
         if (globalSelectedLabel == this) {
             deselect();
             globalSelectedLabel = null;
+            selectedClassName = null;
+            notifySelectionChanged();
             return;
         }
         
@@ -60,9 +92,20 @@ public class LevelClassBox extends Label {
         
         // Select this label
         globalSelectedLabel = this;
+        selectedClassName = this.fullClassName;
         this.getStyleClass().remove("class-box");
         if (!this.getStyleClass().contains("class-box-selected")) {
             this.getStyleClass().add("class-box-selected");
+        }
+        notifySelectionChanged();
+    }
+    
+    /**
+     * Notify the callback that selection has changed.
+     */
+    private static void notifySelectionChanged() {
+        if (onSelectionChangeCallback != null) {
+            onSelectionChangeCallback.run();
         }
     }
 

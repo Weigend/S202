@@ -1,4 +1,4 @@
-package de.weigend.s202.analysis.debug;
+package de.weigend.s202.ui.debug;
 
 import de.weigend.s202.analysis.input.InputAnalyzer;
 import de.weigend.s202.analysis.input.DependencyModel;

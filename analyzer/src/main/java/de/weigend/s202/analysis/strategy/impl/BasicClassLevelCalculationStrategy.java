@@ -49,6 +49,10 @@ public class BasicClassLevelCalculationStrategy implements ClassLevelCalculation
                 Set<Integer> dependencyLevels = new java.util.HashSet<>();
                 
                 for (String depName : dependencies) {
+                    // Skip self-references - a class depending on itself should not affect its level
+                    if (depName.equals(className)) {
+                        continue;
+                    }
                     if (classLevels.containsKey(depName)) {
                         // Internal dependency - include its level
                         dependencyLevels.add(classLevels.get(depName));
