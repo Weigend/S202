@@ -37,7 +37,8 @@ public class ArchitectureView extends BorderPane {
     private Map<String, javafx.scene.Node> elementRegistry = new HashMap<>();
     private List<Line> dependencyLines = new ArrayList<>();
     private Line selectedLine = null;
-    private static final Color DEPENDENCY_COLOR = Color.rgb(64, 64, 64); // Anthrazit
+    private static final Color OUTGOING_DEPENDENCY_COLOR = Color.rgb(64, 64, 64); // Anthrazit - ausgehende Abhängigkeiten
+    private static final Color INCOMING_DEPENDENCY_COLOR = Color.rgb(0, 128, 0); // Grün - eingehende Abhängigkeiten (dependents)
     private static final double DEPENDENCY_WIDTH = 1.0;
 
     public ArchitectureView(Stage parentStage) {
@@ -453,19 +454,21 @@ public class ArchitectureView extends BorderPane {
                     // Draw arrows for each dependency
                     for (String depName : child.getDependencies()) {
                         // If a class is selected, only show dependencies involving that class
-                        if (selectedClass != null) {
-                            // Show if: source is selected OR target is selected
-                            boolean isSourceSelected = child.getFullName().equals(selectedClass);
-                            boolean isTargetSelected = depName.equals(selectedClass);
-                            if (!isSourceSelected && !isTargetSelected) {
-                                continue; // Skip this dependency
-                            }
+                        boolean isSourceSelected = selectedClass != null && child.getFullName().equals(selectedClass);
+                        boolean isTargetSelected = selectedClass != null && depName.equals(selectedClass);
+                        
+                        if (selectedClass != null && !isSourceSelected && !isTargetSelected) {
+                            continue; // Skip this dependency
                         }
                         
                         javafx.scene.Node targetElement = findBestTargetElement(depName);
                         
                         if (targetElement != null && isNodeActuallyVisible(targetElement)) {
-                            createDependencyLine(sourceElement, targetElement, child.getFullName(), depName);
+                            // Determine arrow direction relative to selected class:
+                            // - isSourceSelected = outgoing (selected class depends on target)
+                            // - isTargetSelected = incoming (source depends on selected class)
+                            boolean isIncoming = isTargetSelected && !isSourceSelected;
+                            createDependencyLine(sourceElement, targetElement, child.getFullName(), depName, isIncoming);
                         }
                     }
                 }
@@ -536,9 +539,11 @@ public class ArchitectureView extends BorderPane {
     
     /**
      * Creates a selectable dependency line between source and target.
+     * @param isIncoming true if this is an incoming dependency (someone depends on selected class),
+     *                   false if outgoing (selected class depends on someone)
      */
     private void createDependencyLine(javafx.scene.Node source, javafx.scene.Node target, 
-                                       String sourceName, String targetName) {
+                                       String sourceName, String targetName, boolean isIncoming) {
         try {
             // Get bounds relative to the pane/viewport
             Bounds sourceBounds = source.localToScene(source.getBoundsInLocal());
@@ -557,10 +562,16 @@ public class ArchitectureView extends BorderPane {
             double endX = targetBounds.getMinX() + targetBounds.getWidth() / 2 - paneBounds.getMinX();
             double endY = targetBounds.getMinY() + targetBounds.getHeight() / 2 - paneBounds.getMinY();
             
+            // Choose color based on direction
+            Color lineColor = isIncoming ? INCOMING_DEPENDENCY_COLOR : OUTGOING_DEPENDENCY_COLOR;
+            
             // Create the line
             Line line = new Line(startX, startY, endX, endY);
-            line.setStroke(DEPENDENCY_COLOR);
+            line.setStroke(lineColor);
             line.setStrokeWidth(DEPENDENCY_WIDTH);
+            
+            // Store original color for hover restore
+            final Color originalColor = lineColor;
             
             // Make line easier to click by adding invisible thick stroke
             line.setOnMouseEntered(e -> {
@@ -572,7 +583,7 @@ public class ArchitectureView extends BorderPane {
             
             line.setOnMouseExited(e -> {
                 if (line != selectedLine) {
-                    line.setStroke(DEPENDENCY_COLOR);
+                    line.setStroke(originalColor);
                 }
                 line.setCursor(javafx.scene.Cursor.DEFAULT);
             });
@@ -594,15 +605,15 @@ public class ArchitectureView extends BorderPane {
             
             Line arrow1 = new Line(endX, endY, x1, y1);
             Line arrow2 = new Line(endX, endY, x2, y2);
-            arrow1.setStroke(DEPENDENCY_COLOR);
-            arrow2.setStroke(DEPENDENCY_COLOR);
+            arrow1.setStroke(lineColor);
+            arrow2.setStroke(lineColor);
             arrow1.setStrokeWidth(DEPENDENCY_WIDTH);
             arrow2.setStrokeWidth(DEPENDENCY_WIDTH);
             arrow1.setMouseTransparent(true);
             arrow2.setMouseTransparent(true);
             
-            // Store reference to arrow lines in main line's user data
-            line.setUserData(new Line[]{arrow1, arrow2});
+            // Store reference to arrow lines and original color in main line's user data
+            line.setUserData(new Object[]{arrow1, arrow2, lineColor});
             
             dependencyPane.getChildren().addAll(line, arrow1, arrow2);
             dependencyLines.add(line);
@@ -618,28 +629,34 @@ public class ArchitectureView extends BorderPane {
     private void selectLine(Line line, String sourceName, String targetName) {
         // Deselect previous line
         if (selectedLine != null && selectedLine != line) {
-            selectedLine.setStroke(DEPENDENCY_COLOR);
+            Object[] userData = (Object[]) selectedLine.getUserData();
+            Color originalColor = (userData != null && userData.length > 2) ? (Color) userData[2] : OUTGOING_DEPENDENCY_COLOR;
+            selectedLine.setStroke(originalColor);
             selectedLine.setStrokeWidth(DEPENDENCY_WIDTH);
-            Line[] arrows = (Line[]) selectedLine.getUserData();
-            if (arrows != null) {
-                arrows[0].setStroke(DEPENDENCY_COLOR);
-                arrows[1].setStroke(DEPENDENCY_COLOR);
-                arrows[0].setStrokeWidth(DEPENDENCY_WIDTH);
-                arrows[1].setStrokeWidth(DEPENDENCY_WIDTH);
+            if (userData != null && userData.length >= 2) {
+                Line arrow1 = (Line) userData[0];
+                Line arrow2 = (Line) userData[1];
+                arrow1.setStroke(originalColor);
+                arrow2.setStroke(originalColor);
+                arrow1.setStrokeWidth(DEPENDENCY_WIDTH);
+                arrow2.setStrokeWidth(DEPENDENCY_WIDTH);
             }
         }
         
         // Toggle selection
         if (selectedLine == line) {
             // Deselect
-            line.setStroke(DEPENDENCY_COLOR);
+            Object[] userData = (Object[]) line.getUserData();
+            Color originalColor = (userData != null && userData.length > 2) ? (Color) userData[2] : OUTGOING_DEPENDENCY_COLOR;
+            line.setStroke(originalColor);
             line.setStrokeWidth(DEPENDENCY_WIDTH);
-            Line[] arrows = (Line[]) line.getUserData();
-            if (arrows != null) {
-                arrows[0].setStroke(DEPENDENCY_COLOR);
-                arrows[1].setStroke(DEPENDENCY_COLOR);
-                arrows[0].setStrokeWidth(DEPENDENCY_WIDTH);
-                arrows[1].setStrokeWidth(DEPENDENCY_WIDTH);
+            if (userData != null && userData.length >= 2) {
+                Line arrow1 = (Line) userData[0];
+                Line arrow2 = (Line) userData[1];
+                arrow1.setStroke(originalColor);
+                arrow2.setStroke(originalColor);
+                arrow1.setStrokeWidth(DEPENDENCY_WIDTH);
+                arrow2.setStrokeWidth(DEPENDENCY_WIDTH);
             }
             selectedLine = null;
             setStatus("Ready");
@@ -647,12 +664,14 @@ public class ArchitectureView extends BorderPane {
             // Select
             line.setStroke(Color.RED);
             line.setStrokeWidth(2.0);
-            Line[] arrows = (Line[]) line.getUserData();
-            if (arrows != null) {
-                arrows[0].setStroke(Color.RED);
-                arrows[1].setStroke(Color.RED);
-                arrows[0].setStrokeWidth(2.0);
-                arrows[1].setStrokeWidth(2.0);
+            Object[] userData = (Object[]) line.getUserData();
+            if (userData != null && userData.length >= 2) {
+                Line arrow1 = (Line) userData[0];
+                Line arrow2 = (Line) userData[1];
+                arrow1.setStroke(Color.RED);
+                arrow2.setStroke(Color.RED);
+                arrow1.setStrokeWidth(2.0);
+                arrow2.setStrokeWidth(2.0);
             }
             selectedLine = line;
             
