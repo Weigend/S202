@@ -20,8 +20,27 @@ public class InputAnalyzer {
      */
     public DependencyModel analyze(String jarPath) throws IOException {
         DependencyModel model = new DependencyModel();
+        analyzeInto(jarPath, model);
+        buildPackageHierarchy(model);
+        return model;
+    }
 
-        // Load classes from JAR
+    /**
+     * Analyzes multiple JAR files and returns a combined dependency model.
+     */
+    public DependencyModel analyzeMultiple(java.util.List<String> jarPaths) throws IOException {
+        DependencyModel model = new DependencyModel();
+        for (String jarPath : jarPaths) {
+            analyzeInto(jarPath, model);
+        }
+        buildPackageHierarchy(model);
+        return model;
+    }
+
+    /**
+     * Analyzes a JAR file and adds its classes to an existing model.
+     */
+    private void analyzeInto(String jarPath, DependencyModel model) throws IOException {
         try (JarFile jarFile = new JarFile(jarPath)) {
             jarFile.entries().asIterator().forEachRemaining(entry -> {
                 if (entry.getName().endsWith(".class") && !entry.isDirectory()) {
@@ -34,11 +53,6 @@ public class InputAnalyzer {
                 }
             });
         }
-
-        // Build package hierarchy
-        buildPackageHierarchy(model);
-
-        return model;
     }
 
     /**
@@ -147,7 +161,7 @@ public class InputAnalyzer {
             // Add superclass dependency
             if (superName != null && !superName.equals("java/lang/Object")) {
                 String superClassName = convertClassName(superName);
-                if (!isSelfDependency(superClassName) && !isJavaClass(superClassName)) {
+                if (!isSelfDependency(superClassName) && !isExternalLibraryClass(superClassName)) {
                     currentClassInfo.dependencies.add(superClassName);
                 }
             }
@@ -156,7 +170,7 @@ public class InputAnalyzer {
             if (interfaces != null) {
                 for (String iface : interfaces) {
                     String ifaceClassName = convertClassName(iface);
-                    if (!isSelfDependency(ifaceClassName) && !isJavaClass(ifaceClassName)) {
+                    if (!isSelfDependency(ifaceClassName) && !isExternalLibraryClass(ifaceClassName)) {
                         currentClassInfo.dependencies.add(ifaceClassName);
                     }
                 }
@@ -189,8 +203,44 @@ public class InputAnalyzer {
             return className.equals(currentClassName);
         }
 
-        private boolean isJavaClass(String className) {
-            return className.startsWith("java.") || className.startsWith("javax.");
+        /**
+         * Checks if a class is from external libraries (JDK, JavaFX, frameworks, etc.)
+         * These should not be counted as dependencies since they're not part of the analyzed codebase.
+         */
+        private boolean isExternalLibraryClass(String className) {
+            // Skip array types (e.g., "[Lcom.example.Foo;")
+            if (className.startsWith("[")) {
+                return true;
+            }
+            
+            // Handle inner classes - get the outer class name
+            String outerClassName = className.contains("$") 
+                ? className.substring(0, className.indexOf('$')) 
+                : className;
+            
+            return outerClassName.startsWith("java.")
+                || outerClassName.startsWith("javax.")
+                || outerClassName.startsWith("javafx.")
+                || outerClassName.startsWith("jdk.")
+                || outerClassName.startsWith("sun.")
+                || outerClassName.startsWith("com.sun.")
+                || outerClassName.startsWith("org.objectweb.asm")
+                || outerClassName.startsWith("org.w3c.")
+                || outerClassName.startsWith("org.xml.")
+                // Common frameworks and libraries
+                || outerClassName.startsWith("org.apache.")
+                || outerClassName.startsWith("org.slf4j.")
+                || outerClassName.startsWith("org.junit.")
+                || outerClassName.startsWith("org.springframework.")
+                || outerClassName.startsWith("org.hibernate.")
+                || outerClassName.startsWith("com.google.")
+                || outerClassName.startsWith("com.fasterxml.")
+                || outerClassName.startsWith("com.mojang.")
+                || outerClassName.startsWith("net.minecraft.")
+                || outerClassName.startsWith("net.minecraftforge.")
+                || outerClassName.startsWith("kotlin.")
+                || outerClassName.startsWith("scala.")
+                || outerClassName.startsWith("groovy.");
         }
     }
 
@@ -211,15 +261,62 @@ public class InputAnalyzer {
         @Override
         public void visitMethodInsn(int opcode, String owner, String name, String descriptor, boolean isInterface) {
             String ownerClass = owner.replace("/", ".");
+            
+            // Map inner classes to their outer class for dependency tracking
+            String dependencyClass = getOuterClassName(ownerClass);
             String methodCall = ownerClass + "." + name;
 
-            // Track the call
-            if (!ownerClass.startsWith("java.") && !ownerClass.startsWith("javax.")) {
+            // Track the call - filter out external library classes and self-references
+            if (!isExternalLibraryClass(dependencyClass) && !dependencyClass.equals(classInfo.fullName)) {
                 methodInfo.methodCalls.merge(methodCall, 1, Integer::sum);
-                classInfo.dependencies.add(ownerClass);
+                classInfo.dependencies.add(dependencyClass);
             }
 
             super.visitMethodInsn(opcode, owner, name, descriptor, isInterface);
+        }
+        
+        /**
+         * Gets the outer class name for inner classes.
+         * e.g., "com.example.Foo$Bar" -> "com.example.Foo"
+         */
+        private String getOuterClassName(String className) {
+            return className.contains("$") 
+                ? className.substring(0, className.indexOf('$')) 
+                : className;
+        }
+        
+        /**
+         * Checks if a class is from external libraries (JDK, JavaFX, frameworks, etc.)
+         */
+        private boolean isExternalLibraryClass(String className) {
+            // Skip array types (e.g., "[Lcom.example.Foo;")
+            if (className.startsWith("[")) {
+                return true;
+            }
+            
+            return className.startsWith("java.")
+                || className.startsWith("javax.")
+                || className.startsWith("javafx.")
+                || className.startsWith("jdk.")
+                || className.startsWith("sun.")
+                || className.startsWith("com.sun.")
+                || className.startsWith("org.objectweb.asm")
+                || className.startsWith("org.w3c.")
+                || className.startsWith("org.xml.")
+                // Common frameworks and libraries
+                || className.startsWith("org.apache.")
+                || className.startsWith("org.slf4j.")
+                || className.startsWith("org.junit.")
+                || className.startsWith("org.springframework.")
+                || className.startsWith("org.hibernate.")
+                || className.startsWith("com.google.")
+                || className.startsWith("com.fasterxml.")
+                || className.startsWith("com.mojang.")
+                || className.startsWith("net.minecraft.")
+                || className.startsWith("net.minecraftforge.")
+                || className.startsWith("kotlin.")
+                || className.startsWith("scala.")
+                || className.startsWith("groovy.");
         }
     }
 }

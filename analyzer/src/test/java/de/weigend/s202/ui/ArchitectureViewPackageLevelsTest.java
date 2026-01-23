@@ -29,11 +29,11 @@ public class ArchitectureViewPackageLevelsTest {
         DomainModel domainModel = calculator.calculate(rawModel);
         
         // Verify DomainModel has correct levels
-        // Parent packages inherit the max level of their children
-        assertEquals(1, domainModel.getPackage("com").level, "com inherits L1 from child com.example2");
-        assertEquals(0, domainModel.getPackage("com.example").level);
+        // Package level = max class level, parent packages inherit max from children
+        assertEquals(3, domainModel.getPackage("com").level, "com inherits L3 from child com.example2");
+        assertEquals(2, domainModel.getPackage("com.example").level, "com.example should be L2 (max class = C)");
         assertEquals(0, domainModel.getPackage("com.example1").level);
-        assertEquals(1, domainModel.getPackage("com.example2").level);
+        assertEquals(3, domainModel.getPackage("com.example2").level, "com.example2 should be L3 (max class = E)");
         
         // Step 3: Build architecture node tree
         ArchitectureNodeBuilder builder = new ArchitectureNodeBuilder();
@@ -43,7 +43,7 @@ public class ArchitectureViewPackageLevelsTest {
         ArchitectureNode example2Node = findNodeByName(rootNode, "com.example2");
         assertNotNull(example2Node, "com.example2 should be found");
         assertEquals(NodeType.PACKAGE, example2Node.getType(), "com.example2 should be a PACKAGE");
-        assertEquals(1, example2Node.getLevel(), "com.example2 should have level 1");
+        assertEquals(3, example2Node.getLevel(), "com.example2 should have level 3");
         
         System.out.println("Found com.example2 at level " + example2Node.getLevel());
     }

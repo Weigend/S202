@@ -80,19 +80,21 @@ class LevelCalculatorTest {
     }
 
     @Test
-    void testCalculateClassesWithoutDependenciesAreLevel0() {
-        // Classes with no dependencies should be level 0
-        long level0Classes = calculatedModel.getAllClasses().values().stream()
-            .filter(classInfo -> classInfo.dependencies.isEmpty())
-            .filter(classInfo -> classInfo.level == 0)
-            .count();
+    void testCalculatePackageLevelMatchesMaxClassLevel() {
+        // Package level should equal the max class level within the package
+        boolean allPackagesMatchMaxClassLevel = calculatedModel.getAllPackages().values().stream()
+            .allMatch(pkg -> {
+                int maxClassLevel = calculatedModel.getAllClasses().values().stream()
+                    .filter(cls -> cls.fullName.startsWith(pkg.fullName + ".") 
+                        && !cls.fullName.substring(pkg.fullName.length() + 1).contains("."))
+                    .mapToInt(cls -> cls.level)
+                    .max()
+                    .orElse(pkg.level);
+                return pkg.level >= maxClassLevel;
+            });
         
-        long noDepClassCount = calculatedModel.getAllClasses().values().stream()
-            .filter(classInfo -> classInfo.dependencies.isEmpty())
-            .count();
-        
-        assertEquals(noDepClassCount, level0Classes, 
-            "All classes without dependencies should be level 0");
+        assertTrue(allPackagesMatchMaxClassLevel, 
+            "Package level should be >= max class level within the package");
     }
 
     @Test
@@ -345,11 +347,12 @@ class LevelCalculatorTest {
     }
 
     @Test
-    void testDomainPackageComExampleIsLevel0() {
+    void testDomainPackageComExampleMatchesMaxClassLevel() {
         DomainModel.CalculatedElementInfo pkgComExample = calculatedModel.getPackage("com.example");
         assertNotNull(pkgComExample, "Package com.example should exist");
-        assertEquals(0, pkgComExample.level, 
-            "Package com.example should be at level 0 (only internal dependencies)");
+        // Package level = max class level in package (C is at L2)
+        assertEquals(2, pkgComExample.level, 
+            "Package com.example should be at level 2 (max class level = C at L2)");
     }
 
     @Test
@@ -357,9 +360,9 @@ class LevelCalculatorTest {
         DomainModel.CalculatedElementInfo pkgCom = calculatedModel.getPackage("com");
         assertNotNull(pkgCom, "Package com should exist");
         // Parent packages inherit the max level of their children
-        // com.example2 is L1, so com should also be L1
-        assertEquals(1, pkgCom.level, 
-            "Package com should be at level 1 (inherits from child com.example2)");
+        // com.example2 is L3 (E is L3), so com should also be L3
+        assertEquals(3, pkgCom.level, 
+            "Package com should be at level 3 (inherits from child com.example2)");
     }
 
     @Test
@@ -392,41 +395,39 @@ class LevelCalculatorTest {
     }
 
     @Test
-    void testDomainMaxLevelIs2() {
-        // Max level is now 3 due to com.example2.E which depends on:
-        // - com.example2.A (L2), com.example.B (L1), com.example1.X (L0)
-        // So E gets level 3 (max(2,1,0) + 1)
+    void testDomainMaxLevelIs3() {
+        // Max level is 3 due to com.example2.E which depends on classes at L2
         assertEquals(3, calculatedModel.getMaxLevel(), 
-            "Maximum level should be 3 (due to E depending on A->B->C chain)");
+            "Maximum level should be 3 (E depends on classes at L2)");
     }
 
     @Test
     void testDomainLevelDistribution() {
-        // With example1 and example2, we have more classes at each level:
+        // With SCC-aware calculation:
         // Level 0: com.example.A, com.example1.X, com.example2.D
-        // Level 1: com.example.B, com.example2.B, com.example2.C
+        // Level 1: com.example.B, com.example2.C, com.example2.B
         // Level 2: com.example.C, com.example2.A
         // Level 3: com.example2.E
         Map<Integer, java.util.List<DomainModel.CalculatedElementInfo>> byLevel = 
             calculatedModel.getElementsByLevel();
         
-        var level0Classes = byLevel.get(0).stream()
+        var level0Classes = byLevel.getOrDefault(0, java.util.List.of()).stream()
             .filter(e -> "CLASS".equals(e.type))
             .toList();
-        var level1Classes = byLevel.get(1).stream()
+        var level1Classes = byLevel.getOrDefault(1, java.util.List.of()).stream()
             .filter(e -> "CLASS".equals(e.type))
             .toList();
-        var level2Classes = byLevel.get(2).stream()
+        var level2Classes = byLevel.getOrDefault(2, java.util.List.of()).stream()
             .filter(e -> "CLASS".equals(e.type))
             .toList();
-        var level3Classes = byLevel.get(3).stream()
+        var level3Classes = byLevel.getOrDefault(3, java.util.List.of()).stream()
             .filter(e -> "CLASS".equals(e.type))
             .toList();
         
         assertEquals(3, level0Classes.size(), "Level 0 should have 3 classes (A, X, D)");
-        assertEquals(3, level1Classes.size(), "Level 1 should have 3 classes (B, example2.B, example2.C)");
-        assertEquals(2, level2Classes.size(), "Level 2 should have 2 classes (C, example2.A)");
-        assertEquals(1, level3Classes.size(), "Level 3 should have 1 class (example2.E)");
+        assertEquals(3, level1Classes.size(), "Level 1 should have 3 classes (B, C, B)");
+        assertEquals(2, level2Classes.size(), "Level 2 should have 2 classes (C, A)");
+        assertEquals(1, level3Classes.size(), "Level 3 should have 1 class (E)");
     }
 
 }

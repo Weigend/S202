@@ -33,10 +33,10 @@ public class FullPipelineTest {
         
         assertEquals(4, calculatedModel.getAllPackages().size(), "Should have 4 packages");
         
-        // Verify com.example2 is at Level 1
+        // Verify com.example2 is at Level 3 (max class level = E at L3)
         DomainModel.CalculatedElementInfo example2 = calculatedModel.getPackage("com.example2");
         assertNotNull(example2, "com.example2 should exist");
-        assertEquals(1, example2.level, "com.example2 should be at level 1");
+        assertEquals(3, example2.level, "com.example2 should be at level 3");
         
         // Step 3: Build architecture node tree
         ArchitectureNodeBuilder builder = new ArchitectureNodeBuilder();
@@ -50,7 +50,7 @@ public class FullPipelineTest {
         ArchitectureNode example2Node = findNodeByName(rootNode, "com.example2");
         assertNotNull(example2Node, "com.example2 should be in ArchitectureNode tree");
         assertEquals(NodeType.PACKAGE, example2Node.getType(), "com.example2 should be a PACKAGE");
-        assertEquals(1, example2Node.getLevel(), "com.example2 should have level 1");
+        assertEquals(3, example2Node.getLevel(), "com.example2 should have level 3");
         
         System.out.println("[TEST] Found com.example2 in ArchitectureNode at level " + example2Node.getLevel());
     }

@@ -61,6 +61,6 @@ class BasicClassLevelCalculationStrategyTest {
     @Test
     void testGetName() {
         String name = strategy.getName();
-        assertEquals("BasicClassLevelCalculation (with SimpleMaxAggregation)", name);
+        assertEquals("BasicClassLevelCalculation (SCC-aware, with SimpleMaxAggregation)", name);
     }
 }

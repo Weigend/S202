@@ -16,6 +16,8 @@ import javafx.scene.layout.VBox;
 import javafx.stage.Stage;
 
 import java.io.File;
+import java.util.List;
+import java.util.stream.Collectors;
 
 /**
  * Main application entry point for the S202 Code Analyzer.
@@ -73,7 +75,7 @@ public class AnalyzerApplication extends Application {
             if (jarFile.exists()) {
                 // Load JAR immediately, using Platform.runLater to ensure UI thread
                 javafx.application.Platform.runLater(() -> {
-                    loadJarFile(jarFile);
+                    loadJarFiles(List.of(jarFile));
                 });
             } else {
                 String errorMsg = "Error: JAR file not found at " + jarFilePath;
@@ -90,7 +92,7 @@ public class AnalyzerApplication extends Application {
      */
     private void loadOldLayout(BorderPane root) {
         architectureView = new ArchitectureView(primaryStage);
-        architectureView.setOnFileSelected(this::loadJarFile);
+        architectureView.setOnFilesSelected(this::loadJarFiles);
         root.setCenter(architectureView);
     }
 
@@ -115,27 +117,34 @@ public class AnalyzerApplication extends Application {
     }
 
     /**
-     * Loads a JAR file and updates the architecture view using the new pipeline:
+     * Loads one or more JAR files and updates the architecture view using the new pipeline:
      * InputAnalyzer -> LevelCalculator -> ArchitectureNodeBuilder
      */
-    public void loadJarFile(File jarFile) {
-        if (jarFile == null) return;
+    public void loadJarFiles(List<File> jarFiles) {
+        if (jarFiles == null || jarFiles.isEmpty()) return;
 
         try {
+            String fileNames = jarFiles.stream()
+                .map(File::getName)
+                .collect(Collectors.joining(", "));
+            
             if (architectureView != null) {
-                architectureView.setStatus("Analyzing: " + jarFile.getName() + " (this may take a moment)...");
+                architectureView.setStatus("Analyzing: " + fileNames + " (this may take a moment)...");
             }
 
             // Step 1: Raw analysis - extract classes and dependencies from bytecode
-            DependencyModel rawModel = rawAnalyzer.analyze(jarFile.getAbsolutePath());
+            List<String> jarPaths = jarFiles.stream()
+                .map(File::getAbsolutePath)
+                .collect(Collectors.toList());
+            DependencyModel rawModel = rawAnalyzer.analyzeMultiple(jarPaths);
             System.err.println("[AnalyzerApplication] rawModel packages: " + rawModel.getAllPackageNames());
             
             if (rawModel.getAllClasses().isEmpty()) {
-                String errorMsg = "Error: No classes found in JAR file";
+                String errorMsg = "Error: No classes found in JAR file(s)";
                 if (architectureView != null) {
                     architectureView.setStatus(errorMsg);
                 }
-                showErrorDialog("No Classes Found", "The JAR file does not contain any .class files");
+                showErrorDialog("No Classes Found", "The JAR file(s) do not contain any .class files");
                 return;
             }
 
@@ -150,7 +159,8 @@ public class AnalyzerApplication extends Application {
                 architectureView.setArchitectureRoot(rootNode);
                 
                 String message = String.format(
-                    "Loaded %d classes | %d levels | Max level %d",
+                    "Loaded %d JAR(s) | %d classes | %d levels | Max level %d",
+                    jarFiles.size(),
                     rawModel.getAllClasses().size(),
                     rootNode.getLevelCount(),
                     rootNode.getMaxLevel()
@@ -163,7 +173,7 @@ public class AnalyzerApplication extends Application {
             if (architectureView != null) {
                 architectureView.setStatus(errorMsg);
             }
-            showErrorDialog("Analysis Error", "Failed to analyze JAR file:\n" + e.getMessage());
+            showErrorDialog("Analysis Error", "Failed to analyze JAR file(s):\n" + e.getMessage());
             e.printStackTrace();
         }
     }

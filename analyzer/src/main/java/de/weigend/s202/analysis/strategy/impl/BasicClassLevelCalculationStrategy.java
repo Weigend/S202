@@ -2,15 +2,15 @@ package de.weigend.s202.analysis.strategy.impl;
 
 import de.weigend.s202.analysis.strategy.ClassLevelCalculationStrategy;
 import de.weigend.s202.analysis.strategy.ClassAggregationStrategy;
+import de.weigend.s202.analysis.scc.TarjanSCCFinder;
+import de.weigend.s202.analysis.scc.StronglyConnectedComponent;
 
-import java.util.HashMap;
-import java.util.Map;
-import java.util.Objects;
-import java.util.Set;
+import java.util.*;
 
 /**
  * Basic class level calculation strategy.
- * Uses an aggregation strategy to combine dependency levels.
+ * Uses SCC analysis to handle cyclic dependencies correctly.
+ * Classes in the same SCC (cycle) get the same level.
  */
 public class BasicClassLevelCalculationStrategy implements ClassLevelCalculationStrategy {
     
@@ -25,48 +25,84 @@ public class BasicClassLevelCalculationStrategy implements ClassLevelCalculation
     public Map<String, Integer> calculateClassLevels(Map<String, Set<String>> classDependencies) {
         Objects.requireNonNull(classDependencies, "classDependencies cannot be null");
         
-        Map<String, Integer> classLevels = new HashMap<>();
-        
-        // Initialize all classes with level 0
-        for (String className : classDependencies.keySet()) {
-            classLevels.put(className, 0);
+        if (classDependencies.isEmpty()) {
+            return new HashMap<>();
         }
         
-        // Iteratively calculate levels until stable
+        // Step 1: Find SCCs (strongly connected components) - classes in cycles
+        TarjanSCCFinder sccFinder = new TarjanSCCFinder(classDependencies);
+        List<StronglyConnectedComponent> sccs = sccFinder.findSCCs();
+        
+        // Step 2: Build a map from class to its SCC
+        Map<String, StronglyConnectedComponent> classToScc = new HashMap<>();
+        for (StronglyConnectedComponent scc : sccs) {
+            for (String member : scc.getMembers()) {
+                classToScc.put(member, scc);
+            }
+        }
+        
+        // Step 3: Build SCC dependency graph (DAG - no cycles between SCCs)
+        Map<Integer, Set<Integer>> sccDependencies = new HashMap<>();
+        Map<Integer, StronglyConnectedComponent> sccById = new HashMap<>();
+        
+        for (StronglyConnectedComponent scc : sccs) {
+            sccById.put(scc.getId(), scc);
+            Set<Integer> deps = new HashSet<>();
+            
+            for (String member : scc.getMembers()) {
+                Set<String> memberDeps = classDependencies.getOrDefault(member, Set.of());
+                for (String dep : memberDeps) {
+                    StronglyConnectedComponent depScc = classToScc.get(dep);
+                    if (depScc != null && depScc.getId() != scc.getId()) {
+                        deps.add(depScc.getId());
+                    }
+                }
+            }
+            sccDependencies.put(scc.getId(), deps);
+        }
+        
+        // Step 4: Calculate SCC levels (topological order)
+        Map<Integer, Integer> sccLevels = new HashMap<>();
+        for (StronglyConnectedComponent scc : sccs) {
+            sccLevels.put(scc.getId(), 0);
+        }
+        
+        // Iteratively calculate SCC levels until stable
         boolean changed = true;
         int iterations = 0;
-        int maxIterations = classDependencies.size() + 10;
+        int maxIterations = sccs.size() + 10;
         
         while (changed && iterations < maxIterations) {
             changed = false;
             iterations++;
             
-            for (Map.Entry<String, Set<String>> entry : classDependencies.entrySet()) {
-                String className = entry.getKey();
-                Set<String> dependencies = entry.getValue();
+            for (StronglyConnectedComponent scc : sccs) {
+                Set<Integer> deps = sccDependencies.get(scc.getId());
+                int maxDepLevel = -1;
                 
-                // Collect dependency levels (only for classes within the analyzed scope)
-                Set<Integer> dependencyLevels = new java.util.HashSet<>();
-                
-                for (String depName : dependencies) {
-                    // Skip self-references - a class depending on itself should not affect its level
-                    if (depName.equals(className)) {
-                        continue;
+                for (Integer depId : deps) {
+                    int depLevel = sccLevels.get(depId);
+                    if (depLevel > maxDepLevel) {
+                        maxDepLevel = depLevel;
                     }
-                    if (classLevels.containsKey(depName)) {
-                        // Internal dependency - include its level
-                        dependencyLevels.add(classLevels.get(depName));
-                    }
-                    // External dependencies (not in the JAR) are ignored for level calculation
                 }
                 
-                // Always calculate level based on known internal dependencies
-                int newLevel = aggregationStrategy.aggregate(dependencyLevels);
-                
-                if (classLevels.get(className) != newLevel) {
-                    classLevels.put(className, newLevel);
+                int newLevel = maxDepLevel >= 0 ? maxDepLevel + 1 : 0;
+                if (sccLevels.get(scc.getId()) != newLevel) {
+                    sccLevels.put(scc.getId(), newLevel);
                     changed = true;
                 }
+            }
+        }
+        
+        // Step 5: Assign class levels based on their SCC level
+        Map<String, Integer> classLevels = new HashMap<>();
+        for (String className : classDependencies.keySet()) {
+            StronglyConnectedComponent scc = classToScc.get(className);
+            if (scc != null) {
+                classLevels.put(className, sccLevels.get(scc.getId()));
+            } else {
+                classLevels.put(className, 0);
             }
         }
         
@@ -75,6 +111,6 @@ public class BasicClassLevelCalculationStrategy implements ClassLevelCalculation
     
     @Override
     public String getName() {
-        return "BasicClassLevelCalculation (with " + aggregationStrategy.getName() + ")";
+        return "BasicClassLevelCalculation (SCC-aware, with " + aggregationStrategy.getName() + ")";
     }
 }

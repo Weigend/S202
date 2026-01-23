@@ -29,7 +29,7 @@ public class ArchitectureView extends BorderPane {
     private Label statusLabel;
     private Spinner<Integer> depthSpinner;
     private Stage parentStage;
-    private java.util.function.Consumer<File> onFileSelected;
+    private java.util.function.Consumer<List<File>> onFilesSelected;
     private CheckBox showDependenciesCheckbox;
     private Pane dependencyPane;
     private StackPane contentPane;
@@ -132,27 +132,27 @@ public class ArchitectureView extends BorderPane {
     }
 
     /**
-     * Opens a file chooser for selecting JAR files.
+     * Opens a file chooser for selecting one or more JAR files.
      */
     private void openFileChooser() {
         FileChooser fileChooser = new FileChooser();
-        fileChooser.setTitle("Select JAR File to Analyze");
+        fileChooser.setTitle("Select JAR File(s) to Analyze");
         fileChooser.getExtensionFilters().addAll(
             new FileChooser.ExtensionFilter("JAR Files", "*.jar"),
             new FileChooser.ExtensionFilter("All Files", "*.*")
         );
 
-        File selectedFile = fileChooser.showOpenDialog(parentStage);
-        if (selectedFile != null && onFileSelected != null) {
-            onFileSelected.accept(selectedFile);
+        List<File> selectedFiles = fileChooser.showOpenMultipleDialog(parentStage);
+        if (selectedFiles != null && !selectedFiles.isEmpty() && onFilesSelected != null) {
+            onFilesSelected.accept(selectedFiles);
         }
     }
 
     /**
-     * Sets callback when a JAR file is selected.
+     * Sets callback when one or more JAR files are selected.
      */
-    public void setOnFileSelected(java.util.function.Consumer<File> callback) {
-        this.onFileSelected = Objects.requireNonNull(callback, "callback cannot be null");
+    public void setOnFilesSelected(java.util.function.Consumer<List<File>> callback) {
+        this.onFilesSelected = Objects.requireNonNull(callback, "callback cannot be null");
     }
 
     /**

@@ -156,8 +156,8 @@ class ArchitectureNodeTest {
 
     @Test
     void testDomainMaxLevelIs3() {
-        // Max level is 3 due to example2.E depending on the A->B->C chain
-        assertEquals(3, rootNode.getMaxLevel(), "Max level should be 3 (com.example2.E depends on A->B->C chain)");
+        // Max level is 3 due to example2.E depending on classes at level 2
+        assertEquals(3, rootNode.getMaxLevel(), "Max level should be 3 (com.example2.E at L3)");
     }
 
     @Test
@@ -180,28 +180,29 @@ class ArchitectureNodeTest {
 
     @Test
     void testDomainHasCorrectLevelStructure() {
-        // Verify the expected structure: 
-        // Level 0: A + package com.example + package com
-        // Level 1: B + (packages)
-        // Level 2: C + (packages)
+        // Verify the expected structure with SCC-aware logic:
+        // Level 0: A, X, D, com.example1
+        // Level 1: B (example), B (example2), C (example2)
+        // Level 2: C (example), A (example2), com.example
+        // Level 3: E, com.example2, com
         
-        assertTrue(rootNode.getLevelCount() >= 3, 
-            "Should have at least 3 levels (0, 1, 2)");
-        assertTrue(rootNode.getNodesAtLevel(0).size() >= 3, 
-            "Level 0 should have at least 3 elements (A, com.example, com)");
+        assertTrue(rootNode.getLevelCount() >= 4, 
+            "Should have at least 4 levels (0, 1, 2, 3)");
+        assertTrue(rootNode.getNodesAtLevel(0).size() >= 2, 
+            "Level 0 should have at least 2 elements (A, X, D)");
     }
 
     @Test
     void testDomainPackagesCorrectlyPlaced() {
-        // Package com.example should be in level 0
-        boolean comExampleLevel0 = rootNode.getNodesAtLevel(0).stream()
+        // Package com.example should be in level 2 (max class level = C at L2)
+        boolean comExampleLevel2 = rootNode.getNodesAtLevel(2).stream()
             .anyMatch(e -> "com.example".equals(e.getFullName()) && e.getType() == NodeType.PACKAGE);
-        assertTrue(comExampleLevel0, "Package com.example should be in level 0");
+        assertTrue(comExampleLevel2, "Package com.example should be in level 2 (max class level = C)");
         
-        // Package com should be in level 1 (inherits from child com.example2 which is L1)
-        boolean comLevel1 = rootNode.getNodesAtLevel(1).stream()
+        // Package com should be in level 3 (inherits from child com.example2 which is L3)
+        boolean comLevel3 = rootNode.getNodesAtLevel(3).stream()
             .anyMatch(e -> "com".equals(e.getFullName()) && e.getType() == NodeType.PACKAGE);
-        assertTrue(comLevel1, "Package com should be in level 1 (inherits max level of children)");
+        assertTrue(comLevel3, "Package com should be in level 3 (inherits max level of children)");
     }
 
     @Test

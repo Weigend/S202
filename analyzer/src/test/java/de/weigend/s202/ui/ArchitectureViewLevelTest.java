@@ -35,11 +35,11 @@ public class ArchitectureViewLevelTest {
         assertEquals(4, calculatedModel.getAllPackages().size(), "Should have 4 packages after calculation");
         
         // Verify package levels
-        // Parent packages inherit the max level of their children
-        assertEquals(1, calculatedModel.getAllPackages().get("com").level, "com should be L1 (inherits from child com.example2)");
-        assertEquals(0, calculatedModel.getAllPackages().get("com.example").level, "com.example should be L0");
-        assertEquals(0, calculatedModel.getAllPackages().get("com.example1").level, "com.example1 should be L0");
-        assertEquals(1, calculatedModel.getAllPackages().get("com.example2").level, "com.example2 should be L1");
+        // Package level = max class level, parent packages inherit max from children
+        assertEquals(3, calculatedModel.getAllPackages().get("com").level, "com should be L3 (inherits from child com.example2)");
+        assertEquals(2, calculatedModel.getAllPackages().get("com.example").level, "com.example should be L2 (max class level = C)");
+        assertEquals(0, calculatedModel.getAllPackages().get("com.example1").level, "com.example1 should be L0 (max class level = X)");
+        assertEquals(3, calculatedModel.getAllPackages().get("com.example2").level, "com.example2 should be L3 (max class level = E)");
         
         // Step 3: Build ArchitectureNode tree
         ArchitectureNodeBuilder builder = new ArchitectureNodeBuilder();
@@ -50,7 +50,7 @@ public class ArchitectureViewLevelTest {
         ArchitectureNode com2Node = findNodeByName(rootNode, "com.example2");
         assertNotNull(com2Node, "com.example2 should be found in ArchitectureNode tree");
         assertEquals(NodeType.PACKAGE, com2Node.getType(), "com.example2 should be a PACKAGE");
-        assertEquals(1, com2Node.getLevel(), "com.example2 should have level 1");
+        assertEquals(3, com2Node.getLevel(), "com.example2 should have level 3");
         
         System.err.println("[TEST] Found com.example2 in ArchitectureNode at level " + com2Node.getLevel());
         System.err.println("[TEST] ✓ All ArchitectureNode verifications passed");

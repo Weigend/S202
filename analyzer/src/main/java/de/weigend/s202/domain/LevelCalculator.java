@@ -52,13 +52,21 @@ public class LevelCalculator {
             model.addPackage(packageName, pkgInfo);
         }
 
-        // Step 3: Calculate class levels
+        // Step 3: Calculate class levels (SCC-aware, handles cycles correctly)
         calculateClassLevels(model);
 
-        // Step 4: Calculate package levels (based on external dependencies only)
-        calculatePackageLevels(model, rawModel);
+        // Step 4: Set package levels to max class level within each package
+        // This ensures Package-Level = max(Class-Levels in Package)
+        setPackageLevelsFromClasses(model);
 
-        // Step 5: Update dependent relationships
+        // Step 5: Propagate levels to parent packages (parent inherits max child level)
+        propagateLevelsToParentPackages(model, rawModel);
+
+        // Step 6: Adjust package levels based on cross-package dependencies
+        // If package A depends on package B (via class dependencies), A.level > B.level
+        adjustPackageLevelsForDependencies(model, rawModel);
+
+        // Step 7: Update dependent relationships
         updateDependentRelationships(model);
 
         return model;
@@ -95,50 +103,30 @@ public class LevelCalculator {
     }
 
     /**
-     * Calculates levels for packages based on EXTERNAL class dependencies only.
-     * Uses the PackageLevelCalculationStrategy from the strategy context.
+     * Sets package levels based on the maximum class level within each package.
+     * Package-Level = max(Class-Levels in Package)
      */
-    private void calculatePackageLevels(DomainModel model, DependencyModel rawModel) {
-        Map<String, DomainModel.CalculatedElementInfo> packages = model.getAllPackages();
-
-        // Build external dependency map for each package
-        Map<String, Set<String>> packageDependencies = new HashMap<>();
-        for (String packageName : packages.keySet()) {
-            DependencyModel.PackageInfo rawPkg = rawModel.getPackage(packageName);
-            Set<String> externalPackageDeps = new HashSet<>();
-
-            // Check all classes in this package
-            for (String className : rawPkg.classNames) {
-                DependencyModel.ClassInfo rawClass = rawModel.getClass(className);
-                for (String depClassName : rawClass.dependencies) {
-                    // Extract package name from class name and check if it's a known package
-                    String depPackage = extractPackageName(depClassName);
-                    if (depPackage != null && packages.containsKey(depPackage) && !depPackage.equals(packageName)) {
-                        externalPackageDeps.add(depPackage);
-                    }
+    private void setPackageLevelsFromClasses(DomainModel model) {
+        Map<String, Integer> maxClassLevelByPackage = new HashMap<>();
+        
+        // Find max class level for each package
+        for (DomainModel.CalculatedElementInfo classInfo : model.getAllClasses().values()) {
+            String packageName = extractPackageName(classInfo.fullName);
+            if (packageName != null) {
+                int currentMax = maxClassLevelByPackage.getOrDefault(packageName, 0);
+                if (classInfo.level > currentMax) {
+                    maxClassLevelByPackage.put(packageName, classInfo.level);
                 }
             }
-
-            packageDependencies.put(packageName, externalPackageDeps);
         }
-
-        // Use the strategy to calculate package levels
-        Map<String, Integer> calculatedLevels = 
-            strategyContext.getPackageLevelStrategy().calculatePackageLevels(packageDependencies);
-
-        // Apply calculated levels to the model
-        for (Map.Entry<String, Integer> entry : calculatedLevels.entrySet()) {
+        
+        // Apply max class level to each package
+        for (Map.Entry<String, Integer> entry : maxClassLevelByPackage.entrySet()) {
             DomainModel.CalculatedElementInfo pkgInfo = model.getPackage(entry.getKey());
             if (pkgInfo != null) {
                 pkgInfo.setLevel(entry.getValue());
-                // Update dependencies for the model
-                pkgInfo.dependencies.clear();
-                pkgInfo.dependencies.addAll(packageDependencies.get(entry.getKey()));
             }
         }
-
-        // Propagate levels to parent packages (parent inherits max level of children)
-        propagateLevelsToParentPackages(model, rawModel);
     }
 
     /**
@@ -220,5 +208,76 @@ public class LevelCalculator {
         }
         int lastDot = className.lastIndexOf('.');
         return className.substring(0, lastDot);
+    }
+
+    /**
+     * Adjusts package levels based on cross-package dependencies.
+     * If package A has classes that depend on classes in package B (outside A's subtree),
+     * then A.level must be > B.level.
+     * 
+     * This ensures that if ui depends on domain, ui.level > domain.level.
+     */
+    private void adjustPackageLevelsForDependencies(DomainModel model, DependencyModel rawModel) {
+        // Step 1: Build package dependency graph (which packages depend on which)
+        Map<String, Set<String>> packageDependencies = new HashMap<>();
+        
+        for (DomainModel.CalculatedElementInfo classInfo : model.getAllClasses().values()) {
+            String sourcePackage = extractPackageName(classInfo.fullName);
+            if (sourcePackage == null) continue;
+            
+            packageDependencies.putIfAbsent(sourcePackage, new HashSet<>());
+            
+            for (String depClassName : classInfo.dependencies) {
+                String targetPackage = extractPackageName(depClassName);
+                if (targetPackage == null) continue;
+                
+                // Only consider dependencies to packages OUTSIDE the source's subtree
+                // i.e., not the same package and not a child/parent relationship
+                if (!sourcePackage.equals(targetPackage) && 
+                    !isInSameSubtree(sourcePackage, targetPackage)) {
+                    packageDependencies.get(sourcePackage).add(targetPackage);
+                }
+            }
+        }
+        
+        // Step 2: Iteratively adjust package levels until stable
+        // If package A depends on B, then A.level must be > B.level
+        boolean changed = true;
+        int maxIterations = 50;
+        int iterations = 0;
+        
+        while (changed && iterations < maxIterations) {
+            changed = false;
+            iterations++;
+            
+            for (Map.Entry<String, Set<String>> entry : packageDependencies.entrySet()) {
+                String sourcePackage = entry.getKey();
+                DomainModel.CalculatedElementInfo sourcePkgInfo = model.getPackage(sourcePackage);
+                if (sourcePkgInfo == null) continue;
+                
+                for (String targetPackage : entry.getValue()) {
+                    DomainModel.CalculatedElementInfo targetPkgInfo = model.getPackage(targetPackage);
+                    if (targetPkgInfo == null) continue;
+                    
+                    // If source depends on target, source.level must be > target.level
+                    if (sourcePkgInfo.level <= targetPkgInfo.level) {
+                        sourcePkgInfo.setLevel(targetPkgInfo.level + 1);
+                        changed = true;
+                    }
+                }
+            }
+            
+            // After adjusting leaf packages, propagate to parents
+            if (changed) {
+                propagateLevelsToParentPackages(model, rawModel);
+            }
+        }
+    }
+
+    /**
+     * Checks if two packages are in the same subtree (one is a parent/child of the other).
+     */
+    private boolean isInSameSubtree(String pkg1, String pkg2) {
+        return pkg1.startsWith(pkg2 + ".") || pkg2.startsWith(pkg1 + ".");
     }
 }
