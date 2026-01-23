@@ -4,7 +4,6 @@ import de.weigend.s202.analysis.strategy.ClassAggregationStrategy;
 import de.weigend.s202.analysis.strategy.LevelCalculationStrategyContext;
 import de.weigend.s202.analysis.strategy.aggregation.SimpleMaxAggregationStrategy;
 import de.weigend.s202.analysis.strategy.impl.BasicClassLevelCalculationStrategy;
-import de.weigend.s202.analysis.strategy.impl.BasicPackageLevelCalculationStrategy;
 
 /**
  * Factory for creating LevelCalculationStrategyContext instances.
@@ -18,14 +17,15 @@ public final class LevelCalculationStrategyFactory {
     
     /**
      * Create a context with default simple strategies.
-     * Uses SimpleMaxAggregationStrategy with BasicClassLevelCalculationStrategy
-     * and BasicPackageLevelCalculationStrategy.
+     * Uses SimpleMaxAggregationStrategy with BasicClassLevelCalculationStrategy.
+     * 
+     * Note: Package-level calculation is handled directly in LevelCalculator
+     * with specialized logic for subtree detection and cross-package dependencies.
      */
     public static LevelCalculationStrategyContext createDefault() {
         ClassAggregationStrategy aggregation = new SimpleMaxAggregationStrategy();
         return new LevelCalculationStrategyContext(
             new BasicClassLevelCalculationStrategy(aggregation),
-            new BasicPackageLevelCalculationStrategy(aggregation),
             aggregation
         );
     }

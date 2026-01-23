@@ -3,7 +3,6 @@ package de.weigend.s202.analysis.strategy;
 import de.weigend.s202.domain.LevelCalculationStrategyFactory;
 import de.weigend.s202.analysis.strategy.aggregation.SimpleMaxAggregationStrategy;
 import de.weigend.s202.analysis.strategy.impl.BasicClassLevelCalculationStrategy;
-import de.weigend.s202.analysis.strategy.impl.BasicPackageLevelCalculationStrategy;
 import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.assertNotNull;
@@ -16,7 +15,6 @@ class LevelCalculationStrategyContextTest {
         
         assertNotNull(context);
         assertNotNull(context.getClassLevelStrategy());
-        assertNotNull(context.getPackageLevelStrategy());
         assertNotNull(context.getAggregationStrategy());
     }
     
@@ -25,15 +23,12 @@ class LevelCalculationStrategyContextTest {
         ClassAggregationStrategy aggregation = new SimpleMaxAggregationStrategy();
         ClassLevelCalculationStrategy classStrategy = 
             new BasicClassLevelCalculationStrategy(aggregation);
-        PackageLevelCalculationStrategy packageStrategy = 
-            new BasicPackageLevelCalculationStrategy(aggregation);
         
         LevelCalculationStrategyContext context = 
-            new LevelCalculationStrategyContext(classStrategy, packageStrategy, aggregation);
+            new LevelCalculationStrategyContext(classStrategy, aggregation);
         
         assertNotNull(context);
         assertEquals(classStrategy, context.getClassLevelStrategy());
-        assertEquals(packageStrategy, context.getPackageLevelStrategy());
         assertEquals(aggregation, context.getAggregationStrategy());
     }
     
@@ -45,7 +40,6 @@ class LevelCalculationStrategyContextTest {
         assertNotNull(description);
         assertEquals(true, description.contains("LevelCalculationStrategyContext"));
         assertEquals(true, description.contains("BasicClassLevelCalculation"));
-        assertEquals(true, description.contains("BasicPackageLevelCalculation"));
     }
     
     private void assertEquals(Object expected, Object actual) {

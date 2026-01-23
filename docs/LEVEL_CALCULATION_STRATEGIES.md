@@ -12,9 +12,9 @@ S202 berechnet für jede Klasse und jedes Paket ein **Level** (Schicht). Das Lev
 - **Level 1** = Elemente, die nur von Level-0-Elementen abhängen
 - **Level N** = Elemente, die von Level-(N-1)-Elementen abhängen
 
-## Algorithmus
+## Klassen-Level-Berechnung
 
-Beide Strategien (`BasicClassLevelCalculationStrategy` und `BasicPackageLevelCalculationStrategy`) funktionieren identisch:
+Die `BasicClassLevelCalculationStrategy` berechnet Klassen-Level mit SCC-Algorithmus:
 
 ### Schritt 1: Initialisierung
 Alle Elemente starten mit Level 0.
@@ -83,13 +83,16 @@ Für Zyklen (A → B → A) verwendet S202 den **Tarjan-SCC-Algorithmus** zur Er
 analysis/strategy/
 ├── ClassAggregationStrategy.java       # Interface für Aggregation
 ├── ClassLevelCalculationStrategy.java  # Interface für Klassen-Level
-├── PackageLevelCalculationStrategy.java # Interface für Paket-Level
+├── LevelCalculationStrategyContext.java # Context mit Strategies
 ├── aggregation/
 │   └── SimpleMaxAggregationStrategy.java  # max + 1
 └── impl/
-    ├── BasicClassLevelCalculationStrategy.java
-    └── BasicPackageLevelCalculationStrategy.java
+    └── BasicClassLevelCalculationStrategy.java  # SCC-aware Berechnung
 ```
+
+**Hinweis**: Die Paket-Level-Berechnung ist direkt im `LevelCalculator` implementiert,
+da sie spezielle Logik für Teilbaum-Erkennung und Kreuz-Paket-Abhängigkeiten benötigt.
+Siehe [LEVEL_CALCULATION_ALGORITHM.md](LEVEL_CALCULATION_ALGORITHM.md) für Details.
 
 ## Erweiterbarkeit
 
