@@ -23,9 +23,9 @@ Diese Unterscheidung ist fundamental für eine korrekte Architektur-Visualisieru
 
 ---
 
-## Der 7-Schritte-Algorithmus
+## Der 8-Schritte-Algorithmus
 
-Der `LevelCalculator` führt die Berechnung in **7 aufeinanderfolgenden Schritten** durch:
+Der `LevelCalculator` führt die Berechnung in **8 aufeinanderfolgenden Schritten** durch:
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
@@ -42,7 +42,10 @@ Der `LevelCalculator` führt die Berechnung in **7 aufeinanderfolgenden Schritte
 │  Schritt 6: Paket-Level für Kreuz-Paket-Abhängigkeiten         │
 │             anpassen (KERNLOGIK!)                               │
 ├─────────────────────────────────────────────────────────────────┤
-│  Schritt 7: Rückwärts-Beziehungen (dependents) aktualisieren   │
+│  Schritt 7: Klassen-Level für Unterpaket-Abhängigkeiten        │
+│             anpassen (GEMISCHTE PAKETE!)                        │
+├─────────────────────────────────────────────────────────────────┤
+│  Schritt 8: Rückwärts-Beziehungen (dependents) aktualisieren   │
 └─────────────────────────────────────────────────────────────────┘
 ```
 
@@ -163,6 +166,61 @@ for (jedes Paket A mit Abhängigkeit zu Paket B) {
 }
 // Nach Anpassung: Level zu Eltern-Paketen propagieren
 ```
+
+---
+
+## Schritt 7: Klassen-Level für Unterpaket-Abhängigkeiten (GEMISCHTE PAKETE!)
+
+### Das Problem: Gemischte Pakete
+
+Wenn ein Paket **sowohl Klassen als auch Unterpakete** enthält, kann es zu visuellen Inkonsistenzen kommen:
+
+```
+de.weigend.s202.ui/
+├── ArchitectureView.java (Klasse, Level 1)
+├── LevelClassBox.java (Klasse, Level 0)
+├── model/                      (Unterpaket, Level 6)
+│   └── ArchitectureNode.java   (Klasse, Level 0)
+└── demo/                       (Unterpaket, Level 2)
+    └── DemoApp.java            (Klasse, Level 2)
+```
+
+**Problem**: `ArchitectureView` (L1) hängt von `model.ArchitectureNode` ab. Das Unterpaket `model` hat Level 6 (wegen Cross-Package-Abhängigkeiten zu `domain`). In der Visualisierung würde die Abhängigkeit **nach oben** zeigen!
+
+### Die Lösung
+
+Für jede Klasse C im Paket P, die von einer Klasse D in einem Unterpaket P.sub abhängt:
+- C.level muss > P.sub.level sein
+
+```java
+for (jede Klasse C im Paket P) {
+    for (jede Abhängigkeit D von C) {
+        String depPackage = getPackage(D);
+        if (depPackage.startsWith(P + ".")) {  // D ist in Unterpaket
+            PackageInfo subPkg = getPackage(depPackage);
+            if (C.level <= subPkg.level) {
+                C.level = subPkg.level + 1;  // C muss höher sein
+            }
+        }
+    }
+}
+```
+
+### Ergebnis nach Schritt 7
+
+```
+de.weigend.s202.ui/
+├── ArchitectureView.java (Klasse, Level 7)  ← erhöht!
+├── LevelClassBox.java (Klasse, Level 0)
+├── model/                      (Unterpaket, Level 6)
+│   └── ArchitectureNode.java   (Klasse, Level 0)
+└── demo/                       (Unterpaket, Level 2)
+    └── DemoApp.java            (Klasse, Level 2)
+```
+
+Jetzt zeigt die Abhängigkeit von `ArchitectureView` (L7) zu `model` (L6) **nach unten** ✓
+
+**Wichtig**: Die Paket-Level werden nach diesem Schritt **nicht** neu berechnet, um Kaskadeneffekte zu vermeiden.
 
 ---
 
@@ -383,6 +441,12 @@ UND A und B sind NICHT im gleichen Teilbaum
 DANN: A.level > B.level
 ```
 
+### Unterpaket-Regel (gemischte Pakete)
+```
+WENN Klasse C in Paket P von Klasse D in Unterpaket P.sub abhängt
+DANN: C.level > P.sub.level
+```
+
 ### Teilbaum-Definition
 ```
 A und B sind im gleichen Teilbaum ⟺ 
@@ -397,7 +461,7 @@ A und B sind im gleichen Teilbaum ⟺
 
 | Klasse | Datei | Verantwortung |
 |--------|-------|---------------|
-| `LevelCalculator` | [domain/LevelCalculator.java](../analyzer/src/main/java/de/weigend/s202/domain/LevelCalculator.java) | Hauptlogik mit 7 Schritten |
+| `LevelCalculator` | [domain/LevelCalculator.java](../analyzer/src/main/java/de/weigend/s202/domain/LevelCalculator.java) | Hauptlogik mit 8 Schritten |
 | `BasicClassLevelCalculationStrategy` | [analysis/strategy/impl/BasicClassLevelCalculationStrategy.java](../analyzer/src/main/java/de/weigend/s202/analysis/strategy/impl/BasicClassLevelCalculationStrategy.java) | SCC-aware Klassen-Level |
 | `TarjanSCCFinder` | [analysis/scc/TarjanSCCFinder.java](../analyzer/src/main/java/de/weigend/s202/analysis/scc/TarjanSCCFinder.java) | Zyklen-Erkennung |
 | `SimpleMaxAggregationStrategy` | [analysis/strategy/aggregation/SimpleMaxAggregationStrategy.java](../analyzer/src/main/java/de/weigend/s202/analysis/strategy/aggregation/SimpleMaxAggregationStrategy.java) | max + 1 Aggregation |
@@ -440,11 +504,12 @@ Level 0: │     ┌────────────────────
 
 ## Fazit
 
-Die Level-Berechnung in S202 verwendet einen ausgeklügelten Algorithmus, der:
+Die Level-Berechnung in S202 verwendet einen ausgeklügelten 8-Schritte-Algorithmus, der:
 
 1. **Zyklen korrekt behandelt** (via Tarjan SCC)
 2. **Paket-Hierarchien berücksichtigt** (Eltern erben max von Kindern)
 3. **Interne vs. externe Abhängigkeiten unterscheidet** (Teilbaum-Prüfung)
-4. **Architekturverletzungen erkennt** (wenn A von B abhängt, muss A.level > B.level)
+4. **Gemischte Pakete korrekt behandelt** (Klassen neben Unterpaketen)
+5. **Architekturverletzungen erkennt** (wenn A von B abhängt, muss A.level > B.level)
 
-Diese Unterscheidung zwischen "internen" (gleicher Teilbaum) und "externen" (verschiedene Teilbäume) Abhängigkeiten ermöglicht eine präzise Darstellung der tatsächlichen Architektur-Schichten.
+Die Unterscheidung zwischen "internen" (gleicher Teilbaum) und "externen" (verschiedene Teilbäume) Abhängigkeiten sowie die spezielle Behandlung von gemischten Paketen ermöglicht eine präzise Darstellung der tatsächlichen Architektur-Schichten, bei der alle Abhängigkeiten nach unten zeigen.

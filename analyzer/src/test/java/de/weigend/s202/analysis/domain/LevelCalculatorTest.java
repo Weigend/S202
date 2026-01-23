@@ -430,4 +430,74 @@ class LevelCalculatorTest {
         assertEquals(1, level3Classes.size(), "Level 3 should have 1 class (E)");
     }
 
+    /**
+     * Test for mixed package scenario: Package contains both classes and subpackages.
+     * When a class C in package P depends on a class D in subpackage P.sub,
+     * C.level must be > P.sub.level to ensure downward dependency visualization.
+     */
+    @Test
+    void testClassLevelAdjustedForSubpackageDependencies() throws IOException {
+        // Create a synthetic model to test the mixed package scenario
+        DependencyModel mixedModel = new DependencyModel();
+        
+        // Create ClassInfo objects with proper dependencies
+        // Package: com.example (contains classes AND subpackage)
+        DependencyModel.ClassInfo appClass = new DependencyModel.ClassInfo("com.example.App", "App", "com.example");
+        appClass.dependencies.add("com.example.util.Helper");  // Depends on class in subpackage
+        mixedModel.addClass("com.example.App", appClass);
+        
+        // Class in subpackage
+        DependencyModel.ClassInfo helperClass = new DependencyModel.ClassInfo("com.example.util.Helper", "Helper", "com.example.util");
+        mixedModel.addClass("com.example.util.Helper", helperClass);
+        
+        // Class in subpackage with cross-package dependency (to make package level > 0)
+        DependencyModel.ClassInfo utilUserClass = new DependencyModel.ClassInfo("com.example.util.UtilUser", "UtilUser", "com.example.util");
+        utilUserClass.dependencies.add("com.other.External");  // Cross-package dependency
+        mixedModel.addClass("com.example.util.UtilUser", utilUserClass);
+        
+        // External class to create cross-package dependency
+        DependencyModel.ClassInfo externalClass = new DependencyModel.ClassInfo("com.other.External", "External", "com.other");
+        mixedModel.addClass("com.other.External", externalClass);
+        
+        // Create package hierarchy
+        java.util.Map<String, DependencyModel.PackageInfo> packages = new java.util.HashMap<>();
+        
+        DependencyModel.PackageInfo comPkg = new DependencyModel.PackageInfo("com", "com");
+        comPkg.childPackages.add("com.example");
+        comPkg.childPackages.add("com.other");
+        packages.put("com", comPkg);
+        
+        DependencyModel.PackageInfo examplePkg = new DependencyModel.PackageInfo("com.example", "example");
+        examplePkg.childPackages.add("com.example.util");
+        examplePkg.classNames.add("com.example.App");
+        packages.put("com.example", examplePkg);
+        
+        DependencyModel.PackageInfo utilPkg = new DependencyModel.PackageInfo("com.example.util", "util");
+        utilPkg.classNames.add("com.example.util.Helper");
+        utilPkg.classNames.add("com.example.util.UtilUser");
+        packages.put("com.example.util", utilPkg);
+        
+        DependencyModel.PackageInfo otherPkg = new DependencyModel.PackageInfo("com.other", "other");
+        otherPkg.classNames.add("com.other.External");
+        packages.put("com.other", otherPkg);
+        
+        mixedModel.setPackages(packages);
+        
+        // Calculate levels
+        DomainModel result = calculator.calculate(mixedModel);
+        
+        // Get levels
+        DomainModel.CalculatedElementInfo utilPkgInfo = result.getPackage("com.example.util");
+        DomainModel.CalculatedElementInfo appClassInfo = result.getClass("com.example.App");
+        
+        assertNotNull(utilPkgInfo, "com.example.util package should exist");
+        assertNotNull(appClassInfo, "com.example.App class should exist");
+        
+        // Key assertion: App's level must be > util package's level
+        // because App depends on Helper which is in util subpackage
+        assertTrue(appClassInfo.level > utilPkgInfo.level,
+            "Class com.example.App (L" + appClassInfo.level + ") should have higher level than " +
+            "subpackage com.example.util (L" + utilPkgInfo.level + ") because App depends on Helper in util");
+    }
+
 }

@@ -90,9 +90,9 @@ analysis/strategy/
     └── BasicClassLevelCalculationStrategy.java  # SCC-aware Berechnung
 ```
 
-**Hinweis**: Die Paket-Level-Berechnung ist direkt im `LevelCalculator` implementiert,
-da sie spezielle Logik für Teilbaum-Erkennung und Kreuz-Paket-Abhängigkeiten benötigt.
-Siehe [LEVEL_CALCULATION_ALGORITHM.md](LEVEL_CALCULATION_ALGORITHM.md) für Details.
+**Hinweis**: Die Paket-Level-Berechnung sowie die Anpassung von Klassen-Level für 
+gemischte Pakete (Pakete mit Klassen UND Unterpaketen) ist direkt im `LevelCalculator` 
+implementiert (8-Schritte-Algorithmus). Siehe [LEVEL_CALCULATION_ALGORITHM.md](LEVEL_CALCULATION_ALGORITHM.md) für Details.
 
 ## Erweiterbarkeit
 

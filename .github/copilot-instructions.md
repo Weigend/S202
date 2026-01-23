@@ -30,7 +30,7 @@ JAR → InputAnalyzer → DependencyModel
 
 ### Key Classes
 - **InputAnalyzer** (`reader/`): Converts JAR to DependencyModel (packages, classes, dependencies)
-- **LevelCalculator** (`domain/`): Computes topological levels with SCC analysis
+- **LevelCalculator** (`domain/`): Computes topological levels with 8-step algorithm (SCC-aware, handles mixed packages)
 - **DomainModel** (`domain/`): Analysis result (levels, violations, cycles)
 - **ArchitectureNode** (`ui/model/`): UI tree node (package/class with level + dependencies)
 - **ArchitectureNodeBuilder** (`ui/model/`): Builds UI tree from DomainModel
