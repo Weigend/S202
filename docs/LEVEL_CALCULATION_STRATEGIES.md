@@ -1,6 +1,10 @@
 # Level-Berechnungsstrategien
 
+> **📖 Ausführliche Dokumentation**: Für eine detaillierte Beschreibung des vollständigen Algorithmus inkl. Paket-Hierarchien und Kreuz-Paket-Abhängigkeiten siehe [LEVEL_CALCULATION_ALGORITHM.md](LEVEL_CALCULATION_ALGORITHM.md).
+
 ## Übersicht
+
+Diese Kurzreferenz beschreibt die **Strategy-Pattern-Architektur** der Level-Berechnung.
 
 S202 berechnet für jede Klasse und jedes Paket ein **Level** (Schicht). Das Level gibt an, wie "tief" ein Element in der Abhängigkeitshierarchie liegt:
 
@@ -69,9 +73,9 @@ Level 2: A
 
 ## Zyklen-Behandlung
 
-Bei Zyklen (A → B → A) konvergiert der Algorithmus durch das Iterations-Limit (`maxIterations`). Elemente im Zyklus erhalten das gleiche Level.
+Für Zyklen (A → B → A) verwendet S202 den **Tarjan-SCC-Algorithmus** zur Erkennung von Strongly Connected Components. Alle Klassen innerhalb eines Zyklus erhalten automatisch das gleiche Level.
 
-**Hinweis**: Für echte Zykluserkennung wird separat der Tarjan-SCC-Algorithmus verwendet (siehe `analysis/scc/`).
+**Details**: Siehe [LEVEL_CALCULATION_ALGORITHM.md](LEVEL_CALCULATION_ALGORITHM.md#schritt-3-klassen-level-berechnung-scc-aware).
 
 ## Code-Struktur
 
