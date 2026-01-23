@@ -2,6 +2,8 @@ package de.weigend.s202.ui;
 
 import de.weigend.s202.ui.model.ArchitectureNode;
 import de.weigend.s202.ui.model.ArchitectureNode.NodeType;
+import de.weigend.s202.analysis.scc.TarjanSCCFinder;
+import de.weigend.s202.analysis.scc.StronglyConnectedComponent;
 import javafx.geometry.Bounds;
 import javafx.geometry.Insets;
 import javafx.scene.control.*;
@@ -17,9 +19,11 @@ import javafx.stage.Stage;
 import java.io.File;
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Set;
 
 /**
  * Main UI component for displaying the architecture graph.
@@ -31,14 +35,17 @@ public class ArchitectureView extends BorderPane {
     private Stage parentStage;
     private java.util.function.Consumer<List<File>> onFilesSelected;
     private CheckBox showDependenciesCheckbox;
+    private CheckBox showSccCheckbox;
     private Pane dependencyPane;
     private StackPane contentPane;
     private ArchitectureNode currentRootNode;
     private Map<String, javafx.scene.Node> elementRegistry = new HashMap<>();
     private List<Line> dependencyLines = new ArrayList<>();
+    private List<Line> sccLines = new ArrayList<>();
     private Line selectedLine = null;
     private static final Color OUTGOING_DEPENDENCY_COLOR = Color.rgb(64, 64, 64); // Anthrazit - ausgehende Abhängigkeiten
     private static final Color INCOMING_DEPENDENCY_COLOR = Color.rgb(0, 128, 0); // Grün - eingehende Abhängigkeiten (dependents)
+    private static final Color SCC_COLOR = Color.RED; // Rot - zyklische Abhängigkeiten (SCCs)
     private static final double DEPENDENCY_WIDTH = 1.0;
 
     public ArchitectureView(Stage parentStage) {
@@ -73,17 +80,26 @@ public class ArchitectureView extends BorderPane {
             if (showDependenciesCheckbox != null && showDependenciesCheckbox.isSelected()) {
                 drawDependencyArrows();
             }
+            if (showSccCheckbox != null && showSccCheckbox.isSelected()) {
+                drawSccLines();
+            }
         });
         
         scrollPane.hvalueProperty().addListener((obs, oldVal, newVal) -> {
             if (showDependenciesCheckbox != null && showDependenciesCheckbox.isSelected()) {
                 drawDependencyArrows();
             }
+            if (showSccCheckbox != null && showSccCheckbox.isSelected()) {
+                drawSccLines();
+            }
         });
         
         scrollPane.vvalueProperty().addListener((obs, oldVal, newVal) -> {
             if (showDependenciesCheckbox != null && showDependenciesCheckbox.isSelected()) {
                 drawDependencyArrows();
+            }
+            if (showSccCheckbox != null && showSccCheckbox.isSelected()) {
+                drawSccLines();
             }
         });
 
@@ -124,9 +140,19 @@ public class ArchitectureView extends BorderPane {
             }
         });
 
+        // Checkbox to show/hide SCC (cycle) lines
+        showSccCheckbox = new CheckBox("Show SCC");
+        showSccCheckbox.setOnAction(e -> {
+            if (showSccCheckbox.isSelected()) {
+                drawSccLines();
+            } else {
+                clearSccLines();
+            }
+        });
+
         toolbar.getChildren().addAll(
             loadButton, new Separator(), depthLabel, depthSpinner, refreshButton,
-            new Separator(), showDependenciesCheckbox
+            new Separator(), showDependenciesCheckbox, showSccCheckbox
         );
 
         return toolbar;
@@ -173,12 +199,18 @@ public class ArchitectureView extends BorderPane {
             if (showDependenciesCheckbox != null && showDependenciesCheckbox.isSelected()) {
                 drawDependencyArrows();
             }
+            if (showSccCheckbox != null && showSccCheckbox.isSelected()) {
+                drawSccLines();
+            }
         });
         
         // Set callback to refresh dependency arrows when a class is selected/deselected
         LevelClassBox.setOnSelectionChangeCallback(() -> {
             if (showDependenciesCheckbox != null && showDependenciesCheckbox.isSelected()) {
                 drawDependencyArrows();
+            }
+            if (showSccCheckbox != null && showSccCheckbox.isSelected()) {
+                drawSccLines();
             }
         });
         
@@ -681,6 +713,178 @@ public class ArchitectureView extends BorderPane {
             String simpleTarget = targetName.contains(".") ? 
                 targetName.substring(targetName.lastIndexOf('.') + 1) : targetName;
             setStatus("Dependency: " + simpleSource + " → " + simpleTarget);
+        }
+    }
+
+    // ===== SCC (Strongly Connected Components) Visualization =====
+
+    /**
+     * Clears all SCC lines from the view.
+     */
+    private void clearSccLines() {
+        dependencyPane.getChildren().removeAll(sccLines);
+        sccLines.clear();
+    }
+
+    /**
+     * Draws SCC lines connecting all visible classes that are part of the same SCC (cycle).
+     */
+    private void drawSccLines() {
+        clearSccLines();
+        
+        if (currentRootNode == null) {
+            return;
+        }
+        
+        // Step 1: Collect all visible classes and their dependencies
+        Map<String, Set<String>> classDependencies = new HashMap<>();
+        collectVisibleClassDependencies(currentRootNode, classDependencies);
+        
+        if (classDependencies.isEmpty()) {
+            return;
+        }
+        
+        // Step 2: Find SCCs using Tarjan algorithm
+        TarjanSCCFinder sccFinder = new TarjanSCCFinder(classDependencies);
+        List<StronglyConnectedComponent> sccs = sccFinder.findSCCs();
+        
+        // Step 3: Draw lines for each SCC with more than 1 member (cycles only)
+        int sccCount = 0;
+        for (StronglyConnectedComponent scc : sccs) {
+            if (scc.isTangle()) { // Only draw for cycles (size > 1)
+                drawSccComponentLines(scc, classDependencies);
+                sccCount++;
+            }
+        }
+        
+        if (sccCount > 0) {
+            setStatus("Showing " + sccCount + " SCC cycle(s) in red");
+        } else {
+            setStatus("No cycles found among visible classes");
+        }
+    }
+
+    /**
+     * Recursively collects class dependencies from visible (expanded) nodes.
+     */
+    private void collectVisibleClassDependencies(ArchitectureNode node, Map<String, Set<String>> result) {
+        if (node.getType() == NodeType.CLASS) {
+            // Check if this class is actually visible in the UI
+            javafx.scene.Node uiNode = elementRegistry.get(node.getFullName());
+            if (uiNode != null && isNodeActuallyVisible(uiNode)) {
+                // Filter dependencies to only include classes we know about
+                Set<String> visibleDeps = new HashSet<>();
+                for (String dep : node.getDependencies()) {
+                    if (elementRegistry.containsKey(dep)) {
+                        visibleDeps.add(dep);
+                    }
+                }
+                result.put(node.getFullName(), visibleDeps);
+            }
+        }
+        
+        // Recurse into children
+        for (ArchitectureNode child : node.getChildren()) {
+            collectVisibleClassDependencies(child, result);
+        }
+    }
+
+    /**
+     * Draws lines connecting all members of a single SCC that are visible.
+     * Only draws the actual dependency edges within the SCC, not all pairs.
+     */
+    private void drawSccComponentLines(StronglyConnectedComponent scc, Map<String, Set<String>> classDependencies) {
+        Set<String> members = scc.getMembers();
+        
+        // Draw dependency edges between members of this SCC
+        for (String member : members) {
+            javafx.scene.Node sourceNode = elementRegistry.get(member);
+            if (sourceNode == null || !isNodeActuallyVisible(sourceNode)) {
+                continue;
+            }
+            
+            Set<String> deps = classDependencies.getOrDefault(member, Set.of());
+            for (String dep : deps) {
+                if (members.contains(dep)) {
+                    javafx.scene.Node targetNode = elementRegistry.get(dep);
+                    if (targetNode != null && isNodeActuallyVisible(targetNode)) {
+                        createSccLine(sourceNode, targetNode, member, dep);
+                    }
+                }
+            }
+        }
+    }
+
+    /**
+     * Creates a single SCC line between two elements.
+     */
+    private void createSccLine(javafx.scene.Node source, javafx.scene.Node target, String sourceName, String targetName) {
+        try {
+            Bounds sourceBounds = source.localToScene(source.getBoundsInLocal());
+            Bounds targetBounds = target.localToScene(target.getBoundsInLocal());
+            Bounds paneBounds = dependencyPane.localToScene(dependencyPane.getBoundsInLocal());
+            
+            if (sourceBounds == null || targetBounds == null || paneBounds == null) {
+                return;
+            }
+            
+            // Calculate start point (center of source)
+            double startX = sourceBounds.getMinX() + sourceBounds.getWidth() / 2 - paneBounds.getMinX();
+            double startY = sourceBounds.getMinY() + sourceBounds.getHeight() / 2 - paneBounds.getMinY();
+            
+            // Calculate end point (center of target)
+            double endX = targetBounds.getMinX() + targetBounds.getWidth() / 2 - paneBounds.getMinX();
+            double endY = targetBounds.getMinY() + targetBounds.getHeight() / 2 - paneBounds.getMinY();
+            
+            // Create the line
+            Line line = new Line(startX, startY, endX, endY);
+            line.setStroke(SCC_COLOR);
+            line.setStrokeWidth(DEPENDENCY_WIDTH);
+            
+            // Create arrowhead lines
+            double arrowSize = 4;
+            double angle = Math.atan2(endY - startY, endX - startX);
+            
+            double x1 = endX - arrowSize * Math.cos(angle - Math.PI / 6);
+            double y1 = endY - arrowSize * Math.sin(angle - Math.PI / 6);
+            double x2 = endX - arrowSize * Math.cos(angle + Math.PI / 6);
+            double y2 = endY - arrowSize * Math.sin(angle + Math.PI / 6);
+            
+            Line arrow1 = new Line(endX, endY, x1, y1);
+            Line arrow2 = new Line(endX, endY, x2, y2);
+            arrow1.setStroke(SCC_COLOR);
+            arrow2.setStroke(SCC_COLOR);
+            arrow1.setStrokeWidth(DEPENDENCY_WIDTH);
+            arrow2.setStrokeWidth(DEPENDENCY_WIDTH);
+            arrow1.setMouseTransparent(true);
+            arrow2.setMouseTransparent(true);
+            
+            // Make line clickable
+            line.setUserData(new Object[]{arrow1, arrow2, SCC_COLOR, sourceName, targetName});
+            line.setOnMouseEntered(e -> {
+                line.setStroke(Color.DARKRED);
+                line.setCursor(javafx.scene.Cursor.HAND);
+            });
+            line.setOnMouseExited(e -> {
+                line.setStroke(SCC_COLOR);
+                line.setCursor(javafx.scene.Cursor.DEFAULT);
+            });
+            line.setOnMouseClicked(e -> {
+                String simpleSource = sourceName.contains(".") ? 
+                    sourceName.substring(sourceName.lastIndexOf('.') + 1) : sourceName;
+                String simpleTarget = targetName.contains(".") ? 
+                    targetName.substring(targetName.lastIndexOf('.') + 1) : targetName;
+                setStatus("SCC Edge: " + simpleSource + " ↔ " + simpleTarget);
+                e.consume();
+            });
+            
+            dependencyPane.getChildren().addAll(line, arrow1, arrow2);
+            sccLines.add(line);
+            sccLines.add(arrow1);
+            sccLines.add(arrow2);
+            
+        } catch (Exception e) {
+            // Ignore drawing errors for elements not in scene
         }
     }
 }
