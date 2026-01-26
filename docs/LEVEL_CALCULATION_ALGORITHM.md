@@ -64,9 +64,47 @@ Für zyklische Abhängigkeiten verwendet S202 den **Tarjan-Algorithmus** zur Erk
 └─────────────────────────────────────────────────────────────────┘
 ```
 
-**Wichtig**: Alle Klassen in einem SCC erhalten **das gleiche Level**.
+### Zwei Strategien für SCC-Behandlung
 
-### Algorithmus-Ablauf
+#### 1. BasicClassLevelCalculationStrategy (Standard)
+
+**Alle Klassen in einem SCC erhalten das gleiche Level.**
+
+- ✅ Korrekt im Sinne der Graphentheorie
+- ❌ Problematisch bei stark vernetzten Projekten (z.B. Minecraft)
+
+#### 2. HeuristicSCCBreakingStrategy (für große Projekte)
+
+**Große SCCs werden intelligent aufgebrochen.**
+
+Bei Projekten mit vielen Zyklen landet sonst alles auf dem gleichen Level (unbrauchbar).
+Diese Strategie verwendet Heuristiken, um "Rückkanten" zu identifizieren und zu ignorieren:
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│  Heuristik: In-Degree / Out-Degree Analyse                      │
+│                                                                  │
+│  • Hohe In-Degree (viele Abhängige) → niedrigeres Level         │
+│  • Hohe Out-Degree (viele Abhängigkeiten) → höheres Level       │
+│  • Rückkanten = Kanten von niedrig→hoch → werden ignoriert      │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+**Beispiel (Minecraft-ähnlich):**
+```
+Vorher (Basic):     Alles auf Level 0 (ein großes SCC)
+Nachher (Heuristic): GameLoop=L6, Renderer=L4, World=L3, Entity=L1, Item=L0
+                     Back-Edges: Entity→World, Block→World (ignoriert)
+```
+
+**Aktivierung:**
+```java
+LevelCalculationStrategyContext context = 
+    LevelCalculationStrategyFactory.createWithHeuristicSCCBreaking();
+LevelCalculator calculator = new LevelCalculator(context);
+```
+
+### Algorithmus-Ablauf (Basic)
 
 1. **SCCs finden** mit Tarjan-Algorithmus
 2. **SCC-DAG erstellen** (Abhängigkeitsgraph zwischen SCCs, garantiert azyklisch)

@@ -47,6 +47,14 @@ public class ArchitectureView extends BorderPane {
     private static final Color INCOMING_DEPENDENCY_COLOR = Color.rgb(0, 128, 0); // Grün - eingehende Abhängigkeiten (dependents)
     private static final Color SCC_COLOR = Color.RED; // Rot - zyklische Abhängigkeiten (SCCs)
     private static final double DEPENDENCY_WIDTH = 1.0;
+    
+    // Zoom-Funktionalität
+    private double zoomFactor = 1.0;
+    private static final double ZOOM_MIN = 0.02;  // 2% - für sehr große Architekturen wie Minecraft
+    private static final double ZOOM_MAX = 3.0;
+    private static final double ZOOM_STEP = 0.1;
+    private Label zoomLabel;
+    private javafx.scene.layout.VBox zoomableContent;
 
     public ArchitectureView(Stage parentStage) {
         this.parentStage = Objects.requireNonNull(parentStage, "parentStage cannot be null");
@@ -60,23 +68,54 @@ public class ArchitectureView extends BorderPane {
 
         // Center: StackPane containing ScrollPane and Pane overlay for dependency arrows
         scrollPane = new ScrollPane();
-        scrollPane.setFitToWidth(true);
+        scrollPane.setFitToWidth(false);  // Disabled for zoom
         scrollPane.setFitToHeight(false);
         scrollPane.setPrefHeight(600);
+        scrollPane.setPannable(true);  // Enable panning when zoomed out
+        
+        // Center content when smaller than viewport
+        scrollPane.setStyle("-fx-background-color: transparent;");
+        scrollPane.getStyleClass().add("centered-scroll-pane");
+        
+        // Zoom mit Mausrad (Ctrl+Scroll)
+        scrollPane.addEventFilter(javafx.scene.input.ScrollEvent.SCROLL, event -> {
+            if (event.isControlDown()) {
+                event.consume();
+                double delta = event.getDeltaY();
+                if (delta > 0) {
+                    zoomIn();
+                } else if (delta < 0) {
+                    zoomOut();
+                }
+            }
+        });
         
         // Pane for drawing dependency arrows (on top of scroll content)
         dependencyPane = new Pane();
         dependencyPane.setMouseTransparent(false); // Allow mouse events on lines
         dependencyPane.setPickOnBounds(false); // Only pick on actual shapes
         
+        // Clip the dependency pane to prevent lines from drawing over scrollbars
+        javafx.scene.shape.Rectangle clipRect = new javafx.scene.shape.Rectangle();
+        clipRect.widthProperty().bind(dependencyPane.widthProperty());
+        clipRect.heightProperty().bind(dependencyPane.heightProperty());
+        dependencyPane.setClip(clipRect);
+        
         // Wrap in StackPane to layer pane on top
         contentPane = new StackPane();
         contentPane.getChildren().addAll(scrollPane, dependencyPane);
         
-        // Resize pane when content changes
+        // Resize pane and center content when viewport changes
         scrollPane.viewportBoundsProperty().addListener((obs, oldVal, newVal) -> {
             dependencyPane.setPrefWidth(newVal.getWidth());
             dependencyPane.setPrefHeight(newVal.getHeight());
+            
+            // Update centering wrapper to fill viewport (for centering when zoomed out)
+            if (scrollPane.getContent() instanceof StackPane wrapper) {
+                wrapper.setMinWidth(newVal.getWidth());
+                wrapper.setMinHeight(newVal.getHeight());
+            }
+            
             if (showDependenciesCheckbox != null && showDependenciesCheckbox.isSelected()) {
                 drawDependencyArrows();
             }
@@ -150,12 +189,102 @@ public class ArchitectureView extends BorderPane {
             }
         });
 
+        // Zoom controls
+        Button zoomInBtn = new Button("🔍+");
+        zoomInBtn.setTooltip(new Tooltip("Zoom In (Ctrl+Scroll Up)"));
+        zoomInBtn.setOnAction(e -> zoomIn());
+        
+        Button zoomOutBtn = new Button("🔍-");
+        zoomOutBtn.setTooltip(new Tooltip("Zoom Out (Ctrl+Scroll Down)"));
+        zoomOutBtn.setOnAction(e -> zoomOut());
+        
+        Button zoomResetBtn = new Button("1:1");
+        zoomResetBtn.setTooltip(new Tooltip("Reset Zoom"));
+        zoomResetBtn.setOnAction(e -> resetZoom());
+        
+        zoomLabel = new Label("100%");
+        zoomLabel.setPrefWidth(45);
+        zoomLabel.setStyle("-fx-font-family: monospace;");
+
         toolbar.getChildren().addAll(
             loadButton, new Separator(), depthLabel, depthSpinner, refreshButton,
-            new Separator(), showDependenciesCheckbox, showSccCheckbox
+            new Separator(), showDependenciesCheckbox, showSccCheckbox,
+            new Separator(), zoomOutBtn, zoomLabel, zoomInBtn, zoomResetBtn
         );
 
         return toolbar;
+    }
+    
+    // ==================== Zoom Methods ====================
+    
+    /**
+     * Zooms in by dynamic step (larger steps at higher zoom levels).
+     */
+    private void zoomIn() {
+        setZoom(zoomFactor + getDynamicZoomStep());
+    }
+    
+    /**
+     * Zooms out by dynamic step (smaller steps at lower zoom levels).
+     */
+    private void zoomOut() {
+        setZoom(zoomFactor - getDynamicZoomStep());
+    }
+    
+    /**
+     * Resets zoom to 100%.
+     */
+    private void resetZoom() {
+        setZoom(1.0);
+    }
+    
+    /**
+     * Calculates dynamic zoom step based on current zoom level.
+     * Smaller steps at lower zoom levels for finer control.
+     */
+    private double getDynamicZoomStep() {
+        if (zoomFactor <= 0.1) {
+            return 0.02;  // 2% steps when very zoomed out
+        } else if (zoomFactor <= 0.3) {
+            return 0.05;  // 5% steps
+        } else {
+            return ZOOM_STEP;  // 10% steps at normal zoom
+        }
+    }
+    
+    /**
+     * Sets the zoom factor and updates the display.
+     */
+    private void setZoom(double newZoom) {
+        // Clamp to valid range
+        zoomFactor = Math.max(ZOOM_MIN, Math.min(ZOOM_MAX, newZoom));
+        
+        // Apply scale via CSS transform on the content
+        if (zoomableContent != null) {
+            zoomableContent.setScaleX(zoomFactor);
+            zoomableContent.setScaleY(zoomFactor);
+            
+            // Adjust translation to keep top-left corner anchored
+            double width = zoomableContent.getBoundsInLocal().getWidth();
+            double height = zoomableContent.getBoundsInLocal().getHeight();
+            zoomableContent.setTranslateX((zoomFactor - 1) * width / 2);
+            zoomableContent.setTranslateY((zoomFactor - 1) * height / 2);
+        }
+        
+        // Update label
+        if (zoomLabel != null) {
+            zoomLabel.setText(String.format("%d%%", Math.round(zoomFactor * 100)));
+        }
+        
+        // Redraw dependency arrows at new scale (delayed to allow layout)
+        javafx.application.Platform.runLater(() -> {
+            if (showDependenciesCheckbox != null && showDependenciesCheckbox.isSelected()) {
+                drawDependencyArrows();
+            }
+            if (showSccCheckbox != null && showSccCheckbox.isSelected()) {
+                drawSccLines();
+            }
+        });
     }
 
     /**
@@ -247,8 +376,31 @@ public class ArchitectureView extends BorderPane {
             elementsAddedToParent.add(child.getFullName());
         }
         
-        // Replace content with populated hierarchy
-        scrollPane.setContent(topLevelContainer);
+        // Store reference for zoom
+        this.zoomableContent = topLevelContainer;
+        
+        // Wrap in a Group so that layout bounds reflect the scaled size
+        // (Group reports transformed bounds of its children)
+        javafx.scene.Group scaledGroup = new javafx.scene.Group(topLevelContainer);
+        
+        // Wrap in a StackPane to center the content when zoomed out
+        StackPane centeringWrapper = new StackPane(scaledGroup);
+        centeringWrapper.setAlignment(javafx.geometry.Pos.CENTER);
+        
+        // Bind wrapper size to viewport for centering
+        scrollPane.viewportBoundsProperty().addListener((obs, oldVal, newVal) -> {
+            // Make wrapper at least as large as viewport so content centers
+            centeringWrapper.setMinWidth(newVal.getWidth());
+            centeringWrapper.setMinHeight(newVal.getHeight());
+        });
+        
+        scrollPane.setContent(centeringWrapper);
+        
+        // Reset zoom to 100%
+        zoomFactor = 1.0;
+        if (zoomLabel != null) {
+            zoomLabel.setText("100%");
+        }
         
         // Clear dependency arrows
         clearDependencyArrows();
@@ -470,6 +622,44 @@ public class ArchitectureView extends BorderPane {
     }
     
     /**
+     * Calculates the center point of a node relative to the dependencyPane,
+     * taking zoom into account.
+     * @return double array [x, y] or null if not visible
+     */
+    private double[] getNodeCenterInPane(javafx.scene.Node node) {
+        try {
+            Bounds nodeBounds = node.localToScene(node.getBoundsInLocal());
+            Bounds paneBounds = dependencyPane.localToScene(dependencyPane.getBoundsInLocal());
+            
+            if (nodeBounds == null || paneBounds == null) {
+                return null;
+            }
+            
+            // Calculate center in scene coordinates, then adjust for pane position
+            double centerX = nodeBounds.getMinX() + nodeBounds.getWidth() / 2 - paneBounds.getMinX();
+            double centerY = nodeBounds.getMinY() + nodeBounds.getHeight() / 2 - paneBounds.getMinY();
+            
+            return new double[] { centerX, centerY };
+        } catch (Exception e) {
+            return null;
+        }
+    }
+    
+    /**
+     * Returns the line width scaled by the current zoom factor.
+     */
+    private double getScaledLineWidth() {
+        return DEPENDENCY_WIDTH * zoomFactor;
+    }
+    
+    /**
+     * Returns the arrow size scaled by the current zoom factor.
+     */
+    private double getScaledArrowSize() {
+        return 4.0 * zoomFactor;
+    }
+
+    /**
      * Recursively draws arrows for all visible CLASS nodes (not packages).
      * If a class is selected, only draws arrows to/from that class.
      */
@@ -577,30 +767,27 @@ public class ArchitectureView extends BorderPane {
     private void createDependencyLine(javafx.scene.Node source, javafx.scene.Node target, 
                                        String sourceName, String targetName, boolean isIncoming) {
         try {
-            // Get bounds relative to the pane/viewport
-            Bounds sourceBounds = source.localToScene(source.getBoundsInLocal());
-            Bounds targetBounds = target.localToScene(target.getBoundsInLocal());
-            Bounds paneBounds = dependencyPane.localToScene(dependencyPane.getBoundsInLocal());
+            // Get coordinates using helper method
+            double[] sourceCenter = getNodeCenterInPane(source);
+            double[] targetCenter = getNodeCenterInPane(target);
             
-            if (sourceBounds == null || targetBounds == null || paneBounds == null) {
+            if (sourceCenter == null || targetCenter == null) {
                 return;
             }
             
-            // Calculate start point (center of source)
-            double startX = sourceBounds.getMinX() + sourceBounds.getWidth() / 2 - paneBounds.getMinX();
-            double startY = sourceBounds.getMinY() + sourceBounds.getHeight() / 2 - paneBounds.getMinY();
-            
-            // Calculate end point (center of target)
-            double endX = targetBounds.getMinX() + targetBounds.getWidth() / 2 - paneBounds.getMinX();
-            double endY = targetBounds.getMinY() + targetBounds.getHeight() / 2 - paneBounds.getMinY();
+            double startX = sourceCenter[0];
+            double startY = sourceCenter[1];
+            double endX = targetCenter[0];
+            double endY = targetCenter[1];
             
             // Choose color based on direction
             Color lineColor = isIncoming ? INCOMING_DEPENDENCY_COLOR : OUTGOING_DEPENDENCY_COLOR;
             
-            // Create the line
+            // Create the line with scaled width
+            double scaledWidth = getScaledLineWidth();
             Line line = new Line(startX, startY, endX, endY);
             line.setStroke(lineColor);
-            line.setStrokeWidth(DEPENDENCY_WIDTH);
+            line.setStrokeWidth(scaledWidth);
             
             // Store original color for hover restore
             final Color originalColor = lineColor;
@@ -626,8 +813,8 @@ public class ArchitectureView extends BorderPane {
                 e.consume();
             });
             
-            // Create arrowhead lines
-            double arrowSize = 4;
+            // Create arrowhead lines with scaled size
+            double arrowSize = getScaledArrowSize();
             double angle = Math.atan2(endY - startY, endX - startX);
             
             double x1 = endX - arrowSize * Math.cos(angle - Math.PI / 6);
@@ -639,8 +826,8 @@ public class ArchitectureView extends BorderPane {
             Line arrow2 = new Line(endX, endY, x2, y2);
             arrow1.setStroke(lineColor);
             arrow2.setStroke(lineColor);
-            arrow1.setStrokeWidth(DEPENDENCY_WIDTH);
-            arrow2.setStrokeWidth(DEPENDENCY_WIDTH);
+            arrow1.setStrokeWidth(scaledWidth);
+            arrow2.setStrokeWidth(scaledWidth);
             arrow1.setMouseTransparent(true);
             arrow2.setMouseTransparent(true);
             
@@ -659,19 +846,22 @@ public class ArchitectureView extends BorderPane {
      * Selects a dependency line and highlights it.
      */
     private void selectLine(Line line, String sourceName, String targetName) {
+        double scaledWidth = getScaledLineWidth();
+        double selectedWidth = scaledWidth * 2;
+        
         // Deselect previous line
         if (selectedLine != null && selectedLine != line) {
             Object[] userData = (Object[]) selectedLine.getUserData();
             Color originalColor = (userData != null && userData.length > 2) ? (Color) userData[2] : OUTGOING_DEPENDENCY_COLOR;
             selectedLine.setStroke(originalColor);
-            selectedLine.setStrokeWidth(DEPENDENCY_WIDTH);
+            selectedLine.setStrokeWidth(scaledWidth);
             if (userData != null && userData.length >= 2) {
                 Line arrow1 = (Line) userData[0];
                 Line arrow2 = (Line) userData[1];
                 arrow1.setStroke(originalColor);
                 arrow2.setStroke(originalColor);
-                arrow1.setStrokeWidth(DEPENDENCY_WIDTH);
-                arrow2.setStrokeWidth(DEPENDENCY_WIDTH);
+                arrow1.setStrokeWidth(scaledWidth);
+                arrow2.setStrokeWidth(scaledWidth);
             }
         }
         
@@ -681,29 +871,29 @@ public class ArchitectureView extends BorderPane {
             Object[] userData = (Object[]) line.getUserData();
             Color originalColor = (userData != null && userData.length > 2) ? (Color) userData[2] : OUTGOING_DEPENDENCY_COLOR;
             line.setStroke(originalColor);
-            line.setStrokeWidth(DEPENDENCY_WIDTH);
+            line.setStrokeWidth(scaledWidth);
             if (userData != null && userData.length >= 2) {
                 Line arrow1 = (Line) userData[0];
                 Line arrow2 = (Line) userData[1];
                 arrow1.setStroke(originalColor);
                 arrow2.setStroke(originalColor);
-                arrow1.setStrokeWidth(DEPENDENCY_WIDTH);
-                arrow2.setStrokeWidth(DEPENDENCY_WIDTH);
+                arrow1.setStrokeWidth(scaledWidth);
+                arrow2.setStrokeWidth(scaledWidth);
             }
             selectedLine = null;
             setStatus("Ready");
         } else {
             // Select
             line.setStroke(Color.RED);
-            line.setStrokeWidth(2.0);
+            line.setStrokeWidth(selectedWidth);
             Object[] userData = (Object[]) line.getUserData();
             if (userData != null && userData.length >= 2) {
                 Line arrow1 = (Line) userData[0];
                 Line arrow2 = (Line) userData[1];
                 arrow1.setStroke(Color.RED);
                 arrow2.setStroke(Color.RED);
-                arrow1.setStrokeWidth(2.0);
-                arrow2.setStrokeWidth(2.0);
+                arrow1.setStrokeWidth(selectedWidth);
+                arrow2.setStrokeWidth(selectedWidth);
             }
             selectedLine = line;
             
@@ -820,29 +1010,27 @@ public class ArchitectureView extends BorderPane {
      */
     private void createSccLine(javafx.scene.Node source, javafx.scene.Node target, String sourceName, String targetName) {
         try {
-            Bounds sourceBounds = source.localToScene(source.getBoundsInLocal());
-            Bounds targetBounds = target.localToScene(target.getBoundsInLocal());
-            Bounds paneBounds = dependencyPane.localToScene(dependencyPane.getBoundsInLocal());
+            // Get coordinates using helper method
+            double[] sourceCenter = getNodeCenterInPane(source);
+            double[] targetCenter = getNodeCenterInPane(target);
             
-            if (sourceBounds == null || targetBounds == null || paneBounds == null) {
+            if (sourceCenter == null || targetCenter == null) {
                 return;
             }
             
-            // Calculate start point (center of source)
-            double startX = sourceBounds.getMinX() + sourceBounds.getWidth() / 2 - paneBounds.getMinX();
-            double startY = sourceBounds.getMinY() + sourceBounds.getHeight() / 2 - paneBounds.getMinY();
+            double startX = sourceCenter[0];
+            double startY = sourceCenter[1];
+            double endX = targetCenter[0];
+            double endY = targetCenter[1];
             
-            // Calculate end point (center of target)
-            double endX = targetBounds.getMinX() + targetBounds.getWidth() / 2 - paneBounds.getMinX();
-            double endY = targetBounds.getMinY() + targetBounds.getHeight() / 2 - paneBounds.getMinY();
-            
-            // Create the line
+            // Create the line with scaled width
+            double scaledWidth = getScaledLineWidth();
             Line line = new Line(startX, startY, endX, endY);
             line.setStroke(SCC_COLOR);
-            line.setStrokeWidth(DEPENDENCY_WIDTH);
+            line.setStrokeWidth(scaledWidth);
             
-            // Create arrowhead lines
-            double arrowSize = 4;
+            // Create arrowhead lines with scaled size
+            double arrowSize = getScaledArrowSize();
             double angle = Math.atan2(endY - startY, endX - startX);
             
             double x1 = endX - arrowSize * Math.cos(angle - Math.PI / 6);
@@ -854,8 +1042,8 @@ public class ArchitectureView extends BorderPane {
             Line arrow2 = new Line(endX, endY, x2, y2);
             arrow1.setStroke(SCC_COLOR);
             arrow2.setStroke(SCC_COLOR);
-            arrow1.setStrokeWidth(DEPENDENCY_WIDTH);
-            arrow2.setStrokeWidth(DEPENDENCY_WIDTH);
+            arrow1.setStrokeWidth(scaledWidth);
+            arrow2.setStrokeWidth(scaledWidth);
             arrow1.setMouseTransparent(true);
             arrow2.setMouseTransparent(true);
             

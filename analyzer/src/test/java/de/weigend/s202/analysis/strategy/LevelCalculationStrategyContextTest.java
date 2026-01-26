@@ -39,7 +39,7 @@ class LevelCalculationStrategyContextTest {
         
         assertNotNull(description);
         assertEquals(true, description.contains("LevelCalculationStrategyContext"));
-        assertEquals(true, description.contains("BasicClassLevelCalculation"));
+        assertEquals(true, description.contains("HeuristicSCCBreaking"));
     }
     
     private void assertEquals(Object expected, Object actual) {

@@ -4,6 +4,7 @@ import de.weigend.s202.reader.DependencyModel;
 import de.weigend.s202.reader.InputAnalyzer;
 import de.weigend.s202.domain.DomainModel;
 import de.weigend.s202.domain.LevelCalculator;
+import de.weigend.s202.domain.LevelCalculationStrategyFactory;
 import de.weigend.s202.ui.model.ArchitectureNode;
 import de.weigend.s202.ui.model.ArchitectureNode.NodeType;
 import de.weigend.s202.ui.model.ArchitectureNodeBuilder;
@@ -40,8 +41,11 @@ class LevelConsistencyValidationTest {
         InputAnalyzer analyzer = new InputAnalyzer();
         DependencyModel rawModel = analyzer.analyze(SWCITY_JAR_PATH);
         
-        // Step 2: Calculate levels
-        LevelCalculator calculator = new LevelCalculator();
+        // Step 2: Calculate levels using BasicClassLevelCalculationStrategy
+        // (The heuristic strategy intentionally creates back-edges that appear as upward deps)
+        LevelCalculator calculator = new LevelCalculator(
+            LevelCalculationStrategyFactory.createWithBasicStrategy()
+        );
         domainModel = calculator.calculate(rawModel);
         
         // Step 3: Build the ArchitectureNode tree

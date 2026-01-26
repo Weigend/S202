@@ -227,17 +227,10 @@ public class InputAnalyzer {
                 || outerClassName.startsWith("org.objectweb.asm")
                 || outerClassName.startsWith("org.w3c.")
                 || outerClassName.startsWith("org.xml.")
-                // Common frameworks and libraries
-                || outerClassName.startsWith("org.apache.")
-                || outerClassName.startsWith("org.slf4j.")
+                // Common frameworks and libraries (test/build dependencies)
                 || outerClassName.startsWith("org.junit.")
-                || outerClassName.startsWith("org.springframework.")
-                || outerClassName.startsWith("org.hibernate.")
-                || outerClassName.startsWith("com.google.")
-                || outerClassName.startsWith("com.fasterxml.")
-                || outerClassName.startsWith("com.mojang.")
-                || outerClassName.startsWith("net.minecraft.")
-                || outerClassName.startsWith("net.minecraftforge.")
+                || outerClassName.startsWith("org.hamcrest.")
+                || outerClassName.startsWith("org.mockito.")
                 || outerClassName.startsWith("kotlin.")
                 || outerClassName.startsWith("scala.")
                 || outerClassName.startsWith("groovy.");
@@ -294,29 +287,27 @@ public class InputAnalyzer {
                 return true;
             }
             
-            return className.startsWith("java.")
-                || className.startsWith("javax.")
-                || className.startsWith("javafx.")
-                || className.startsWith("jdk.")
-                || className.startsWith("sun.")
-                || className.startsWith("com.sun.")
-                || className.startsWith("org.objectweb.asm")
-                || className.startsWith("org.w3c.")
-                || className.startsWith("org.xml.")
-                // Common frameworks and libraries
-                || className.startsWith("org.apache.")
-                || className.startsWith("org.slf4j.")
-                || className.startsWith("org.junit.")
-                || className.startsWith("org.springframework.")
-                || className.startsWith("org.hibernate.")
-                || className.startsWith("com.google.")
-                || className.startsWith("com.fasterxml.")
-                || className.startsWith("com.mojang.")
-                || className.startsWith("net.minecraft.")
-                || className.startsWith("net.minecraftforge.")
-                || className.startsWith("kotlin.")
-                || className.startsWith("scala.")
-                || className.startsWith("groovy.");
+            // Handle inner classes - get the outer class name
+            String outerClassName = className.contains("$") 
+                ? className.substring(0, className.indexOf('$')) 
+                : className;
+            
+            return outerClassName.startsWith("java.")
+                || outerClassName.startsWith("javax.")
+                || outerClassName.startsWith("javafx.")
+                || outerClassName.startsWith("jdk.")
+                || outerClassName.startsWith("sun.")
+                || outerClassName.startsWith("com.sun.")
+                || outerClassName.startsWith("org.objectweb.asm")
+                || outerClassName.startsWith("org.w3c.")
+                || outerClassName.startsWith("org.xml.")
+                // Common frameworks and libraries (test/build dependencies)
+                || outerClassName.startsWith("org.junit.")
+                || outerClassName.startsWith("org.hamcrest.")
+                || outerClassName.startsWith("org.mockito.")
+                || outerClassName.startsWith("kotlin.")
+                || outerClassName.startsWith("scala.")
+                || outerClassName.startsWith("groovy.");
         }
     }
 }
