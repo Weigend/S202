@@ -1,0 +1,32 @@
+# Excluded Class Prefixes
+# Classes starting with these prefixes will be excluded from dependency analysis.
+# One prefix per line. Lines starting with # are comments.
+#
+# Java Standard Library
+java.
+javax.
+#
+# JavaFX
+javafx.
+#
+# JDK internals
+jdk.
+sun.
+com.sun.
+#
+# XML APIs
+org.w3c.
+org.xml.
+#
+# ASM Bytecode Library (used by S202)
+org.objectweb.asm
+#
+# Test frameworks
+org.junit.
+org.hamcrest.
+org.mockito.
+#
+# Other JVM languages
+kotlin.
+scala.
+groovy.

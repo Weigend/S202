@@ -5,15 +5,89 @@ import org.objectweb.asm.ClassVisitor;
 import org.objectweb.asm.MethodVisitor;
 import org.objectweb.asm.Opcodes;
 
+import java.io.BufferedReader;
 import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.util.*;
 import java.util.jar.JarFile;
 
 /**
  * Analyzes Java bytecode from JAR files and extracts dependency information.
  * This is the raw analysis layer - NO layer calculation, NO UI dependencies.
+ * 
+ * <p>External library prefixes are loaded from {@code excluded-prefixes.txt} in the
+ * current working directory. If the file is not found, built-in defaults are used.</p>
  */
 public class InputAnalyzer {
+    
+    private static final String EXCLUDED_PREFIXES_FILE = "excluded-prefixes.txt";
+    
+    /**
+     * Minimal default exclusions - only JDK internal classes that are never part of user code.
+     * For additional exclusions (JavaFX, test frameworks, etc.), use excluded-prefixes.txt.
+     */
+    private static final List<String> DEFAULT_EXCLUDED_PREFIXES = List.of(
+        "java.",      // Java Standard Library
+        "javax.",     // Java Extensions
+        "jdk.",       // JDK internals
+        "sun.",       // JDK implementation
+        "com.sun."    // JDK implementation
+    );
+    
+    private static List<String> excludedPrefixes;
+    
+    /**
+     * Returns the list of excluded class prefixes.
+     * Loads from excluded-prefixes.txt if available, otherwise uses defaults.
+     */
+    public static List<String> getExcludedPrefixes() {
+        if (excludedPrefixes == null) {
+            excludedPrefixes = loadExcludedPrefixes();
+        }
+        return excludedPrefixes;
+    }
+    
+    /**
+     * Loads excluded prefixes from the configuration file.
+     */
+    private static List<String> loadExcludedPrefixes() {
+        Path configPath = Paths.get(EXCLUDED_PREFIXES_FILE);
+        
+        if (!Files.exists(configPath)) {
+            System.out.println("No " + EXCLUDED_PREFIXES_FILE + " found, using default excluded prefixes.");
+            return new ArrayList<>(DEFAULT_EXCLUDED_PREFIXES);
+        }
+        
+        List<String> prefixes = new ArrayList<>();
+        try (BufferedReader reader = Files.newBufferedReader(configPath)) {
+            String line;
+            while ((line = reader.readLine()) != null) {
+                line = line.trim();
+                // Skip empty lines and comments
+                if (!line.isEmpty() && !line.startsWith("#")) {
+                    prefixes.add(line);
+                }
+            }
+            System.out.println("Loaded " + prefixes.size() + " excluded prefixes from " + EXCLUDED_PREFIXES_FILE);
+        } catch (IOException e) {
+            System.err.println("Warning: Could not read " + EXCLUDED_PREFIXES_FILE + ": " + e.getMessage());
+            System.out.println("Using default excluded prefixes.");
+            return new ArrayList<>(DEFAULT_EXCLUDED_PREFIXES);
+        }
+        
+        return prefixes;
+    }
+    
+    /**
+     * Reloads the excluded prefixes from the configuration file.
+     * Call this method after modifying excluded-prefixes.txt to apply changes.
+     */
+    public static void reloadExcludedPrefixes() {
+        excludedPrefixes = null;
+        getExcludedPrefixes();
+    }
 
     /**
      * Analyzes a JAR file and returns raw dependency model.
@@ -205,7 +279,7 @@ public class InputAnalyzer {
 
         /**
          * Checks if a class is from external libraries (JDK, JavaFX, frameworks, etc.)
-         * These should not be counted as dependencies since they're not part of the analyzed codebase.
+         * Prefixes are loaded from excluded-prefixes.txt in the working directory.
          */
         private boolean isExternalLibraryClass(String className) {
             // Skip array types (e.g., "[Lcom.example.Foo;")
@@ -218,22 +292,13 @@ public class InputAnalyzer {
                 ? className.substring(0, className.indexOf('$')) 
                 : className;
             
-            return outerClassName.startsWith("java.")
-                || outerClassName.startsWith("javax.")
-                || outerClassName.startsWith("javafx.")
-                || outerClassName.startsWith("jdk.")
-                || outerClassName.startsWith("sun.")
-                || outerClassName.startsWith("com.sun.")
-                || outerClassName.startsWith("org.objectweb.asm")
-                || outerClassName.startsWith("org.w3c.")
-                || outerClassName.startsWith("org.xml.")
-                // Common frameworks and libraries (test/build dependencies)
-                || outerClassName.startsWith("org.junit.")
-                || outerClassName.startsWith("org.hamcrest.")
-                || outerClassName.startsWith("org.mockito.")
-                || outerClassName.startsWith("kotlin.")
-                || outerClassName.startsWith("scala.")
-                || outerClassName.startsWith("groovy.");
+            // Check against loaded prefixes
+            for (String prefix : getExcludedPrefixes()) {
+                if (outerClassName.startsWith(prefix)) {
+                    return true;
+                }
+            }
+            return false;
         }
     }
 
@@ -280,6 +345,7 @@ public class InputAnalyzer {
         
         /**
          * Checks if a class is from external libraries (JDK, JavaFX, frameworks, etc.)
+         * Prefixes are loaded from excluded-prefixes.txt in the working directory.
          */
         private boolean isExternalLibraryClass(String className) {
             // Skip array types (e.g., "[Lcom.example.Foo;")
@@ -292,22 +358,13 @@ public class InputAnalyzer {
                 ? className.substring(0, className.indexOf('$')) 
                 : className;
             
-            return outerClassName.startsWith("java.")
-                || outerClassName.startsWith("javax.")
-                || outerClassName.startsWith("javafx.")
-                || outerClassName.startsWith("jdk.")
-                || outerClassName.startsWith("sun.")
-                || outerClassName.startsWith("com.sun.")
-                || outerClassName.startsWith("org.objectweb.asm")
-                || outerClassName.startsWith("org.w3c.")
-                || outerClassName.startsWith("org.xml.")
-                // Common frameworks and libraries (test/build dependencies)
-                || outerClassName.startsWith("org.junit.")
-                || outerClassName.startsWith("org.hamcrest.")
-                || outerClassName.startsWith("org.mockito.")
-                || outerClassName.startsWith("kotlin.")
-                || outerClassName.startsWith("scala.")
-                || outerClassName.startsWith("groovy.");
+            // Check against loaded prefixes
+            for (String prefix : getExcludedPrefixes()) {
+                if (outerClassName.startsWith(prefix)) {
+                    return true;
+                }
+            }
+            return false;
         }
     }
 }
