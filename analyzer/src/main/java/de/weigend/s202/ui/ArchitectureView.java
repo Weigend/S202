@@ -36,13 +36,20 @@ public class ArchitectureView extends BorderPane {
     private java.util.function.Consumer<List<File>> onFilesSelected;
     private CheckBox showDependenciesCheckbox;
     private CheckBox showSccCheckbox;
-    private Pane dependencyPane;
+    private Pane dependencyPane;  // Container for dependency lines
+    private Pane sccPane;          // Container for SCC lines
+    private StackPane overlayPane; // Contains both dependency and SCC panes
     private StackPane contentPane;
     private ArchitectureNode currentRootNode;
     private Map<String, javafx.scene.Node> elementRegistry = new HashMap<>();
     private List<Line> dependencyLines = new ArrayList<>();
     private List<Line> sccLines = new ArrayList<>();
     private Line selectedLine = null;
+    
+    // Flags to track if lines have been drawn (for performance optimization)
+    private boolean dependencyLinesDrawn = false;
+    private boolean sccLinesDrawn = false;
+    private boolean linesNeedUpdate = false;  // Set when zoom/scroll changes
     private static final Color OUTGOING_DEPENDENCY_COLOR = Color.rgb(64, 64, 64); // Anthrazit - ausgehende Abhängigkeiten
     private static final Color INCOMING_DEPENDENCY_COLOR = Color.rgb(0, 128, 0); // Grün - eingehende Abhängigkeiten (dependents)
     private static final Color SCC_COLOR = Color.RED; // Rot - zyklische Abhängigkeiten (SCCs)
@@ -94,21 +101,38 @@ public class ArchitectureView extends BorderPane {
         dependencyPane = new Pane();
         dependencyPane.setMouseTransparent(false); // Allow mouse events on lines
         dependencyPane.setPickOnBounds(false); // Only pick on actual shapes
+        dependencyPane.setVisible(false); // Initially hidden
         
-        // Clip the dependency pane to prevent lines from drawing over scrollbars
+        // Separate pane for SCC lines
+        sccPane = new Pane();
+        sccPane.setMouseTransparent(true); // SCC lines don't need mouse events
+        sccPane.setPickOnBounds(false);
+        sccPane.setVisible(false); // Initially hidden
+        
+        // Overlay pane contains both dependency and SCC panes
+        overlayPane = new StackPane();
+        overlayPane.setMouseTransparent(false);
+        overlayPane.setPickOnBounds(false);
+        overlayPane.getChildren().addAll(dependencyPane, sccPane);
+        
+        // Clip the overlay pane to prevent lines from drawing over scrollbars
         javafx.scene.shape.Rectangle clipRect = new javafx.scene.shape.Rectangle();
-        clipRect.widthProperty().bind(dependencyPane.widthProperty());
-        clipRect.heightProperty().bind(dependencyPane.heightProperty());
-        dependencyPane.setClip(clipRect);
+        clipRect.widthProperty().bind(overlayPane.widthProperty());
+        clipRect.heightProperty().bind(overlayPane.heightProperty());
+        overlayPane.setClip(clipRect);
         
-        // Wrap in StackPane to layer pane on top
+        // Wrap in StackPane to layer overlay on top
         contentPane = new StackPane();
-        contentPane.getChildren().addAll(scrollPane, dependencyPane);
+        contentPane.getChildren().addAll(scrollPane, overlayPane);
         
-        // Resize pane and center content when viewport changes
+        // Resize overlay panes when viewport changes
         scrollPane.viewportBoundsProperty().addListener((obs, oldVal, newVal) -> {
+            overlayPane.setPrefWidth(newVal.getWidth());
+            overlayPane.setPrefHeight(newVal.getHeight());
             dependencyPane.setPrefWidth(newVal.getWidth());
             dependencyPane.setPrefHeight(newVal.getHeight());
+            sccPane.setPrefWidth(newVal.getWidth());
+            sccPane.setPrefHeight(newVal.getHeight());
             
             // Update centering wrapper to fill viewport (for centering when zoomed out)
             if (scrollPane.getContent() instanceof StackPane wrapper) {
@@ -116,31 +140,13 @@ public class ArchitectureView extends BorderPane {
                 wrapper.setMinHeight(newVal.getHeight());
             }
             
-            if (showDependenciesCheckbox != null && showDependenciesCheckbox.isSelected()) {
-                drawDependencyArrows();
-            }
-            if (showSccCheckbox != null && showSccCheckbox.isSelected()) {
-                drawSccLines();
-            }
+            // Mark lines for update on next visibility toggle
+            invalidateLines();
         });
         
-        scrollPane.hvalueProperty().addListener((obs, oldVal, newVal) -> {
-            if (showDependenciesCheckbox != null && showDependenciesCheckbox.isSelected()) {
-                drawDependencyArrows();
-            }
-            if (showSccCheckbox != null && showSccCheckbox.isSelected()) {
-                drawSccLines();
-            }
-        });
-        
-        scrollPane.vvalueProperty().addListener((obs, oldVal, newVal) -> {
-            if (showDependenciesCheckbox != null && showDependenciesCheckbox.isSelected()) {
-                drawDependencyArrows();
-            }
-            if (showSccCheckbox != null && showSccCheckbox.isSelected()) {
-                drawSccLines();
-            }
-        });
+        // Mark lines for update when scrolling (only redraw on next visibility toggle)
+        scrollPane.hvalueProperty().addListener((obs, oldVal, newVal) -> invalidateLines());
+        scrollPane.vvalueProperty().addListener((obs, oldVal, newVal) -> invalidateLines());
 
         setCenter(contentPane);
 
@@ -173,9 +179,13 @@ public class ArchitectureView extends BorderPane {
         showDependenciesCheckbox = new CheckBox("Show Dependencies");
         showDependenciesCheckbox.setOnAction(e -> {
             if (showDependenciesCheckbox.isSelected()) {
-                drawDependencyArrows();
+                // Draw lines only if not already drawn or if invalidated
+                if (!dependencyLinesDrawn || linesNeedUpdate) {
+                    drawDependencyArrows();
+                }
+                dependencyPane.setVisible(true);
             } else {
-                clearDependencyArrows();
+                dependencyPane.setVisible(false);
             }
         });
 
@@ -183,9 +193,13 @@ public class ArchitectureView extends BorderPane {
         showSccCheckbox = new CheckBox("Show SCC");
         showSccCheckbox.setOnAction(e -> {
             if (showSccCheckbox.isSelected()) {
-                drawSccLines();
+                // Draw lines only if not already drawn or if invalidated
+                if (!sccLinesDrawn || linesNeedUpdate) {
+                    drawSccLines();
+                }
+                sccPane.setVisible(true);
             } else {
-                clearSccLines();
+                sccPane.setVisible(false);
             }
         });
 
@@ -276,15 +290,24 @@ public class ArchitectureView extends BorderPane {
             zoomLabel.setText(String.format("%d%%", Math.round(zoomFactor * 100)));
         }
         
-        // Redraw dependency arrows at new scale (delayed to allow layout)
+        // Invalidate lines - they will be redrawn on next visibility toggle
+        // For visible lines, redraw them now (delayed to allow layout)
         javafx.application.Platform.runLater(() -> {
-            if (showDependenciesCheckbox != null && showDependenciesCheckbox.isSelected()) {
+            invalidateLines();
+            if (showDependenciesCheckbox != null && showDependenciesCheckbox.isSelected() && dependencyPane.isVisible()) {
                 drawDependencyArrows();
             }
-            if (showSccCheckbox != null && showSccCheckbox.isSelected()) {
+            if (showSccCheckbox != null && showSccCheckbox.isSelected() && sccPane.isVisible()) {
                 drawSccLines();
             }
         });
+    }
+    
+    /**
+     * Marks lines as needing update. Lines will be redrawn on next visibility toggle.
+     */
+    private void invalidateLines() {
+        linesNeedUpdate = true;
     }
 
     /**
@@ -402,8 +425,17 @@ public class ArchitectureView extends BorderPane {
             zoomLabel.setText("100%");
         }
         
-        // Clear dependency arrows
+        // Clear dependency and SCC lines (new architecture = new lines needed)
         clearDependencyArrows();
+        clearSccLines();
+        dependencyPane.setVisible(false);
+        sccPane.setVisible(false);
+        if (showDependenciesCheckbox != null) {
+            showDependenciesCheckbox.setSelected(false);
+        }
+        if (showSccCheckbox != null) {
+            showSccCheckbox.setSelected(false);
+        }
         
         setStatus("Architecture loaded: " + rootNode.getLevelCount() + " levels");
     }
@@ -594,23 +626,27 @@ public class ArchitectureView extends BorderPane {
     }
     
     /**
-     * Clears all dependency arrows.
+     * Clears all dependency arrows and resets the drawn flag.
      */
     private void clearDependencyArrows() {
         if (dependencyPane != null) {
             dependencyPane.getChildren().clear();
             dependencyLines.clear();
             selectedLine = null;
+            dependencyLinesDrawn = false;
         }
     }
     
     /**
      * Draws dependency arrows between visible elements.
+     * Lines are cached and only redrawn when invalidated.
      */
     private void drawDependencyArrows() {
         if (dependencyPane == null || currentRootNode == null) {
             return;
         }
+        
+        long startTime = System.currentTimeMillis();
         
         // Clear existing lines
         dependencyPane.getChildren().clear();
@@ -619,6 +655,15 @@ public class ArchitectureView extends BorderPane {
         
         // Iterate through all registered elements and draw arrows for their dependencies
         drawDependencyArrowsRecursive(currentRootNode);
+        
+        // Mark as drawn and reset invalidation flag
+        dependencyLinesDrawn = true;
+        linesNeedUpdate = false;
+        
+        long elapsed = System.currentTimeMillis() - startTime;
+        if (elapsed > 100) {
+            System.out.println("Drawing dependency lines took " + elapsed + "ms");
+        }
     }
     
     /**
@@ -909,22 +954,32 @@ public class ArchitectureView extends BorderPane {
     // ===== SCC (Strongly Connected Components) Visualization =====
 
     /**
-     * Clears all SCC lines from the view.
+     * Clears all SCC lines from the view and resets the drawn flag.
      */
     private void clearSccLines() {
-        dependencyPane.getChildren().removeAll(sccLines);
+        if (sccPane != null) {
+            sccPane.getChildren().clear();
+        }
         sccLines.clear();
+        sccLinesDrawn = false;
     }
 
     /**
      * Draws SCC lines connecting all visible classes that are part of the same SCC (cycle).
+     * Lines are cached and only redrawn when invalidated.
      */
     private void drawSccLines() {
-        clearSccLines();
+        // Clear existing SCC lines
+        if (sccPane != null) {
+            sccPane.getChildren().clear();
+        }
+        sccLines.clear();
         
         if (currentRootNode == null) {
             return;
         }
+        
+        long startTime = System.currentTimeMillis();
         
         // Step 1: Collect all visible classes and their dependencies
         Map<String, Set<String>> classDependencies = new HashMap<>();
@@ -945,6 +1000,15 @@ public class ArchitectureView extends BorderPane {
                 drawSccComponentLines(scc, classDependencies);
                 sccCount++;
             }
+        }
+        
+        // Mark as drawn and reset invalidation flag
+        sccLinesDrawn = true;
+        linesNeedUpdate = false;
+        
+        long elapsed = System.currentTimeMillis() - startTime;
+        if (elapsed > 100) {
+            System.out.println("Drawing SCC lines took " + elapsed + "ms");
         }
         
         if (sccCount > 0) {
@@ -1066,7 +1130,7 @@ public class ArchitectureView extends BorderPane {
                 e.consume();
             });
             
-            dependencyPane.getChildren().addAll(line, arrow1, arrow2);
+            sccPane.getChildren().addAll(line, arrow1, arrow2);
             sccLines.add(line);
             sccLines.add(arrow1);
             sccLines.add(arrow2);
