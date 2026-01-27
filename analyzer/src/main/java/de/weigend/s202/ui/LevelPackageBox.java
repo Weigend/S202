@@ -170,11 +170,13 @@ public class LevelPackageBox extends VBox {
         });
         
         // Add node to the level row
-        if (node instanceof Region) {
+        // Only packages should grow, classes keep their natural size
+        if (node instanceof LevelPackageBox) {
             ((Region) node).setMaxWidth(Double.MAX_VALUE);
             ((Region) node).setMaxHeight(Double.MAX_VALUE);
             HBox.setHgrow(node, Priority.ALWAYS);
         }
+        // LevelClassBox keeps natural size (no setMaxWidth, no HBox.setHgrow)
         levelRow.getChildren().add(node);
     }
     

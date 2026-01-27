@@ -44,7 +44,6 @@ public class LevelClassBox extends Label {
         
         // Styling via CSS class
         this.getStyleClass().add("class-box");
-        this.setMaxWidth(Double.MAX_VALUE);
         this.setAlignment(Pos.CENTER);
         this.setCursor(javafx.scene.Cursor.HAND);
         this.setWrapText(true);
