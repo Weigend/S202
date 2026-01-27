@@ -61,7 +61,8 @@ public class ArchitectureView extends BorderPane {
     private static final double ZOOM_MAX = 3.0;
     private static final double ZOOM_STEP = 0.1;
     private Label zoomLabel;
-    private javafx.scene.layout.VBox zoomableContent;
+    private javafx.scene.layout.Pane zoomableContent;  // StackPane containing content + overlay
+    private javafx.scene.layout.VBox topLevelContainer; // The actual architecture content
 
     public ArchitectureView(Stage parentStage) {
         this.parentStage = Objects.requireNonNull(parentStage, "parentStage cannot be null");
@@ -97,56 +98,26 @@ public class ArchitectureView extends BorderPane {
             }
         });
         
-        // Pane for drawing dependency arrows (on top of scroll content)
-        dependencyPane = new Pane();
-        dependencyPane.setMouseTransparent(false); // Allow mouse events on lines
-        dependencyPane.setPickOnBounds(false); // Only pick on actual shapes
-        dependencyPane.setVisible(false); // Initially hidden
+        // Panes for drawing lines will be created in setArchitectureRoot
+        // They are placed inside the scrollable content so they scroll with it
+        dependencyPane = null;
+        sccPane = null;
+        overlayPane = null;
         
-        // Separate pane for SCC lines
-        sccPane = new Pane();
-        sccPane.setMouseTransparent(true); // SCC lines don't need mouse events
-        sccPane.setPickOnBounds(false);
-        sccPane.setVisible(false); // Initially hidden
-        
-        // Overlay pane contains both dependency and SCC panes
-        overlayPane = new StackPane();
-        overlayPane.setMouseTransparent(false);
-        overlayPane.setPickOnBounds(false);
-        overlayPane.getChildren().addAll(dependencyPane, sccPane);
-        
-        // Clip the overlay pane to prevent lines from drawing over scrollbars
-        javafx.scene.shape.Rectangle clipRect = new javafx.scene.shape.Rectangle();
-        clipRect.widthProperty().bind(overlayPane.widthProperty());
-        clipRect.heightProperty().bind(overlayPane.heightProperty());
-        overlayPane.setClip(clipRect);
-        
-        // Wrap in StackPane to layer overlay on top
+        // Content pane just contains the scroll pane
         contentPane = new StackPane();
-        contentPane.getChildren().addAll(scrollPane, overlayPane);
+        contentPane.getChildren().add(scrollPane);
         
-        // Resize overlay panes when viewport changes
+        // Update centering wrapper when viewport changes
         scrollPane.viewportBoundsProperty().addListener((obs, oldVal, newVal) -> {
-            overlayPane.setPrefWidth(newVal.getWidth());
-            overlayPane.setPrefHeight(newVal.getHeight());
-            dependencyPane.setPrefWidth(newVal.getWidth());
-            dependencyPane.setPrefHeight(newVal.getHeight());
-            sccPane.setPrefWidth(newVal.getWidth());
-            sccPane.setPrefHeight(newVal.getHeight());
-            
             // Update centering wrapper to fill viewport (for centering when zoomed out)
             if (scrollPane.getContent() instanceof StackPane wrapper) {
                 wrapper.setMinWidth(newVal.getWidth());
                 wrapper.setMinHeight(newVal.getHeight());
             }
-            
-            // Mark lines for update on next visibility toggle
-            invalidateLines();
         });
         
-        // Mark lines for update when scrolling (only redraw on next visibility toggle)
-        scrollPane.hvalueProperty().addListener((obs, oldVal, newVal) -> invalidateLines());
-        scrollPane.vvalueProperty().addListener((obs, oldVal, newVal) -> invalidateLines());
+        // Note: Scrolling no longer invalidates lines since they are part of the content
 
         setCenter(contentPane);
 
@@ -399,12 +370,37 @@ public class ArchitectureView extends BorderPane {
             elementsAddedToParent.add(child.getFullName());
         }
         
-        // Store reference for zoom
-        this.zoomableContent = topLevelContainer;
+        // Store reference to the architecture container
+        this.topLevelContainer = topLevelContainer;
+        
+        // Create panes for drawing dependency and SCC lines
+        // These are placed inside the scrollable content so they scroll with it
+        dependencyPane = new Pane();
+        dependencyPane.setMouseTransparent(false);
+        dependencyPane.setPickOnBounds(false);
+        dependencyPane.setVisible(false);
+        
+        sccPane = new Pane();
+        sccPane.setMouseTransparent(true);
+        sccPane.setPickOnBounds(false);
+        sccPane.setVisible(false);
+        
+        // Overlay contains both line panes, stacked on top of content
+        overlayPane = new StackPane();
+        overlayPane.setMouseTransparent(false);
+        overlayPane.setPickOnBounds(false);
+        overlayPane.getChildren().addAll(dependencyPane, sccPane);
+        
+        // Stack architecture content and overlay together
+        StackPane contentWithOverlay = new StackPane();
+        contentWithOverlay.getChildren().addAll(topLevelContainer, overlayPane);
+        
+        // Store reference for zoom - we scale the entire content including overlay
+        this.zoomableContent = contentWithOverlay;
         
         // Wrap in a Group so that layout bounds reflect the scaled size
         // (Group reports transformed bounds of its children)
-        javafx.scene.Group scaledGroup = new javafx.scene.Group(topLevelContainer);
+        javafx.scene.Group scaledGroup = new javafx.scene.Group(contentWithOverlay);
         
         // Wrap in a StackPane to center the content when zoomed out
         StackPane centeringWrapper = new StackPane(scaledGroup);
@@ -667,22 +663,37 @@ public class ArchitectureView extends BorderPane {
     }
     
     /**
-     * Calculates the center point of a node relative to the dependencyPane,
-     * taking zoom into account.
+     * Calculates the center point of a node relative to the overlay pane.
+     * Since the overlay and content are siblings in zoomableContent,
+     * we need to calculate coordinates in that common parent's coordinate space.
      * @return double array [x, y] or null if not visible
      */
     private double[] getNodeCenterInPane(javafx.scene.Node node) {
         try {
-            Bounds nodeBounds = node.localToScene(node.getBoundsInLocal());
-            Bounds paneBounds = dependencyPane.localToScene(dependencyPane.getBoundsInLocal());
-            
-            if (nodeBounds == null || paneBounds == null) {
+            if (zoomableContent == null || overlayPane == null) {
                 return null;
             }
             
-            // Calculate center in scene coordinates, then adjust for pane position
-            double centerX = nodeBounds.getMinX() + nodeBounds.getWidth() / 2 - paneBounds.getMinX();
-            double centerY = nodeBounds.getMinY() + nodeBounds.getHeight() / 2 - paneBounds.getMinY();
+            // Get bounds in local coordinates
+            Bounds localBounds = node.getBoundsInLocal();
+            
+            // Transform to zoomableContent's coordinate space
+            // node -> ... -> topLevelContainer -> zoomableContent
+            javafx.scene.Node current = node;
+            double centerX = localBounds.getMinX() + localBounds.getWidth() / 2;
+            double centerY = localBounds.getMinY() + localBounds.getHeight() / 2;
+            
+            // Walk up the parent chain to zoomableContent, accumulating transforms
+            while (current != null && current != zoomableContent) {
+                Bounds boundsInParent = current.getBoundsInParent();
+                Bounds localB = current.getBoundsInLocal();
+                
+                // Adjust for the offset from local to parent bounds
+                centerX = centerX - localB.getMinX() + boundsInParent.getMinX();
+                centerY = centerY - localB.getMinY() + boundsInParent.getMinY();
+                
+                current = current.getParent();
+            }
             
             return new double[] { centerX, centerY };
         } catch (Exception e) {
@@ -691,17 +702,19 @@ public class ArchitectureView extends BorderPane {
     }
     
     /**
-     * Returns the line width scaled by the current zoom factor.
+     * Returns the line width.
+     * Since lines are now inside the scaled content, they scale automatically.
      */
     private double getScaledLineWidth() {
-        return DEPENDENCY_WIDTH * zoomFactor;
+        return DEPENDENCY_WIDTH;
     }
     
     /**
-     * Returns the arrow size scaled by the current zoom factor.
+     * Returns the arrow size.
+     * Since lines are now inside the scaled content, they scale automatically.
      */
     private double getScaledArrowSize() {
-        return 4.0 * zoomFactor;
+        return 4.0;
     }
 
     /**

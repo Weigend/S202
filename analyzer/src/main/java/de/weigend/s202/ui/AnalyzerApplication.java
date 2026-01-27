@@ -137,7 +137,6 @@ public class AnalyzerApplication extends Application {
                 .map(File::getAbsolutePath)
                 .collect(Collectors.toList());
             DependencyModel rawModel = rawAnalyzer.analyzeMultiple(jarPaths);
-            System.err.println("[AnalyzerApplication] rawModel packages: " + rawModel.getAllPackageNames());
             
             if (rawModel.getAllClasses().isEmpty()) {
                 String errorMsg = "Error: No classes found in JAR file(s)";
