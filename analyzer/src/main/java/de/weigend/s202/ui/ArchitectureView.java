@@ -2,6 +2,7 @@ package de.weigend.s202.ui;
 
 import de.weigend.s202.ui.model.ArchitectureNode;
 import de.weigend.s202.ui.model.ArchitectureNode.NodeType;
+import de.weigend.s202.ui.zoom.ZoomController;
 import de.weigend.s202.analysis.scc.TarjanSCCFinder;
 import de.weigend.s202.analysis.scc.StronglyConnectedComponent;
 import javafx.geometry.Bounds;
@@ -54,12 +55,9 @@ public class ArchitectureView extends BorderPane {
     private static final Color INCOMING_DEPENDENCY_COLOR = Color.rgb(0, 128, 0); // Grün - eingehende Abhängigkeiten (dependents)
     private static final Color SCC_COLOR = Color.RED; // Rot - zyklische Abhängigkeiten (SCCs)
     private static final double DEPENDENCY_WIDTH = 1.0;
-    
+
     // Zoom-Funktionalität
-    private double zoomFactor = 1.0;
-    private static final double ZOOM_MIN = 0.02;  // 2% - für sehr große Architekturen wie Minecraft
-    private static final double ZOOM_MAX = 3.0;
-    private static final double ZOOM_STEP = 0.1;
+    private ZoomController zoomController;
     private Label zoomLabel;
     private javafx.scene.layout.Pane zoomableContent;  // StackPane containing content + overlay
     private javafx.scene.layout.VBox topLevelContainer; // The actual architecture content
@@ -85,15 +83,15 @@ public class ArchitectureView extends BorderPane {
         scrollPane.setStyle("-fx-background-color: transparent;");
         scrollPane.getStyleClass().add("centered-scroll-pane");
         
-        // Zoom mit Mausrad (Ctrl+Scroll)
+        // Zoom mit Mausrad (Ctrl+Scroll) - will be initialized after zoomController is created
         scrollPane.addEventFilter(javafx.scene.input.ScrollEvent.SCROLL, event -> {
-            if (event.isControlDown()) {
+            if (event.isControlDown() && zoomController != null) {
                 event.consume();
                 double delta = event.getDeltaY();
                 if (delta > 0) {
-                    zoomIn();
+                    zoomController.zoomIn();
                 } else if (delta < 0) {
-                    zoomOut();
+                    zoomController.zoomOut();
                 }
             }
         });
@@ -177,15 +175,15 @@ public class ArchitectureView extends BorderPane {
         // Zoom controls
         Button zoomInBtn = new Button("🔍+");
         zoomInBtn.setTooltip(new Tooltip("Zoom In (Ctrl+Scroll Up)"));
-        zoomInBtn.setOnAction(e -> zoomIn());
-        
+        zoomInBtn.setOnAction(e -> { if (zoomController != null) zoomController.zoomIn(); });
+
         Button zoomOutBtn = new Button("🔍-");
         zoomOutBtn.setTooltip(new Tooltip("Zoom Out (Ctrl+Scroll Down)"));
-        zoomOutBtn.setOnAction(e -> zoomOut());
-        
+        zoomOutBtn.setOnAction(e -> { if (zoomController != null) zoomController.zoomOut(); });
+
         Button zoomResetBtn = new Button("1:1");
         zoomResetBtn.setTooltip(new Tooltip("Reset Zoom"));
-        zoomResetBtn.setOnAction(e -> resetZoom());
+        zoomResetBtn.setOnAction(e -> { if (zoomController != null) zoomController.resetZoom(); });
         
         zoomLabel = new Label("100%");
         zoomLabel.setPrefWidth(45);
@@ -199,81 +197,20 @@ public class ArchitectureView extends BorderPane {
 
         return toolbar;
     }
-    
-    // ==================== Zoom Methods ====================
-    
+
     /**
-     * Zooms in by dynamic step (larger steps at higher zoom levels).
+     * Callback invoked when zoom changes. Invalidates and redraws visible lines.
      */
-    private void zoomIn() {
-        setZoom(zoomFactor + getDynamicZoomStep());
-    }
-    
-    /**
-     * Zooms out by dynamic step (smaller steps at lower zoom levels).
-     */
-    private void zoomOut() {
-        setZoom(zoomFactor - getDynamicZoomStep());
-    }
-    
-    /**
-     * Resets zoom to 100%.
-     */
-    private void resetZoom() {
-        setZoom(1.0);
-    }
-    
-    /**
-     * Calculates dynamic zoom step based on current zoom level.
-     * Smaller steps at lower zoom levels for finer control.
-     */
-    private double getDynamicZoomStep() {
-        if (zoomFactor <= 0.1) {
-            return 0.02;  // 2% steps when very zoomed out
-        } else if (zoomFactor <= 0.3) {
-            return 0.05;  // 5% steps
-        } else {
-            return ZOOM_STEP;  // 10% steps at normal zoom
+    private void handleZoomChanged() {
+        invalidateLines();
+        if (showDependenciesCheckbox != null && showDependenciesCheckbox.isSelected() && dependencyPane != null && dependencyPane.isVisible()) {
+            drawDependencyArrows();
+        }
+        if (showSccCheckbox != null && showSccCheckbox.isSelected() && sccPane != null && sccPane.isVisible()) {
+            drawSccLines();
         }
     }
-    
-    /**
-     * Sets the zoom factor and updates the display.
-     */
-    private void setZoom(double newZoom) {
-        // Clamp to valid range
-        zoomFactor = Math.max(ZOOM_MIN, Math.min(ZOOM_MAX, newZoom));
-        
-        // Apply scale via CSS transform on the content
-        if (zoomableContent != null) {
-            zoomableContent.setScaleX(zoomFactor);
-            zoomableContent.setScaleY(zoomFactor);
-            
-            // Adjust translation to keep top-left corner anchored
-            double width = zoomableContent.getBoundsInLocal().getWidth();
-            double height = zoomableContent.getBoundsInLocal().getHeight();
-            zoomableContent.setTranslateX((zoomFactor - 1) * width / 2);
-            zoomableContent.setTranslateY((zoomFactor - 1) * height / 2);
-        }
-        
-        // Update label
-        if (zoomLabel != null) {
-            zoomLabel.setText(String.format("%d%%", Math.round(zoomFactor * 100)));
-        }
-        
-        // Invalidate lines - they will be redrawn on next visibility toggle
-        // For visible lines, redraw them now (delayed to allow layout)
-        javafx.application.Platform.runLater(() -> {
-            invalidateLines();
-            if (showDependenciesCheckbox != null && showDependenciesCheckbox.isSelected() && dependencyPane.isVisible()) {
-                drawDependencyArrows();
-            }
-            if (showSccCheckbox != null && showSccCheckbox.isSelected() && sccPane.isVisible()) {
-                drawSccLines();
-            }
-        });
-    }
-    
+
     /**
      * Marks lines as needing update. Lines will be redrawn on next visibility toggle.
      */
@@ -414,12 +351,10 @@ public class ArchitectureView extends BorderPane {
         });
         
         scrollPane.setContent(centeringWrapper);
-        
-        // Reset zoom to 100%
-        zoomFactor = 1.0;
-        if (zoomLabel != null) {
-            zoomLabel.setText("100%");
-        }
+
+        // Initialize or recreate ZoomController (now that zoomableContent is set)
+        zoomController = new ZoomController(zoomLabel, zoomableContent, this::handleZoomChanged);
+        zoomController.resetZoom();
         
         // Clear dependency and SCC lines (new architecture = new lines needed)
         clearDependencyArrows();
