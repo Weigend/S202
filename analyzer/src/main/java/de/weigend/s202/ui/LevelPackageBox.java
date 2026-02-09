@@ -134,11 +134,9 @@ public class LevelPackageBox extends VBox {
         }
         
         // Notify callback (used to refresh dependency arrows)
-        System.out.println("[DEBUG] toggleExpanded called, callback=" + (onExpandChangeCallback != null));
         if (onExpandChangeCallback != null) {
             // Use Platform.runLater to ensure layout is updated first
             javafx.application.Platform.runLater(() -> {
-                System.out.println("[DEBUG] Callback executing");
                 onExpandChangeCallback.run();
             });
         }

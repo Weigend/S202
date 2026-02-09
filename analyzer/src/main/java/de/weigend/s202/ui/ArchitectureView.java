@@ -598,30 +598,6 @@ public class ArchitectureView extends BorderPane {
     }
 
     /**
-     * Returns the selected architecture node.
-     */
-    public ArchitectureNode getSelectedNode() {
-        return null; // Graph view doesn't have selection yet
-    }
-
-    /**
-     * Returns the current auto-expand depth setting.
-     */
-    public int getAutoExpandDepth() {
-        return depthSpinner.getValue();
-    }
-
-    /**
-     * Sets the auto-expand depth.
-     */
-    public void setAutoExpandDepth(int depth) {
-        if (depth < 1 || depth > 10) {
-            throw new IllegalArgumentException("Depth must be between 1 and 10");
-        }
-        depthSpinner.getValueFactory().setValue(depth);
-    }
-    
-    /**
      * Clears all dependency arrows and resets the drawn flag.
      */
     private void clearDependencyArrows() {
@@ -655,11 +631,6 @@ public class ArchitectureView extends BorderPane {
         // Mark as drawn and reset invalidation flag
         dependencyLinesDrawn = true;
         linesNeedUpdate = false;
-        
-        long elapsed = System.currentTimeMillis() - startTime;
-        if (elapsed > 100) {
-            System.out.println("Drawing dependency lines took " + elapsed + "ms");
-        }
     }
     
     /**
@@ -1018,11 +989,6 @@ public class ArchitectureView extends BorderPane {
         // Mark as drawn and reset invalidation flag
         sccLinesDrawn = true;
         linesNeedUpdate = false;
-        
-        long elapsed = System.currentTimeMillis() - startTime;
-        if (elapsed > 100) {
-            System.out.println("Drawing SCC lines took " + elapsed + "ms");
-        }
         
         if (sccCount > 0) {
             setStatus("Showing " + sccCount + " SCC cycle(s) in red");
