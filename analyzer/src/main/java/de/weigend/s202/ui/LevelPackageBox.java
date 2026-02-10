@@ -62,25 +62,25 @@ public class LevelPackageBox extends VBox {
      * @param transparent If true, shows with no background and no border (for pass-through packages)
      */
     public LevelPackageBox(String levelName, int level, boolean transparent) {
-        super(3);
+        super(transparent ? 0 : 3);
         this.levelName = level >= 0 ? levelName + " (L:" + level + ")" : levelName;
         this.transparent = transparent;
-        
+
         // Apply styles directly - CSS doesn't override VBox defaults reliably
         if (transparent) {
-            this.setStyle("-fx-background-color: #fffef8; -fx-border-width: 0;");
+            this.setStyle("-fx-background-color: transparent; -fx-border-width: 0;");
         } else {
             this.setStyle("-fx-background-color: #fffacd; -fx-border-color: #999999; -fx-border-width: 1;");
         }
         this.setPadding(new Insets(0));
         this.setMaxWidth(Double.MAX_VALUE);
-        
+
         // Initialize level rows map (TreeMap for ordered levels)
         this.levelRows = new TreeMap<>();
-        
+
         // Create and add header
         createHeader();
-        
+
         // Create content container for all rows
         contentContainer = new VBox(6);
         contentContainer.setPadding(transparent ? new Insets(0, 0, 0, 10) : new Insets(6, 6, 6, 20));
@@ -155,7 +155,7 @@ public class LevelPackageBox extends VBox {
         // Get or create HBox for this level
         HBox levelRow = levelRows.computeIfAbsent(levelNumber, level -> {
             HBox hbox = new HBox(10);
-            hbox.setStyle("-fx-background-color: #fffacd;");
+            hbox.setStyle(transparent ? "-fx-background-color: transparent;" : "-fx-background-color: #fffacd;");
             hbox.setMaxWidth(Double.MAX_VALUE);
             hbox.setMaxHeight(Double.MAX_VALUE);
             hbox.setAlignment(Pos.CENTER);
