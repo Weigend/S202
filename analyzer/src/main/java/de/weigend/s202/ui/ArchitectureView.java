@@ -59,7 +59,7 @@ public class ArchitectureView extends BorderPane {
     }
 
     private void setupUI() {
-        // Top toolbar
+        // Top toolbar (will be fully initialized after renderers are created)
         HBox toolbar = createToolbar();
         setTop(toolbar);
 
@@ -87,11 +87,16 @@ public class ArchitectureView extends BorderPane {
             }
         });
         
-        // Panes for drawing lines will be created in setArchitectureRoot
-        // They are placed inside the scrollable content so they scroll with it
-        dependencyPane = null;
-        sccPane = null;
-        overlayPane = null;
+        // Create panes for drawing lines (initially empty, will be populated in setArchitectureRoot)
+        dependencyPane = new Pane();
+        dependencyPane.setMouseTransparent(false);
+        dependencyPane.setPickOnBounds(false);
+        dependencyPane.setVisible(false);
+
+        sccPane = new Pane();
+        sccPane.setMouseTransparent(true);
+        sccPane.setPickOnBounds(false);
+        sccPane.setVisible(false);
         
         // Content pane just contains the scroll pane
         contentPane = new StackPane();
@@ -273,20 +278,14 @@ public class ArchitectureView extends BorderPane {
 
         // Store reference to the architecture container
         this.topLevelContainer = topLevelContainer;
-        
-        // Create panes for drawing dependency and SCC lines
-        // These are placed inside the scrollable content so they scroll with it
-        dependencyPane = new Pane();
-        dependencyPane.setMouseTransparent(false);
-        dependencyPane.setPickOnBounds(false);
+
+        // Clear panes for new architecture (panes were created in setupUI())
+        dependencyPane.getChildren().clear();
         dependencyPane.setVisible(false);
-        
-        sccPane = new Pane();
-        sccPane.setMouseTransparent(true);
-        sccPane.setPickOnBounds(false);
+        sccPane.getChildren().clear();
         sccPane.setVisible(false);
-        
-        // Overlay contains both line panes, stacked on top of content
+
+        // Create overlay that contains both line panes, stacked on top of content
         overlayPane = new StackPane();
         overlayPane.setMouseTransparent(false);
         overlayPane.setPickOnBounds(false);
