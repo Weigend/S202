@@ -6,6 +6,8 @@ import de.weigend.s202.ui.model.ArchitectureNode;
 import de.weigend.s202.ui.model.ArchitectureNode.NodeType;
 import javafx.geometry.Insets;
 import javafx.scene.Node;
+import javafx.scene.layout.HBox;
+import javafx.scene.layout.Priority;
 import javafx.scene.layout.VBox;
 
 import java.util.ArrayList;
@@ -91,12 +93,28 @@ public class ArchitectureTreeBuilder {
         // Process children of effective root, sorted by level descending (higher levels at top)
         List<ArchitectureNode> sortedChildren = new ArrayList<>(effectiveRoot.getChildren());
         sortedChildren.sort((a, b) -> Integer.compare(b.getLevel(), a.getLevel()));
+
+        // Group top-level children by level into HBox rows (same level = side by side)
+        Map<Integer, HBox> topLevelRows = new HashMap<>();
         for (ArchitectureNode child : sortedChildren) {
+            int level = child.getLevel();
+            HBox levelRow = topLevelRows.computeIfAbsent(level, l -> {
+                HBox hbox = new HBox(8);
+                hbox.setMaxWidth(Double.MAX_VALUE);
+                VBox.setVgrow(hbox, Priority.ALWAYS);
+                topLevelContainer.getChildren().add(hbox);
+                return hbox;
+            });
+
             if (child.getType() == NodeType.PACKAGE) {
                 LevelPackageBox packageBox = new LevelPackageBox(child.getSimpleName(), child.getLevel(), false);
                 packageContainers.put(child.getFullName(), packageBox);
                 elementRegistry.put(child.getFullName(), packageBox);
-                topLevelContainer.getChildren().add(packageBox);
+
+                packageBox.setMaxWidth(Double.MAX_VALUE);
+                packageBox.setMaxHeight(Double.MAX_VALUE);
+                HBox.setHgrow(packageBox, Priority.ALWAYS);
+                levelRow.getChildren().add(packageBox);
 
                 // Depth 1 = this level visible, collapse if beyond maxDepth
                 if (maxDepth < 1) {
@@ -107,7 +125,7 @@ public class ArchitectureTreeBuilder {
             } else if (child.getType() == NodeType.CLASS) {
                 LevelClassBox classBox = new LevelClassBox(child.getSimpleName(), child.getLevel(), child.getFullName());
                 elementRegistry.put(child.getFullName(), classBox);
-                topLevelContainer.getChildren().add(classBox);
+                levelRow.getChildren().add(classBox);
             }
             elementsAddedToParent.add(child.getFullName());
         }
