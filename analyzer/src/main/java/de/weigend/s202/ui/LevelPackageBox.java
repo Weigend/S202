@@ -119,6 +119,15 @@ public class LevelPackageBox extends VBox {
     }
 
     /**
+     * Sets the expanded/collapsed state programmatically.
+     */
+    public void setExpanded(boolean expanded) {
+        if (this.isExpanded != expanded) {
+            toggleExpanded();
+        }
+    }
+
+    /**
      * Toggle between expanded and collapsed state.
      */
     private void toggleExpanded() {
@@ -133,12 +142,9 @@ public class LevelPackageBox extends VBox {
             contentContainer.setManaged(false);
         }
         
-        // Notify callback (used to refresh dependency arrows)
+        // Notify optional callback
         if (onExpandChangeCallback != null) {
-            // Use Platform.runLater to ensure layout is updated first
-            javafx.application.Platform.runLater(() -> {
-                onExpandChangeCallback.run();
-            });
+            onExpandChangeCallback.run();
         }
     }
 

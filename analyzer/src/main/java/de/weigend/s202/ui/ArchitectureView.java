@@ -47,6 +47,7 @@ public class ArchitectureView extends BorderPane {
 
     // Flags to track if lines have been drawn (for performance optimization)
     private boolean linesNeedUpdate = false;  // Set when zoom/scroll changes
+    private boolean arrowRedrawPending = false;  // Debounce flag for layout-triggered redraws
 
     // UI components for zoom
     private Label zoomLabel;
@@ -136,8 +137,9 @@ public class ArchitectureView extends BorderPane {
 
         Button refreshButton = new Button("🔄 Refresh");
         refreshButton.setOnAction(e -> {
-            String depth = String.valueOf(depthSpinner.getValue());
-            setStatus("Analyzing with depth: " + depth);
+            if (currentRootNode != null) {
+                setArchitectureRoot(currentRootNode);
+            }
         });
 
         // Checkbox to show/hide dependency arrows
@@ -252,15 +254,8 @@ public class ArchitectureView extends BorderPane {
         this.currentRootNode = rootNode;
         this.elementRegistry.clear();
         
-        // Set callback to refresh dependency arrows when packages are expanded/collapsed
-        LevelPackageBox.setOnExpandChangeCallback(() -> {
-            if (showDependenciesCheckbox != null && showDependenciesCheckbox.isSelected()) {
-                dependencyRenderer.drawDependencyArrows(currentRootNode);
-            }
-            if (showSccCheckbox != null && showSccCheckbox.isSelected()) {
-                sccRenderer.drawSccLines(currentRootNode);
-            }
-        });
+        // Expand/collapse callback no longer needed — layoutBoundsProperty listener handles arrow redraw
+        LevelPackageBox.setOnExpandChangeCallback(null);
 
         // Set callback to refresh dependency arrows when a class is selected/deselected
         LevelClassBox.setOnSelectionChangeCallback(() -> {
@@ -271,13 +266,27 @@ public class ArchitectureView extends BorderPane {
                 sccRenderer.drawSccLines(currentRootNode);
             }
         });
-        
+
         // Initialize ArchitectureTreeBuilder and build the UI tree
         treeBuilder = new ArchitectureTreeBuilder(elementRegistry);
-        javafx.scene.layout.VBox topLevelContainer = treeBuilder.buildTree(rootNode);
+        int maxDepth = depthSpinner != null ? depthSpinner.getValue() : 3;
+        javafx.scene.layout.VBox topLevelContainer = treeBuilder.buildTree(rootNode, maxDepth);
 
         // Store reference to the architecture container
         this.topLevelContainer = topLevelContainer;
+
+        // Redraw arrows when layout changes (expand/collapse causes layout bounds to change).
+        // layoutBoundsProperty fires AFTER the layout pass has computed correct bounds.
+        // Platform.runLater defers drawing to after ALL nested layouts are complete.
+        topLevelContainer.layoutBoundsProperty().addListener((obs, oldVal, newVal) -> {
+            if (!arrowRedrawPending) {
+                arrowRedrawPending = true;
+                javafx.application.Platform.runLater(() -> {
+                    arrowRedrawPending = false;
+                    redrawVisibleArrows();
+                });
+            }
+        });
 
         // Clear panes for new architecture (panes were created in setupUI())
         dependencyPane.getChildren().clear();
@@ -306,14 +315,15 @@ public class ArchitectureView extends BorderPane {
         StackPane centeringWrapper = new StackPane(scaledGroup);
         centeringWrapper.setAlignment(javafx.geometry.Pos.CENTER);
         
-        // Bind wrapper size to viewport for centering
-        scrollPane.viewportBoundsProperty().addListener((obs, oldVal, newVal) -> {
-            // Make wrapper at least as large as viewport so content centers
-            centeringWrapper.setMinWidth(newVal.getWidth());
-            centeringWrapper.setMinHeight(newVal.getHeight());
-        });
-        
         scrollPane.setContent(centeringWrapper);
+
+        // Apply current viewport bounds immediately (the setupUI listener only fires on change,
+        // so on Refresh the new wrapper's minWidth/minHeight would remain unset)
+        javafx.geometry.Bounds viewportBounds = scrollPane.getViewportBounds();
+        if (viewportBounds != null && viewportBounds.getWidth() > 0) {
+            centeringWrapper.setMinWidth(viewportBounds.getWidth());
+            centeringWrapper.setMinHeight(viewportBounds.getHeight());
+        }
 
         // Initialize or recreate ZoomController (now that zoomableContent is set)
         zoomController = new ZoomController(zoomLabel, zoomableContent, this::handleZoomChanged);
@@ -342,6 +352,18 @@ public class ArchitectureView extends BorderPane {
         setStatus("Architecture loaded: " + rootNode.getLevelCount() + " levels");
     }
     
+
+    /**
+     * Redraws dependency and SCC arrows if their checkboxes are enabled.
+     */
+    private void redrawVisibleArrows() {
+        if (showDependenciesCheckbox != null && showDependenciesCheckbox.isSelected()) {
+            dependencyRenderer.drawDependencyArrows(currentRootNode);
+        }
+        if (showSccCheckbox != null && showSccCheckbox.isSelected()) {
+            sccRenderer.drawSccLines(currentRootNode);
+        }
+    }
 
     /**
      * Updates the status bar message.
