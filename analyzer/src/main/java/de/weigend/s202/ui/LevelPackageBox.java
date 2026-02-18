@@ -136,12 +136,14 @@ public class LevelPackageBox extends VBox {
             toggleIcon.setText("−");
             contentContainer.setVisible(true);
             contentContainer.setManaged(true);
+            // Force CSS on newly visible content so sizes are computed before layout
+            contentContainer.applyCss();
         } else {
             toggleIcon.setText("+");
             contentContainer.setVisible(false);
             contentContainer.setManaged(false);
         }
-        
+
         // Notify optional callback
         if (onExpandChangeCallback != null) {
             onExpandChangeCallback.run();

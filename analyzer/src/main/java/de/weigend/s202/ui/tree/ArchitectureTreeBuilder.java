@@ -8,8 +8,10 @@ import javafx.geometry.Insets;
 import javafx.scene.Node;
 import javafx.scene.layout.VBox;
 
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
@@ -85,8 +87,10 @@ public class ArchitectureTreeBuilder {
             effectiveRoot = singleChild;
         }
 
-        // Process children of effective root (first real package with content)
-        for (ArchitectureNode child : effectiveRoot.getChildren()) {
+        // Process children of effective root, sorted by level descending (higher levels at top)
+        List<ArchitectureNode> sortedChildren = new ArrayList<>(effectiveRoot.getChildren());
+        sortedChildren.sort((a, b) -> Integer.compare(b.getLevel(), a.getLevel()));
+        for (ArchitectureNode child : sortedChildren) {
             if (child.getType() == NodeType.PACKAGE) {
                 LevelPackageBox packageBox = new LevelPackageBox(child.getSimpleName(), child.getLevel(), false);
                 packageContainers.put(child.getFullName(), packageBox);

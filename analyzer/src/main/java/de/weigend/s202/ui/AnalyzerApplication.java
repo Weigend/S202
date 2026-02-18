@@ -13,6 +13,7 @@ import javafx.scene.Scene;
 import javafx.scene.control.Alert;
 import javafx.scene.control.Label;
 import javafx.scene.layout.BorderPane;
+import javafx.scene.layout.HBox;
 import javafx.scene.layout.VBox;
 import javafx.stage.Stage;
 
@@ -40,7 +41,7 @@ public class AnalyzerApplication extends Application {
         primaryStage.setTitle("S202 Code Analyzer - Architecture Viewer");
 
         BorderPane root = new BorderPane();
-        VBox header = createHeader();
+        HBox header = createHeader();
         root.setTop(header);
 
         // Load original layout by default
@@ -95,25 +96,29 @@ public class AnalyzerApplication extends Application {
         architectureView = new ArchitectureView(primaryStage);
         architectureView.setOnFilesSelected(this::loadJarFiles);
         root.setCenter(architectureView);
+        root.setBottom(architectureView.getStatusBar());
     }
 
 
 
-    private VBox createHeader() {
-        VBox header = new VBox(10);
-        header.setPadding(new Insets(15));
-        header.setStyle("-fx-background-color: #f5f5f5; -fx-border-color: #cccccc; -fx-border-width: 0 0 1 0;");
+    private HBox createHeader() {
+        HBox header = new HBox(12);
+        header.setPadding(new Insets(8, 15, 8, 15));
+        header.setAlignment(javafx.geometry.Pos.CENTER_LEFT);
+        header.setStyle("-fx-background-color: #2b3e50;");
 
-        // Title area
         Label titleLabel = new Label("S202 Code Analyzer");
-        titleLabel.setStyle("-fx-font-size: 18; -fx-font-weight: bold;");
+        titleLabel.setStyle("-fx-font-size: 16; -fx-font-weight: bold; -fx-text-fill: white;");
+
+        Label separator = new Label("\u2014");
+        separator.setStyle("-fx-text-fill: #7a9bb5;");
 
         Label descriptionLabel = new Label(
             "Analyze Java bytecode dependencies and visualize architecture structure with automatic cycle detection"
         );
-        descriptionLabel.setStyle("-fx-font-size: 11; -fx-text-fill: #666666;");
+        descriptionLabel.setStyle("-fx-font-size: 11; -fx-text-fill: #c0d0dd;");
 
-        header.getChildren().addAll(titleLabel, descriptionLabel);
+        header.getChildren().addAll(titleLabel, separator, descriptionLabel);
         return header;
     }
 

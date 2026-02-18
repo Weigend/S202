@@ -5,28 +5,105 @@
     -fx-font-family: "System";
 }
 
-/* Toolbar */
+/* ===== Toolbar ===== */
 .tool-bar {
-    -fx-padding: 3 6;
-    -fx-spacing: 4;
-    -fx-font-size: 9px;
+    -fx-padding: 4 8;
+    -fx-spacing: 6;
+    -fx-font-size: 12px;
+    -fx-background-color: #f0f0f0;
+    -fx-border-color: #d0d0d0;
+    -fx-border-width: 0 0 1 0;
 }
 
-.tool-bar .button {
-    -fx-font-size: 9px;
+.tool-bar .separator .line {
+    -fx-border-color: #c0c0c0;
+    -fx-border-width: 0 1 0 0;
+    -fx-padding: 0 4;
+}
+
+/* Toolbar Buttons - modern flat style */
+.toolbar-button {
+    -fx-font-size: 12px;
+    -fx-padding: 4 10;
+    -fx-min-height: 24;
+    -fx-background-color: transparent;
+    -fx-border-color: #b0b0b0;
+    -fx-border-width: 1;
+    -fx-border-radius: 3;
+    -fx-background-radius: 3;
+    -fx-cursor: hand;
+}
+
+.toolbar-button:hover {
+    -fx-background-color: #e0e0e0;
+}
+
+.toolbar-button:pressed {
+    -fx-background-color: #d0d0d0;
+}
+
+/* Compact zoom buttons (square) */
+.toolbar-zoom-button {
+    -fx-font-size: 13px;
+    -fx-font-weight: bold;
     -fx-padding: 2 6;
+    -fx-min-width: 28;
+    -fx-min-height: 24;
+    -fx-background-color: transparent;
+    -fx-border-color: #b0b0b0;
+    -fx-border-width: 1;
+    -fx-border-radius: 3;
+    -fx-background-radius: 3;
+    -fx-cursor: hand;
 }
 
+.toolbar-zoom-button:hover {
+    -fx-background-color: #e0e0e0;
+}
+
+.toolbar-zoom-button:pressed {
+    -fx-background-color: #d0d0d0;
+}
+
+/* Zoom percentage label */
+.toolbar-zoom-label {
+    -fx-font-size: 12px;
+    -fx-font-family: monospace;
+    -fx-min-width: 55;
+    -fx-alignment: center;
+}
+
+/* Toolbar labels (e.g. "Depth:") */
+.toolbar-label {
+    -fx-font-size: 12px;
+    -fx-text-fill: #444444;
+}
+
+/* Toolbar checkboxes */
+.tool-bar .check-box {
+    -fx-font-size: 12px;
+}
+
+/* Toolbar spinner */
 .tool-bar .spinner {
-    -fx-pref-width: 55;
-    -fx-font-size: 9px;
+    -fx-pref-width: 60;
+    -fx-font-size: 12px;
 }
 
 .tool-bar .spinner .text-field {
-    -fx-font-size: 9px;
+    -fx-font-size: 12px;
 }
 
-/* TreeView */
+/* ===== Status Bar ===== */
+.status-bar {
+    -fx-padding: 3 8;
+    -fx-font-size: 11px;
+    -fx-border-color: #d0d0d0;
+    -fx-border-width: 1 0 0 0;
+    -fx-background-color: #f8f8f8;
+}
+
+/* ===== TreeView ===== */
 .tree-view {
     -fx-font-size: 9px;
 }
@@ -36,26 +113,18 @@
     -fx-font-size: 9px;
 }
 
-/* Status Bar */
-.status-bar {
-    -fx-padding: 2 6;
-    -fx-font-size: 9px;
-    -fx-border-color: #cccccc;
-    -fx-border-width: 1 0 0 0;
-}
-
-/* Labels */
+/* ===== Labels ===== */
 .label {
     -fx-font-size: 9px;
 }
 
-/* Buttons */
+/* ===== Buttons ===== */
 .button {
     -fx-font-size: 9px;
     -fx-padding: 2 6;
 }
 
-/* Spinner */
+/* ===== Spinner ===== */
 .spinner {
     -fx-font-size: 9px;
 }
@@ -64,7 +133,7 @@
     -fx-font-size: 9px;
 }
 
-/* Package Boxes */
+/* ===== Package Boxes ===== */
 .package-box {
     -fx-background-color: #fffacd;
     -fx-border-color: #999999;
@@ -101,22 +170,22 @@
     -fx-font-weight: bold;
 }
 
-/* ScrollPane */
+/* ===== ScrollPane ===== */
 .scroll-pane {
     -fx-font-size: 9px;
 }
 
-/* Alerts & Dialogs */
+/* ===== Alerts & Dialogs ===== */
 .alert .content {
     -fx-font-size: 9px;
 }
 
-/* HBox, VBox */
+/* ===== HBox, VBox ===== */
 .hbox, .vbox {
     -fx-font-size: 9px;
 }
 
-/* Class Boxes */
+/* ===== Class Boxes ===== */
 .class-box {
     -fx-font-size: 9px;
     -fx-border-color: #0066cc;

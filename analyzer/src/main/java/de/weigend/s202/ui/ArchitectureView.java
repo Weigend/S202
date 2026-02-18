@@ -7,6 +7,7 @@ import de.weigend.s202.ui.rendering.SCCRenderer;
 import de.weigend.s202.ui.tree.ArchitectureTreeBuilder;
 import de.weigend.s202.ui.zoom.ZoomController;
 import javafx.geometry.Insets;
+import javafx.geometry.Pos;
 import javafx.scene.control.*;
 import javafx.scene.layout.BorderPane;
 import javafx.scene.layout.HBox;
@@ -47,7 +48,6 @@ public class ArchitectureView extends BorderPane {
 
     // Flags to track if lines have been drawn (for performance optimization)
     private boolean linesNeedUpdate = false;  // Set when zoom/scroll changes
-    private boolean arrowRedrawPending = false;  // Debounce flag for layout-triggered redraws
 
     // UI components for zoom
     private Label zoomLabel;
@@ -116,37 +116,54 @@ public class ArchitectureView extends BorderPane {
 
         setCenter(contentPane);
 
-        // Bottom: Status bar
+        // Status bar (label created here, placed in root by AnalyzerApplication)
         statusLabel = new Label("Ready");
         statusLabel.getStyleClass().add("status-bar");
-        setBottom(statusLabel);
+        statusLabel.setMaxWidth(Double.MAX_VALUE);
+    }
+
+    /**
+     * Returns the status bar label for placement in the application root layout.
+     */
+    public Label getStatusBar() {
+        return statusLabel;
     }
 
 
     private HBox createToolbar() {
         HBox toolbar = new HBox(8);
         toolbar.setPadding(new Insets(5));
+        toolbar.setAlignment(Pos.CENTER_LEFT);
         toolbar.getStyleClass().add("tool-bar");
 
-        Button loadButton = new Button("📂 Load JAR");
+        // --- File group ---
+        Button loadButton = new Button("Load JAR");
+        loadButton.getStyleClass().add("toolbar-button");
+        loadButton.setTooltip(new Tooltip("Analyse a JAR file"));
         loadButton.setOnAction(e -> openFileChooser());
 
+        // --- View group ---
         Label depthLabel = new Label("Depth:");
-        depthSpinner = new Spinner<>(1, 10, 3);
-        depthSpinner.setPrefWidth(55);
+        depthLabel.getStyleClass().add("toolbar-label");
+        depthLabel.setTooltip(new Tooltip("Package nesting depth to display"));
 
-        Button refreshButton = new Button("🔄 Refresh");
+        depthSpinner = new Spinner<>(1, 10, 3);
+        depthSpinner.setTooltip(new Tooltip("Package nesting depth to display"));
+
+        Button refreshButton = new Button("Refresh");
+        refreshButton.getStyleClass().add("toolbar-button");
+        refreshButton.setTooltip(new Tooltip("Rebuild architecture view"));
         refreshButton.setOnAction(e -> {
             if (currentRootNode != null) {
                 setArchitectureRoot(currentRootNode);
             }
         });
 
-        // Checkbox to show/hide dependency arrows
-        showDependenciesCheckbox = new CheckBox("Show Dependencies");
+        // --- Overlay group ---
+        showDependenciesCheckbox = new CheckBox("Dependencies");
+        showDependenciesCheckbox.setTooltip(new Tooltip("Toggle dependency arrows"));
         showDependenciesCheckbox.setOnAction(e -> {
             if (showDependenciesCheckbox.isSelected()) {
-                // Draw lines only if not already drawn or if invalidated
                 if (!dependencyRenderer.isDependencyLinesDrawn() || linesNeedUpdate) {
                     dependencyRenderer.drawDependencyArrows(currentRootNode);
                     linesNeedUpdate = false;
@@ -157,11 +174,10 @@ public class ArchitectureView extends BorderPane {
             }
         });
 
-        // Checkbox to show/hide SCC (cycle) lines
-        showSccCheckbox = new CheckBox("Show SCC");
+        showSccCheckbox = new CheckBox("SCC");
+        showSccCheckbox.setTooltip(new Tooltip("Toggle cycle highlighting (Strongly Connected Components)"));
         showSccCheckbox.setOnAction(e -> {
             if (showSccCheckbox.isSelected()) {
-                // Draw lines only if not already drawn or if invalidated
                 if (!sccRenderer.isSccLinesDrawn() || linesNeedUpdate) {
                     sccRenderer.drawSccLines(currentRootNode);
                     linesNeedUpdate = false;
@@ -172,27 +188,32 @@ public class ArchitectureView extends BorderPane {
             }
         });
 
-        // Zoom controls
-        Button zoomInBtn = new Button("🔍+");
-        zoomInBtn.setTooltip(new Tooltip("Zoom In (Ctrl+Scroll Up)"));
-        zoomInBtn.setOnAction(e -> { if (zoomController != null) zoomController.zoomIn(); });
-
-        Button zoomOutBtn = new Button("🔍-");
+        // --- Zoom group ---
+        Button zoomOutBtn = new Button("\u2212");
+        zoomOutBtn.getStyleClass().add("toolbar-zoom-button");
         zoomOutBtn.setTooltip(new Tooltip("Zoom Out (Ctrl+Scroll Down)"));
         zoomOutBtn.setOnAction(e -> { if (zoomController != null) zoomController.zoomOut(); });
 
-        Button zoomResetBtn = new Button("1:1");
-        zoomResetBtn.setTooltip(new Tooltip("Reset Zoom"));
-        zoomResetBtn.setOnAction(e -> { if (zoomController != null) zoomController.resetZoom(); });
-        
         zoomLabel = new Label("100%");
-        zoomLabel.setPrefWidth(45);
-        zoomLabel.setStyle("-fx-font-family: monospace;");
+        zoomLabel.getStyleClass().add("toolbar-zoom-label");
+
+        Button zoomInBtn = new Button("+");
+        zoomInBtn.getStyleClass().add("toolbar-zoom-button");
+        zoomInBtn.setTooltip(new Tooltip("Zoom In (Ctrl+Scroll Up)"));
+        zoomInBtn.setOnAction(e -> { if (zoomController != null) zoomController.zoomIn(); });
+
+        Button zoomResetBtn = new Button("1:1");
+        zoomResetBtn.getStyleClass().add("toolbar-zoom-button");
+        zoomResetBtn.setTooltip(new Tooltip("Reset Zoom to 100%"));
+        zoomResetBtn.setOnAction(e -> { if (zoomController != null) zoomController.resetZoom(); });
 
         toolbar.getChildren().addAll(
-            loadButton, new Separator(), depthLabel, depthSpinner, refreshButton,
-            new Separator(), showDependenciesCheckbox, showSccCheckbox,
-            new Separator(), zoomOutBtn, zoomLabel, zoomInBtn, zoomResetBtn
+            loadButton, new Separator(),
+            depthLabel, depthSpinner, refreshButton,
+            new Separator(),
+            showDependenciesCheckbox, showSccCheckbox,
+            new Separator(),
+            zoomOutBtn, zoomLabel, zoomInBtn, zoomResetBtn
         );
 
         return toolbar;
@@ -254,8 +275,18 @@ public class ArchitectureView extends BorderPane {
         this.currentRootNode = rootNode;
         this.elementRegistry.clear();
         
-        // Expand/collapse callback no longer needed — layoutBoundsProperty listener handles arrow redraw
-        LevelPackageBox.setOnExpandChangeCallback(null);
+        // On expand/collapse: CSS was already applied to newly visible content in toggleExpanded().
+        // Ensure the entire layout chain is marked dirty (ScrollPane can break propagation),
+        // then force a full scene layout and redraw arrows with correct coordinates.
+        LevelPackageBox.setOnExpandChangeCallback(() -> {
+            if (getScene() != null && getScene().getRoot() != null) {
+                if (zoomableContent != null) {
+                    zoomableContent.requestLayout();
+                }
+                getScene().getRoot().layout();
+                redrawVisibleArrows();
+            }
+        });
 
         // Set callback to refresh dependency arrows when a class is selected/deselected
         LevelClassBox.setOnSelectionChangeCallback(() -> {
@@ -275,18 +306,6 @@ public class ArchitectureView extends BorderPane {
         // Store reference to the architecture container
         this.topLevelContainer = topLevelContainer;
 
-        // Redraw arrows when layout changes (expand/collapse causes layout bounds to change).
-        // layoutBoundsProperty fires AFTER the layout pass has computed correct bounds.
-        // Platform.runLater defers drawing to after ALL nested layouts are complete.
-        topLevelContainer.layoutBoundsProperty().addListener((obs, oldVal, newVal) -> {
-            if (!arrowRedrawPending) {
-                arrowRedrawPending = true;
-                javafx.application.Platform.runLater(() -> {
-                    arrowRedrawPending = false;
-                    redrawVisibleArrows();
-                });
-            }
-        });
 
         // Clear panes for new architecture (panes were created in setupUI())
         dependencyPane.getChildren().clear();
