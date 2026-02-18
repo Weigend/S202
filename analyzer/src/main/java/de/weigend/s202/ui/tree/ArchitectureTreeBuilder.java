@@ -73,6 +73,7 @@ public class ArchitectureTreeBuilder {
         // Container for top-level packages (children of root)
         VBox topLevelContainer = new VBox(8);
         topLevelContainer.setPadding(new Insets(10));
+        topLevelContainer.setStyle("-fx-background-color: #f5f5f0;");
 
         // Skip transparent top-level packages (de, weigend, s202, etc.)
         // Follow the chain of single-child packages until we reach the first "real" package

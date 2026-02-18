@@ -147,12 +147,12 @@ public class ArchitectureView extends BorderPane {
         depthLabel.getStyleClass().add("toolbar-label");
         depthLabel.setTooltip(new Tooltip("Package nesting depth to display"));
 
-        depthSpinner = new Spinner<>(1, 10, 3);
+        depthSpinner = new Spinner<>(0, 10, 3);
         depthSpinner.setTooltip(new Tooltip("Package nesting depth to display"));
 
-        Button refreshButton = new Button("Refresh");
+        Button refreshButton = new Button("\u21bb Refresh");
         refreshButton.getStyleClass().add("toolbar-button");
-        refreshButton.setTooltip(new Tooltip("Rebuild architecture view"));
+        refreshButton.setTooltip(new Tooltip("Rebuild architecture view (re-layout all packages)"));
         refreshButton.setOnAction(e -> {
             if (currentRootNode != null) {
                 setArchitectureRoot(currentRootNode);
@@ -160,7 +160,7 @@ public class ArchitectureView extends BorderPane {
         });
 
         // --- Overlay group ---
-        showDependenciesCheckbox = new CheckBox("Dependencies");
+        showDependenciesCheckbox = new CheckBox("Show Dependencies");
         showDependenciesCheckbox.setTooltip(new Tooltip("Toggle dependency arrows"));
         showDependenciesCheckbox.setOnAction(e -> {
             if (showDependenciesCheckbox.isSelected()) {
@@ -174,7 +174,7 @@ public class ArchitectureView extends BorderPane {
             }
         });
 
-        showSccCheckbox = new CheckBox("SCC");
+        showSccCheckbox = new CheckBox("Show Cyclic Dependencies - SCCs");
         showSccCheckbox.setTooltip(new Tooltip("Toggle cycle highlighting (Strongly Connected Components)"));
         showSccCheckbox.setOnAction(e -> {
             if (showSccCheckbox.isSelected()) {
@@ -207,13 +207,18 @@ public class ArchitectureView extends BorderPane {
         zoomResetBtn.setTooltip(new Tooltip("Reset Zoom to 100%"));
         zoomResetBtn.setOnAction(e -> { if (zoomController != null) zoomController.resetZoom(); });
 
+        // Zoom controls grouped tightly
+        HBox zoomGroup = new HBox(2);
+        zoomGroup.setAlignment(Pos.CENTER_LEFT);
+        zoomGroup.getChildren().addAll(zoomOutBtn, zoomLabel, zoomInBtn);
+
         toolbar.getChildren().addAll(
             loadButton, new Separator(),
             depthLabel, depthSpinner, refreshButton,
             new Separator(),
             showDependenciesCheckbox, showSccCheckbox,
             new Separator(),
-            zoomOutBtn, zoomLabel, zoomInBtn, zoomResetBtn
+            zoomGroup, zoomResetBtn
         );
 
         return toolbar;

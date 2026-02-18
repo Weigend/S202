@@ -32,9 +32,9 @@ import java.util.function.Consumer;
  */
 public class DependencyRenderer {
 
-    private static final Color OUTGOING_DEPENDENCY_COLOR = Color.rgb(64, 64, 64); // Anthrazit
+    private static final Color OUTGOING_DEPENDENCY_COLOR = Color.rgb(90, 94, 98);  // Anthrazit
     private static final Color INCOMING_DEPENDENCY_COLOR = Color.rgb(0, 128, 0);  // Grün
-    private static final double DEPENDENCY_WIDTH = 1.0;
+    private static final double DEPENDENCY_WIDTH = 0.6;
 
     private final Pane dependencyPane;
     private final Map<String, Node> elementRegistry;

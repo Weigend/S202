@@ -105,18 +105,18 @@ public class AnalyzerApplication extends Application {
         HBox header = new HBox(12);
         header.setPadding(new Insets(8, 15, 8, 15));
         header.setAlignment(javafx.geometry.Pos.CENTER_LEFT);
-        header.setStyle("-fx-background-color: #2b3e50;");
+        header.setStyle("-fx-background-color: #2b3e50; -fx-border-color: #5a5e62; -fx-border-width: 0 0 0.5 0;");
 
         Label titleLabel = new Label("S202 Code Analyzer");
-        titleLabel.setStyle("-fx-font-size: 16; -fx-font-weight: bold; -fx-text-fill: white;");
+        titleLabel.setStyle("-fx-font-size: 24; -fx-font-weight: bold; -fx-text-fill: #e0e0e0;");
 
         Label separator = new Label("\u2014");
-        separator.setStyle("-fx-text-fill: #7a9bb5;");
+        separator.setStyle("-fx-text-fill: #888888;");
 
         Label descriptionLabel = new Label(
             "Analyze Java bytecode dependencies and visualize architecture structure with automatic cycle detection"
         );
-        descriptionLabel.setStyle("-fx-font-size: 11; -fx-text-fill: #c0d0dd;");
+        descriptionLabel.setStyle("-fx-font-size: 11; -fx-text-fill: #aaaaaa;");
 
         header.getChildren().addAll(titleLabel, separator, descriptionLabel);
         return header;
