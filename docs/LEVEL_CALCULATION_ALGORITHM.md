@@ -77,14 +77,14 @@ Für zyklische Abhängigkeiten verwendet S202 den **Tarjan-Algorithmus** zur Erk
 
 ### Zwei Strategien für SCC-Behandlung
 
-#### 1. BasicClassLevelCalculationStrategy (Standard)
+#### 1. HeuristicSCCBreakingStrategy (Default)
 
-**Alle Klassen in einem SCC erhalten das gleiche Level.**
+**Große SCCs werden intelligent aufgebrochen.**
 
-- ✅ Korrekt im Sinne der Graphentheorie
-- ❌ Problematisch bei stark vernetzten Projekten (z.B. Minecraft)
+- ✅ Erzeugt sinnvolle Hierarchie auch bei stark vernetzten Projekten (z.B. Minecraft)
+- ❌ Nicht streng korrekt im Sinne der Graphentheorie (Heuristik)
 
-#### 2. HeuristicSCCBreakingStrategy (für große Projekte)
+#### 2. BasicClassLevelCalculationStrategy (strenge SCC-Gruppierung)
 
 **Große SCCs werden intelligent aufgebrochen.**
 
