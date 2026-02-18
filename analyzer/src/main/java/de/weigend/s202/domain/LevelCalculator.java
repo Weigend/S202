@@ -62,18 +62,11 @@ public class LevelCalculator {
         // Step 5: Propagate levels to parent packages (parent inherits max child level)
         propagateLevelsToParentPackages(model, rawModel);
 
-        // Step 6: Adjust package levels based on cross-package dependencies
-        // If package A depends on package B (via class dependencies), A.level > B.level
-        adjustPackageLevelsForDependencies(model, rawModel);
+        // Note: Cross-package and mixed-package level adjustments (formerly steps 6-7) have been
+        // removed. The DistrictRowLevelCalculator (Phase 2) now handles all final level assignment
+        // locally per package, making those adjustments redundant.
 
-        // Step 7: Adjust class levels for dependencies to classes in subpackages
-        // If class C in package P depends on class D in subpackage P.sub,
-        // then C.level must be > (subpackage P.sub's level) to avoid upward arrows in visualization
-        // NOTE: We do NOT recalculate package levels after this step, because the class level
-        // adjustment is purely for visualization within a package - it should not cascade upward.
-        adjustClassLevelsForSubpackageDependencies(model);
-
-        // Step 8: Update dependent relationships
+        // Step 6: Update dependent relationships
         updateDependentRelationships(model);
 
         return model;
@@ -217,120 +210,4 @@ public class LevelCalculator {
         return className.substring(0, lastDot);
     }
 
-    /**
-     * Adjusts package levels based on cross-package dependencies.
-     * If package A has classes that depend on classes in package B (outside A's subtree),
-     * then A.level must be > B.level.
-     * 
-     * This ensures that if ui depends on domain, ui.level > domain.level.
-     */
-    private void adjustPackageLevelsForDependencies(DomainModel model, DependencyModel rawModel) {
-        // Step 1: Build package dependency graph (which packages depend on which)
-        Map<String, Set<String>> packageDependencies = new HashMap<>();
-        
-        for (DomainModel.CalculatedElementInfo classInfo : model.getAllClasses().values()) {
-            String sourcePackage = extractPackageName(classInfo.fullName);
-            if (sourcePackage == null) continue;
-            
-            packageDependencies.putIfAbsent(sourcePackage, new HashSet<>());
-            
-            for (String depClassName : classInfo.dependencies) {
-                String targetPackage = extractPackageName(depClassName);
-                if (targetPackage == null) continue;
-                
-                // Only consider dependencies to packages OUTSIDE the source's subtree
-                // i.e., not the same package and not a child/parent relationship
-                if (!sourcePackage.equals(targetPackage) && 
-                    !isInSameSubtree(sourcePackage, targetPackage)) {
-                    packageDependencies.get(sourcePackage).add(targetPackage);
-                }
-            }
-        }
-        
-        // Step 2: Iteratively adjust package levels until stable
-        // If package A depends on B, then A.level must be > B.level
-        boolean changed = true;
-        int maxIterations = 50;
-        int iterations = 0;
-        
-        while (changed && iterations < maxIterations) {
-            changed = false;
-            iterations++;
-            
-            for (Map.Entry<String, Set<String>> entry : packageDependencies.entrySet()) {
-                String sourcePackage = entry.getKey();
-                DomainModel.CalculatedElementInfo sourcePkgInfo = model.getPackage(sourcePackage);
-                if (sourcePkgInfo == null) continue;
-                
-                for (String targetPackage : entry.getValue()) {
-                    DomainModel.CalculatedElementInfo targetPkgInfo = model.getPackage(targetPackage);
-                    if (targetPkgInfo == null) continue;
-                    
-                    // If source depends on target, source.level must be > target.level
-                    if (sourcePkgInfo.level <= targetPkgInfo.level) {
-                        sourcePkgInfo.setLevel(targetPkgInfo.level + 1);
-                        changed = true;
-                    }
-                }
-            }
-            
-            // After adjusting leaf packages, propagate to parents
-            if (changed) {
-                propagateLevelsToParentPackages(model, rawModel);
-            }
-        }
-    }
-
-    /**
-     * Checks if two packages are in the same subtree (one is a parent/child of the other).
-     */
-    private boolean isInSameSubtree(String pkg1, String pkg2) {
-        return pkg1.startsWith(pkg2 + ".") || pkg2.startsWith(pkg1 + ".");
-    }
-
-    /**
-     * Adjusts class levels for classes that depend on classes in subpackages.
-     * 
-     * Problem: When a package contains both classes and subpackages, a class C in package P
-     * might depend on class D in subpackage P.sub. If P.sub has a higher package level than
-     * C's class level, the dependency arrow would point upward in the visualization.
-     * 
-     * Solution: For each class C in package P, if C depends on any class in a subpackage P.sub,
-     * then C's level must be at least (P.sub's package level + 1).
-     */
-    private void adjustClassLevelsForSubpackageDependencies(DomainModel model) {
-        boolean changed = true;
-        int maxIterations = 20;
-        int iterations = 0;
-        
-        while (changed && iterations < maxIterations) {
-            changed = false;
-            iterations++;
-            
-            for (DomainModel.CalculatedElementInfo classInfo : model.getAllClasses().values()) {
-                String classPackage = extractPackageName(classInfo.fullName);
-                if (classPackage == null) continue;
-                
-                for (String depClassName : classInfo.dependencies) {
-                    // Get the package of the dependency
-                    String depPackage = extractPackageName(depClassName);
-                    if (depPackage == null) continue;
-                    
-                    // Check if the dependency is in a SUBPACKAGE of the class's package
-                    // depPackage must start with classPackage + "." (e.g., "ui.model" starts with "ui.")
-                    if (depPackage.startsWith(classPackage + ".")) {
-                        // The dependency is in a subpackage
-                        DomainModel.CalculatedElementInfo subPackageInfo = model.getPackage(depPackage);
-                        if (subPackageInfo != null) {
-                            // Class level must be > subpackage level
-                            if (classInfo.level <= subPackageInfo.level) {
-                                classInfo.setLevel(subPackageInfo.level + 1);
-                                changed = true;
-                            }
-                        }
-                    }
-                }
-            }
-        }
-    }
 }

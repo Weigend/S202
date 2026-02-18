@@ -37,9 +37,9 @@ Die Level-Berechnung erfolgt in zwei Phasen:
 ├─────────────────────────────────────────────────────────────────┤
 │  Schritt 3: Klassen-Level berechnen (SCC-aware)                │
 ├─────────────────────────────────────────────────────────────────┤
-│  Schritt 4-7: Paket-Level + Anpassungen (Zwischenergebnis)     │
+│  Schritt 4-5: Paket-Level aus Klassen + Eltern-Propagation     │
 ├─────────────────────────────────────────────────────────────────┤
-│  Schritt 8: Rückwärts-Beziehungen (dependents) aktualisieren   │
+│  Schritt 6: Rückwärts-Beziehungen (dependents) aktualisieren   │
 └─────────────────────────────────────────────────────────────────┘
 ```
 
@@ -131,10 +131,13 @@ Klassen-Level = max(Level aller Abhängigkeiten) + 1
 
 ---
 
-## Schritte 4-7: Paket-Level (Zwischenergebnis)
+## Schritte 4-5: Paket-Level (Zwischenergebnis)
 
-Die Schritte 4-7 im `LevelCalculator` berechnen initiale Paket-Levels als Zwischenergebnis.
-**Diese Levels werden in Phase 2 (DistrictRowLevelCalculator) vollständig überschrieben.**
+- **Schritt 4**: Paket-Level = max(Klassen-Level im Paket)
+- **Schritt 5**: Eltern-Pakete erben max(Kind-Paket-Level)
+
+Diese Levels werden in Phase 2 (DistrictRowLevelCalculator) für das Layout überschrieben,
+dienen aber als Metadaten im DomainModel.
 
 ---
 
