@@ -122,9 +122,9 @@ LevelCalculationStrategyContext context =
 LevelCalculator calculator = new LevelCalculator(context);
 ```
 
-**Hinweis**: Die Paket-Level-Berechnung sowie die Anpassung von Klassen-Level für 
-gemischte Pakete (Pakete mit Klassen UND Unterpaketen) ist direkt im `LevelCalculator` 
-implementiert (8-Schritte-Algorithmus). Siehe [LEVEL_CALCULATION_ALGORITHM.md](LEVEL_CALCULATION_ALGORITHM.md) für Details.
+**Hinweis**: Die Strategies beeinflussen nur Phase 1 (LevelCalculator). Die finalen
+Layout-Levels werden in Phase 2 durch den `DistrictRowLevelCalculator` lokal pro Paket
+berechnet und überschreiben die Phase-1-Ergebnisse. Siehe [LEVEL_CALCULATION_ALGORITHM.md](LEVEL_CALCULATION_ALGORITHM.md) für Details.
 
 ## Aggregationsstrategien
 

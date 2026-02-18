@@ -2,6 +2,7 @@ package de.weigend.s202.ui;
 
 import de.weigend.s202.ui.model.ArchitectureNode;
 import de.weigend.s202.ui.model.ArchitectureNodeBuilder;
+import de.weigend.s202.ui.model.DistrictRowLevelCalculator;
 import de.weigend.s202.domain.DomainModel;
 import de.weigend.s202.domain.LevelCalculator;
 import de.weigend.s202.reader.DependencyModel;
@@ -152,6 +153,9 @@ public class AnalyzerApplication extends Application {
 
             // Step 3: Build architecture node tree
             ArchitectureNode rootNode = architectureNodeBuilder.build(calculatedModel);
+
+            // Step 3b: Assign district row-levels based on inter-package dependency direction
+            new DistrictRowLevelCalculator().assignDistrictRowLevels(rootNode);
 
             // Step 4: Display in the UI
             if (architectureView != null) {
