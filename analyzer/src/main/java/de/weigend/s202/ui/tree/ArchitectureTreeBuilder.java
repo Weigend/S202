@@ -73,8 +73,8 @@ public class ArchitectureTreeBuilder {
                 elementRegistry.put(child.getFullName(), packageBox);
                 topLevelContainer.getChildren().add(packageBox);
 
-                // Recursively process children
-                processArchitectureNode(child, packageContainers, packageBox, elementsAddedToParent, rootNode);
+                // Recursively process children - pass whether this node is transparent
+                processArchitectureNode(child, packageContainers, packageBox, elementsAddedToParent, rootNode, topLevelTransparent);
             } else if (child.getType() == NodeType.CLASS) {
                 // Top-level class (rare but possible)
                 LevelClassBox classBox = new LevelClassBox(child.getSimpleName(), child.getLevel(), child.getFullName());
@@ -103,14 +103,21 @@ public class ArchitectureTreeBuilder {
 
     /**
      * Recursively processes an ArchitectureNode and its children to build the UI hierarchy.
+     *
+     * @param currentNodeIsTransparent Whether the current node itself is transparent.
+     *        Children can only be transparent if the current node is also transparent
+     *        (transparency only cascades from root through single-child chains).
      */
     private void processArchitectureNode(ArchitectureNode node,
                                          Map<String, LevelPackageBox> packageContainers,
                                          LevelPackageBox rootLevel,
                                          Set<String> elementsAddedToParent,
-                                         ArchitectureNode archRoot) {
-        // Check if child packages should be transparent (node has only one sub-package)
-        boolean childrenTransparent = shouldChildrenBeTransparent(node);
+                                         ArchitectureNode archRoot,
+                                         boolean currentNodeIsTransparent) {
+        // Children are only transparent if the current node is itself transparent
+        // AND has exactly one sub-package. Once a non-transparent package is reached,
+        // all descendants get borders.
+        boolean childrenTransparent = currentNodeIsTransparent && shouldChildrenBeTransparent(node);
 
         for (ArchitectureNode child : node.getChildren()) {
             // Skip if already processed
@@ -141,8 +148,8 @@ public class ArchitectureTreeBuilder {
                     elementRegistry.put(child.getFullName(), packageBox);
                     parentContainer.addToLevel(child.getLevel(), packageBox);
                 }
-                // Recursively process children
-                processArchitectureNode(child, packageContainers, rootLevel, elementsAddedToParent, archRoot);
+                // Recursively process children - pass whether this child is transparent
+                processArchitectureNode(child, packageContainers, rootLevel, elementsAddedToParent, archRoot, childrenTransparent);
             } else if (child.getType() == NodeType.CLASS) {
                 // Create class element
                 LevelClassBox classBox = new LevelClassBox(child.getSimpleName(), child.getLevel(), child.getFullName());
@@ -173,6 +180,9 @@ public class ArchitectureTreeBuilder {
         String[] parts = packageName.split("\\.");
         String currentPkg = "";
 
+        // Track transparency cascade: only root starts as transparent
+        boolean parentIsTransparent = true;
+
         for (String part : parts) {
             String previousPkg = currentPkg;
             currentPkg = currentPkg.isEmpty() ? part : currentPkg + "." + part;
@@ -181,9 +191,9 @@ public class ArchitectureTreeBuilder {
                 // Look up package level and check if transparent from architecture tree
                 int packageLevel = findPackageLevelInTree(currentPkg, rootNode);
 
-                // Find the parent node to determine if this package should be transparent
+                // Transparency only cascades from root through single-child chains
                 ArchitectureNode parentNode = previousPkg.isEmpty() ? rootNode : findNodeInTree(previousPkg, rootNode);
-                boolean isTransparent = parentNode != null && shouldChildrenBeTransparent(parentNode);
+                boolean isTransparent = parentIsTransparent && parentNode != null && shouldChildrenBeTransparent(parentNode);
 
                 LevelPackageBox packageBox = new LevelPackageBox(part, packageLevel, isTransparent);
                 packageContainers.put(currentPkg, packageBox);
@@ -195,6 +205,8 @@ public class ArchitectureTreeBuilder {
                 } else {
                     rootLevel.addToLevel(packageLevel, packageBox);
                 }
+
+                parentIsTransparent = isTransparent;
             }
         }
     }
