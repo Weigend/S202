@@ -25,7 +25,8 @@ import java.util.PriorityQueue;
 public final class AStarEdgeRouter {
 
     private static final int BASE = 10;
-    private static final int TURN = 40;
+    /** Strong penalty — bends dominate length by design. */
+    private static final int TURN = 500;
     /** Penalty for stepping into a cell already occupied in the SAME axis — prevents overlap. */
     private static final int OVERLAP = 30;
     /** Bonus for stepping into a cell whose neighbour (orthogonal offset) carries

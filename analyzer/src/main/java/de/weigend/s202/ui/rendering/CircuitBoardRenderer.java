@@ -100,8 +100,9 @@ public final class CircuitBoardRenderer implements DependencyRendererStrategy {
             GridBuilder.BoxPorts dst = ports.get(req.target);
             if (src == null || dst == null) continue;
 
-            GridBuilder.Port sp = pickBestPort(src, dst);
-            GridBuilder.Port tp = pickBestPort(dst, src);
+            GridBuilder.Port[] vp = pickVerticalPorts(src, dst);
+            GridBuilder.Port sp = vp[0];
+            GridBuilder.Port tp = vp[1];
 
             // Allowed packages = union of source's and target's ancestor chains
             java.util.BitSet allowed = new java.util.BitSet();
@@ -138,18 +139,19 @@ public final class CircuitBoardRenderer implements DependencyRendererStrategy {
         return 0;
     }
 
-    private static GridBuilder.Port pickBestPort(GridBuilder.BoxPorts self, GridBuilder.BoxPorts other) {
-        // Use the midpoint of the other box's ports as target centre.
-        double ocx = (other.left.col + other.right.col) / 2.0;
-        double ocy = (other.top.row + other.bottom.row) / 2.0;
-        double scx = (self.left.col + self.right.col) / 2.0;
-        double scy = (self.top.row + self.bottom.row) / 2.0;
-        double dx = ocx - scx;
-        double dy = ocy - scy;
-        if (Math.abs(dx) > Math.abs(dy)) {
-            return dx >= 0 ? self.right : self.left;
+    /**
+     * Always pick vertical (TOP/BOTTOM) ports for both ends so traces run
+     * centred top-to-bottom through the class stack. If source sits above
+     * target, source exits BOTTOM and target enters TOP, and vice versa.
+     */
+    private static GridBuilder.Port[] pickVerticalPorts(GridBuilder.BoxPorts source,
+                                                          GridBuilder.BoxPorts target) {
+        double sY = (source.top.row + source.bottom.row) / 2.0;
+        double tY = (target.top.row + target.bottom.row) / 2.0;
+        if (sY <= tY) {
+            return new GridBuilder.Port[]{source.bottom, target.top};
         } else {
-            return dy >= 0 ? self.bottom : self.top;
+            return new GridBuilder.Port[]{source.top, target.bottom};
         }
     }
 
