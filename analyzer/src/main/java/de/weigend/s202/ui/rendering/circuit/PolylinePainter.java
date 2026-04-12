@@ -81,9 +81,17 @@ public final class PolylinePainter {
         path.setFill(null);
         path.setCursor(Cursor.HAND);
 
-        double startX = grid.toWorldX(corners.get(0)[0]);
-        double startY = grid.toWorldY(corners.get(0)[1]);
-        path.getElements().add(new MoveTo(startX, startY));
+        // Start at the actual source box edge, then stub to the first grid corner
+        path.getElements().add(new MoveTo(edge.sourceStubX, edge.sourceStubY));
+        double firstX = grid.toWorldX(corners.get(0)[0]);
+        double firstY = grid.toWorldY(corners.get(0)[1]);
+        // Force axis alignment: emit an L that goes the stub's dominant axis first
+        if (Math.abs(edge.sourceStubX - firstX) > Math.abs(edge.sourceStubY - firstY)) {
+            path.getElements().add(new LineTo(firstX, edge.sourceStubY));
+        } else {
+            path.getElements().add(new LineTo(edge.sourceStubX, firstY));
+        }
+        path.getElements().add(new LineTo(firstX, firstY));
 
         for (int i = 1; i < corners.size(); i++) {
             int[] prev = corners.get(i - 1);
@@ -96,6 +104,16 @@ public final class PolylinePainter {
                 path.getElements().add(new LineTo(grid.toWorldX(cur[0]), grid.toWorldY(cur[1])));
             }
         }
+
+        // Target stub: L from the last cell center to the actual box edge
+        double lastX = grid.toWorldX(corners.get(corners.size() - 1)[0]);
+        double lastY = grid.toWorldY(corners.get(corners.size() - 1)[1]);
+        if (Math.abs(edge.targetStubX - lastX) > Math.abs(edge.targetStubY - lastY)) {
+            path.getElements().add(new LineTo(edge.targetStubX, lastY));
+        } else {
+            path.getElements().add(new LineTo(lastX, edge.targetStubY));
+        }
+        path.getElements().add(new LineTo(edge.targetStubX, edge.targetStubY));
 
         final Color originalColor = edge.incoming ? INCOMING_COLOR : OUTGOING_COLOR;
         path.setOnMouseEntered(e -> {
@@ -149,13 +167,14 @@ public final class PolylinePainter {
     }
 
     private void addArrowHead(RoutedEdge edge) {
-        if (edge.path == null || edge.path.size() < 2) return;
+        if (edge.path == null || edge.path.isEmpty()) return;
         int[] last = edge.path.get(edge.path.size() - 1);
-        int[] prev = edge.path.get(edge.path.size() - 2);
-        double ex = grid.toWorldX(last[0]);
-        double ey = grid.toWorldY(last[1]);
-        double px = grid.toWorldX(prev[0]);
-        double py = grid.toWorldY(prev[1]);
+        // Arrow tip sits at the actual box edge (stub endpoint)
+        double ex = edge.targetStubX;
+        double ey = edge.targetStubY;
+        // Direction: from last port cell centre toward the stub point
+        double px = grid.toWorldX(last[0]);
+        double py = grid.toWorldY(last[1]);
         double angle = Math.atan2(ey - py, ex - px);
 
         double x1 = ex - ARROW_SIZE * Math.cos(angle - Math.PI / 6);

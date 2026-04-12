@@ -110,7 +110,9 @@ public final class CircuitBoardRenderer implements DependencyRendererStrategy {
                 int[] b = path.get(path.size() - 1);
                 endDir = new int[]{b[0] - a[0], b[1] - a[1]};
             }
-            routed.add(new RoutedEdge(req.sourceName, req.targetName, req.incoming, path, endDir));
+            routed.add(new RoutedEdge(
+                req.sourceName, req.targetName, req.incoming, path, endDir,
+                sp.stubX, sp.stubY, tp.stubX, tp.stubY));
 
             // Remember the actual cells used so downstream port selections see the load.
             req.pathCells = path;

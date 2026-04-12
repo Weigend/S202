@@ -26,7 +26,12 @@ public final class AStarEdgeRouter {
 
     private static final int BASE = 10;
     private static final int TURN = 40;
-    private static final int BUNDLE = -6;
+    /** Penalty for stepping into a cell already occupied in the SAME axis — prevents overlap. */
+    private static final int OVERLAP = 30;
+    /** Bonus for stepping into a cell whose neighbour (orthogonal offset) carries
+     *  an edge in the same axis — encourages adjacent parallel tracks. */
+    private static final int PARALLEL = -6;
+    /** Penalty for stepping into a cell already occupied in the orthogonal axis — crossing. */
     private static final int CROSS = 25;
 
     private static final int[][] DIRS = {
@@ -107,11 +112,16 @@ public final class AStarEdgeRouter {
                 int hu = grid.horizontalUse(nc, nr);
                 int vu = grid.verticalUse(nc, nr);
                 if (horizontal) {
-                    if (hu > 0) step += BUNDLE;
-                    if (vu > 0) step += CROSS;
+                    if (hu > 0) step += OVERLAP;            // another horizontal edge already here
+                    if (vu > 0) step += CROSS;              // a vertical edge crosses this cell
+                    // Parallel bonus: neighbouring rows carry a horizontal edge
+                    if (grid.horizontalUse(nc, nr - 1) > 0) step += PARALLEL;
+                    if (grid.horizontalUse(nc, nr + 1) > 0) step += PARALLEL;
                 } else {
-                    if (vu > 0) step += BUNDLE;
+                    if (vu > 0) step += OVERLAP;
                     if (hu > 0) step += CROSS;
+                    if (grid.verticalUse(nc - 1, nr) > 0) step += PARALLEL;
+                    if (grid.verticalUse(nc + 1, nr) > 0) step += PARALLEL;
                 }
                 if (step < 1) step = 1;
 

@@ -31,11 +31,16 @@ public final class GridBuilder {
         public final int col;
         public final int row;
         public final Side side;
+        /** World coordinate of the actual box-edge point where the stub should attach. */
+        public final double stubX;
+        public final double stubY;
 
-        public Port(int col, int row, Side side) {
+        public Port(int col, int row, Side side, double stubX, double stubY) {
             this.col = col;
             this.row = row;
             this.side = side;
+            this.stubX = stubX;
+            this.stubY = stubY;
         }
     }
 
@@ -65,8 +70,9 @@ public final class GridBuilder {
         }
     }
 
-    /** Padding (in grid cells) around each blocked box to keep lines off the border. */
-    private static final int BLOCK_PADDING = 1;
+    /** Padding (in grid cells) around each blocked box to keep lines off the border.
+     *  0 → routes may hug the class edge, ports sit in the very next free cell. */
+    private static final int BLOCK_PADDING = 0;
 
     public static Result build(Pane overlayPane, Node contentRoot) {
         List<Node> classBoxes = new ArrayList<>();
@@ -142,18 +148,18 @@ public final class GridBuilder {
     private static BoxPorts assignPorts(RoutingGrid grid, Bounds b) {
         double cx = (b.getMinX() + b.getMaxX()) / 2.0;
         double cy = (b.getMinY() + b.getMaxY()) / 2.0;
-        double pad = BLOCK_PADDING * RoutingGrid.PITCH;
 
+        // First free cell outside the blocked box on each side
         int topCol = grid.toColClamped(cx);
-        int topRow = grid.toRowClamped(b.getMinY() - pad - RoutingGrid.PITCH);
+        int topRow = Math.max(0, grid.toRowClamped(b.getMinY()) - 1);
 
         int bottomCol = grid.toColClamped(cx);
-        int bottomRow = grid.toRowClamped(b.getMaxY() + pad + RoutingGrid.PITCH);
+        int bottomRow = Math.min(grid.rows() - 1, grid.toRowClamped(b.getMaxY()) + 1);
 
-        int leftCol = grid.toColClamped(b.getMinX() - pad - RoutingGrid.PITCH);
+        int leftCol = Math.max(0, grid.toColClamped(b.getMinX()) - 1);
         int leftRow = grid.toRowClamped(cy);
 
-        int rightCol = grid.toColClamped(b.getMaxX() + pad + RoutingGrid.PITCH);
+        int rightCol = Math.min(grid.cols() - 1, grid.toColClamped(b.getMaxX()) + 1);
         int rightRow = grid.toRowClamped(cy);
 
         grid.setPort(topCol, topRow);
@@ -161,11 +167,12 @@ public final class GridBuilder {
         grid.setPort(leftCol, leftRow);
         grid.setPort(rightCol, rightRow);
 
+        // Stub attach points = actual box edge midpoints
         return new BoxPorts(
-            new Port(topCol, topRow, Port.Side.TOP),
-            new Port(rightCol, rightRow, Port.Side.RIGHT),
-            new Port(bottomCol, bottomRow, Port.Side.BOTTOM),
-            new Port(leftCol, leftRow, Port.Side.LEFT)
+            new Port(topCol,    topRow,    Port.Side.TOP,    cx,            b.getMinY()),
+            new Port(rightCol,  rightRow,  Port.Side.RIGHT,  b.getMaxX(),   cy),
+            new Port(bottomCol, bottomRow, Port.Side.BOTTOM, cx,            b.getMaxY()),
+            new Port(leftCol,   leftRow,   Port.Side.LEFT,   b.getMinX(),   cy)
         );
     }
 
