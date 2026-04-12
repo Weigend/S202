@@ -54,6 +54,17 @@ public final class AStarEdgeRouter {
      * edges can bundle along the same corridor.
      */
     public List<int[]> route(GridBuilder.Port source, GridBuilder.Port target) {
+        return route(source, target, null);
+    }
+
+    /**
+     * Routes with a per-edge allowed-package filter. Cells whose innermost
+     * package id is not present in {@code allowedPackageIds} are rejected
+     * (foreign sub-packages block the route). The special id {@code -1}
+     * (outside any package) is always allowed.
+     */
+    public List<int[]> route(GridBuilder.Port source, GridBuilder.Port target,
+                              java.util.BitSet allowedPackageIds) {
         int sCol = source.col, sRow = source.row;
         int tCol = target.col, tRow = target.row;
         if (!grid.inBounds(sCol, sRow) || !grid.inBounds(tCol, tRow)) return null;
@@ -104,6 +115,11 @@ public final class AStarEdgeRouter {
                 if (s == RoutingGrid.CellStatus.BLOCKED) continue;
                 // Disallow passing through foreign PORT cells (only target port allowed)
                 if (s == RoutingGrid.CellStatus.PORT && !(nc == tCol && nr == tRow)) continue;
+                // Disallow foreign sub-packages
+                if (allowedPackageIds != null) {
+                    int pid = grid.packageId(nc, nr);
+                    if (pid >= 0 && !allowedPackageIds.get(pid)) continue;
+                }
 
                 int step = BASE;
                 if (curDir != NO_DIR && curDir != d) step += TURN;

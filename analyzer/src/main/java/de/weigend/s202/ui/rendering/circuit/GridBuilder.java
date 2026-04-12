@@ -8,7 +8,10 @@ import javafx.scene.Parent;
 import javafx.scene.layout.Pane;
 
 import java.util.ArrayList;
+import java.util.ArrayDeque;
+import java.util.Deque;
 import java.util.HashMap;
+import java.util.IdentityHashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -59,14 +62,17 @@ public final class GridBuilder {
         }
     }
 
-    /** Result of a grid build: the grid plus per-class port info. */
+    /** Result of a grid build: the grid plus per-class port info and package ancestry. */
     public static final class Result {
         public final RoutingGrid grid;
         public final Map<Node, BoxPorts> ports;
+        /** For each class box node, the list of enclosing package ids from outermost to innermost. */
+        public final Map<Node, int[]> classAncestors;
 
-        public Result(RoutingGrid grid, Map<Node, BoxPorts> ports) {
+        public Result(RoutingGrid grid, Map<Node, BoxPorts> ports, Map<Node, int[]> classAncestors) {
             this.grid = grid;
             this.ports = ports;
+            this.classAncestors = classAncestors;
         }
     }
 
@@ -77,7 +83,9 @@ public final class GridBuilder {
     public static Result build(Pane overlayPane, Node contentRoot) {
         List<Node> classBoxes = new ArrayList<>();
         List<Node> collapsedPackages = new ArrayList<>();
-        collect(contentRoot, classBoxes, collapsedPackages);
+        List<LevelPackageBox> expandedPackages = new ArrayList<>();
+        Map<Node, List<LevelPackageBox>> classChains = new IdentityHashMap<>();
+        collect(contentRoot, classBoxes, collapsedPackages, expandedPackages, classChains, new ArrayDeque<>());
 
         // Compute overall extent in overlay coordinates
         double minX = Double.POSITIVE_INFINITY, minY = Double.POSITIVE_INFINITY;
@@ -101,7 +109,7 @@ public final class GridBuilder {
 
         if (!Double.isFinite(minX)) {
             // Nothing visible
-            return new Result(new RoutingGrid(0, 0, 1, 1), new HashMap<>());
+            return new Result(new RoutingGrid(0, 0, 1, 1), new HashMap<>(), new IdentityHashMap<>());
         }
 
         // Margin so routes can leave the outermost boxes
@@ -114,6 +122,27 @@ public final class GridBuilder {
         int cols = (int) Math.ceil((maxX - minX) / RoutingGrid.PITCH) + 1;
         int rows = (int) Math.ceil((maxY - minY) / RoutingGrid.PITCH) + 1;
         RoutingGrid grid = new RoutingGrid(minX, minY, cols, rows);
+
+        // Assign integer ids to expanded packages, sorted by bounding-box area
+        // descending so nested packages overwrite outer ones.
+        Map<LevelPackageBox, Integer> pkgIds = new IdentityHashMap<>();
+        Map<LevelPackageBox, Bounds> pkgBounds = new IdentityHashMap<>();
+        for (LevelPackageBox pkg : expandedPackages) {
+            Bounds b = overlayLocalBounds(pkg, overlayPane);
+            if (b != null) pkgBounds.put(pkg, b);
+        }
+        List<LevelPackageBox> sortedPkgs = new ArrayList<>(pkgBounds.keySet());
+        sortedPkgs.sort((a, b) -> {
+            double aa = pkgBounds.get(a).getWidth() * pkgBounds.get(a).getHeight();
+            double bb = pkgBounds.get(b).getWidth() * pkgBounds.get(b).getHeight();
+            return Double.compare(bb, aa);
+        });
+        for (int i = 0; i < sortedPkgs.size(); i++) {
+            LevelPackageBox pkg = sortedPkgs.get(i);
+            pkgIds.put(pkg, i);
+            Bounds b = pkgBounds.get(pkg);
+            grid.setPackageRect(b.getMinX(), b.getMinY(), b.getMaxX(), b.getMaxY(), i);
+        }
 
         // Block collapsed packages and class boxes
         for (Node n : collapsedPackages) {
@@ -136,7 +165,26 @@ public final class GridBuilder {
             ports.put(n, bp);
         }
 
-        return new Result(grid, ports);
+        // Build per-class ancestor id chain
+        Map<Node, int[]> classAncestors = new IdentityHashMap<>();
+        for (Node n : classBoxes) {
+            List<LevelPackageBox> chain = classChains.get(n);
+            if (chain == null) { classAncestors.put(n, new int[0]); continue; }
+            int[] ids = new int[chain.size()];
+            int w = 0;
+            for (LevelPackageBox p : chain) {
+                Integer id = pkgIds.get(p);
+                if (id != null) ids[w++] = id;
+            }
+            if (w < ids.length) {
+                int[] shrunk = new int[w];
+                System.arraycopy(ids, 0, shrunk, 0, w);
+                ids = shrunk;
+            }
+            classAncestors.put(n, ids);
+        }
+
+        return new Result(grid, ports, classAncestors);
     }
 
     private static void blockWithPadding(RoutingGrid grid, Bounds b) {
@@ -176,31 +224,41 @@ public final class GridBuilder {
         );
     }
 
-    private static void collect(Node node, List<Node> classBoxes, List<Node> collapsedPackages) {
+    private static void collect(Node node,
+                                 List<Node> classBoxes,
+                                 List<Node> collapsedPackages,
+                                 List<LevelPackageBox> expandedPackages,
+                                 Map<Node, List<LevelPackageBox>> classChains,
+                                 Deque<LevelPackageBox> stack) {
         if (node == null || !node.isVisible()) return;
         if (node instanceof LevelClassBox) {
             classBoxes.add(node);
+            // Chain from outermost to innermost
+            List<LevelPackageBox> chain = new ArrayList<>(stack);
+            java.util.Collections.reverse(chain);
+            classChains.put(node, chain);
             return;
         }
         if (node instanceof LevelPackageBox pkg) {
-            // Walk children regardless; if the package is collapsed, no class-level
-            // children will be visible and we block the package node as a whole.
-            boolean hasVisibleClassDescendant = false;
+            int beforeClasses = classBoxes.size();
+            stack.push(pkg);
             if (node instanceof Parent p) {
-                int before = classBoxes.size();
                 for (Node child : p.getChildrenUnmodifiable()) {
-                    collect(child, classBoxes, collapsedPackages);
+                    collect(child, classBoxes, collapsedPackages, expandedPackages, classChains, stack);
                 }
-                hasVisibleClassDescendant = classBoxes.size() > before;
             }
-            if (!hasVisibleClassDescendant) {
+            stack.pop();
+            boolean hasVisibleClasses = classBoxes.size() > beforeClasses;
+            if (hasVisibleClasses) {
+                expandedPackages.add(pkg);
+            } else {
                 collapsedPackages.add(pkg);
             }
             return;
         }
         if (node instanceof Parent p) {
             for (Node child : p.getChildrenUnmodifiable()) {
-                collect(child, classBoxes, collapsedPackages);
+                collect(child, classBoxes, collapsedPackages, expandedPackages, classChains, stack);
             }
         }
     }

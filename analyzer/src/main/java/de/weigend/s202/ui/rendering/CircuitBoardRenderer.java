@@ -93,6 +93,7 @@ public final class CircuitBoardRenderer implements DependencyRendererStrategy {
         requests.sort((a, b) -> Integer.compare(manhattan(a), manhattan(b)));
 
         AStarEdgeRouter router = new AStarEdgeRouter(grid);
+        Map<Node, int[]> classAncestors = gb.classAncestors;
         List<RoutedEdge> routed = new ArrayList<>();
         for (EdgeRequest req : requests) {
             GridBuilder.BoxPorts src = ports.get(req.source);
@@ -102,7 +103,14 @@ public final class CircuitBoardRenderer implements DependencyRendererStrategy {
             GridBuilder.Port sp = pickBestPort(src, dst);
             GridBuilder.Port tp = pickBestPort(dst, src);
 
-            List<int[]> path = router.route(sp, tp);
+            // Allowed packages = union of source's and target's ancestor chains
+            java.util.BitSet allowed = new java.util.BitSet();
+            int[] aSrc = classAncestors.get(req.source);
+            int[] aTgt = classAncestors.get(req.target);
+            if (aSrc != null) for (int id : aSrc) allowed.set(id);
+            if (aTgt != null) for (int id : aTgt) allowed.set(id);
+
+            List<int[]> path = router.route(sp, tp, allowed);
             if (path == null) continue;
             int[] endDir = null;
             if (path.size() >= 2) {

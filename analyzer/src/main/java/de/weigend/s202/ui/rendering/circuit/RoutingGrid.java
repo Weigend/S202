@@ -28,6 +28,8 @@ public final class RoutingGrid {
     private final CellStatus[][] status;
     private final int[][] horizontalUse;
     private final int[][] verticalUse;
+    /** Innermost package id per cell, or -1 if outside any package. */
+    private final int[][] packageId;
 
     public RoutingGrid(double originX, double originY, int cols, int rows) {
         this.originX = originX;
@@ -37,9 +39,27 @@ public final class RoutingGrid {
         this.status = new CellStatus[this.cols][this.rows];
         this.horizontalUse = new int[this.cols][this.rows];
         this.verticalUse = new int[this.cols][this.rows];
+        this.packageId = new int[this.cols][this.rows];
         for (int x = 0; x < this.cols; x++) {
             for (int y = 0; y < this.rows; y++) {
                 this.status[x][y] = CellStatus.FREE;
+                this.packageId[x][y] = -1;
+            }
+        }
+    }
+
+    public int packageId(int col, int row) {
+        return inBounds(col, row) ? packageId[col][row] : -1;
+    }
+
+    public void setPackageRect(double x0, double y0, double x1, double y1, int id) {
+        int c0 = toColClamped(Math.min(x0, x1));
+        int c1 = toColClamped(Math.max(x0, x1));
+        int r0 = toRowClamped(Math.min(y0, y1));
+        int r1 = toRowClamped(Math.max(y0, y1));
+        for (int c = c0; c <= c1; c++) {
+            for (int r = r0; r <= r1; r++) {
+                packageId[c][r] = id;
             }
         }
     }
