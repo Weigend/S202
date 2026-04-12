@@ -112,7 +112,17 @@ public final class CircuitBoardRenderer implements DependencyRendererStrategy {
             if (aTgt != null) for (int id : aTgt) allowed.set(id);
 
             List<int[]> path = router.route(sp, tp, allowed);
-            if (path == null) continue;
+            if (path == null) {
+                // Fallback: emit a simple L between the two ports so no
+                // dependency is silently dropped. This may overlap obstacles
+                // but is strictly better than hiding the edge.
+                path = new ArrayList<>();
+                path.add(new int[]{sp.col, sp.row});
+                if (sp.col != tp.col && sp.row != tp.row) {
+                    path.add(new int[]{tp.col, sp.row});
+                }
+                path.add(new int[]{tp.col, tp.row});
+            }
             int[] endDir = null;
             if (path.size() >= 2) {
                 int[] a = path.get(path.size() - 2);
