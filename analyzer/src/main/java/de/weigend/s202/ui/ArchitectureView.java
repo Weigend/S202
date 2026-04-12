@@ -2,7 +2,9 @@ package de.weigend.s202.ui;
 
 import de.weigend.s202.ui.model.ArchitectureNode;
 import de.weigend.s202.ui.model.ArchitectureNode.NodeType;
+import de.weigend.s202.ui.rendering.CircuitBoardRenderer;
 import de.weigend.s202.ui.rendering.DependencyRenderer;
+import de.weigend.s202.ui.rendering.DependencyRendererStrategy;
 import de.weigend.s202.ui.rendering.SCCRenderer;
 import de.weigend.s202.ui.tree.ArchitectureTreeBuilder;
 import de.weigend.s202.ui.zoom.ZoomController;
@@ -41,7 +43,10 @@ public class ArchitectureView extends BorderPane {
     private Map<String, javafx.scene.Node> elementRegistry = new HashMap<>();
 
     // Renderers and builders
-    private DependencyRenderer dependencyRenderer;
+    private DependencyRendererStrategy dependencyRenderer;
+    private DependencyRenderer classicRenderer;
+    private CircuitBoardRenderer circuitRenderer;
+    private ToggleButton circuitToggle;
     private SCCRenderer sccRenderer;
     private ArchitectureTreeBuilder treeBuilder;
     private ZoomController zoomController;
@@ -174,6 +179,17 @@ public class ArchitectureView extends BorderPane {
             }
         });
 
+        circuitToggle = new ToggleButton("Leiterbahn");
+        circuitToggle.setTooltip(new Tooltip("Dependency style: classic straight lines vs. circuit-board routing"));
+        circuitToggle.setSelected(false);
+        circuitToggle.setOnAction(e -> {
+            dependencyRenderer = circuitToggle.isSelected() ? circuitRenderer : classicRenderer;
+            if (showDependenciesCheckbox != null && showDependenciesCheckbox.isSelected() && currentRootNode != null) {
+                dependencyRenderer.drawDependencyArrows(currentRootNode);
+                dependencyPane.setVisible(true);
+            }
+        });
+
         showSccCheckbox = new CheckBox("Show Cyclic Dependencies - SCCs");
         showSccCheckbox.setTooltip(new Tooltip("Toggle cycle highlighting (Strongly Connected Components)"));
         showSccCheckbox.setOnAction(e -> {
@@ -216,7 +232,7 @@ public class ArchitectureView extends BorderPane {
             loadButton, new Separator(),
             depthLabel, depthSpinner, refreshButton,
             new Separator(),
-            showDependenciesCheckbox, showSccCheckbox,
+            showDependenciesCheckbox, circuitToggle, showSccCheckbox,
             new Separator(),
             zoomGroup, zoomResetBtn
         );
@@ -353,9 +369,12 @@ public class ArchitectureView extends BorderPane {
         zoomController = new ZoomController(zoomLabel, zoomableContent, this::handleZoomChanged);
         zoomController.resetZoom();
 
-        // Initialize DependencyRenderer with coordinate context
-        dependencyRenderer = new DependencyRenderer(dependencyPane, elementRegistry, zoomController, this::setStatus);
-        dependencyRenderer.setCoordinateContext(zoomableContent, overlayPane, scrollPane);
+        // Initialize both dependency renderer strategies with coordinate context
+        classicRenderer = new DependencyRenderer(dependencyPane, elementRegistry, zoomController, this::setStatus);
+        classicRenderer.setCoordinateContext(zoomableContent, overlayPane, scrollPane);
+        circuitRenderer = new CircuitBoardRenderer(dependencyPane, elementRegistry, this::setStatus);
+        circuitRenderer.setCoordinateContext(zoomableContent, overlayPane, scrollPane);
+        dependencyRenderer = (circuitToggle != null && circuitToggle.isSelected()) ? circuitRenderer : classicRenderer;
 
         // Initialize SCCRenderer with coordinate context
         sccRenderer = new SCCRenderer(sccPane, elementRegistry, this::setStatus);

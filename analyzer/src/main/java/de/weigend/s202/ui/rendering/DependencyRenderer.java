@@ -30,7 +30,7 @@ import java.util.function.Consumer;
  *   <li>Zoom-aware scaling</li>
  * </ul>
  */
-public class DependencyRenderer {
+public class DependencyRenderer implements DependencyRendererStrategy {
 
     private static final Color OUTGOING_DEPENDENCY_COLOR = Color.rgb(90, 94, 98);  // Anthrazit
     private static final Color INCOMING_DEPENDENCY_COLOR = Color.rgb(0, 128, 0);  // Grün
