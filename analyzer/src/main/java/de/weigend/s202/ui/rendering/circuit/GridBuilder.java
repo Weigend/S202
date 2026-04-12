@@ -215,12 +215,28 @@ public final class GridBuilder {
         grid.setPort(leftCol, leftRow);
         grid.setPort(rightCol, rightRow);
 
-        // Stub attach points = actual box edge midpoints
+        // Stub attach points: snap the tangential coordinate to the port cell
+        // centre so the stub segment is purely perpendicular (no tiny kink
+        // between stub and port cell). The normal coordinate sits on the
+        // actual box edge so the arrowhead still lands on the class.
+        double topStubX    = grid.toWorldX(topCol);
+        double bottomStubX = grid.toWorldX(bottomCol);
+        double leftStubY   = grid.toWorldY(leftRow);
+        double rightStubY  = grid.toWorldY(rightRow);
+
+        // Clamp stub X/Y to the actual box extent so the arrow tip never
+        // drifts outside the class rectangle when the cell centre falls
+        // beyond the edge (very small classes).
+        topStubX    = Math.max(b.getMinX(), Math.min(b.getMaxX(), topStubX));
+        bottomStubX = Math.max(b.getMinX(), Math.min(b.getMaxX(), bottomStubX));
+        leftStubY   = Math.max(b.getMinY(), Math.min(b.getMaxY(), leftStubY));
+        rightStubY  = Math.max(b.getMinY(), Math.min(b.getMaxY(), rightStubY));
+
         return new BoxPorts(
-            new Port(topCol,    topRow,    Port.Side.TOP,    cx,            b.getMinY()),
-            new Port(rightCol,  rightRow,  Port.Side.RIGHT,  b.getMaxX(),   cy),
-            new Port(bottomCol, bottomRow, Port.Side.BOTTOM, cx,            b.getMaxY()),
-            new Port(leftCol,   leftRow,   Port.Side.LEFT,   b.getMinX(),   cy)
+            new Port(topCol,    topRow,    Port.Side.TOP,    topStubX,      b.getMinY()),
+            new Port(rightCol,  rightRow,  Port.Side.RIGHT,  b.getMaxX(),   rightStubY),
+            new Port(bottomCol, bottomRow, Port.Side.BOTTOM, bottomStubX,   b.getMaxY()),
+            new Port(leftCol,   leftRow,   Port.Side.LEFT,   b.getMinX(),   leftStubY)
         );
     }
 
