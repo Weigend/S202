@@ -1,7 +1,8 @@
 package de.weigend.s202.ui.zoom;
 
 import javafx.application.Platform;
-import javafx.scene.control.Label;
+import javafx.beans.property.ReadOnlyDoubleProperty;
+import javafx.beans.property.ReadOnlyDoubleWrapper;
 import javafx.scene.layout.Pane;
 
 import java.util.Objects;
@@ -20,41 +21,44 @@ import java.util.Objects;
  */
 public class ZoomController {
 
-    private double zoomFactor = 1.0;
-
     private static final double ZOOM_MIN = 0.02;  // 2% - für sehr große Architekturen wie Minecraft
     private static final double ZOOM_MAX = 3.0;   // 300%
     private static final double ZOOM_STEP = 0.1;  // 10% default step
 
-    private final Label zoomLabel;
+    private final ReadOnlyDoubleWrapper zoomFactorProperty = new ReadOnlyDoubleWrapper(1.0);
     private final Pane zoomableContent;
     private final Runnable onZoomChanged;
 
     /**
      * Creates a new ZoomController.
      *
-     * @param zoomLabel Label to display current zoom percentage
      * @param zoomableContent Pane to apply zoom transformations to
      * @param onZoomChanged Callback invoked after zoom changes (for line invalidation)
      */
-    public ZoomController(Label zoomLabel, Pane zoomableContent, Runnable onZoomChanged) {
-        this.zoomLabel = Objects.requireNonNull(zoomLabel, "zoomLabel cannot be null");
+    public ZoomController(Pane zoomableContent, Runnable onZoomChanged) {
         this.zoomableContent = Objects.requireNonNull(zoomableContent, "zoomableContent cannot be null");
         this.onZoomChanged = onZoomChanged; // May be null
+    }
+
+    /**
+     * Observable zoom factor (1.0 = 100%). Bind UI labels/displays to this.
+     */
+    public ReadOnlyDoubleProperty zoomFactorProperty() {
+        return zoomFactorProperty.getReadOnlyProperty();
     }
 
     /**
      * Zooms in by dynamic step (smaller steps at lower zoom levels).
      */
     public void zoomIn() {
-        setZoom(zoomFactor + getDynamicZoomStep());
+        setZoom(zoomFactorProperty.get() + getDynamicZoomStep());
     }
 
     /**
      * Zooms out by dynamic step (smaller steps at lower zoom levels).
      */
     public void zoomOut() {
-        setZoom(zoomFactor - getDynamicZoomStep());
+        setZoom(zoomFactorProperty.get() - getDynamicZoomStep());
     }
 
     /**
@@ -72,7 +76,8 @@ public class ZoomController {
      */
     public void setZoom(double newZoom) {
         // Clamp to valid range
-        zoomFactor = Math.max(ZOOM_MIN, Math.min(ZOOM_MAX, newZoom));
+        double zoomFactor = Math.max(ZOOM_MIN, Math.min(ZOOM_MAX, newZoom));
+        zoomFactorProperty.set(zoomFactor);
 
         // Apply scale via CSS transform on the content
         zoomableContent.setScaleX(zoomFactor);
@@ -83,9 +88,6 @@ public class ZoomController {
         double height = zoomableContent.getBoundsInLocal().getHeight();
         zoomableContent.setTranslateX((zoomFactor - 1) * width / 2);
         zoomableContent.setTranslateY((zoomFactor - 1) * height / 2);
-
-        // Update label
-        zoomLabel.setText(String.format("%d%%", Math.round(zoomFactor * 100)));
 
         // Notify callback (for line invalidation/redrawing)
         if (onZoomChanged != null) {
@@ -99,7 +101,7 @@ public class ZoomController {
      * @return Zoom factor (1.0 = 100%)
      */
     public double getZoomFactor() {
-        return zoomFactor;
+        return zoomFactorProperty.get();
     }
 
     /**
@@ -109,9 +111,10 @@ public class ZoomController {
      * @return Step size for zoom in/out operations
      */
     private double getDynamicZoomStep() {
-        if (zoomFactor <= 0.1) {
+        double f = zoomFactorProperty.get();
+        if (f <= 0.1) {
             return 0.02;  // 2% steps when very zoomed out
-        } else if (zoomFactor <= 0.3) {
+        } else if (f <= 0.3) {
             return 0.05;  // 5% steps
         } else {
             return ZOOM_STEP;  // 10% steps at normal zoom

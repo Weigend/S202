@@ -23,6 +23,18 @@
     -fx-padding: 0 4;
 }
 
+/* Ikonli icons in toolbar buttons (light yellow on dark blue toolbar) */
+.toolbar-button .ikonli-font-icon,
+.toolbar-zoom-button .ikonli-font-icon {
+    -fx-icon-color: #ffd54f;
+    -fx-icon-size: 16;
+}
+
+.toolbar-button:hover .ikonli-font-icon,
+.toolbar-zoom-button:hover .ikonli-font-icon {
+    -fx-icon-color: #fff176;
+}
+
 /* Toolbar Buttons - dark blue flat style */
 .toolbar-button {
     -fx-font-size: 12px;

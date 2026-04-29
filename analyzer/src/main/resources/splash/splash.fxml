@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<?import javafx.scene.control.Label?>
+<?import javafx.scene.control.ProgressBar?>
+<?import javafx.scene.layout.Pane?>
+<Pane prefHeight="400.0" prefWidth="590.0"
+      style="-fx-background-color: linear-gradient(to bottom right, #2b3e50, #1a1a1a);"
+      xmlns:fx="http://javafx.com/fxml"
+      fx:controller="io.softwareecg.wfx.platform.impl.ProgressController">
+
+    <Label layoutX="32.0" layoutY="120.0"
+           text="S202 Code Analyzer"
+           style="-fx-font-size: 36px; -fx-font-weight: bold; -fx-text-fill: #e0e0e0;"/>
+
+    <Label layoutX="32.0" layoutY="172.0"
+           text="Java bytecode architecture viewer"
+           style="-fx-font-size: 14px; -fx-text-fill: #a0c0d0;"/>
+
+    <Label layoutX="32.0" layoutY="200.0"
+           text="Powered by WFX Rich Client Platform"
+           style="-fx-font-size: 11px; -fx-text-fill: #607080; -fx-font-style: italic;"/>
+
+    <ProgressBar fx:id="progressBar" id="splash-progress-bar"
+                 layoutX="14.0" layoutY="350.0" prefWidth="562"
+                 progress="0.0" styleClass="splash-progress-bar"/>
+
+    <Label fx:id="progressText" id="splash-progress-text"
+           layoutX="14.0" layoutY="370.0" prefWidth="562"
+           text="Loading..."
+           style="-fx-text-fill: #cccccc; -fx-font-size: 11px;"/>
+</Pane>

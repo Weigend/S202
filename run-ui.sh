@@ -26,4 +26,4 @@ else
 fi
 
 cd "$PROJECT_ROOT/analyzer"
-mvn org.openjfx:javafx-maven-plugin:0.0.8:run
+mvn exec:java

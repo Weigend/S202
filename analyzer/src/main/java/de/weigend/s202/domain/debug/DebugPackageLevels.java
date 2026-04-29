@@ -45,7 +45,7 @@ public class DebugPackageLevels {
             Set<String> deps = entry.getValue().dependencies;
             System.out.println("  " + className + " -> L" + level);
             // Show dependencies for key classes
-            if (className.contains("AnalyzerApplication") || className.contains("ArchitectureView")) {
+            if (className.contains("S202Main") || className.contains("ArchitectureView")) {
                 System.out.println("      dependencies: " + deps);
             }
         }
@@ -79,7 +79,7 @@ public class DebugPackageLevels {
         
         // Debug: Show dependencies of ArchitectureView in detail
         System.out.println("\n=== DEPENDENCY CHAIN ANALYSIS ===");
-        String[] keyClasses = {"de.weigend.s202.ui.AnalyzerApplication", "de.weigend.s202.ui.ArchitectureView"};
+        String[] keyClasses = {"de.weigend.s202.ui.wfx.S202Main", "de.weigend.s202.ui.ArchitectureView"};
         for (String className : keyClasses) {
             DomainModel.CalculatedElementInfo info = model.getClass(className);
             if (info != null) {
