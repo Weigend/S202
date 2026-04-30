@@ -3,6 +3,7 @@ package de.weigend.s202.ui.wfx;
 import de.weigend.s202.ui.ArchitectureView;
 import io.softwareecg.wfx.windowmtg.api.Position;
 import io.softwareecg.wfx.windowmtg.api.View;
+import io.softwareecg.wfx.windowmtg.api.ViewKind;
 import javafx.scene.Parent;
 
 import java.net.URL;
@@ -47,6 +48,19 @@ public class ArchitectureWfxView implements View {
     @Override
     public Position getDefaultPosition() {
         return Position.CENTER;
+    }
+
+    /**
+     * Architecture tabs are content-bound: a fresh instance is created per
+     * Open JAR / Windows → New, multiple may coexist, and closing one means
+     * "I'm done with this analysis" — not "I'd like to find this view in
+     * the View menu later". Marking it {@link ViewKind#DOCUMENT} makes wfx
+     * fully unregister on tab-X (no leak), exclude it from the auto-built
+     * View menu, and close it on Restore Default Layout.
+     */
+    @Override
+    public ViewKind getKind() {
+        return ViewKind.DOCUMENT;
     }
 
     @Override

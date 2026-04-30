@@ -32,6 +32,15 @@
             <version>${wfx.version}</version>
         </dependency>
 
+        <!-- Auto-built top-level "View" menu listing all TOOL views.
+             Opt-in: not bundled into wfx-all so apps can choose. -->
+        <dependency>
+            <groupId>io.softwareecg.wfx</groupId>
+            <artifactId>view-menu</artifactId>
+            <version>${wfx.version}</version>
+            <scope>runtime</scope>
+        </dependency>
+
         <!-- Logging runtime -->
         <dependency>
             <groupId>ch.qos.logback</groupId>

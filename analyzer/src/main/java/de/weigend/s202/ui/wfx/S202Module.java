@@ -18,6 +18,7 @@ import io.softwareecg.wfx.platform.api.events.ProgressEvent;
 import io.softwareecg.wfx.platform.api.exceptions.PlatformException;
 import io.softwareecg.wfx.windowmtg.api.ApplicationWindow;
 import io.softwareecg.wfx.windowmtg.api.View;
+import io.softwareecg.wfx.windowmtg.api.ViewKind;
 import io.softwareecg.wfx.windowmtg.api.WindowManager;
 import jakarta.inject.Singleton;
 import javafx.application.Platform;
@@ -232,15 +233,23 @@ public class S202Module implements Module {
         WindowManager wm = Lookup.lookup(WindowManager.class);
         View focused = wm.getFocusedView();
         if (focused != null) {
-            wm.unregister(focused);
+            // closeView is kind-aware: TOOL is hidden (still in View menu);
+            // DOCUMENT is fully unregistered. Old code called unregister
+            // unconditionally, which forcibly removed Outline/Quality from
+            // the registry when the user happened to focus them.
+            wm.closeView(focused);
         }
     }
 
     private void closeAllViews() {
         WindowManager wm = Lookup.lookup(WindowManager.class);
-        // Copy because unregister mutates the visible-views list.
+        // "Close All" means "close all open documents" — the user's analyses,
+        // not the side panels. Filter to DOCUMENTs so TOOLs (Outline, Quality)
+        // stay alive.
         for (View v : new ArrayList<>(wm.getVisibleViews())) {
-            wm.unregister(v);
+            if (v.getKind() == ViewKind.DOCUMENT) {
+                wm.closeView(v);
+            }
         }
     }
 

@@ -80,20 +80,30 @@ public class OutlineExplorerModule implements Module {
     }
 
     private void rebindToFocusedView() {
+        ArchitectureWfxView focused = focusedArchitectureView();
+        ArchitectureView newBound = focused == null ? null : focused.getArchitectureView();
+
+        // Idempotent: every focus change (including focus moving onto the
+        // outline panel itself or onto the quality view) lands here, but if
+        // we're still bound to the same chart there's nothing to do.
+        // Rebuilding the TreeView would silently drop the user's expansion
+        // and selection state.
+        if (newBound == boundView) {
+            return;
+        }
+
         unbind();
 
-        ArchitectureWfxView focused = focusedArchitectureView();
-        if (focused == null) {
+        if (newBound == null) {
             outlineView.setArchitectureRoot(null);
             return;
         }
 
-        ArchitectureView view = focused.getArchitectureView();
-        boundView = view;
-        outlineView.setArchitectureRoot(view.getArchitectureRoot());
+        boundView = newBound;
+        outlineView.setArchitectureRoot(newBound.getArchitectureRoot());
 
         rootListener = (obs, was, isNow) -> outlineView.setArchitectureRoot(isNow);
-        view.architectureRootProperty().addListener(rootListener);
+        newBound.architectureRootProperty().addListener(rootListener);
     }
 
     private void unbind() {

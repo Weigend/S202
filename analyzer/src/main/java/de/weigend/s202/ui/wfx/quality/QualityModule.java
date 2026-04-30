@@ -67,22 +67,29 @@ public class QualityModule implements Module {
     }
 
     private void rebindToFocusedView() {
+        ArchitectureWfxView focused = focusedArchitectureView();
+        ArchitectureView newBound = focused == null ? null : focused.getArchitectureView();
+
+        // Same fix as OutlineExplorerModule: focus moving onto a side panel
+        // shouldn't trigger a re-bind to the same chart.
+        if (newBound == boundView) {
+            return;
+        }
+
         unbind();
 
-        ArchitectureWfxView focused = focusedArchitectureView();
-        if (focused == null) {
+        if (newBound == null) {
             qualityView.setMetrics(null, null);
             return;
         }
 
-        ArchitectureView view = focused.getArchitectureView();
-        boundView = view;
+        boundView = newBound;
         applyCurrentScope();
 
         metricsListener = (obs, was, isNow) -> applyCurrentScope();
         selectionListener = (obs, was, isNow) -> applyCurrentScope();
-        view.qualityMetricsProperty().addListener(metricsListener);
-        view.selectedFullNameProperty().addListener(selectionListener);
+        newBound.qualityMetricsProperty().addListener(metricsListener);
+        newBound.selectedFullNameProperty().addListener(selectionListener);
     }
 
     /**

@@ -9,6 +9,10 @@ import javafx.scene.control.TreeItem;
 import javafx.scene.control.TreeView;
 import javafx.scene.input.MouseButton;
 import javafx.scene.layout.BorderPane;
+import javafx.scene.paint.Color;
+import org.kordamp.ikonli.javafx.FontIcon;
+import org.kordamp.ikonli.materialdesign2.MaterialDesignA;
+import org.kordamp.ikonli.materialdesign2.MaterialDesignP;
 
 import java.net.URL;
 import java.util.function.Consumer;
@@ -166,20 +170,35 @@ public class OutlineExplorerView implements View {
         return 0.30;
     }
 
-    /** Renders package vs. class nodes with distinct labels. */
+    /** Renders package vs. class nodes with distinct icons and style classes. */
     private static final class ArchitectureNodeCell extends javafx.scene.control.TreeCell<ArchitectureNode> {
+        private static final Color PACKAGE_COLOR = Color.web("#e6c46a");
+        private static final Color CLASS_COLOR   = Color.web("#7fb3ff");
+
         @Override
         protected void updateItem(ArchitectureNode item, boolean empty) {
             super.updateItem(item, empty);
             if (empty || item == null) {
                 setText(null);
+                setGraphic(null);
                 getStyleClass().removeAll("outline-package", "outline-class");
                 return;
             }
             setText(item.getSimpleName());
             getStyleClass().removeAll("outline-package", "outline-class");
-            getStyleClass().add(item.getType() == ArchitectureNode.NodeType.CLASS
-                    ? "outline-class" : "outline-package");
+
+            FontIcon icon;
+            if (item.getType() == ArchitectureNode.NodeType.CLASS) {
+                icon = new FontIcon(MaterialDesignA.ALPHA_C_CIRCLE);
+                icon.setIconColor(CLASS_COLOR);
+                getStyleClass().add("outline-class");
+            } else {
+                icon = new FontIcon(MaterialDesignP.PACKAGE_VARIANT_CLOSED);
+                icon.setIconColor(PACKAGE_COLOR);
+                getStyleClass().add("outline-package");
+            }
+            icon.setIconSize(14);
+            setGraphic(icon);
         }
     }
 }
