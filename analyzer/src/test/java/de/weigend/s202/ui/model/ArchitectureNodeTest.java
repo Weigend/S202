@@ -9,6 +9,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import java.io.IOException;
+import java.util.HashSet;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.*;
@@ -130,6 +131,24 @@ class ArchitectureNodeTest {
         assertEquals(0, classA.getLevel(), "Level should be 0");
         assertNotNull(classA.getDependencies(), "Dependencies should not be null");
         assertNotNull(classA.getDependents(), "Dependents should not be null");
+    }
+
+    @Test
+    void testBuilderPreservesInterfaceType() {
+        DomainModel domainModel = new DomainModel();
+        domainModel.addPackage("com.example", new DomainModel.CalculatedElementInfo(
+            "com.example", "example", "PACKAGE", 0, new HashSet<>()
+        ));
+        domainModel.addClass("com.example.Service", new DomainModel.CalculatedElementInfo(
+            "com.example.Service", "Service", "CLASS", 0, new HashSet<>(), true
+        ));
+
+        ArchitectureNode root = builder.build(domainModel);
+        ArchitectureNode service = findNodeByName(root, "com.example.Service");
+
+        assertNotNull(service, "Interface node should exist");
+        assertEquals(NodeType.CLASS, service.getType(), "Interfaces should remain class nodes for layout");
+        assertTrue(service.isInterfaceType(), "Interface flag should be preserved for icon rendering");
     }
 
     @Test

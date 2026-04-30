@@ -30,6 +30,7 @@ public class ArchitectureNode {
     private final String fullName;
     private final String simpleName;
     private final NodeType type;
+    private final boolean interfaceType;
     private final boolean autoExpanded;
     private final List<ArchitectureNode> children;
     private Set<String> dependencies;
@@ -40,6 +41,7 @@ public class ArchitectureNode {
         this.fullName = Objects.requireNonNull(fullName, "fullName cannot be null");
         this.simpleName = Objects.requireNonNull(simpleName, "simpleName cannot be null");
         this.type = Objects.requireNonNull(type, "type cannot be null");
+        this.interfaceType = false;
         this.autoExpanded = autoExpanded;
         this.children = new ArrayList<>();
         this.dependencies = new HashSet<>();
@@ -55,6 +57,19 @@ public class ArchitectureNode {
         this.level = level;
     }
 
+    public ArchitectureNode(String fullName, String simpleName, NodeType type, boolean autoExpanded, int level,
+                            boolean interfaceType) {
+        this.fullName = Objects.requireNonNull(fullName, "fullName cannot be null");
+        this.simpleName = Objects.requireNonNull(simpleName, "simpleName cannot be null");
+        this.type = Objects.requireNonNull(type, "type cannot be null");
+        this.interfaceType = interfaceType;
+        this.autoExpanded = autoExpanded;
+        this.children = new ArrayList<>();
+        this.dependencies = new HashSet<>();
+        this.dependents = new HashSet<>();
+        this.level = level;
+    }
+
     // ===== Getters =====
     
     public String getFullName() {
@@ -67,6 +82,10 @@ public class ArchitectureNode {
 
     public NodeType getType() {
         return type;
+    }
+
+    public boolean isInterfaceType() {
+        return interfaceType;
     }
 
     public boolean isAutoExpanded() {

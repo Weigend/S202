@@ -38,7 +38,8 @@ public class LevelCalculator {
         for (String className : rawModel.getAllClassNames()) {
             DependencyModel.ClassInfo rawClass = rawModel.getClass(className);
             DomainModel.CalculatedElementInfo classInfo = new DomainModel.CalculatedElementInfo(
-                className, rawClass.simpleName, "CLASS", 0, new HashSet<>(rawClass.dependencies)
+                className, rawClass.simpleName, "CLASS", 0, new HashSet<>(rawClass.dependencies),
+                rawClass.interfaceType
             );
             model.addClass(className, classInfo);
         }

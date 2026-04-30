@@ -16,14 +16,21 @@ public class DomainModel {
         public final String fullName;
         public final String simpleName;
         public final String type; // "CLASS" or "PACKAGE"
+        public final boolean interfaceType;
         public int level;
         public final Set<String> dependencies;
         public final Set<String> dependents = new HashSet<>();
 
         public CalculatedElementInfo(String fullName, String simpleName, String type, int level, Set<String> dependencies) {
+            this(fullName, simpleName, type, level, dependencies, false);
+        }
+
+        public CalculatedElementInfo(String fullName, String simpleName, String type, int level, Set<String> dependencies,
+                                     boolean interfaceType) {
             this.fullName = fullName;
             this.simpleName = simpleName;
             this.type = type;
+            this.interfaceType = interfaceType;
             this.level = level;
             this.dependencies = dependencies;
         }

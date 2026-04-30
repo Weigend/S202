@@ -18,13 +18,19 @@ public class DependencyModel {
         public final String fullName;
         public final String simpleName;
         public final String packageName;
+        public final boolean interfaceType;
         public final Set<String> dependencies = new HashSet<>();
         public final Map<String, MethodInfo> methods = new HashMap<>();
 
         public ClassInfo(String fullName, String simpleName, String packageName) {
+            this(fullName, simpleName, packageName, false);
+        }
+
+        public ClassInfo(String fullName, String simpleName, String packageName, boolean interfaceType) {
             this.fullName = fullName;
             this.simpleName = simpleName;
             this.packageName = packageName;
+            this.interfaceType = interfaceType;
         }
 
         public void addMethod(String name, String descriptor) {

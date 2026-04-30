@@ -170,10 +170,11 @@ public class OutlineExplorerView implements View {
         return 0.30;
     }
 
-    /** Renders package vs. class nodes with distinct icons and style classes. */
+    /** Renders package, class, and interface nodes with distinct icons and style classes. */
     private static final class ArchitectureNodeCell extends javafx.scene.control.TreeCell<ArchitectureNode> {
         private static final Color PACKAGE_COLOR = Color.web("#e6c46a");
         private static final Color CLASS_COLOR   = Color.web("#7fb3ff");
+        private static final Color INTERFACE_COLOR = Color.web("#4caf50");
 
         @Override
         protected void updateItem(ArchitectureNode item, boolean empty) {
@@ -181,14 +182,18 @@ public class OutlineExplorerView implements View {
             if (empty || item == null) {
                 setText(null);
                 setGraphic(null);
-                getStyleClass().removeAll("outline-package", "outline-class");
+                getStyleClass().removeAll("outline-package", "outline-class", "outline-interface");
                 return;
             }
             setText(item.getSimpleName());
-            getStyleClass().removeAll("outline-package", "outline-class");
+            getStyleClass().removeAll("outline-package", "outline-class", "outline-interface");
 
             FontIcon icon;
-            if (item.getType() == ArchitectureNode.NodeType.CLASS) {
+            if (item.isInterfaceType()) {
+                icon = new FontIcon(MaterialDesignA.ALPHA_I_CIRCLE);
+                icon.setIconColor(INTERFACE_COLOR);
+                getStyleClass().add("outline-interface");
+            } else if (item.getType() == ArchitectureNode.NodeType.CLASS) {
                 icon = new FontIcon(MaterialDesignA.ALPHA_C_CIRCLE);
                 icon.setIconColor(CLASS_COLOR);
                 getStyleClass().add("outline-class");

@@ -106,7 +106,8 @@ public class ArchitectureNodeBuilder {
                         element.simpleName,
                         NodeType.CLASS,
                         false,
-                        element.level
+                        element.level,
+                        element.interfaceType
                     );
                     classNode.setDependencies(element.dependencies);
                     classNode.setDependents(element.dependents);

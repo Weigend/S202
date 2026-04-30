@@ -227,8 +227,9 @@ public class InputAnalyzer {
                 classNameForPackage.lastIndexOf("."));
 
             // Create ClassInfo
+            boolean interfaceType = (access & Opcodes.ACC_INTERFACE) != 0;
             this.currentClassInfo = new DependencyModel.ClassInfo(
-                currentClassName, currentSimpleName, currentPackageName
+                currentClassName, currentSimpleName, currentPackageName, interfaceType
             );
             model.addClass(currentClassName, currentClassInfo);
 
