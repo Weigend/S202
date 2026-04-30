@@ -1,5 +1,6 @@
 package de.weigend.s202.ui.wfx;
 
+import de.weigend.s202.analysis.quality.QualityMetrics;
 import de.weigend.s202.domain.DomainModel;
 import de.weigend.s202.domain.LevelCalculator;
 import de.weigend.s202.reader.DependencyModel;
@@ -8,7 +9,8 @@ import de.weigend.s202.ui.ArchitectureView;
 import de.weigend.s202.ui.model.ArchitectureNode;
 import de.weigend.s202.ui.model.ArchitectureNodeBuilder;
 import de.weigend.s202.ui.model.DistrictRowLevelCalculator;
-import io.softwareecg.wfx.extension.uiutils.MenuUtil;
+import de.weigend.s202.ui.wfx.events.NodeSelectionEvent;
+import de.weigend.s202.ui.wfx.events.MenuRequestEvent;
 import io.softwareecg.wfx.lookup.Lookup;
 import io.softwareecg.wfx.platform.api.EventBus;
 import io.softwareecg.wfx.platform.api.Module;
@@ -20,33 +22,19 @@ import io.softwareecg.wfx.windowmtg.api.WindowManager;
 import jakarta.inject.Singleton;
 import javafx.application.Platform;
 import javafx.concurrent.Task;
-import javafx.geometry.HPos;
-import javafx.geometry.Insets;
 import javafx.geometry.Pos;
 import javafx.beans.property.ReadOnlyDoubleProperty;
 import javafx.beans.value.ChangeListener;
 import javafx.scene.Node;
 import javafx.scene.control.Alert;
 import javafx.scene.control.Button;
-import javafx.scene.control.ButtonType;
 import javafx.scene.control.CheckBox;
 import javafx.scene.control.Label;
-import javafx.scene.control.Menu;
-import javafx.scene.control.MenuItem;
-import javafx.scene.control.ProgressBar;
 import javafx.scene.control.Separator;
-import javafx.scene.control.SeparatorMenuItem;
 import javafx.scene.control.Spinner;
 import javafx.scene.control.SpinnerValueFactory;
-import javafx.scene.control.ToggleButton;
 import javafx.scene.control.Tooltip;
-import javafx.scene.input.KeyCode;
-import javafx.scene.input.KeyCodeCombination;
-import javafx.scene.input.KeyCombination;
-import javafx.scene.layout.ColumnConstraints;
-import javafx.scene.layout.GridPane;
 import javafx.scene.layout.HBox;
-import javafx.scene.layout.Priority;
 import javafx.scene.paint.Color;
 import javafx.stage.FileChooser;
 import org.kordamp.ikonli.Ikon;
@@ -58,15 +46,18 @@ import org.slf4j.LoggerFactory;
 
 import java.io.File;
 import java.util.ArrayList;
+import java.util.EventObject;
 import java.util.List;
 import java.util.stream.Collectors;
 
 /**
- * S202 platform module: builds the WFX shell (status bar, menus, toolbar, About,
+ * S202 platform module: wires the WFX shell (status bar, menus, toolbar,
  * preloader splash already provided by /splash/splash.fxml) and runs the JAR
- * analysis pipeline. The central docking area starts empty; each Open JAR
- * action registers a fresh {@link ArchitectureWfxView} with the
- * {@link WindowManager} and loads its content on a background thread.
+ * analysis pipeline. The status bar and menu bar live in their own classes;
+ * this module wires them via the {@link EventBus} and reacts to
+ * {@link MenuRequestEvent}s from the menu. The central docking area starts
+ * empty; each Open JAR action registers a fresh {@link ArchitectureWfxView}
+ * with the {@link WindowManager} and loads its content on a background thread.
  */
 @Singleton
 public class S202Module implements Module {
@@ -81,15 +72,14 @@ public class S202Module implements Module {
     private int viewCounter;
     private File lastDirectory;
 
-    private Label statusLabel;
-    private ProgressBar statusProgressBar;
+    private S202StatusBar statusBar;
 
     // Toolbar widgets — shared across all ArchitectureWfxView tabs.
     private Button openJarButton;
     private Spinner<Integer> depthSpinner;
     private Button refreshButton;
     private CheckBox showDependenciesCheckbox;
-    private ToggleButton circuitToggle;
+    private CheckBox circuitToggle;
     private CheckBox showSccCheckbox;
     private Button zoomOutButton;
     private Label zoomLabel;
@@ -123,10 +113,17 @@ public class S202Module implements Module {
         // creates and registers the first tab on demand.
     }
 
+    @SuppressWarnings("unchecked")
     private ArchitectureWfxView createArchitectureView() {
         viewCounter++;
         ArchitectureView view = new ArchitectureView();
         view.setStatusSink(this::publishStatus);
+
+        // Bridge graph node double-clicks (class or package) onto the bus so
+        // the outline (and any future listener) can react without a direct
+        // dependency.
+        EventBus<EventObject> bus = Lookup.lookup(EventBus.class);
+        view.setOnNodeDoubleClicked(fqn -> bus.publish(new NodeSelectionEvent(fqn, view)));
 
         var css = getClass().getResource("/de/weigend/s202/ui/styles.css");
         if (css != null) {
@@ -168,61 +165,48 @@ public class S202Module implements Module {
     }
 
     @Override
+    @SuppressWarnings("unchecked")
     public void start() {
         installSceneStylesheet();
-        installStatusBar();
-        installFileMenu();
-        installWindowsMenu();
-        installHelpMenu();
+
+        EventBus<EventObject> bus = Lookup.lookup(EventBus.class);
+
+        statusBar = new S202StatusBar((EventBus) bus);
+        applicationWindow.getStatusBarItems().setAll(statusBar.getNode());
+
+        new S202MenuBar(applicationWindow, bus).install();
+        subscribeToMenuRequests(bus);
+        subscribeToNodeSelection(bus);
+
         installToolbar();
 
-        statusLabel.setText("Ready to analyze bytecode. Click 'Open JAR' to begin.");
+        statusBar.setMessage("Ready to analyze bytecode. Click 'Open JAR' to begin.");
     }
 
-    @SuppressWarnings("unchecked")
-    private void installStatusBar() {
-        statusLabel = new Label("Ready");
-        statusLabel.getStyleClass().add("status-bar");
-        statusLabel.setMaxWidth(Double.MAX_VALUE);
-        statusLabel.setAlignment(Pos.CENTER_LEFT);
+    private void subscribeToMenuRequests(EventBus<EventObject> bus) {
+        bus.subscribe(MenuRequestEvent.OpenJar.class, ev -> { openJarChooser(); return true; });
+        bus.subscribe(MenuRequestEvent.Exit.class, ev -> { Platform.exit(); return true; });
+        bus.subscribe(MenuRequestEvent.NewView.class, ev -> { newArchitectureWindow(); return true; });
+        bus.subscribe(MenuRequestEvent.CloseFocusedView.class, ev -> { closeFocusedView(); return true; });
+        bus.subscribe(MenuRequestEvent.CloseAllViews.class, ev -> { closeAllViews(); return true; });
+        bus.subscribe(MenuRequestEvent.RestoreDefaultLayout.class, ev -> {
+            Lookup.lookup(WindowManager.class).restoreDefaultLayout();
+            return true;
+        });
+    }
 
-        statusProgressBar = new ProgressBar(0);
-        statusProgressBar.setMaxWidth(Double.MAX_VALUE);
-        // hide while idle (progress == 0 or finished == 1)
-        statusProgressBar.visibleProperty().bind(
-                statusProgressBar.progressProperty().isNotEqualTo(0)
-                        .and(statusProgressBar.progressProperty().isEqualTo(1).not()));
-
-        // 70 / 30 split: status text left, progress bar right.
-        ColumnConstraints leftCol = new ColumnConstraints();
-        leftCol.setPercentWidth(70);
-        ColumnConstraints rightCol = new ColumnConstraints();
-        rightCol.setPercentWidth(30);
-
-        GridPane bar = new GridPane();
-        bar.getColumnConstraints().addAll(leftCol, rightCol);
-        bar.setHgap(8);
-        bar.setPadding(new Insets(2, 8, 2, 8));
-        bar.setMaxWidth(Double.MAX_VALUE);
-        bar.add(statusLabel, 0, 0);
-        bar.add(statusProgressBar, 1, 0);
-        GridPane.setHalignment(statusLabel, HPos.LEFT);
-        GridPane.setHalignment(statusProgressBar, HPos.RIGHT);
-        GridPane.setFillWidth(statusLabel, true);
-        GridPane.setFillWidth(statusProgressBar, true);
-        HBox.setHgrow(bar, Priority.ALWAYS);
-
-        // Replace wfx's built-in status item (StatusBarProgress.fxml: fixed 250+200 px)
-        // with our 70/30 layout. The wfx ProgressController is still subscribed to the
-        // EventBus but updates an orphaned widget — harmless.
-        applicationWindow.getStatusBarItems().setAll(bar);
-
-        EventBus<ProgressEvent> bus = Lookup.lookup(EventBus.class);
-        bus.subscribe(ProgressEvent.class, ev -> {
-            if (ev.getMessage() != null && !ev.getMessage().isEmpty()) {
-                statusLabel.setText(ev.getMessage());
+    private void subscribeToNodeSelection(EventBus<EventObject> bus) {
+        bus.subscribe(NodeSelectionEvent.class, ev -> {
+            ArchitectureWfxView focused = focusedArchitectureView();
+            if (focused == null) {
+                return true;
             }
-            statusProgressBar.setProgress(ev.getProgress());
+            ArchitectureView view = focused.getArchitectureView();
+            // The graph already selected the node inline; skip our own echo.
+            if (ev.getSource() == view) {
+                return true;
+            }
+            view.selectByFullName(ev.getFullName());
             return true;
         });
     }
@@ -238,68 +222,6 @@ public class S202Module implements Module {
             stage.getScene().getStylesheets().add(url.toExternalForm());
             LOGGER.info("Attached stylesheet to Scene: {}", url);
         }
-    }
-
-    private void installFileMenu() {
-        MenuItem openItem = MenuUtil.createMenuItem("file.open", "Open JAR...", e -> openJarChooser());
-        openItem.setAccelerator(new KeyCodeCombination(KeyCode.O, KeyCombination.SHORTCUT_DOWN));
-
-        MenuItem exitItem = MenuUtil.createMenuItem("file.exit", "Exit", e -> Platform.exit());
-        exitItem.setAccelerator(new KeyCodeCombination(KeyCode.Q, KeyCombination.SHORTCUT_DOWN));
-
-        Menu fileMenu = MenuUtil.createMenu("file", "File");
-        fileMenu.getItems().addAll(openItem, new SeparatorMenuItem(), exitItem);
-
-        applicationWindow.getMenu().add(0, fileMenu);
-    }
-
-    private void installWindowsMenu() {
-        MenuItem newItem = MenuUtil.createMenuItem("windows.new", "New", e -> newArchitectureWindow());
-        newItem.setAccelerator(new KeyCodeCombination(KeyCode.N, KeyCombination.SHORTCUT_DOWN));
-
-        MenuItem closeItem = MenuUtil.createMenuItem("windows.close", "Close", e -> closeFocusedView());
-        closeItem.setAccelerator(new KeyCodeCombination(KeyCode.W, KeyCombination.SHORTCUT_DOWN));
-
-        MenuItem closeAllItem = MenuUtil.createMenuItem("windows.closeAll", "Close All", e -> closeAllViews());
-        closeAllItem.setAccelerator(new KeyCodeCombination(
-                KeyCode.W, KeyCombination.SHORTCUT_DOWN, KeyCombination.SHIFT_DOWN));
-
-        MenuItem defaultLayoutItem = MenuUtil.createMenuItem(
-                "windows.defaultLayout", "Default Layout",
-                e -> Lookup.lookup(WindowManager.class).restoreDefaultLayout());
-
-        Menu windowsMenu = MenuUtil.createMenu("windows", "Windows");
-        windowsMenu.getItems().addAll(newItem, closeItem, closeAllItem,
-                new SeparatorMenuItem(), defaultLayoutItem);
-
-        applicationWindow.getMenu().add(windowsMenu);
-    }
-
-    private void installHelpMenu() {
-        MenuItem aboutItem = MenuUtil.createMenuItem("help.about", "About...", e -> showAboutDialog());
-
-        Menu helpMenu = MenuUtil.createMenu("help", "Help");
-        helpMenu.getItems().add(aboutItem);
-
-        applicationWindow.getMenu().add(helpMenu);
-    }
-
-    private void showAboutDialog() {
-        Alert about = new Alert(Alert.AlertType.NONE);
-        about.setTitle("About S202 Code Analyzer");
-        about.setHeaderText("S202 Code Analyzer");
-        about.setContentText("""
-                Java bytecode architecture viewer.
-
-                Analyzes JAR files, extracts package and class dependencies,
-                detects cyclic dependencies (SCCs) and visualizes the layered
-                architecture.
-
-                Built on the WFX Rich Client Platform.
-                """);
-        about.getButtonTypes().setAll(ButtonType.CLOSE);
-        about.initOwner(applicationWindow.getStage());
-        about.showAndWait();
     }
 
     private void newArchitectureWindow() {
@@ -359,7 +281,7 @@ public class S202Module implements Module {
             }
         });
 
-        circuitToggle = new ToggleButton("Leiterbahn");
+        circuitToggle = new CheckBox("Leiterbahn");
         circuitToggle.setTooltip(new Tooltip("Dependency style: classic vs. circuit-board routing"));
         circuitToggle.selectedProperty().addListener((obs, was, isNow) -> {
             if (boundView != null) {
@@ -511,12 +433,13 @@ public class S202Module implements Module {
             protected AnalysisResult call() throws Exception {
                 DependencyModel rawModel = rawAnalyzer.analyzeMultiple(jarPaths);
                 if (rawModel.getAllClasses().isEmpty()) {
-                    return new AnalysisResult(rawModel, null);
+                    return new AnalysisResult(rawModel, null, null, null);
                 }
                 DomainModel calculated = levelCalculator.calculate(rawModel);
                 ArchitectureNode root = architectureNodeBuilder.build(calculated);
                 new DistrictRowLevelCalculator().assignDistrictRowLevels(root);
-                return new AnalysisResult(rawModel, root);
+                QualityMetrics metrics = QualityMetrics.compute(calculated);
+                return new AnalysisResult(rawModel, root, metrics, calculated);
             }
         };
 
@@ -527,7 +450,11 @@ public class S202Module implements Module {
                 showError("No Classes Found", "The JAR file(s) do not contain any .class files");
                 return;
             }
+            // Domain model first so listeners on architectureRoot/metrics can
+            // already query scoped data (e.g. quality module on package select).
+            view.setDomainModel(result.domainModel());
             view.setArchitectureRoot(result.rootNode());
+            view.setQualityMetrics(result.metrics());
             publishProgress(String.format(
                     "Loaded %d JAR(s) | %d classes | %d levels | Max level %d",
                     jarFiles.size(),
@@ -548,7 +475,8 @@ public class S202Module implements Module {
         analyzer.start();
     }
 
-    private record AnalysisResult(DependencyModel rawModel, ArchitectureNode rootNode) {}
+    private record AnalysisResult(DependencyModel rawModel, ArchitectureNode rootNode,
+                                  QualityMetrics metrics, DomainModel domainModel) {}
 
     private void showError(String title, String message) {
         Platform.runLater(() -> {

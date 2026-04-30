@@ -20,7 +20,7 @@
 
     <properties>
         <javafx.version>21.0.5</javafx.version>
-        <wfx.version>1.0.0</wfx.version>
+        <wfx.version>1.0.1</wfx.version>
         <avaje.version>11.4</avaje.version>
     </properties>
 

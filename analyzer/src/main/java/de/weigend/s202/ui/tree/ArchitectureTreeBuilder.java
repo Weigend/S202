@@ -107,7 +107,7 @@ public class ArchitectureTreeBuilder {
             });
 
             if (child.getType() == NodeType.PACKAGE) {
-                LevelPackageBox packageBox = new LevelPackageBox(child.getSimpleName(), child.getLevel(), false);
+                LevelPackageBox packageBox = new LevelPackageBox(child.getSimpleName(), child.getLevel(), false, child.getFullName());
                 packageContainers.put(child.getFullName(), packageBox);
                 elementRegistry.put(child.getFullName(), packageBox);
 
@@ -188,7 +188,7 @@ public class ArchitectureTreeBuilder {
             if (child.getType() == NodeType.PACKAGE) {
                 // Create package container if not already created
                 if (!packageContainers.containsKey(child.getFullName())) {
-                    LevelPackageBox packageBox = new LevelPackageBox(child.getSimpleName(), child.getLevel(), false);
+                    LevelPackageBox packageBox = new LevelPackageBox(child.getSimpleName(), child.getLevel(), false, child.getFullName());
                     packageContainers.put(child.getFullName(), packageBox);
                     elementRegistry.put(child.getFullName(), packageBox);
                     parentContainer.addToLevel(child.getLevel(), packageBox);
@@ -239,7 +239,7 @@ public class ArchitectureTreeBuilder {
             if (!packageContainers.containsKey(currentPkg)) {
                 int packageLevel = findPackageLevelInTree(currentPkg, rootNode);
 
-                LevelPackageBox packageBox = new LevelPackageBox(part, packageLevel, false);
+                LevelPackageBox packageBox = new LevelPackageBox(part, packageLevel, false, currentPkg);
                 packageContainers.put(currentPkg, packageBox);
 
                 // Add to parent at the correct architectural level

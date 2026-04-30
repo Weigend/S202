@@ -1,5 +1,7 @@
 package de.weigend.s202.ui;
 
+import de.weigend.s202.analysis.quality.QualityMetrics;
+import de.weigend.s202.domain.DomainModel;
 import de.weigend.s202.ui.model.ArchitectureNode;
 import de.weigend.s202.ui.rendering.CircuitBoardRenderer;
 import de.weigend.s202.ui.rendering.DependencyRenderer;
@@ -10,6 +12,10 @@ import de.weigend.s202.ui.zoom.ZoomController;
 import javafx.beans.property.BooleanProperty;
 import javafx.beans.property.IntegerProperty;
 import javafx.beans.property.ReadOnlyDoubleProperty;
+import javafx.beans.property.ReadOnlyObjectProperty;
+import javafx.beans.property.ReadOnlyObjectWrapper;
+import javafx.beans.property.ReadOnlyStringProperty;
+import javafx.beans.property.ReadOnlyStringWrapper;
 import javafx.beans.property.SimpleBooleanProperty;
 import javafx.beans.property.SimpleIntegerProperty;
 import javafx.scene.control.ScrollPane;
@@ -52,12 +58,17 @@ public class ArchitectureView extends BorderPane {
 
     private javafx.scene.layout.Pane zoomableContent;
     private Consumer<String> statusSink = msg -> { /* no-op default */ };
+    private Consumer<String> nodeDoubleClickSink = fqn -> { /* no-op default */ };
 
     // Externally bindable settings.
     private final IntegerProperty packageDepth = new SimpleIntegerProperty(3);
     private final BooleanProperty showDependencies = new SimpleBooleanProperty(false);
     private final BooleanProperty circuitMode = new SimpleBooleanProperty(false);
     private final BooleanProperty showScc = new SimpleBooleanProperty(false);
+    private final ReadOnlyObjectWrapper<ArchitectureNode> architectureRoot = new ReadOnlyObjectWrapper<>(null);
+    private final ReadOnlyObjectWrapper<QualityMetrics> qualityMetrics = new ReadOnlyObjectWrapper<>(null);
+    private final ReadOnlyObjectWrapper<DomainModel> domainModel = new ReadOnlyObjectWrapper<>(null);
+    private final ReadOnlyStringWrapper selectedFullName = new ReadOnlyStringWrapper(null);
 
     public ArchitectureView() {
         setupUI();
@@ -195,7 +206,10 @@ public class ArchitectureView extends BorderPane {
             }
         });
 
-        LevelClassBox.setOnSelectionChangeCallback(() -> {
+        // Selection (class OR package) is owned by GraphSelection. Mirror it
+        // onto our selectedFullName property and trigger overlay redraws.
+        GraphSelection.setOnSelectionChange(fqn -> {
+            selectedFullName.set(fqn);
             if (showDependencies.get()) {
                 dependencyRenderer.drawDependencyArrows(currentRootNode);
             }
@@ -203,6 +217,10 @@ public class ArchitectureView extends BorderPane {
                 sccRenderer.drawSccLines(currentRootNode);
             }
         });
+
+        // Re-route double-clicks on graph boxes (class or package) through this
+        // view's sink so external panels (e.g. outline explorer) can reveal it.
+        GraphSelection.setOnDoubleClick(fqn -> nodeDoubleClickSink.accept(fqn));
 
         treeBuilder = new ArchitectureTreeBuilder(elementRegistry);
         int maxDepth = packageDepth.get();
@@ -257,6 +275,130 @@ public class ArchitectureView extends BorderPane {
         showScc.set(false);
 
         setStatus("Architecture loaded: " + rootNode.getLevelCount() + " levels");
+
+        // Notify external observers (e.g. Outline Explorer) last, so the registry
+        // is fully populated before listeners run lookups.
+        architectureRoot.set(rootNode);
+    }
+
+    /**
+     * Read-only handle to the currently displayed architecture root. Fires when
+     * a new JAR is loaded or {@link #refreshLayout()} runs.
+     */
+    public ReadOnlyObjectProperty<ArchitectureNode> architectureRootProperty() {
+        return architectureRoot.getReadOnlyProperty();
+    }
+
+    public ArchitectureNode getArchitectureRoot() {
+        return architectureRoot.get();
+    }
+
+    /**
+     * Read-only handle to the current quality metrics for this view, or null
+     * if the analysis hasn't computed them yet. Pushed in by the host shell
+     * after each successful analysis.
+     */
+    public ReadOnlyObjectProperty<QualityMetrics> qualityMetricsProperty() {
+        return qualityMetrics.getReadOnlyProperty();
+    }
+
+    public QualityMetrics getQualityMetrics() {
+        return qualityMetrics.get();
+    }
+
+    public void setQualityMetrics(QualityMetrics metrics) {
+        qualityMetrics.set(metrics);
+    }
+
+    /**
+     * Read-only handle to the analyzed domain model. Pushed in by the host
+     * shell after each successful analysis; needed by panels that compute
+     * scoped metrics (e.g. quality view for a selected package).
+     */
+    public ReadOnlyObjectProperty<DomainModel> domainModelProperty() {
+        return domainModel.getReadOnlyProperty();
+    }
+
+    public DomainModel getDomainModel() {
+        return domainModel.get();
+    }
+
+    public void setDomainModel(DomainModel model) {
+        domainModel.set(model);
+    }
+
+    /**
+     * Read-only handle to the currently selected node's full name (class or
+     * package), or null when nothing is selected.
+     */
+    public ReadOnlyStringProperty selectedFullNameProperty() {
+        return selectedFullName.getReadOnlyProperty();
+    }
+
+    public String getSelectedFullName() {
+        return selectedFullName.get();
+    }
+
+    /**
+     * Select the node (class or package) with the given full name (if present)
+     * and scroll it into view. No-op if the name is unknown or the
+     * architecture is not yet loaded. Idempotent — re-selecting the current
+     * node does not toggle it off.
+     */
+    public void selectByFullName(String fullName) {
+        if (fullName == null) {
+            return;
+        }
+        javafx.scene.Node node = elementRegistry.get(fullName);
+        if (node instanceof GraphSelection.Selectable target) {
+            GraphSelection.ensureSelected(target);
+            // Defer scrolling until layout has settled; the box may have just
+            // been created during a refresh and have unresolved bounds.
+            javafx.application.Platform.runLater(() -> scrollToNode(node));
+            return;
+        }
+        // Tree-only node (e.g. a package skipped as a transparent passthrough
+        // — "com", "de", … — that has no visible box in the chart). No visual
+        // highlight to apply, but external observers (quality view, etc.) still
+        // need the announcement. Clear any visible chart selection and update
+        // the property directly.
+        GraphSelection.clear();
+        selectedFullName.set(fullName);
+    }
+
+    /** @deprecated use {@link #selectByFullName(String)}. */
+    @Deprecated
+    public void selectClass(String fullClassName) {
+        selectByFullName(fullClassName);
+    }
+
+    private void scrollToNode(javafx.scene.Node target) {
+        if (scrollPane == null || scrollPane.getContent() == null) {
+            return;
+        }
+        javafx.scene.Node content = scrollPane.getContent();
+        javafx.geometry.Bounds contentBounds = content.getBoundsInLocal();
+        javafx.geometry.Bounds targetInContent = content.sceneToLocal(target.localToScene(target.getBoundsInLocal()));
+
+        double contentWidth = contentBounds.getWidth();
+        double contentHeight = contentBounds.getHeight();
+        javafx.geometry.Bounds viewport = scrollPane.getViewportBounds();
+        if (viewport == null || contentWidth <= 0 || contentHeight <= 0) {
+            return;
+        }
+
+        double overflowX = Math.max(0, contentWidth - viewport.getWidth());
+        double overflowY = Math.max(0, contentHeight - viewport.getHeight());
+        if (overflowX > 0) {
+            double centerX = targetInContent.getMinX() + targetInContent.getWidth() / 2.0;
+            double hValue = (centerX - viewport.getWidth() / 2.0) / overflowX;
+            scrollPane.setHvalue(Math.max(0, Math.min(1, hValue)));
+        }
+        if (overflowY > 0) {
+            double centerY = targetInContent.getMinY() + targetInContent.getHeight() / 2.0;
+            double vValue = (centerY - viewport.getHeight() / 2.0) / overflowY;
+            scrollPane.setVvalue(Math.max(0, Math.min(1, vValue)));
+        }
     }
 
     private void redrawVisibleArrows() {
@@ -377,5 +519,19 @@ public class ArchitectureView extends BorderPane {
      */
     public void setStatusSink(Consumer<String> sink) {
         this.statusSink = sink != null ? sink : (m -> {});
+    }
+
+    /**
+     * Set a sink that receives the full name whenever the user double-clicks
+     * a node (class or package) in the graph. Pass null to detach.
+     */
+    public void setOnNodeDoubleClicked(Consumer<String> sink) {
+        this.nodeDoubleClickSink = sink != null ? sink : (fqn -> {});
+    }
+
+    /** @deprecated use {@link #setOnNodeDoubleClicked(Consumer)}. */
+    @Deprecated
+    public void setOnClassDoubleClicked(Consumer<String> sink) {
+        setOnNodeDoubleClicked(sink);
     }
 }

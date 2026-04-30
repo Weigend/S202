@@ -7,6 +7,68 @@
     -fx-background: #3c3f41;
 }
 
+/* ===== Menu Bar (darker than toolbar) ===== */
+.menu-bar {
+    -fx-background-color: #1e2a36;
+    -fx-border-color: #14202b;
+    -fx-border-width: 0 0 1 0;
+    -fx-padding: 2 4;
+}
+
+.menu-bar .label,
+.menu-bar .menu .label,
+.menu-bar .menu-button .label {
+    -fx-font-size: 12px;
+    -fx-text-fill: #e0e0e0;
+}
+
+.menu-bar .menu-button {
+    -fx-background-color: transparent;
+    -fx-padding: 4 10;
+}
+
+.menu-bar .menu-button:hover,
+.menu-bar .menu-button:showing {
+    -fx-background-color: #2b3e50;
+}
+
+/* Popup menu (the dropdown after clicking) */
+.context-menu {
+    -fx-background-color: #1e2a36;
+    -fx-border-color: #14202b;
+    -fx-border-width: 1;
+    -fx-padding: 2 0;
+}
+
+.menu-item {
+    -fx-padding: 4 12;
+}
+
+.menu-item .label {
+    -fx-font-size: 12px;
+    -fx-text-fill: #e0e0e0;
+}
+
+.menu-item:focused,
+.menu-item:hover {
+    -fx-background-color: #2b3e50;
+}
+
+.menu-item:focused .label,
+.menu-item:hover .label {
+    -fx-text-fill: #ffffff;
+}
+
+.menu-item .accelerator-text {
+    -fx-font-size: 12px;
+    -fx-text-fill: #b0b0b0;
+}
+
+.separator-menu-item .line {
+    -fx-border-color: #34495e;
+    -fx-border-width: 1 0 0 0;
+}
+
 /* ===== Toolbar (dark blue) ===== */
 .tool-bar {
     -fx-padding: 4 8;
@@ -183,6 +245,70 @@
 .tree-cell {
     -fx-padding: 0;
     -fx-font-size: 9px;
+}
+
+/* ===== Outline Explorer (left dock) ===== */
+.outline-tree {
+    -fx-font-size: 12px;
+    -fx-background-color: #1a1a1a;
+    -fx-control-inner-background: #1a1a1a;
+}
+
+.outline-tree .tree-cell {
+    -fx-font-size: 12px;
+    -fx-padding: 2 6;
+    -fx-text-fill: #e0e0e0;
+    -fx-background-color: transparent;
+}
+
+.outline-tree .tree-cell:hover {
+    -fx-background-color: #2b3e50;
+}
+
+.outline-tree .tree-cell:selected,
+.outline-tree .tree-cell:filled:selected:focused {
+    -fx-background-color: #3d5a80;
+    -fx-text-fill: #ffffff;
+}
+
+.outline-tree .outline-package {
+    -fx-text-fill: #f0f0f0;
+}
+
+.outline-tree .outline-class {
+    -fx-text-fill: #d0d0d0;
+}
+
+.outline-empty {
+    -fx-font-size: 12px;
+    -fx-text-fill: #888888;
+    -fx-padding: 12;
+}
+
+/* ===== Quality view (left dock, below outline) ===== */
+.quality-view {
+    -fx-background-color: #1a1a1a;
+}
+
+.quality-view .quality-axis-label {
+    -fx-font-size: 13px;
+    -fx-text-fill: #cccccc;
+}
+
+.quality-view .quality-value {
+    -fx-font-size: 10px;
+    -fx-text-fill: #ffffff;
+    -fx-background-color: rgba(0, 0, 0, 0.55);
+    -fx-padding: 2 6;
+    -fx-background-radius: 3;
+}
+
+.quality-view .quality-scope {
+    -fx-font-size: 10px;
+    -fx-text-fill: #ffffff;
+    -fx-background-color: rgba(0, 0, 0, 0.55);
+    -fx-padding: 2 6;
+    -fx-background-radius: 3;
 }
 
 /* ===== Labels ===== */
