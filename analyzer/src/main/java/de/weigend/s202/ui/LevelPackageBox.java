@@ -75,6 +75,8 @@ public class LevelPackageBox extends VBox implements GraphSelection.Selectable {
         this.transparent = transparent;
         this.fullName = fullName;
 
+        getStyleClass().add(transparent ? "package-box-transparent" : "package-box");
+
         // Apply styles directly - CSS doesn't override VBox defaults reliably
         applyBaseStyle();
         this.setPadding(new Insets(0));
@@ -133,6 +135,7 @@ public class LevelPackageBox extends VBox implements GraphSelection.Selectable {
      */
     private void createHeader() {
         HBox header = new HBox(6);
+        header.getStyleClass().add("header");
         header.setPadding(transparent ? new Insets(0) : new Insets(4));
         header.setMaxWidth(Double.MAX_VALUE);
         header.setAlignment(Pos.CENTER_LEFT);
@@ -140,6 +143,10 @@ public class LevelPackageBox extends VBox implements GraphSelection.Selectable {
         // Toggle icon (- for expanded, + for collapsed)
         toggleIcon = new Label("−");
         toggleIcon.getStyleClass().add("toggle-icon");
+        toggleIcon.setStyle("-fx-text-fill: #000000; -fx-font-size: 10px; -fx-font-weight: bold;");
+        toggleIcon.setMinWidth(12);
+        toggleIcon.setPrefWidth(12);
+        toggleIcon.setAlignment(Pos.CENTER);
         toggleIcon.setCursor(Cursor.HAND);
         toggleIcon.addEventHandler(javafx.scene.input.MouseEvent.MOUSE_CLICKED, event -> {
             if (event.getButton() == MouseButton.PRIMARY) {
