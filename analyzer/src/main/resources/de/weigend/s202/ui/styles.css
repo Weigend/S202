@@ -311,6 +311,75 @@
     -fx-background-radius: 3;
 }
 
+/* ===== About dialog ===== */
+.about-dialog {
+    -fx-background-color: #1e2a36;
+}
+
+.about-dialog > .content,
+.about-dialog > .button-bar {
+    -fx-background-color: transparent;
+}
+
+.about-dialog .about-title {
+    -fx-font-size: 22px;
+    -fx-font-weight: bold;
+    -fx-text-fill: #ffffff;
+}
+
+.about-dialog .about-tagline {
+    -fx-font-size: 12px;
+    -fx-text-fill: #b0bccd;
+}
+
+.about-dialog .about-description {
+    -fx-font-size: 13px;
+    -fx-text-fill: #d0d8e0;
+    -fx-line-spacing: 2;
+}
+
+.about-dialog .about-meta {
+    -fx-font-size: 12px;
+    -fx-fill: #a0aab8;
+}
+
+.about-dialog .about-link {
+    -fx-font-size: 12px;
+    -fx-text-fill: #6fb1ff;
+    -fx-padding: 0;
+    -fx-border-color: transparent;
+    -fx-underline: false;
+}
+
+.about-dialog .about-link:hover {
+    -fx-text-fill: #8fc4ff;
+    -fx-underline: true;
+}
+
+.about-dialog .about-divider .line {
+    -fx-border-color: #34495e;
+    -fx-border-width: 1 0 0 0;
+}
+
+.about-dialog .button {
+    -fx-background-color: #34495e;
+    -fx-text-fill: #e0e0e0;
+    -fx-border-color: #4a6a8a;
+    -fx-border-radius: 3;
+    -fx-background-radius: 3;
+    -fx-padding: 4 14;
+    -fx-cursor: hand;
+}
+
+.about-dialog .button:hover {
+    -fx-background-color: #3d5a80;
+    -fx-border-color: #5a8ab5;
+}
+
+.about-dialog .button:focused {
+    -fx-border-color: #ffd54f;
+}
+
 /* ===== Labels ===== */
 .label {
     -fx-font-size: 9px;
