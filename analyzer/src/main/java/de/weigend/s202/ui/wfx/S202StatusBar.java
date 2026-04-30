@@ -2,6 +2,7 @@ package de.weigend.s202.ui.wfx;
 
 import io.softwareecg.wfx.platform.api.EventBus;
 import io.softwareecg.wfx.platform.api.events.ProgressEvent;
+import javafx.application.Platform;
 import javafx.geometry.HPos;
 import javafx.geometry.Insets;
 import javafx.geometry.Pos;
@@ -55,12 +56,21 @@ public class S202StatusBar {
         HBox.setHgrow(root, Priority.ALWAYS);
 
         bus.subscribe(ProgressEvent.class, ev -> {
-            if (ev.getMessage() != null && !ev.getMessage().isEmpty()) {
-                statusLabel.setText(ev.getMessage());
+            Runnable update = () -> applyProgressEvent(ev);
+            if (Platform.isFxApplicationThread()) {
+                update.run();
+            } else {
+                Platform.runLater(update);
             }
-            progressBar.setProgress(ev.getProgress());
             return true;
         });
+    }
+
+    private void applyProgressEvent(ProgressEvent ev) {
+        if (ev.getMessage() != null && !ev.getMessage().isEmpty()) {
+            statusLabel.setText(ev.getMessage());
+        }
+        progressBar.setProgress(ev.getProgress());
     }
 
     public Node getNode() {
@@ -68,6 +78,11 @@ public class S202StatusBar {
     }
 
     public void setMessage(String message) {
-        statusLabel.setText(message);
+        Runnable update = () -> statusLabel.setText(message);
+        if (Platform.isFxApplicationThread()) {
+            update.run();
+        } else {
+            Platform.runLater(update);
+        }
     }
 }

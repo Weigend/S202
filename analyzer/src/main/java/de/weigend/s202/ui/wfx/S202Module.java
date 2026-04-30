@@ -21,6 +21,7 @@ import io.softwareecg.wfx.windowmtg.api.View;
 import io.softwareecg.wfx.windowmtg.api.ViewKind;
 import io.softwareecg.wfx.windowmtg.api.WindowManager;
 import jakarta.inject.Singleton;
+import javafx.animation.PauseTransition;
 import javafx.application.Platform;
 import javafx.concurrent.Task;
 import javafx.geometry.Pos;
@@ -38,6 +39,7 @@ import javafx.scene.control.Tooltip;
 import javafx.scene.layout.HBox;
 import javafx.scene.paint.Color;
 import javafx.stage.FileChooser;
+import javafx.util.Duration;
 import org.kordamp.ikonli.Ikon;
 import org.kordamp.ikonli.javafx.FontIcon;
 import org.kordamp.ikonli.materialdesign2.MaterialDesignF;
@@ -450,13 +452,31 @@ public class S202Module implements Module {
         Task<AnalysisResult> task = new Task<>() {
             @Override
             protected AnalysisResult call() throws Exception {
-                DependencyModel rawModel = rawAnalyzer.analyzeMultiple(jarPaths);
+                final int[] lastReportedClass = {-1};
+                DependencyModel rawModel = rawAnalyzer.analyzeMultiple(jarPaths, progress -> {
+                    int total = progress.totalClasses();
+                    int processed = progress.processedClasses();
+                    if (total <= 0 || (processed != total && processed - lastReportedClass[0] < 25)) {
+                        return;
+                    }
+                    lastReportedClass[0] = processed;
+                    double bytecodeProgress = Math.min(0.70, 0.70 * processed / total);
+                    String jarName = progress.jarPath() == null ? fileNames : new File(progress.jarPath()).getName();
+                    publishProgress(String.format("Reading bytecode: %s (%d/%d classes)",
+                            jarName, processed, total), bytecodeProgress);
+                });
                 if (rawModel.getAllClasses().isEmpty()) {
                     return new AnalysisResult(rawModel, null, null, null);
                 }
+
+                publishProgress("Calculating architectural levels...", 0.75);
                 DomainModel calculated = levelCalculator.calculate(rawModel);
+
+                publishProgress("Building architecture tree...", 0.85);
                 ArchitectureNode root = architectureNodeBuilder.build(calculated);
                 new DistrictRowLevelCalculator().assignDistrictRowLevels(root);
+
+                publishProgress("Preparing quality metrics...", 0.90);
                 QualityMetrics metrics = QualityMetrics.compute(calculated);
                 return new AnalysisResult(rawModel, root, metrics, calculated);
             }
@@ -469,17 +489,11 @@ public class S202Module implements Module {
                 showError("No Classes Found", "The JAR file(s) do not contain any .class files");
                 return;
             }
-            // Domain model first so listeners on architectureRoot/metrics can
-            // already query scoped data (e.g. quality module on package select).
-            view.setDomainModel(result.domainModel());
-            view.setArchitectureRoot(result.rootNode());
-            view.setQualityMetrics(result.metrics());
-            publishProgress(String.format(
-                    "Loaded %d JAR(s) | %d classes | %d levels | Max level %d",
-                    jarFiles.size(),
-                    result.rawModel().getAllClasses().size(),
-                    result.rootNode().getLevelCount(),
-                    result.rootNode().getMaxLevel()), 1);
+            publishProgress("Building JavaFX architecture view...", 0.97);
+
+            PauseTransition yieldToPulse = new PauseTransition(Duration.millis(50));
+            yieldToPulse.setOnFinished(event -> applyAnalysisResult(jarFiles, view, result));
+            yieldToPulse.play();
         });
         task.setOnFailed(e -> {
             Throwable t = task.getException();
@@ -492,6 +506,20 @@ public class S202Module implements Module {
         Thread analyzer = new Thread(task, "s202-analyzer");
         analyzer.setDaemon(true);
         analyzer.start();
+    }
+
+    private void applyAnalysisResult(List<File> jarFiles, ArchitectureView view, AnalysisResult result) {
+        // Domain model first so listeners on architectureRoot/metrics can
+        // already query scoped data (e.g. quality module on package select).
+        view.setDomainModel(result.domainModel());
+        view.setArchitectureRoot(result.rootNode());
+        view.setQualityMetrics(result.metrics());
+        publishProgress(String.format(
+                "Loaded %d JAR(s) | %d classes | %d levels | Max level %d",
+                jarFiles.size(),
+                result.rawModel().getAllClasses().size(),
+                result.rootNode().getLevelCount(),
+                result.rootNode().getMaxLevel()), 1);
     }
 
     private record AnalysisResult(DependencyModel rawModel, ArchitectureNode rootNode,

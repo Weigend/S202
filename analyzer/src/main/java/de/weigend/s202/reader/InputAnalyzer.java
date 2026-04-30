@@ -11,6 +11,8 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.*;
+import java.util.function.Consumer;
+import java.util.jar.JarEntry;
 import java.util.jar.JarFile;
 
 /**
@@ -37,6 +39,8 @@ public class InputAnalyzer {
     );
     
     private static List<String> excludedPrefixes;
+
+    public record AnalysisProgress(String jarPath, String classEntryName, int processedClasses, int totalClasses) {}
     
     /**
      * Returns the list of excluded class prefixes.
@@ -103,9 +107,23 @@ public class InputAnalyzer {
      * Analyzes multiple JAR files and returns a combined dependency model.
      */
     public DependencyModel analyzeMultiple(java.util.List<String> jarPaths) throws IOException {
+        return analyzeMultiple(jarPaths, progress -> {});
+    }
+
+    /**
+     * Analyzes multiple JAR files and reports bytecode-reading progress without
+     * introducing a dependency on any UI framework.
+     */
+    public DependencyModel analyzeMultiple(java.util.List<String> jarPaths,
+                                           Consumer<AnalysisProgress> progressConsumer) throws IOException {
         DependencyModel model = new DependencyModel();
+        Consumer<AnalysisProgress> progress = progressConsumer != null ? progressConsumer : ignored -> {};
+        int totalClasses = countClassEntries(jarPaths);
+        progress.accept(new AnalysisProgress(null, null, 0, totalClasses));
+
+        int processedClasses = 0;
         for (String jarPath : jarPaths) {
-            analyzeInto(jarPath, model);
+            processedClasses = analyzeInto(jarPath, model, progress, processedClasses, totalClasses);
         }
         buildPackageHierarchy(model);
         return model;
@@ -115,8 +133,15 @@ public class InputAnalyzer {
      * Analyzes a JAR file and adds its classes to an existing model.
      */
     private void analyzeInto(String jarPath, DependencyModel model) throws IOException {
+        analyzeInto(jarPath, model, progress -> {}, 0, countClassEntries(List.of(jarPath)));
+    }
+
+    private int analyzeInto(String jarPath, DependencyModel model, Consumer<AnalysisProgress> progress,
+                            int processedClasses, int totalClasses) throws IOException {
         try (JarFile jarFile = new JarFile(jarPath)) {
-            jarFile.entries().asIterator().forEachRemaining(entry -> {
+            Enumeration<JarEntry> entries = jarFile.entries();
+            while (entries.hasMoreElements()) {
+                JarEntry entry = entries.nextElement();
                 if (entry.getName().endsWith(".class") && !entry.isDirectory()) {
                     try {
                         byte[] classBytes = jarFile.getInputStream(entry).readAllBytes();
@@ -124,9 +149,28 @@ public class InputAnalyzer {
                     } catch (Exception e) {
                         System.err.println("Warning: Could not analyze " + entry.getName() + ": " + e.getMessage());
                     }
+                    processedClasses++;
+                    progress.accept(new AnalysisProgress(jarPath, entry.getName(), processedClasses, totalClasses));
                 }
-            });
+            }
         }
+        return processedClasses;
+    }
+
+    private int countClassEntries(List<String> jarPaths) throws IOException {
+        int total = 0;
+        for (String jarPath : jarPaths) {
+            try (JarFile jarFile = new JarFile(jarPath)) {
+                Enumeration<JarEntry> entries = jarFile.entries();
+                while (entries.hasMoreElements()) {
+                    JarEntry entry = entries.nextElement();
+                    if (entry.getName().endsWith(".class") && !entry.isDirectory()) {
+                        total++;
+                    }
+                }
+            }
+        }
+        return total;
     }
 
     /**
