@@ -109,9 +109,19 @@ public class S202Module implements Module {
 
     @Override
     public void preload() throws PlatformException {
+        waitForDemoPreloader();
         // No view registered up-front: the central docking area stays empty
         // until the user loads a JAR (or invokes Windows → New). loadJarFiles()
         // creates and registers the first tab on demand.
+    }
+
+    private void waitForDemoPreloader() throws PlatformException {
+        try {
+            Thread.sleep(2_000);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw new PlatformException("Interrupted while delaying S202 preload", e);
+        }
     }
 
     @SuppressWarnings("unchecked")
