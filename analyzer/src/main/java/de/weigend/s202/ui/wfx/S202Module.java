@@ -274,12 +274,12 @@ public class S202Module implements Module {
     }
 
     private void installToolbar() {
-        openJarButton = new Button("Open JAR");
+        openJarButton = new Button("Open");
         openJarButton.setId("toolbar.open");
         openJarButton.getStyleClass().add("toolbar-button");
         openJarButton.setGraphic(toolbarIcon(MaterialDesignF.FOLDER_OPEN));
-        openJarButton.setTooltip(new Tooltip("Analyse a JAR file"));
-        openJarButton.setOnAction(e -> openJarChooser());
+        openJarButton.setTooltip(new Tooltip("Open JAR(s), Maven pom.xml, or Gradle build script"));
+        openJarButton.setOnAction(e -> openAnyChooser());
 
         Label depthLabel = new Label("Depth:");
         depthLabel.getStyleClass().add("toolbar-label");
@@ -419,10 +419,6 @@ public class S202Module implements Module {
     }
 
     private void openJarChooser() {
-        // System FileChooser is the entry point. Single-file picks fall
-        // straight through to analysis. Multi-file picks land in the
-        // staging dialog so the user can review or add files from another
-        // folder before kicking off the run.
         FileChooser fileChooser = new FileChooser();
         fileChooser.setTitle("Select JAR file(s) to analyze");
         fileChooser.getExtensionFilters().addAll(
@@ -431,7 +427,89 @@ public class S202Module implements Module {
         if (lastDirectory != null && lastDirectory.isDirectory()) {
             fileChooser.setInitialDirectory(lastDirectory);
         }
+        loadJarSelection(fileChooser.showOpenMultipleDialog(applicationWindow.getStage()));
+    }
+
+    private void openMavenProject() {
+        File pom = chooseProjectFile("Select Maven project root pom.xml",
+                new FileChooser.ExtensionFilter("Maven POM", "pom.xml"));
+        if (pom != null) {
+            scanMavenProjectAt(pom.getParentFile());
+        }
+    }
+
+    private void openGradleProject() {
+        File buildScript = chooseProjectFile("Select Gradle root settings.gradle or build.gradle",
+                new FileChooser.ExtensionFilter("Gradle settings/build script",
+                        "settings.gradle", "settings.gradle.kts",
+                        "build.gradle", "build.gradle.kts"));
+        if (buildScript != null) {
+            scanGradleProjectAt(buildScript.getParentFile());
+        }
+    }
+
+    /**
+     * Unified toolbar entry point. Accepts JARs, a Maven {@code pom.xml}, or
+     * a Gradle settings/build script in a single FileChooser and dispatches
+     * to the right loader by filename.
+     */
+    private void openAnyChooser() {
+        FileChooser fileChooser = new FileChooser();
+        fileChooser.setTitle("Open JAR(s), Maven pom.xml, or Gradle build script");
+        fileChooser.getExtensionFilters().addAll(
+                new FileChooser.ExtensionFilter("All supported",
+                        "*.jar", "pom.xml",
+                        "settings.gradle", "settings.gradle.kts",
+                        "build.gradle", "build.gradle.kts"),
+                new FileChooser.ExtensionFilter("JAR Files", "*.jar"),
+                new FileChooser.ExtensionFilter("Maven POM", "pom.xml"),
+                new FileChooser.ExtensionFilter("Gradle settings/build script",
+                        "settings.gradle", "settings.gradle.kts",
+                        "build.gradle", "build.gradle.kts"),
+                new FileChooser.ExtensionFilter("All Files", "*.*"));
+        File initial = lastDirectory != null && lastDirectory.isDirectory()
+                ? lastDirectory
+                : (lastProjectDirectory != null && lastProjectDirectory.isDirectory() ? lastProjectDirectory : null);
+        if (initial != null) {
+            fileChooser.setInitialDirectory(initial);
+        }
         List<File> picked = fileChooser.showOpenMultipleDialog(applicationWindow.getStage());
+        if (picked == null || picked.isEmpty()) {
+            return;
+        }
+
+        // Single-file picks may be a project descriptor; check the filename first.
+        if (picked.size() == 1) {
+            File f = picked.get(0);
+            String name = f.getName();
+            if (name.equalsIgnoreCase("pom.xml")) {
+                scanMavenProjectAt(f.getParentFile());
+                return;
+            }
+            if (name.equalsIgnoreCase("settings.gradle") || name.equalsIgnoreCase("settings.gradle.kts")
+                    || name.equalsIgnoreCase("build.gradle") || name.equalsIgnoreCase("build.gradle.kts")) {
+                scanGradleProjectAt(f.getParentFile());
+                return;
+            }
+        }
+
+        // Otherwise treat as JAR selection — but reject mixed picks, since
+        // mixing a pom.xml with JARs has no defined semantics.
+        for (File f : picked) {
+            if (!f.getName().toLowerCase().endsWith(".jar")) {
+                showError("Mixed selection",
+                        "Pick either ONE pom.xml / settings.gradle / build.gradle for a project import,\n"
+                                + "or one or more *.jar files for direct analysis. Mixed selections aren't supported.");
+                return;
+            }
+        }
+        loadJarSelection(picked);
+    }
+
+    /** Routes a list of JAR files through the staging dialog when there's
+     *  more than one, and into the analysis pipeline otherwise. Shared by the
+     *  JAR-only menu entry and the unified toolbar chooser. */
+    private void loadJarSelection(List<File> picked) {
         if (picked == null || picked.isEmpty()) {
             return;
         }
@@ -441,7 +519,6 @@ public class S202Module implements Module {
             loadJarFiles(picked);
             return;
         }
-
         SourceSetDialog.chooseSourceSet(applicationWindow.getStage(), lastDirectory, picked)
                 .ifPresent(selected -> {
                     if (!selected.isEmpty()) {
@@ -451,13 +528,7 @@ public class S202Module implements Module {
                 });
     }
 
-    private void openMavenProject() {
-        File pom = chooseProjectFile("Select Maven project root pom.xml",
-                new FileChooser.ExtensionFilter("Maven POM", "pom.xml"));
-        if (pom == null) {
-            return;
-        }
-        File root = pom.getParentFile();
+    private void scanMavenProjectAt(File root) {
         lastProjectDirectory = root;
         runProjectScan("Maven", root,
                 () -> {
@@ -467,15 +538,7 @@ public class S202Module implements Module {
                 "mvn package");
     }
 
-    private void openGradleProject() {
-        File buildScript = chooseProjectFile("Select Gradle root settings.gradle or build.gradle",
-                new FileChooser.ExtensionFilter("Gradle settings/build script",
-                        "settings.gradle", "settings.gradle.kts",
-                        "build.gradle", "build.gradle.kts"));
-        if (buildScript == null) {
-            return;
-        }
-        File root = buildScript.getParentFile();
+    private void scanGradleProjectAt(File root) {
         lastProjectDirectory = root;
         runProjectScan("Gradle", root,
                 () -> {
