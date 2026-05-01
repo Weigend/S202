@@ -67,6 +67,13 @@ public class S202MenuBar {
                 "file.open", "Open JAR...", e -> publish(new MenuRequestEvent.OpenJar(this)));
         openItem.setAccelerator(new KeyCodeCombination(KeyCode.O, KeyCombination.SHORTCUT_DOWN));
 
+        MenuItem openMavenItem = MenuUtil.createMenuItem(
+                "file.openMaven", "Open Maven Project...",
+                e -> publish(new MenuRequestEvent.OpenMavenProject(this)));
+        MenuItem openGradleItem = MenuUtil.createMenuItem(
+                "file.openGradle", "Open Gradle Project...",
+                e -> publish(new MenuRequestEvent.OpenGradleProject(this)));
+
         MenuItem exitItem = MenuUtil.createMenuItem(
                 "file.exit", "Exit", e -> {
                     if (confirmExit()) {
@@ -76,7 +83,8 @@ public class S202MenuBar {
         exitItem.setAccelerator(new KeyCodeCombination(KeyCode.Q, KeyCombination.SHORTCUT_DOWN));
 
         Menu fileMenu = MenuUtil.createMenu("file", "File");
-        fileMenu.getItems().addAll(openItem, new SeparatorMenuItem(), exitItem);
+        fileMenu.getItems().addAll(openItem, openMavenItem, openGradleItem,
+                new SeparatorMenuItem(), exitItem);
 
         applicationWindow.getMenu().add(0, fileMenu);
     }

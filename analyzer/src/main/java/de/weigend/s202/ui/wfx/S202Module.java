@@ -1,10 +1,14 @@
 package de.weigend.s202.ui.wfx;
 
+import de.weigend.s202.analysis.invariants.LayoutInvariantChecker;
+import de.weigend.s202.analysis.invariants.LayoutInvariantReport;
 import de.weigend.s202.analysis.quality.QualityMetrics;
 import de.weigend.s202.domain.DomainModel;
 import de.weigend.s202.domain.LevelCalculator;
 import de.weigend.s202.reader.DependencyModel;
+import de.weigend.s202.reader.GradleProjectScanner;
 import de.weigend.s202.reader.InputAnalyzer;
+import de.weigend.s202.reader.MavenProjectScanner;
 import de.weigend.s202.ui.ArchitectureView;
 import de.weigend.s202.ui.model.ArchitectureNode;
 import de.weigend.s202.ui.model.ArchitectureNodeBuilder;
@@ -71,9 +75,11 @@ public class S202Module implements Module {
     private final InputAnalyzer rawAnalyzer = new InputAnalyzer();
     private final LevelCalculator levelCalculator = new LevelCalculator();
     private final ArchitectureNodeBuilder architectureNodeBuilder = new ArchitectureNodeBuilder();
+    private final LayoutInvariantChecker invariantChecker = new LayoutInvariantChecker();
 
     private int viewCounter;
     private File lastDirectory;
+    private File lastProjectDirectory;
 
     private S202StatusBar statusBar;
 
@@ -198,6 +204,8 @@ public class S202Module implements Module {
 
     private void subscribeToMenuRequests(EventBus<EventObject> bus) {
         bus.subscribe(MenuRequestEvent.OpenJar.class, ev -> { openJarChooser(); return true; });
+        bus.subscribe(MenuRequestEvent.OpenMavenProject.class, ev -> { openMavenProject(); return true; });
+        bus.subscribe(MenuRequestEvent.OpenGradleProject.class, ev -> { openGradleProject(); return true; });
         bus.subscribe(MenuRequestEvent.Exit.class, ev -> { Platform.exit(); return true; });
         bus.subscribe(MenuRequestEvent.NewView.class, ev -> { newArchitectureWindow(); return true; });
         bus.subscribe(MenuRequestEvent.CloseFocusedView.class, ev -> { closeFocusedView(); return true; });
@@ -411,19 +419,151 @@ public class S202Module implements Module {
     }
 
     private void openJarChooser() {
+        // System FileChooser is the entry point. Single-file picks fall
+        // straight through to analysis. Multi-file picks land in the
+        // staging dialog so the user can review or add files from another
+        // folder before kicking off the run.
         FileChooser fileChooser = new FileChooser();
-        fileChooser.setTitle("Select JAR File(s) to Analyze");
+        fileChooser.setTitle("Select JAR file(s) to analyze");
         fileChooser.getExtensionFilters().addAll(
                 new FileChooser.ExtensionFilter("JAR Files", "*.jar"),
                 new FileChooser.ExtensionFilter("All Files", "*.*"));
         if (lastDirectory != null && lastDirectory.isDirectory()) {
             fileChooser.setInitialDirectory(lastDirectory);
         }
-        List<File> selected = fileChooser.showOpenMultipleDialog(applicationWindow.getStage());
-        if (selected != null && !selected.isEmpty()) {
-            lastDirectory = selected.get(0).getParentFile();
-            loadJarFiles(selected);
+        List<File> picked = fileChooser.showOpenMultipleDialog(applicationWindow.getStage());
+        if (picked == null || picked.isEmpty()) {
+            return;
         }
+        lastDirectory = picked.get(0).getParentFile();
+
+        if (picked.size() == 1) {
+            loadJarFiles(picked);
+            return;
+        }
+
+        SourceSetDialog.chooseSourceSet(applicationWindow.getStage(), lastDirectory, picked)
+                .ifPresent(selected -> {
+                    if (!selected.isEmpty()) {
+                        lastDirectory = selected.get(0).getParentFile();
+                        loadJarFiles(selected);
+                    }
+                });
+    }
+
+    private void openMavenProject() {
+        File pom = chooseProjectFile("Select Maven project root pom.xml",
+                new FileChooser.ExtensionFilter("Maven POM", "pom.xml"));
+        if (pom == null) {
+            return;
+        }
+        File root = pom.getParentFile();
+        lastProjectDirectory = root;
+        runProjectScan("Maven", root,
+                () -> {
+                    var r = new MavenProjectScanner().scan(root);
+                    return new ScanResult(r.jars(), r.missingArtifactModules(), r.scannedModuleCount());
+                },
+                "mvn package");
+    }
+
+    private void openGradleProject() {
+        File buildScript = chooseProjectFile("Select Gradle root settings.gradle or build.gradle",
+                new FileChooser.ExtensionFilter("Gradle settings/build script",
+                        "settings.gradle", "settings.gradle.kts",
+                        "build.gradle", "build.gradle.kts"));
+        if (buildScript == null) {
+            return;
+        }
+        File root = buildScript.getParentFile();
+        lastProjectDirectory = root;
+        runProjectScan("Gradle", root,
+                () -> {
+                    var r = new GradleProjectScanner().scan(root);
+                    return new ScanResult(r.jars(), r.missingArtifactModules(), r.scannedModuleCount());
+                },
+                "gradle build");
+    }
+
+    private File chooseProjectFile(String title, FileChooser.ExtensionFilter filter) {
+        FileChooser chooser = new FileChooser();
+        chooser.setTitle(title);
+        chooser.getExtensionFilters().addAll(filter,
+                new FileChooser.ExtensionFilter("All Files", "*.*"));
+        File initial = lastProjectDirectory != null && lastProjectDirectory.isDirectory()
+                ? lastProjectDirectory
+                : (lastDirectory != null && lastDirectory.isDirectory() ? lastDirectory : null);
+        if (initial != null) {
+            chooser.setInitialDirectory(initial);
+        }
+        return chooser.showOpenDialog(applicationWindow.getStage());
+    }
+
+    /**
+     * Adapter result so the Maven and Gradle scanner result records can flow
+     * through a shared post-scan handler without bleeding their concrete
+     * record types into S202Module.
+     */
+    private record ScanResult(List<File> jars, List<String> missingArtifactModules, int scannedModuleCount) {}
+
+    @FunctionalInterface
+    private interface ScanCallable {
+        ScanResult call() throws Exception;
+    }
+
+    private void runProjectScan(String kind, File root, ScanCallable scanCallable, String buildHint) {
+        publishProgress("Scanning " + kind + " project " + root.getName() + "…", -1);
+
+        Task<ScanResult> task = new Task<>() {
+            @Override
+            protected ScanResult call() throws Exception {
+                return scanCallable.call();
+            }
+        };
+        task.setOnSucceeded(e -> handleScanResult(kind, root, task.getValue(), buildHint));
+        task.setOnFailed(e -> {
+            Throwable t = task.getException();
+            String msg = t != null ? t.getMessage() : "unknown error";
+            LOGGER.error("{} project scan failed", kind, t);
+            publishProgress("Error scanning " + kind + " project: " + msg, 1);
+            showError(kind + " scan failed", "Could not scan " + kind + " project:\n" + msg);
+        });
+        Thread th = new Thread(task, "s202-" + kind.toLowerCase() + "-scan");
+        th.setDaemon(true);
+        th.start();
+    }
+
+    private void handleScanResult(String kind, File root, ScanResult result, String buildHint) {
+        List<File> jars = result.jars();
+        List<String> missing = result.missingArtifactModules();
+        int total = result.scannedModuleCount();
+
+        if (jars.isEmpty()) {
+            publishProgress("No built JARs found in " + kind + " project " + root.getName(), 0);
+            showError("No JARs found",
+                    "Found no analyzable JARs under\n" + root.getAbsolutePath()
+                            + "\n\nTry running \"" + buildHint + "\" first to produce module artifacts.");
+            return;
+        }
+
+        int built = total - missing.size();
+        String summary = jars.size() + " JAR(s) from " + built + "/" + total
+                + " " + kind + " module(s)"
+                + (missing.isEmpty() ? "" : " (" + missing.size() + " not built)");
+        publishProgress(summary, 0);
+        if (!missing.isEmpty()) {
+            LOGGER.warn("{} project '{}': {} module(s) without artifact: {}",
+                    kind, root.getName(), missing.size(), missing);
+        }
+
+        File initialDir = jars.get(0).getParentFile();
+        SourceSetDialog.chooseSourceSet(applicationWindow.getStage(), initialDir, jars)
+                .ifPresent(selected -> {
+                    if (!selected.isEmpty()) {
+                        lastDirectory = selected.get(0).getParentFile();
+                        loadJarFiles(selected);
+                    }
+                });
     }
 
     @Override
@@ -466,7 +606,7 @@ public class S202Module implements Module {
                             jarName, processed, total), bytecodeProgress);
                 });
                 if (rawModel.getAllClasses().isEmpty()) {
-                    return new AnalysisResult(rawModel, null, null, null);
+                    return new AnalysisResult(rawModel, null, null, null, null);
                 }
 
                 publishProgress("Calculating architectural levels...", 0.75);
@@ -478,7 +618,18 @@ public class S202Module implements Module {
 
                 publishProgress("Preparing quality metrics...", 0.90);
                 QualityMetrics metrics = QualityMetrics.compute(calculated);
-                return new AnalysisResult(rawModel, root, metrics, calculated);
+
+                // Layout invariant check runs on the same background thread so
+                // findings reach the FX thread together with the rest of the
+                // result — the user sees one settled state, not a mid-render
+                // popup. Findings flagged here are real algorithm bugs in the
+                // level pipeline, not architectural violations (those already
+                // surface as red dependency edges).
+                publishProgress("Verifying layout invariants...", 0.95);
+                LayoutInvariantReport invariants = invariantChecker.check(
+                        calculated, rawModel,
+                        jarFiles.stream().map(File::getAbsolutePath).toList());
+                return new AnalysisResult(rawModel, root, metrics, calculated, invariants);
             }
         };
 
@@ -514,16 +665,44 @@ public class S202Module implements Module {
         view.setDomainModel(result.domainModel());
         view.setArchitectureRoot(result.rootNode());
         view.setQualityMetrics(result.metrics());
+
+        LayoutInvariantReport invariants = result.invariants();
+        String invariantSuffix = "";
+        if (invariants != null) {
+            int n = invariants.findings().size();
+            if (n == 0) {
+                invariantSuffix = " | invariants OK";
+            } else {
+                invariantSuffix = " | " + n + " invariant finding" + (n == 1 ? "" : "s");
+                LOGGER.warn("Layout invariant report ({} finding(s)):\n{}",
+                        n, invariants.toReproducerText());
+            }
+        }
         publishProgress(String.format(
-                "Loaded %d JAR(s) | %d classes | %d levels | Max level %d",
+                "Loaded %d JAR(s) | %d classes | %d levels | Max level %d%s",
                 jarFiles.size(),
                 result.rawModel().getAllClasses().size(),
                 result.rootNode().getLevelCount(),
-                result.rootNode().getMaxLevel()), 1);
+                result.rootNode().getMaxLevel(),
+                invariantSuffix), 1);
+
+        // Auto-show the report dialog only on findings; clean runs stay quiet
+        // so the user is not interrupted on every successful analysis.
+        if (invariants != null && invariants.hasFindings()) {
+            // applyAnalysisResult runs inside a PauseTransition.onFinished —
+            // i.e. inside an animation pulse. Dialog.showAndWait refuses to
+            // run from there ("not allowed during animation or layout
+            // processing"); defer one tick so the dialog opens on a clean
+            // FX pulse.
+            final LayoutInvariantReport report = invariants;
+            Platform.runLater(() ->
+                    InvariantReportDialog.show(applicationWindow.getStage(), report));
+        }
     }
 
     private record AnalysisResult(DependencyModel rawModel, ArchitectureNode rootNode,
-                                  QualityMetrics metrics, DomainModel domainModel) {}
+                                  QualityMetrics metrics, DomainModel domainModel,
+                                  LayoutInvariantReport invariants) {}
 
     private void showError(String title, String message) {
         Platform.runLater(() -> {

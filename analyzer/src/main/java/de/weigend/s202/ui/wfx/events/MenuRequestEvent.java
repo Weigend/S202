@@ -18,6 +18,14 @@ public abstract class MenuRequestEvent extends EventObject {
         public OpenJar(Object source) { super(source); }
     }
 
+    public static final class OpenMavenProject extends MenuRequestEvent {
+        public OpenMavenProject(Object source) { super(source); }
+    }
+
+    public static final class OpenGradleProject extends MenuRequestEvent {
+        public OpenGradleProject(Object source) { super(source); }
+    }
+
     public static final class Exit extends MenuRequestEvent {
         public Exit(Object source) { super(source); }
     }

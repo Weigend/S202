@@ -380,6 +380,84 @@
     -fx-border-color: #ffd54f;
 }
 
+/* ===== Invariant Report dialog ===== */
+.invariant-report-dialog .invariant-report-text,
+.invariant-report-dialog .invariant-report-text .content {
+    -fx-background-color: #14202b;
+    -fx-control-inner-background: #14202b;
+    -fx-text-fill: #e0e0e0;
+    -fx-font-family: "JetBrains Mono", "Fira Mono", "Consolas", monospace;
+    -fx-font-size: 11px;
+    -fx-border-color: #34495e;
+    -fx-border-width: 1;
+    -fx-background-radius: 3;
+    -fx-border-radius: 3;
+}
+
+.invariant-report-dialog .invariant-report-text .scroll-pane {
+    -fx-background-color: transparent;
+}
+
+/* ===== Source Set dialog ===== */
+.source-set-dialog .source-set-list {
+    -fx-background-color: #14202b;
+    -fx-control-inner-background: #14202b;
+    -fx-border-color: #34495e;
+    -fx-border-width: 1;
+    -fx-background-radius: 3;
+    -fx-border-radius: 3;
+}
+
+.source-set-dialog .source-set-list .list-cell {
+    -fx-background-color: transparent;
+    -fx-padding: 4 8;
+}
+
+.source-set-dialog .source-set-list .list-cell:filled:hover {
+    -fx-background-color: #1f2d3d;
+}
+
+.source-set-dialog .source-set-list .list-cell:filled:selected,
+.source-set-dialog .source-set-list .list-cell:filled:selected:focused {
+    -fx-background-color: #3d5a80;
+}
+
+.source-set-dialog .source-set-name {
+    -fx-font-size: 12px;
+    -fx-text-fill: #f0f0f0;
+}
+
+.source-set-dialog .source-set-path {
+    -fx-font-size: 10px;
+    -fx-text-fill: #8090a0;
+}
+
+.source-set-dialog .source-set-empty {
+    -fx-font-size: 11px;
+    -fx-text-fill: #8090a0;
+    -fx-padding: 16;
+}
+
+.source-set-dialog .source-set-action {
+    -fx-font-size: 12px;
+    -fx-padding: 4 10;
+    -fx-background-color: #34495e;
+    -fx-text-fill: #e0e0e0;
+    -fx-border-color: #4a6a8a;
+    -fx-border-radius: 3;
+    -fx-background-radius: 3;
+    -fx-cursor: hand;
+}
+
+.source-set-dialog .source-set-action:hover {
+    -fx-background-color: #3d5a80;
+    -fx-border-color: #5a8ab5;
+}
+
+.source-set-dialog .source-set-action:disabled {
+    -fx-opacity: 0.45;
+}
+
 /* ===== Labels ===== */
 .label {
     -fx-font-size: 9px;
