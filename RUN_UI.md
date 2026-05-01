@@ -13,10 +13,10 @@
 ## Beispiel
 
 ```bash
-./run-ui.sh test-example/target/test-cyclic-dependencies-1.0.0.jar
+./run-ui.sh test-example/target/test-example-1.0.0.jar
 ```
 
 ## Voraussetzungen
 
 - Maven 3.9+
-- Java 17+
+- Java 21+

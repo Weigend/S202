@@ -37,7 +37,11 @@ Die Level-Berechnung erfolgt in zwei Phasen:
 ├─────────────────────────────────────────────────────────────────┤
 │  Schritt 3: Klassen-Level berechnen (SCC-aware)                │
 ├─────────────────────────────────────────────────────────────────┤
-│  Schritt 4-5: Paket-Level aus Klassen + Eltern-Propagation     │
+│  Schritt 4: Paket-Level = max(Klassen-Level im Paket)          │
+├─────────────────────────────────────────────────────────────────┤
+│  Konvergenz-Loop (alternierend, bis stabil):                   │
+│    Schritt 5:  Eltern-Paket = max(Kind-Paket)                  │
+│    Schritt 4b: Paket-SCC-Mitglieder auf gemeinsames Maximum    │
 ├─────────────────────────────────────────────────────────────────┤
 │  Schritt 6: Rückwärts-Beziehungen (dependents) aktualisieren   │
 └─────────────────────────────────────────────────────────────────┘
@@ -134,13 +138,27 @@ Klassen-Level = max(Level aller Abhängigkeiten) + 1
 
 ---
 
-## Schritte 4-5: Paket-Level (Zwischenergebnis)
+## Schritte 4 / 4b / 5: Paket-Level (Zwischenergebnis)
 
 - **Schritt 4**: Paket-Level = max(Klassen-Level im Paket)
 - **Schritt 5**: Eltern-Pakete erben max(Kind-Paket-Level)
+- **Schritt 4b**: Mitglieder eines Multi-Member-Paket-SCCs werden auf das gemeinsame Maximum gehoben.
+
+Schritt 4b verwendet denselben gefilterten Paket-Dep-Graph wie der Layout-Invariant-Checker
+(heuristische Back-Edges raus, Kanten innerhalb eines Klassen-SCCs raus, Eltern↔Kind-Kanten
+raus), läuft Tarjan darauf, und equalisiert jeden Multi-Member-Paket-SCC auf den Maximum-Level
+seiner Mitglieder. Ohne diesen Schritt würden zyklische Geschwister-Pakete (architektonische
+Peers) auf unterschiedlichen Levels landen, weil Schritt 4 jedes Paket separat aus seinen
+Klassen ableitet — eine Pseudo-Hierarchie.
+
+Schritte 4b und 5 sind zyklisch gekoppelt: Schritt 4b kann ein Blatt-Paket heben, was Schritt
+5 zwingt, dessen Eltern nachzuziehen; Schritt 5 kann ein Paket über seine Sub-Pakete heben,
+was den SCC-Maximum-Level ändert und Schritt 4b erneut triggert. Beide werden in einem
+Konvergenz-Loop (Cap 20 Iterationen) abwechselnd ausgeführt, bis nichts mehr verändert wird.
 
 Diese Levels werden in Phase 2 (DistrictRowLevelCalculator) für das Layout überschrieben,
-dienen aber als Metadaten im DomainModel.
+dienen aber als Metadaten im DomainModel und werden vom **LayoutInvariantChecker**
+(`analysis/invariants/`) gegen vier Regeln (R1, R2, R3, R5) geprüft — siehe Code-Referenzen.
 
 ---
 
@@ -275,6 +293,7 @@ com/
 Klassen-Level = max(Level aller Abhängigkeiten) + 1
 Klassen im gleichen SCC (Zyklus) = gleiches Level
 Paket-Level = max(Level aller Klassen im Paket)
+Paket-SCC-Mitglieder (zyklische Peers) = gemeinsames Maximum (Schritt 4b/5-Loop)
 ```
 
 ### Phase 2: DistrictRowLevelCalculator (finale Levels)
@@ -296,7 +315,8 @@ Externe Abhängigkeiten (zu Klassen außerhalb des Elternpakets) → Level 0.
 
 | Klasse | Datei | Verantwortung |
 |--------|-------|---------------|
-| `LevelCalculator` | [domain/LevelCalculator.java](../analyzer/src/main/java/de/weigend/s202/domain/LevelCalculator.java) | Phase 1: Abhängigkeiten + initiale Levels |
+| `LevelCalculator` | [domain/LevelCalculator.java](../analyzer/src/main/java/de/weigend/s202/domain/LevelCalculator.java) | Phase 1: Abhängigkeiten + initiale Levels (inkl. Schritt 4b/5-Konvergenz-Loop) |
+| `LayoutInvariantChecker` | [analysis/invariants/LayoutInvariantChecker.java](../analyzer/src/main/java/de/weigend/s202/analysis/invariants/LayoutInvariantChecker.java) | Verifiziert die Pipeline-Ausgabe gegen vier Regeln (R1/R2/R3/R5) |
 | `DistrictRowLevelCalculator` | [ui/model/DistrictRowLevelCalculator.java](../analyzer/src/main/java/de/weigend/s202/ui/model/DistrictRowLevelCalculator.java) | Phase 2: Lokale Level-Berechnung pro Paket |
 | `BasicClassLevelCalculationStrategy` | [analysis/strategy/impl/BasicClassLevelCalculationStrategy.java](../analyzer/src/main/java/de/weigend/s202/analysis/strategy/impl/BasicClassLevelCalculationStrategy.java) | SCC-aware Klassen-Level |
 | `TarjanSCCFinder` | [analysis/scc/TarjanSCCFinder.java](../analyzer/src/main/java/de/weigend/s202/analysis/scc/TarjanSCCFinder.java) | Zyklen-Erkennung (Phase 1 + Phase 2) |

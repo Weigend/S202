@@ -9,7 +9,7 @@ cd test-example
 mvn clean package
 ```
 
-JAR wird erstellt: `target/test-cyclic-dependencies-1.0.0.jar`
+JAR wird erstellt: `target/test-example-1.0.0.jar`
 
 ## Struktur
 
@@ -29,5 +29,5 @@ com.example
 ```bash
 cd ..
 mvn javafx:run
-# Load JAR → test-example/target/test-cyclic-dependencies-1.0.0.jar
+# File → Open JAR... → test-example/target/test-example-1.0.0.jar
 ```

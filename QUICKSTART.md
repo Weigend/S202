@@ -12,25 +12,32 @@ cd /home/johannes/Programieren/Structure202
 mvn javafx:run
 ```
 
-### 3. JAR-Datei laden
-Klick auf **📂 Load JAR** und wähle eine JAR-Datei aus.
+### 3. Code laden
+Drei Einstiegspunkte im **File**-Menü:
+
+- **Open JAR…** — eine oder mehrere JARs (Mehrfachauswahl öffnet einen Staging-Dialog)
+- **Open Maven Project…** — auf das Wurzel-`pom.xml` zeigen, alle Modul-JARs aus `target/` werden gesammelt
+- **Open Gradle Project…** — auf `settings.gradle(.kts)` oder `build.gradle(.kts)` zeigen, alle Modul-JARs aus `build/libs/` werden gesammelt
+
+Voraussetzung für Maven/Gradle-Projekte: `mvn package` bzw. `gradle build` muss bereits gelaufen sein.
 
 ## Beispiel: S202 selbst analysieren
 
 ```bash
 mvn clean package -DskipTests
 mvn javafx:run
-# Im UI: Load JAR → analyzer/target/s202-analyzer-1.0.0.jar
+# Im UI: File → Open JAR... → analyzer/target/s202-code-analyzer-1.0.0.jar
 ```
 
 ## Hauptfunktionen
 
 | Feature | Beschreibung |
 |---------|--------------|
-| **Load JAR** | JAR-Datei zur Analyse laden |
+| **Open JAR / Maven / Gradle** | JARs einzeln oder ganze Multi-Modul-Projekte laden |
 | **Package Tree** | Hierarchische Paket-Ansicht |
 | **Level-Layout** | Pakete nach Abhängigkeitstiefe sortiert |
 | **Violations** | Rote Linien zeigen architektonische Probleme |
+| **Invariant Check** | Läuft nach jeder Analyse automatisch; meldet Algorithmus-Bugs in der Level-Pipeline |
 
 ## Level-Bedeutung
 

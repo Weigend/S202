@@ -3,7 +3,7 @@
 ## Project Overview
 S202 is a **JavaFX-based bytecode analysis and architecture visualization tool**. It parses Java `.class` files, extracts dependency graphs, detects cyclic dependencies (SCC), and visualizes code architecture.
 
-**Tech Stack**: Java 17+, JavaFX 21.0.1, ASM 9.6, JUnit 5, Maven
+**Tech Stack**: Java 21, JavaFX 21.0.1, ASM 9.6, JUnit 5, Maven, WFX rich-client platform
 
 ## Architecture
 
@@ -11,26 +11,35 @@ S202 is a **JavaFX-based bytecode analysis and architecture visualization tool**
 ```
 de.weigend.s202/
 ├── analysis/           # Analyse-Algorithmen
-│   ├── scc/            # Tarjan SCC-Algorithmus
-│   └── strategy/       # Level-Berechnungsstrategien
+│   ├── scc/            # Tarjan SCC-Algorithmus + EdgeClassification
+│   ├── strategy/       # Level-Berechnungsstrategien
+│   ├── invariants/     # LayoutInvariantChecker (R1/R2/R3/R5)
+│   └── quality/        # Quality metrics
 ├── domain/             # Kernmodelle (DomainModel, LevelCalculator)
-├── reader/             # JAR → DependencyModel (InputAnalyzer)
-└── ui/                 # JavaFX UI
+├── reader/             # Input adapters
+│   ├── InputAnalyzer       # JAR → DependencyModel
+│   ├── MavenProjectScanner # Multi-module pom.xml walker
+│   └── GradleProjectScanner# settings.gradle include walker
+└── ui/                 # JavaFX UI (WFX-hosted)
     ├── model/          # ArchitectureNode, UIModel
+    ├── wfx/            # WFX module + dialogs (SourceSet, InvariantReport)
     └── demo/           # Demo-Klassen
 ```
 
 ### Data Pipeline
 ```
-JAR → InputAnalyzer → DependencyModel 
-    → LevelCalculator → DomainModel 
-    → ArchitectureNodeBuilder → ArchitectureNode (tree)
-    → ArchitectureView.setArchitectureRoot()
+JAR(s) → InputAnalyzer → DependencyModel
+       → LevelCalculator → DomainModel
+       → LayoutInvariantChecker → LayoutInvariantReport (parallel branch)
+       → ArchitectureNodeBuilder → ArchitectureNode (tree)
+       → ArchitectureView.setArchitectureRoot()
 ```
 
 ### Key Classes
 - **InputAnalyzer** (`reader/`): Converts JAR to DependencyModel (packages, classes, dependencies)
-- **LevelCalculator** (`domain/`): Computes topological levels with 8-step algorithm (SCC-aware, handles mixed packages)
+- **MavenProjectScanner / GradleProjectScanner** (`reader/`): Walk multi-module project trees and return analyzable JARs
+- **LevelCalculator** (`domain/`): Class-level SCC-aware levels, package-level rollup, then a 4b/5 convergence loop that equalises pkg-SCC peers and propagates parents
+- **LayoutInvariantChecker** (`analysis/invariants/`): Verifies the level pipeline output (R1 non-back-edge inversion, R2 pkg-SCC equal level, R3 container ≥ content, R5 type-flag drift)
 - **DomainModel** (`domain/`): Analysis result (levels, violations, cycles)
 - **ArchitectureNode** (`ui/model/`): UI tree node (package/class with level + dependencies)
 - **ArchitectureNodeBuilder** (`ui/model/`): Builds UI tree from DomainModel
