@@ -90,6 +90,7 @@ public class S202Module implements Module {
     private CheckBox showDependenciesCheckbox;
     private CheckBox circuitToggle;
     private CheckBox showSccCheckbox;
+    private CheckBox showIconsCheckbox;
     private Button zoomOutButton;
     private Label zoomLabel;
     private Button zoomInButton;
@@ -326,6 +327,14 @@ public class S202Module implements Module {
             }
         });
 
+        showIconsCheckbox = new CheckBox("Show Icons");
+        showIconsCheckbox.setTooltip(new Tooltip("Toggle package/class/interface icons in the architecture view"));
+        showIconsCheckbox.selectedProperty().addListener((obs, was, isNow) -> {
+            if (boundView != null) {
+                boundView.setShowIcons(isNow);
+            }
+        });
+
         zoomOutButton = new Button("−");
         zoomOutButton.getStyleClass().add("toolbar-zoom-button");
         zoomOutButton.setTooltip(new Tooltip("Zoom Out (Ctrl+Scroll Down)"));
@@ -350,14 +359,14 @@ public class S202Module implements Module {
         // Everything except the Open JAR button is view-dependent.
         viewDependentToolbarNodes.addAll(List.of(
                 depthLabel, depthSpinner, refreshButton,
-                showDependenciesCheckbox, circuitToggle, showSccCheckbox,
+                showDependenciesCheckbox, circuitToggle, showSccCheckbox, showIconsCheckbox,
                 zoomOutButton, zoomLabel, zoomInButton, zoomResetButton));
 
         applicationWindow.getToolbarItems().setAll(
                 openJarButton, new Separator(),
                 depthLabel, depthSpinner, refreshButton,
                 new Separator(),
-                showDependenciesCheckbox, circuitToggle, showSccCheckbox,
+                showDependenciesCheckbox, circuitToggle, showSccCheckbox, showIconsCheckbox,
                 new Separator(),
                 zoomGroup, zoomResetButton);
 
@@ -396,6 +405,7 @@ public class S202Module implements Module {
         showDependenciesCheckbox.setSelected(view.isShowDependencies());
         circuitToggle.setSelected(view.isCircuitMode());
         showSccCheckbox.setSelected(view.isShowScc());
+        showIconsCheckbox.setSelected(view.isShowIcons());
 
         ReadOnlyDoubleProperty zoomProp = view.zoomFactorProperty();
         if (zoomProp != null) {

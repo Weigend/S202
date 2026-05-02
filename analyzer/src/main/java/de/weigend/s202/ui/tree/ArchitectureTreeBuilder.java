@@ -123,7 +123,7 @@ public class ArchitectureTreeBuilder {
 
                 processArchitectureNode(child, packageContainers, packageBox, elementsAddedToParent, effectiveRoot, false, 1, maxDepth);
             } else if (child.getType() == NodeType.CLASS) {
-                LevelClassBox classBox = new LevelClassBox(child.getSimpleName(), child.getLevel(), child.getFullName());
+                LevelClassBox classBox = new LevelClassBox(child.getSimpleName(), child.getLevel(), child.getFullName(), child.isInterfaceType());
                 elementRegistry.put(child.getFullName(), classBox);
                 levelRow.getChildren().add(classBox);
             }
@@ -202,7 +202,7 @@ public class ArchitectureTreeBuilder {
                 processArchitectureNode(child, packageContainers, rootLevel, elementsAddedToParent, archRoot, false, currentDepth + 1, maxDepth);
             } else if (child.getType() == NodeType.CLASS) {
                 // Create class element
-                LevelClassBox classBox = new LevelClassBox(child.getSimpleName(), child.getLevel(), child.getFullName());
+                LevelClassBox classBox = new LevelClassBox(child.getSimpleName(), child.getLevel(), child.getFullName(), child.isInterfaceType());
                 elementRegistry.put(child.getFullName(), classBox);
                 parentContainer.addToLevel(child.getLevel(), classBox);
             }

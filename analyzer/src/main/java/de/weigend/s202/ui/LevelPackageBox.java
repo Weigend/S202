@@ -10,6 +10,9 @@ import javafx.scene.layout.HBox;
 import javafx.scene.layout.Priority;
 import javafx.scene.layout.Region;
 import javafx.scene.layout.VBox;
+import javafx.scene.paint.Color;
+import org.kordamp.ikonli.javafx.FontIcon;
+import org.kordamp.ikonli.materialdesign2.MaterialDesignP;
 
 import java.util.Map;
 import java.util.Objects;
@@ -28,6 +31,7 @@ public class LevelPackageBox extends VBox implements GraphSelection.Selectable {
             "-fx-background-color: #fff3a0; -fx-border-color: #ff6600; -fx-border-width: 2;";
     private static final String STYLE_TRANSPARENT =
             "-fx-background-color: transparent; -fx-border-width: 0;";
+    private static final Color PACKAGE_COLOR = Color.web("#e6c46a");
 
     private Label toggleIcon;
     private VBox contentContainer;
@@ -155,12 +159,18 @@ public class LevelPackageBox extends VBox implements GraphSelection.Selectable {
             }
         });
 
+        FontIcon packageIcon = new FontIcon(MaterialDesignP.PACKAGE_VARIANT_CLOSED);
+        packageIcon.getStyleClass().add("architecture-icon");
+        packageIcon.setIconColor(PACKAGE_COLOR);
+        packageIcon.visibleProperty().bind(ArchitectureView.showIconsProperty());
+        packageIcon.managedProperty().bind(ArchitectureView.showIconsProperty());
+
         Label nameLabel = new Label(levelName);
         nameLabel.getStyleClass().add("package-name");
         nameLabel.setMaxWidth(Double.MAX_VALUE);
         HBox.setHgrow(nameLabel, Priority.ALWAYS);
 
-        header.getChildren().addAll(toggleIcon, nameLabel);
+        header.getChildren().addAll(toggleIcon, packageIcon, nameLabel);
 
         this.getChildren().add(0, header);
     }

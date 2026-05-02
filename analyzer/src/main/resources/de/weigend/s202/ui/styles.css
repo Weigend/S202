@@ -546,3 +546,12 @@
     -fx-background-color: #ffe6cc;
     -fx-text-fill: #000000;
 }
+
+/* Architecture-graph icons (package / class / interface).
+   Pinned to the Material Design Icons font so the global
+   .root { -fx-font-family: "System" } cascade can't replace
+   the icon glyph with a missing-glyph "tofu" square. */
+.architecture-icon {
+    -fx-font-family: "Material Design Icons";
+    -fx-icon-size: 14;
+}

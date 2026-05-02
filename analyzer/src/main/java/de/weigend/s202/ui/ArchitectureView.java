@@ -65,6 +65,10 @@ public class ArchitectureView extends BorderPane {
     private final BooleanProperty showDependencies = new SimpleBooleanProperty(false);
     private final BooleanProperty circuitMode = new SimpleBooleanProperty(false);
     private final BooleanProperty showScc = new SimpleBooleanProperty(false);
+    // Icon visibility is shared across all open architecture views — boxes bind
+    // their FontIcon visibility to this property so toggling refreshes every
+    // open tab without rebuilding the tree.
+    private static final BooleanProperty SHOW_ICONS = new SimpleBooleanProperty(false);
     private final ReadOnlyObjectWrapper<ArchitectureNode> architectureRoot = new ReadOnlyObjectWrapper<>(null);
     private final ReadOnlyObjectWrapper<QualityMetrics> qualityMetrics = new ReadOnlyObjectWrapper<>(null);
     private final ReadOnlyObjectWrapper<DomainModel> domainModel = new ReadOnlyObjectWrapper<>(null);
@@ -500,6 +504,23 @@ public class ArchitectureView extends BorderPane {
 
     public void setShowScc(boolean show) {
         showScc.set(show);
+    }
+
+    /**
+     * Global icon visibility for all package/class boxes. Backed by a static
+     * property so all open architecture tabs and freshly created boxes react
+     * to the same toggle.
+     */
+    public static BooleanProperty showIconsProperty() {
+        return SHOW_ICONS;
+    }
+
+    public boolean isShowIcons() {
+        return SHOW_ICONS.get();
+    }
+
+    public void setShowIcons(boolean show) {
+        SHOW_ICONS.set(show);
     }
 
     /* ----- Status sink ----------------------------------------------------- */
