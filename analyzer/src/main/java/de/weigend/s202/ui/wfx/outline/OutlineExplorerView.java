@@ -109,6 +109,30 @@ public class OutlineExplorerView implements View {
         selectByFullName(fullName);
     }
 
+    /**
+     * Expand the owning class, select the matching method row, and scroll it
+     * into view. Falls back to the class row if the method is absent.
+     */
+    public void revealMethod(String className, String methodName, String descriptor) {
+        if (className == null || methodName == null) {
+            return;
+        }
+        TreeItem<OutlineRow> rootItem = treeView.getRoot();
+        if (rootItem == null) {
+            return;
+        }
+        TreeItem<OutlineRow> classItem = findItem(rootItem, className);
+        if (classItem == null) {
+            return;
+        }
+        TreeItem<OutlineRow> methodItem = findMethodItem(classItem, methodName, descriptor);
+        selectTreeItem(methodItem == null ? classItem : methodItem);
+    }
+
+    public void clearSelection() {
+        treeView.getSelectionModel().clearSelection();
+    }
+
     private void selectByFullName(String fullName) {
         TreeItem<OutlineRow> rootItem = treeView.getRoot();
         if (rootItem == null) {
@@ -118,6 +142,10 @@ public class OutlineExplorerView implements View {
         if (match == null) {
             return;
         }
+        selectTreeItem(match);
+    }
+
+    private void selectTreeItem(TreeItem<OutlineRow> match) {
         TreeItem<OutlineRow> ancestor = match.getParent();
         while (ancestor != null) {
             ancestor.setExpanded(true);
@@ -161,6 +189,22 @@ public class OutlineExplorerView implements View {
         TreeItem<OutlineRow> selected = treeView.getSelectionModel().getSelectedItem();
         if (selected != null && selected.getValue() instanceof NodeRow row) {
             return row.node().getFullName();
+        }
+        return null;
+    }
+
+    private TreeItem<OutlineRow> findMethodItem(TreeItem<OutlineRow> classItem,
+                                                String methodName,
+                                                String descriptor) {
+        for (TreeItem<OutlineRow> child : classItem.getChildren()) {
+            if (!(child.getValue() instanceof MethodRow row)) {
+                continue;
+            }
+            DependencyModel.MethodInfo method = row.method();
+            if (methodName.equals(method.name)
+                    && (descriptor == null || descriptor.equals(method.descriptor))) {
+                return child;
+            }
         }
         return null;
     }

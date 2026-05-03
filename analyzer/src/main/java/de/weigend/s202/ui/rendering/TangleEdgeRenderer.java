@@ -25,6 +25,7 @@ import java.util.IdentityHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Set;
 import java.util.function.Consumer;
 
 /**
@@ -44,18 +45,23 @@ public class TangleEdgeRenderer {
 
     private static final Color EDGE_COLOR     = Color.web("#ff5252");
     private static final Color EDGE_HOVER     = Color.web("#b71c1c");
-    private static final Color SELECTED_COLOR = Color.web("#ffeb3b");
+    private static final Color SELECTED_COLOR = Color.web("#d50000");
+    private static final Color CUT_EDGE_COLOR = Color.web("#ff9800");
     private static final double EDGE_WIDTH    = 1.2;
-    private static final double SELECTED_WIDTH = 2.0;
+    private static final double SELECTED_WIDTH = 3.0;
+    private static final double CUT_EDGE_WIDTH = 2.2;
     private static final double ARROW_SIZE    = 6.0;
 
     /** Debug lane constants */
     private static final Color  LANE_COLOR      = Color.web("#00bcd4", 0.30);
     private static final double LANE_WIDTH      = 0.7;
     /** Number of potential dependency lanes shown in every free channel. */
-    private static final int POTENTIAL_LANE_COUNT = 5;
+    private static final int POTENTIAL_LANE_COUNT = 7;
     /** Fixed distance between adjacent potential lanes in both X and Y direction. */
     private static final double LANE_SPACING_PX = 6.0;
+    private static final double LANE_EDGE_PADDING_PX = ARROW_SIZE + 2.0;
+    private static final double TRACK_CLEARANCE_PX = 1.0;
+    private static final double TRACK_REUSE_PENALTY = LANE_SPACING_PX * 2.0;
     private static final double BRIDGE_RADIUS = LANE_SPACING_PX / 2.5;
     /** Nodes within this Y-distance belong to the same layout row. */
     private static final double ROW_CLUSTER_PX  = 20.0;
@@ -67,11 +73,16 @@ public class TangleEdgeRenderer {
     private List<Edge> edges = List.of();
     private String selectedFrom;
     private String selectedTo;
+    private Set<Edge> cycleBreakEdges = Set.of();
     private Pane zoomableContent;
     private Pane overlayPane;
+    private boolean showDebugLines = true;
 
     private int retriesLeft = 0;
     private static final int INITIAL_RETRIES = 8;
+    private int settleRedrawsLeft = 0;
+    private static final int INITIAL_SETTLE_REDRAWS = 3;
+    private boolean layoutPending;
 
     private final javafx.beans.value.ChangeListener<Bounds> layoutListener =
             (obs, was, isNow) -> redraw();
@@ -103,6 +114,7 @@ public class TangleEdgeRenderer {
     public void setEdges(List<Edge> edges) {
         this.edges = edges == null ? List.of() : List.copyOf(edges);
         retriesLeft = INITIAL_RETRIES;
+        settleRedrawsLeft = INITIAL_SETTLE_REDRAWS;
         redraw();
     }
 
@@ -112,13 +124,28 @@ public class TangleEdgeRenderer {
         redraw();
     }
 
+    public void setCycleBreakEdges(Set<Edge> cycleBreakEdges) {
+        this.cycleBreakEdges = cycleBreakEdges == null ? Set.of() : Set.copyOf(cycleBreakEdges);
+        redraw();
+    }
+
+    public void setShowDebugLines(boolean showDebugLines) {
+        if (this.showDebugLines == showDebugLines) {
+            return;
+        }
+        this.showDebugLines = showDebugLines;
+        redraw();
+    }
+
     public void clear() {
         pane.getChildren().clear();
         edges = List.of();
+        settleRedrawsLeft = 0;
     }
 
     public void requestRedraw() {
         retriesLeft = INITIAL_RETRIES;
+        settleRedrawsLeft = INITIAL_SETTLE_REDRAWS;
         redraw();
     }
 
@@ -126,13 +153,15 @@ public class TangleEdgeRenderer {
 
     private void redraw() {
         pane.getChildren().clear();
+        layoutPending = false;
         if (zoomableContent == null || overlayPane == null || edges.isEmpty()) {
             return;
         }
         zoomableContent.applyCss();
         zoomableContent.layout();
 
-        // Debug lanes drawn first so edges appear on top
+        // Routing lanes are built first; visible debug lines, when enabled,
+        // are drawn before edges so the dependencies stay on top.
         LaneLayout lanes = drawDebugLanes();
 
         boolean anyRendered = false;
@@ -150,7 +179,11 @@ public class TangleEdgeRenderer {
             }
         }
 
-        if (!anyRendered && retriesLeft > 0) {
+        boolean needsSettleRedraw = settleRedrawsLeft > 0;
+        if ((!anyRendered || layoutPending || needsSettleRedraw) && retriesLeft > 0) {
+            if (needsSettleRedraw) {
+                settleRedrawsLeft--;
+            }
             scheduleRetry();
         }
     }
@@ -170,8 +203,8 @@ public class TangleEdgeRenderer {
             Node node = entry.getValue();
             if (!(node instanceof LevelClassBox) && !(node instanceof LevelPackageBox)) continue;
             if (!isVisible(node)) continue;
-            Bounds b = overlayPane.sceneToLocal(node.localToScene(node.getBoundsInLocal()));
-            if (b.getWidth() > 0 && b.getHeight() > 0) {
+            Bounds b = overlayBounds(node);
+            if (b != null) {
                 // Use min and max Y so large package boxes contribute proper extents.
                 yCenters.add(b.getMinY());
                 yCenters.add(b.getMaxY());
@@ -198,8 +231,11 @@ public class TangleEdgeRenderer {
         rows.add(new double[]{grpMin, grpMax});
 
         // X-extent of all content in overlay coordinates.
-        Bounds cb = overlayPane.sceneToLocal(
-                zoomableContent.localToScene(zoomableContent.getBoundsInLocal()));
+        Bounds cb = overlayBounds(zoomableContent);
+        if (cb == null) {
+            layoutPending = true;
+            return null;
+        }
         double xLeft  = cb.getMinX();
         double xRight = cb.getMaxX();
 
@@ -223,11 +259,13 @@ public class TangleEdgeRenderer {
         }
 
         Map<Bounds, List<VerticalTrack>> verticalTracks = drawVerticalDebugLanes(classBounds, cb.getMinY(), cb.getMaxY());
-        return new LaneLayout(horizontalTracks, verticalTracks, classBoundsByName);
+        return new LaneLayout(horizontalTracks, verticalTracks, classBoundsByName, classBounds);
     }
 
     static List<Double> lanePositions(double min, double max) {
-        if (max <= min) {
+        double firstAllowed = min + LANE_EDGE_PADDING_PX;
+        double lastAllowed = max - LANE_EDGE_PADDING_PX;
+        if (lastAllowed < firstAllowed) {
             return List.of();
         }
 
@@ -235,7 +273,10 @@ public class TangleEdgeRenderer {
         double center = (min + max) / 2.0;
         double firstOffset = -LANE_SPACING_PX * (POTENTIAL_LANE_COUNT - 1) / 2.0;
         for (int i = 0; i < POTENTIAL_LANE_COUNT; i++) {
-            lanes.add(center + firstOffset + i * LANE_SPACING_PX);
+            double lane = center + firstOffset + i * LANE_SPACING_PX;
+            if (lane >= firstAllowed && lane <= lastAllowed) {
+                lanes.add(lane);
+            }
         }
         return lanes;
     }
@@ -279,6 +320,9 @@ public class TangleEdgeRenderer {
         if (Math.abs(x2 - x1) < 0.0001 && Math.abs(y2 - y1) < 0.0001) {
             return;
         }
+        if (!showDebugLines) {
+            return;
+        }
         Line lane = new Line(x1, y1, x2, y2);
         lane.setStroke(LANE_COLOR);
         lane.setStrokeWidth(LANE_WIDTH);
@@ -294,9 +338,10 @@ public class TangleEdgeRenderer {
             Bounds source = laneLayout.classBoundsByName.get(edge.from());
             Bounds target = laneLayout.classBoundsByName.get(edge.to());
             if (source == null || target == null) {
-                if (renderEdge(edge)) {
+                if (hasVisibleEndpointWaitingForLayout(edge)) {
+                    layoutPending = true;
+                } else if (renderEdge(edge)) {
                     anyRendered = true;
-                    // Legacy fallback: keep visible even if not enough lane data exists yet.
                 }
                 continue;
             }
@@ -306,7 +351,7 @@ public class TangleEdgeRenderer {
                 routed.add(routedEdge);
                 anyRendered = true;
             } else {
-                if (renderEdge(edge)) {
+                if (renderFallbackEdge(edge, source, target, laneLayout)) {
                     anyRendered = true;
                 }
             }
@@ -317,36 +362,90 @@ public class TangleEdgeRenderer {
     private RoutedTangleEdge routeEdge(Edge edge, Bounds source, Bounds target, LaneLayout laneLayout) {
         double idealY = (source.getCenterY() + target.getCenterY()) / 2.0;
         List<HorizontalTrack> horizontalCandidates = new ArrayList<>(laneLayout.horizontalTracks);
-        horizontalCandidates.removeIf(HorizontalTrack::isOccupied);
-        horizontalCandidates.sort(Comparator.comparingDouble(h -> Math.abs(h.y - idealY)));
+        horizontalCandidates.sort(Comparator.comparingDouble(h -> horizontalScore(h, idealY)));
 
         for (HorizontalTrack horizontal : horizontalCandidates) {
-            VerticalTrack sourceTrack = pickVerticalTrack(laneLayout.verticalTracks.get(source), horizontal.y);
-            if (sourceTrack == null) continue;
-            VerticalTrack targetTrack = pickVerticalTrack(laneLayout.verticalTracks.get(target), horizontal.y);
-            if (targetTrack == null) continue;
+            List<VerticalTrack> sourceTracks = candidateVerticalTracks(laneLayout.verticalTracks.get(source), horizontal.y);
+            List<VerticalTrack> targetTracks = candidateVerticalTracks(laneLayout.verticalTracks.get(target), horizontal.y);
+            for (VerticalTrack sourceTrack : sourceTracks) {
+                for (VerticalTrack targetTrack : targetTracks) {
+                    if (!horizontal.canOccupy(sourceTrack.x, targetTrack.x)) continue;
+                    if (horizontalSegmentHitsClass(horizontal.y, sourceTrack.x, targetTrack.x, laneLayout.classBounds)) continue;
 
-            horizontal.occupied = true;
-            sourceTrack.occupy(horizontal.y);
-            targetTrack.occupy(horizontal.y);
-            return new RoutedTangleEdge(edge, source, target, sourceTrack, horizontal, targetTrack);
+                    horizontal.occupy(sourceTrack.x, targetTrack.x);
+                    sourceTrack.occupy(horizontal.y);
+                    targetTrack.occupy(horizontal.y);
+                    return new RoutedTangleEdge(edge, source, target, sourceTrack, horizontal, targetTrack);
+                }
+            }
         }
         return null;
     }
 
-    private static VerticalTrack pickVerticalTrack(List<VerticalTrack> tracks, double y) {
-        if (tracks == null) return null;
+    private static List<VerticalTrack> candidateVerticalTracks(List<VerticalTrack> tracks, double y) {
+        if (tracks == null) return List.of();
         return tracks.stream()
                 .filter(track -> track.canOccupy(y))
-                .min(Comparator.comparingDouble(track -> Math.abs(track.x - track.owner.getCenterX())))
-                .orElse(null);
+                .sorted(Comparator.comparingDouble(TangleEdgeRenderer::verticalScore))
+                .toList();
+    }
+
+    private static double horizontalScore(HorizontalTrack track, double idealY) {
+        return Math.abs(track.y - idealY) + track.useCount() * TRACK_REUSE_PENALTY;
+    }
+
+    private static double verticalScore(VerticalTrack track) {
+        return Math.abs(track.x - track.owner.getCenterX()) + track.useCount() * TRACK_REUSE_PENALTY;
+    }
+
+    static boolean horizontalSegmentHitsClass(double y, double x1, double x2, List<Bounds> classBounds) {
+        return horizontalSegmentHitsClass(y, x1, x2, classBounds, null, null);
+    }
+
+    static boolean horizontalSegmentHitsClass(double y, double x1, double x2, List<Bounds> classBounds,
+                                             Bounds allowedA, Bounds allowedB) {
+        Range xRange = Range.of(x1, x2).inflate(TRACK_CLEARANCE_PX);
+        for (Bounds box : classBounds) {
+            if (box == allowedA || box == allowedB) {
+                continue;
+            }
+            if (y <= box.getMinY() - TRACK_CLEARANCE_PX || y >= box.getMaxY() + TRACK_CLEARANCE_PX) {
+                continue;
+            }
+            Range boxRange = new Range(
+                    box.getMinX() - TRACK_CLEARANCE_PX,
+                    box.getMaxX() + TRACK_CLEARANCE_PX);
+            if (xRange.overlaps(boxRange)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    static boolean verticalSegmentHitsClass(double x, double y1, double y2, List<Bounds> classBounds,
+                                            Bounds allowedA, Bounds allowedB) {
+        Range yRange = Range.of(y1, y2).inflate(TRACK_CLEARANCE_PX);
+        for (Bounds box : classBounds) {
+            if (box == allowedA || box == allowedB) {
+                continue;
+            }
+            if (x <= box.getMinX() - TRACK_CLEARANCE_PX || x >= box.getMaxX() + TRACK_CLEARANCE_PX) {
+                continue;
+            }
+            Range boxRange = new Range(
+                    box.getMinY() - TRACK_CLEARANCE_PX,
+                    box.getMaxY() + TRACK_CLEARANCE_PX);
+            if (yRange.overlaps(boxRange)) {
+                return true;
+            }
+        }
+        return false;
     }
 
     private void paintRoutedEdge(RoutedTangleEdge routed, List<VerticalSegment> verticalSegments) {
         Edge edge = routed.edge;
-        boolean selected = isSelected(edge);
-        Color color = selected ? SELECTED_COLOR : EDGE_COLOR;
-        double width = selected ? SELECTED_WIDTH : EDGE_WIDTH;
+        Color color = edgeColor(edge);
+        double width = edgeWidth(edge);
 
         double y = routed.horizontal.y;
         Point sourceDock = dockPoint(routed.source, routed.sourceTrack.x, y);
@@ -359,6 +458,7 @@ public class TangleEdgeRenderer {
         path.setStrokeLineJoin(StrokeLineJoin.MITER);
         path.setFill(null);
         path.setCursor(Cursor.HAND);
+        applyEdgeDash(path, edge);
 
         path.getElements().add(new MoveTo(sourceDock.x, sourceDock.y));
         path.getElements().add(new LineTo(routed.sourceTrack.x, sourceDock.y));
@@ -376,17 +476,98 @@ public class TangleEdgeRenderer {
             path.setCursor(Cursor.HAND);
         });
         path.setOnMouseExited(e -> {
-            path.setStroke(isSelected(edge) ? SELECTED_COLOR : EDGE_COLOR);
+            path.setStroke(edgeColor(edge));
             path.setCursor(Cursor.DEFAULT);
         });
         path.setOnMouseClicked(e -> {
-            statusCallback.accept(simple(edge.from()) + " \u2192 " + simple(edge.to()));
-            setSelectedEdge(edge.from(), edge.to());
-            onEdgeClicked.accept(edge.from(), edge.to());
+            handleEdgeClick(edge);
             e.consume();
         });
 
         pane.getChildren().addAll(path, arrow);
+    }
+
+    private boolean renderFallbackEdge(Edge edge, Bounds source, Bounds target, LaneLayout laneLayout) {
+        FallbackPath fallback = findFallbackPath(source, target, laneLayout);
+        if (fallback == null) {
+            return renderEdge(edge);
+        }
+
+        Color color = edgeColor(edge);
+        double width = edgeWidth(edge);
+
+        Path path = new Path();
+        path.setStroke(color);
+        path.setStrokeWidth(width);
+        path.setStrokeLineCap(StrokeLineCap.ROUND);
+        path.setStrokeLineJoin(StrokeLineJoin.MITER);
+        path.setFill(null);
+        path.setCursor(Cursor.HAND);
+        applyEdgeDash(path, edge);
+
+        path.getElements().add(new MoveTo(fallback.sourceDock.x, fallback.sourceDock.y));
+        path.getElements().add(new LineTo(fallback.sourceX, fallback.sourceDock.y));
+        path.getElements().add(new LineTo(fallback.sourceX, fallback.y));
+        path.getElements().add(new LineTo(fallback.targetX, fallback.y));
+        path.getElements().add(new LineTo(fallback.targetX, fallback.targetDock.y));
+        path.getElements().add(new LineTo(fallback.targetDock.x, fallback.targetDock.y));
+
+        double arrowDx = fallback.targetDock.x - fallback.targetX;
+        double arrowDy = Math.abs(arrowDx) < 0.0001 ? fallback.targetDock.y - fallback.y : 0.0;
+        Polygon arrow = makeArrow(fallback.targetDock.x, fallback.targetDock.y, arrowDx, arrowDy, color);
+
+        path.setOnMouseEntered(e -> {
+            if (!isSelected(edge)) path.setStroke(EDGE_HOVER);
+            path.setCursor(Cursor.HAND);
+        });
+        path.setOnMouseExited(e -> {
+            path.setStroke(edgeColor(edge));
+            path.setCursor(Cursor.DEFAULT);
+        });
+        path.setOnMouseClicked(e -> {
+            handleEdgeClick(edge);
+            e.consume();
+        });
+
+        pane.getChildren().addAll(path, arrow);
+        return true;
+    }
+
+    private FallbackPath findFallbackPath(Bounds source, Bounds target, LaneLayout laneLayout) {
+        double idealY = (source.getCenterY() + target.getCenterY()) / 2.0;
+        List<HorizontalTrack> horizontalCandidates = new ArrayList<>(laneLayout.horizontalTracks);
+        horizontalCandidates.sort(Comparator.comparingDouble(h -> horizontalScore(h, idealY)));
+
+        for (HorizontalTrack horizontal : horizontalCandidates) {
+            List<VerticalTrack> sourceTracks = candidateVerticalTracks(laneLayout.verticalTracks.get(source), horizontal.y);
+            List<VerticalTrack> targetTracks = candidateVerticalTracks(laneLayout.verticalTracks.get(target), horizontal.y);
+            for (VerticalTrack sourceTrack : sourceTracks) {
+                Point sourceDock = dockPoint(source, sourceTrack.x, horizontal.y);
+                if (verticalSegmentHitsClass(sourceTrack.x, sourceDock.y, horizontal.y,
+                        laneLayout.classBounds, source, target)) {
+                    continue;
+                }
+                for (VerticalTrack targetTrack : targetTracks) {
+                    Point targetDock = dockPoint(target, targetTrack.x, horizontal.y);
+                    if (!horizontal.canOccupy(sourceTrack.x, targetTrack.x)) {
+                        continue;
+                    }
+                    if (verticalSegmentHitsClass(targetTrack.x, horizontal.y, targetDock.y,
+                            laneLayout.classBounds, source, target)) {
+                        continue;
+                    }
+                    if (horizontalSegmentHitsClass(horizontal.y, sourceTrack.x, targetTrack.x,
+                            laneLayout.classBounds, source, target)) {
+                        continue;
+                    }
+                    horizontal.occupy(sourceTrack.x, targetTrack.x);
+                    sourceTrack.occupy(horizontal.y);
+                    targetTrack.occupy(horizontal.y);
+                    return new FallbackPath(sourceDock, targetDock, sourceTrack.x, targetTrack.x, horizontal.y);
+                }
+            }
+        }
+        return null;
     }
 
     static Point dockPoint(Bounds box, double trackX, double horizontalY) {
@@ -465,13 +646,16 @@ public class TangleEdgeRenderer {
         final List<HorizontalTrack> horizontalTracks;
         final Map<Bounds, List<VerticalTrack>> verticalTracks;
         final Map<String, Bounds> classBoundsByName;
+        final List<Bounds> classBounds;
 
         LaneLayout(List<HorizontalTrack> horizontalTracks,
                    Map<Bounds, List<VerticalTrack>> verticalTracks,
-                   Map<String, Bounds> classBoundsByName) {
+                   Map<String, Bounds> classBoundsByName,
+                   List<Bounds> classBounds) {
             this.horizontalTracks = horizontalTracks;
             this.verticalTracks = verticalTracks;
             this.classBoundsByName = classBoundsByName;
+            this.classBounds = classBounds;
         }
     }
 
@@ -479,7 +663,7 @@ public class TangleEdgeRenderer {
         final double y;
         final double xLeft;
         final double xRight;
-        boolean occupied;
+        final List<Range> occupiedRanges = new ArrayList<>();
 
         HorizontalTrack(double y, double xLeft, double xRight) {
             this.y = y;
@@ -487,19 +671,58 @@ public class TangleEdgeRenderer {
             this.xRight = xRight;
         }
 
-        boolean isOccupied() {
-            return occupied;
+        boolean canOccupy(double x1, double x2) {
+            Range base = Range.of(x1, x2);
+            if (base.min < xLeft || base.max > xRight) {
+                return false;
+            }
+            Range candidate = base.inflate(TRACK_CLEARANCE_PX);
+            for (Range occupied : occupiedRanges) {
+                if (candidate.overlaps(occupied)) {
+                    return false;
+                }
+            }
+            return true;
+        }
+
+        void occupy(double x1, double x2) {
+            occupiedRanges.add(Range.of(x1, x2).inflate(TRACK_CLEARANCE_PX));
+        }
+
+        int useCount() {
+            return occupiedRanges.size();
         }
     }
 
-    private static final class VerticalTrack {
+    static final class Range {
+        final double min;
+        final double max;
+
+        private Range(double min, double max) {
+            this.min = min;
+            this.max = max;
+        }
+
+        static Range of(double a, double b) {
+            return new Range(Math.min(a, b), Math.max(a, b));
+        }
+
+        Range inflate(double value) {
+            return new Range(min - value, max + value);
+        }
+
+        boolean overlaps(Range other) {
+            return min < other.max && max > other.min;
+        }
+    }
+
+    static final class VerticalTrack {
         final Bounds owner;
         final double x;
         final double centerY;
         final double topY;
         final double bottomY;
-        boolean upwardOccupied;
-        boolean downwardOccupied;
+        final List<Range> occupiedRanges = new ArrayList<>();
 
         VerticalTrack(Bounds owner, double x, double centerY, double topY, double bottomY) {
             this.owner = owner;
@@ -510,18 +733,29 @@ public class TangleEdgeRenderer {
         }
 
         boolean canOccupy(double y) {
-            if (y < centerY) {
-                return !upwardOccupied && y >= topY;
+            if (y < topY || y > bottomY) {
+                return false;
             }
-            return !downwardOccupied && y <= bottomY;
+            Range candidate = segmentRange(y).inflate(TRACK_CLEARANCE_PX);
+            for (Range occupied : occupiedRanges) {
+                if (candidate.overlaps(occupied)) {
+                    return false;
+                }
+            }
+            return true;
         }
 
         void occupy(double y) {
-            if (y < centerY) {
-                upwardOccupied = true;
-            } else {
-                downwardOccupied = true;
-            }
+            occupiedRanges.add(segmentRange(y).inflate(TRACK_CLEARANCE_PX));
+        }
+
+        int useCount() {
+            return occupiedRanges.size();
+        }
+
+        private Range segmentRange(double y) {
+            double dockY = dockPoint(owner, x, y).y;
+            return Range.of(dockY, y);
         }
     }
 
@@ -563,6 +797,22 @@ public class TangleEdgeRenderer {
         }
     }
 
+    private static final class FallbackPath {
+        final Point sourceDock;
+        final Point targetDock;
+        final double sourceX;
+        final double targetX;
+        final double y;
+
+        FallbackPath(Point sourceDock, Point targetDock, double sourceX, double targetX, double y) {
+            this.sourceDock = sourceDock;
+            this.targetDock = targetDock;
+            this.sourceX = sourceX;
+            this.targetX = targetX;
+            this.y = y;
+        }
+    }
+
     record Point(double x, double y) {}
 
     /**
@@ -577,41 +827,132 @@ public class TangleEdgeRenderer {
         if (source == null || target == null) return false;
         if (!isVisible(source) || !isVisible(target)) return false;
 
-        Bounds sb = overlayPane.sceneToLocal(source.localToScene(source.getBoundsInLocal()));
-        Bounds tb = overlayPane.sceneToLocal(target.localToScene(target.getBoundsInLocal()));
+        Bounds sb = overlayBounds(source);
+        Bounds tb = overlayBounds(target);
+        if (sb == null || tb == null) {
+            layoutPending = true;
+            return false;
+        }
 
-        double x1 = sb.getCenterX();
-        double y1 = sb.getCenterY();
-        double x2 = tb.getCenterX();
-        double y2 = tb.getCenterY();
+        Point start = edgePoint(sb, tb.getCenterX(), tb.getCenterY());
+        Point end = edgePoint(tb, sb.getCenterX(), sb.getCenterY());
 
-        boolean selected = isSelected(edge);
-        Color color = selected ? SELECTED_COLOR : EDGE_COLOR;
-        double width = selected ? SELECTED_WIDTH : EDGE_WIDTH;
+        Color color = edgeColor(edge);
+        double width = edgeWidth(edge);
 
-        Line line = new Line(x1, y1, x2, y2);
+        Line line = new Line(start.x, start.y, end.x, end.y);
         line.setStroke(color);
         line.setStrokeWidth(width);
+        applyEdgeDash(line, edge);
 
-        Polygon arrow = makeArrow(x2, y2, x2 - x1, y2 - y1, color);
+        Polygon arrow = makeArrow(end.x, end.y, end.x - start.x, end.y - start.y, color);
 
         line.setOnMouseEntered(e -> {
             if (!isSelected(edge)) line.setStroke(EDGE_HOVER);
             line.setCursor(Cursor.HAND);
         });
         line.setOnMouseExited(e -> {
-            line.setStroke(isSelected(edge) ? SELECTED_COLOR : EDGE_COLOR);
+            line.setStroke(edgeColor(edge));
             line.setCursor(Cursor.DEFAULT);
         });
         line.setOnMouseClicked(e -> {
-            statusCallback.accept(simple(edge.from()) + " \u2192 " + simple(edge.to()));
-            setSelectedEdge(edge.from(), edge.to());
-            onEdgeClicked.accept(edge.from(), edge.to());
+            handleEdgeClick(edge);
             e.consume();
         });
 
         pane.getChildren().addAll(line, arrow);
         return true;
+    }
+
+    private void handleEdgeClick(Edge edge) {
+        if (isSelected(edge)) {
+            statusCallback.accept("Tangle edge deselected");
+            setSelectedEdge(null, null);
+            onEdgeClicked.accept(null, null);
+            return;
+        }
+        String label = simple(edge.from()) + " \u2192 " + simple(edge.to());
+        statusCallback.accept(isCycleBreakEdge(edge) ? "Recommended cut: " + label : label);
+        setSelectedEdge(edge.from(), edge.to());
+        onEdgeClicked.accept(edge.from(), edge.to());
+    }
+
+    private Color edgeColor(Edge edge) {
+        if (isSelected(edge)) {
+            return SELECTED_COLOR;
+        }
+        return isCycleBreakEdge(edge) ? CUT_EDGE_COLOR : EDGE_COLOR;
+    }
+
+    private double edgeWidth(Edge edge) {
+        if (isSelected(edge)) {
+            return SELECTED_WIDTH;
+        }
+        return isCycleBreakEdge(edge) ? CUT_EDGE_WIDTH : EDGE_WIDTH;
+    }
+
+    private void applyEdgeDash(javafx.scene.shape.Shape shape, Edge edge) {
+        if (isCycleBreakEdge(edge)) {
+            shape.getStrokeDashArray().setAll(9.0, 5.0);
+        } else {
+            shape.getStrokeDashArray().clear();
+        }
+    }
+
+    private boolean isCycleBreakEdge(Edge edge) {
+        return cycleBreakEdges.contains(edge);
+    }
+
+    private boolean hasVisibleEndpointWaitingForLayout(Edge edge) {
+        Node source = elementRegistry.get(edge.from());
+        Node target = elementRegistry.get(edge.to());
+        if (source == null || target == null) {
+            return false;
+        }
+        return (isVisible(source) && overlayBounds(source) == null)
+                || (isVisible(target) && overlayBounds(target) == null);
+    }
+
+    private Bounds overlayBounds(Node node) {
+        if (node == null || overlayPane == null || node.getScene() == null || overlayPane.getScene() == null) {
+            return null;
+        }
+        try {
+            Bounds local = node.getBoundsInLocal();
+            Bounds sceneBounds = node.localToScene(local);
+            Bounds overlay = overlayPane.sceneToLocal(sceneBounds);
+            if (!isUsable(overlay)) {
+                return null;
+            }
+            return overlay;
+        } catch (RuntimeException ex) {
+            return null;
+        }
+    }
+
+    private static boolean isUsable(Bounds bounds) {
+        return bounds != null
+                && Double.isFinite(bounds.getMinX())
+                && Double.isFinite(bounds.getMinY())
+                && Double.isFinite(bounds.getWidth())
+                && Double.isFinite(bounds.getHeight())
+                && bounds.getWidth() > 1.0
+                && bounds.getHeight() > 1.0;
+    }
+
+    static Point edgePoint(Bounds box, double towardX, double towardY) {
+        double cx = box.getCenterX();
+        double cy = box.getCenterY();
+        double dx = towardX - cx;
+        double dy = towardY - cy;
+        if (Math.abs(dx) < 0.0001 && Math.abs(dy) < 0.0001) {
+            return new Point(cx, cy);
+        }
+
+        double halfW = box.getWidth() / 2.0;
+        double halfH = box.getHeight() / 2.0;
+        double scale = 1.0 / Math.max(Math.abs(dx) / halfW, Math.abs(dy) / halfH);
+        return new Point(cx + dx * scale, cy + dy * scale);
     }
 
     private boolean isSelected(Edge edge) {

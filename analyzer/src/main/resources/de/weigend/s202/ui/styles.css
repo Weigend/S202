@@ -364,6 +364,11 @@
     -fx-text-fill: #b0c4de;
 }
 
+.top-tangles-tree .top-tangles-cut-edge-row {
+    -fx-font-weight: bold;
+    -fx-text-fill: #ffb74d;
+}
+
 /* ===== About dialog ===== */
 .about-dialog {
     -fx-background-color: #1e2a36;

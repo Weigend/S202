@@ -4,6 +4,7 @@ import de.weigend.s202.reader.DependencyModel;
 import de.weigend.s202.ui.ArchitectureView;
 import de.weigend.s202.ui.model.ArchitectureNode;
 import de.weigend.s202.ui.wfx.ArchitectureWfxView;
+import de.weigend.s202.ui.wfx.events.MethodSelectionEvent;
 import de.weigend.s202.ui.wfx.events.NodeSelectionEvent;
 import io.softwareecg.wfx.lookup.Lookup;
 import io.softwareecg.wfx.platform.api.EventBus;
@@ -82,6 +83,16 @@ public class OutlineExplorerModule implements Module {
             // Skip our own publishes — the user already clicked the tree row.
             if (ev.getSource() != outlineView) {
                 outlineView.revealByFullName(ev.getFullName());
+            }
+            return true;
+        });
+        bus.subscribe(MethodSelectionEvent.class, ev -> {
+            if (ev.getSource() != outlineView) {
+                if (ev.getClassName() == null && ev.getMethodName() == null) {
+                    outlineView.clearSelection();
+                } else {
+                    outlineView.revealMethod(ev.getClassName(), ev.getMethodName(), ev.getDescriptor());
+                }
             }
             return true;
         });

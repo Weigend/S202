@@ -372,6 +372,9 @@ public class InputAnalyzer {
             // Track the call - filter out external library classes and self-references
             if (!isExternalLibraryClass(dependencyClass) && !dependencyClass.equals(classInfo.fullName)) {
                 methodInfo.methodCalls.merge(methodCall, 1, Integer::sum);
+                methodInfo.methodCallDescriptors
+                        .computeIfAbsent(methodCall, k -> new HashSet<>())
+                        .add(descriptor);
                 // INVOKESPECIAL on <init> is "new T(...)" — distinguish constructor
                 // from regular method calls so the UI can show "instantiates" vs "calls".
                 EdgeKind kind = (opcode == Opcodes.INVOKESPECIAL && "<init>".equals(name))

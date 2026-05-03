@@ -7,6 +7,7 @@ import de.weigend.s202.reader.DependencyModel;
 import de.weigend.s202.reader.EdgeKind;
 import de.weigend.s202.ui.ArchitectureView;
 import de.weigend.s202.ui.model.ArchitectureNode;
+import de.weigend.s202.ui.rendering.TangleEdgeRenderer;
 import de.weigend.s202.ui.wfx.ArchitectureWfxView;
 import de.weigend.s202.ui.wfx.events.OpenTangleEvent;
 import de.weigend.s202.ui.wfx.outline.OutlineExplorerView;
@@ -186,7 +187,7 @@ public class TopTanglesModule implements Module {
         String scopeLabel = scope == null ? "All classes" : scope;
 
         List<TopTanglesView.Tangle> tangles = computeTopTangles(
-                model, boundView.getRawDependencyModel(), scope, TOP_N);
+                model, boundView.getRawDependencyModel(), boundView.getCycleBreakEdges(), scope, TOP_N);
 
         // Skip the setData call when nothing actually changed — records'
         // generated equals walks the full edge / kind structure, so identical
@@ -224,6 +225,7 @@ public class TopTanglesModule implements Module {
      */
     static List<TopTanglesView.Tangle> computeTopTangles(DomainModel model,
                                                         DependencyModel rawModel,
+                                                        Set<TangleEdgeRenderer.Edge> cycleBreakEdges,
                                                         String scope, int topN) {
         Map<String, Set<String>> graph = new HashMap<>();
         for (var entry : model.getAllClasses().entrySet()) {
@@ -242,21 +244,23 @@ public class TopTanglesModule implements Module {
                 .filter(StronglyConnectedComponent::isTangle)
                 .sorted(Comparator.comparingInt(StronglyConnectedComponent::getSize).reversed())
                 .limit(topN)
-                .map(scc -> toTangle(scc, graph, rawModel))
+                .map(scc -> toTangle(scc, graph, rawModel, cycleBreakEdges))
                 .toList();
     }
 
     private static TopTanglesView.Tangle toTangle(StronglyConnectedComponent scc,
                                                   Map<String, Set<String>> graph,
-                                                  DependencyModel rawModel) {
+                                                  DependencyModel rawModel,
+                                                  Set<TangleEdgeRenderer.Edge> cycleBreakEdges) {
         Set<String> members = scc.getMembers();
         List<String> sortedMembers = members.stream().sorted().toList();
         List<TopTanglesView.TangleEdge> edges = new ArrayList<>();
         for (String from : sortedMembers) {
             for (String to : graph.getOrDefault(from, Set.of())) {
                 if (members.contains(to)) {
+                    boolean cycleBreakEdge = isCycleBreakEdge(cycleBreakEdges, from, to);
                     edges.add(new TopTanglesView.TangleEdge(
-                            from, to, buildKindEntries(rawModel, from, to)));
+                            from, to, buildKindEntries(rawModel, from, to), cycleBreakEdge));
                 }
             }
         }
@@ -268,6 +272,12 @@ public class TopTanglesModule implements Module {
                 tangleTitle(sortedMembers),
                 sortedMembers,
                 edges);
+    }
+
+    private static boolean isCycleBreakEdge(Set<TangleEdgeRenderer.Edge> cycleBreakEdges,
+                                            String from,
+                                            String to) {
+        return cycleBreakEdges != null && cycleBreakEdges.contains(new TangleEdgeRenderer.Edge(from, to));
     }
 
     /**

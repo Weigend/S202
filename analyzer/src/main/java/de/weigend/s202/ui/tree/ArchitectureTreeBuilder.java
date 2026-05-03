@@ -32,6 +32,10 @@ import java.util.Set;
  */
 public class ArchitectureTreeBuilder {
 
+    private static final double TOP_LEVEL_HORIZONTAL_PADDING = 10.0;
+    // Seven 6px-spaced tangle lanes need 36px span plus arrow-head clearance.
+    private static final double TOP_LEVEL_VERTICAL_PADDING = 52.0;
+
     private final Map<String, Node> elementRegistry;
 
     /**
@@ -74,7 +78,11 @@ public class ArchitectureTreeBuilder {
 
         // Container for top-level packages (children of root)
         VBox topLevelContainer = new VBox(8);
-        topLevelContainer.setPadding(new Insets(10));
+        topLevelContainer.setPadding(new Insets(
+                TOP_LEVEL_VERTICAL_PADDING,
+                TOP_LEVEL_HORIZONTAL_PADDING,
+                TOP_LEVEL_VERTICAL_PADDING,
+                TOP_LEVEL_HORIZONTAL_PADDING));
         topLevelContainer.setStyle("-fx-background-color: #f5f5f0;");
 
         // Skip transparent top-level packages (de, weigend, s202, etc.)

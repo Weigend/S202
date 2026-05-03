@@ -70,6 +70,7 @@ public class DependencyModel {
         public final String name;
         public final String descriptor;
         public final Map<String, Integer> methodCalls = new HashMap<>();
+        public final Map<String, Set<String>> methodCallDescriptors = new HashMap<>();
 
         public MethodInfo(String name, String descriptor) {
             this.name = name;

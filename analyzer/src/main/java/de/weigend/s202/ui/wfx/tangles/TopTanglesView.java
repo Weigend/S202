@@ -37,14 +37,14 @@ public class TopTanglesView implements View {
     /** Sealed model so the cell factory can render rows differently per level. */
     public sealed interface Row permits TangleRow, EdgeRow, KindRow {}
     public record TangleRow(int rank, Tangle tangle) implements Row {}
-    public record EdgeRow(String from, String to) implements Row {}
+    public record EdgeRow(String from, String to, boolean cycleBreakEdge) implements Row {}
     /** One relationship-kind line beneath an {@link EdgeRow}. */
     public record KindRow(EdgeKind kind) implements Row {}
 
     /** Display data for a single tangle. */
     public record Tangle(int size, String key, String title, List<String> members, List<TangleEdge> edges) {}
     /** A from→to edge inside a tangle, decomposed into per-kind entries. */
-    public record TangleEdge(String from, String to, List<KindEntry> entries) {}
+    public record TangleEdge(String from, String to, List<KindEntry> entries, boolean cycleBreakEdge) {}
     /** One relationship kind on an edge. */
     public record KindEntry(EdgeKind kind) {}
 
@@ -103,7 +103,8 @@ public class TopTanglesView implements View {
         for (Tangle t : tangles) {
             TreeItem<Row> tangleItem = new TreeItem<>(new TangleRow(rank++, t));
             for (TangleEdge edge : t.edges()) {
-                TreeItem<Row> edgeItem = new TreeItem<>(new EdgeRow(edge.from(), edge.to()));
+                TreeItem<Row> edgeItem = new TreeItem<>(
+                        new EdgeRow(edge.from(), edge.to(), edge.cycleBreakEdge()));
                 for (KindEntry entry : edge.entries()) {
                     edgeItem.getChildren().add(new TreeItem<>(new KindRow(entry.kind())));
                 }
@@ -185,19 +186,21 @@ public class TopTanglesView implements View {
             if (empty || item == null) {
                 setText(null);
                 getStyleClass().removeAll("top-tangles-tangle-row",
-                        "top-tangles-edge-row", "top-tangles-kind-row");
+                        "top-tangles-edge-row", "top-tangles-cut-edge-row", "top-tangles-kind-row");
                 return;
             }
             getStyleClass().removeAll("top-tangles-tangle-row",
-                    "top-tangles-edge-row", "top-tangles-kind-row");
+                    "top-tangles-edge-row", "top-tangles-cut-edge-row", "top-tangles-kind-row");
             switch (item) {
                 case TangleRow t -> {
                     setText(t.tangle().title());
                     getStyleClass().add("top-tangles-tangle-row");
                 }
                 case EdgeRow e -> {
-                    setText(simple(e.from()) + " → " + simple(e.to()));
-                    getStyleClass().add("top-tangles-edge-row");
+                    setText((e.cycleBreakEdge() ? "CUT " : "") + simple(e.from()) + " → " + simple(e.to()));
+                    getStyleClass().add(e.cycleBreakEdge()
+                            ? "top-tangles-cut-edge-row"
+                            : "top-tangles-edge-row");
                 }
                 case KindRow k -> {
                     setText(renderKind(k));

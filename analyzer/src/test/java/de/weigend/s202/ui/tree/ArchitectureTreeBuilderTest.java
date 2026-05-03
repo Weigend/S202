@@ -117,4 +117,21 @@ public class ArchitectureTreeBuilderTest {
                     "Row " + i + " should have exactly 1 package");
         }
     }
+
+    @Test
+    public void testTopLevelPaddingReservesOuterTangleLanes() {
+        ArchitectureNode root = new ArchitectureNode("root", "root", NodeType.PACKAGE, true, 0);
+        root.addChild(new ArchitectureNode("ui", "ui", NodeType.PACKAGE, true, 2));
+
+        Map<String, Node> registry = new HashMap<>();
+        ArchitectureTreeBuilder builder = new ArchitectureTreeBuilder(registry);
+        VBox topLevel = builder.buildTree(root);
+
+        assertEquals(52.0, topLevel.getPadding().getTop(), 0.0001,
+                "Top gap should fit seven tangle lanes");
+        assertEquals(52.0, topLevel.getPadding().getBottom(), 0.0001,
+                "Bottom gap should fit seven tangle lanes");
+        assertEquals(10.0, topLevel.getPadding().getLeft(), 0.0001);
+        assertEquals(10.0, topLevel.getPadding().getRight(), 0.0001);
+    }
 }

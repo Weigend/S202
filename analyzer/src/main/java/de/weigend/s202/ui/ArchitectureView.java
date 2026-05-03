@@ -29,6 +29,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Set;
 import java.util.function.BiConsumer;
 import java.util.function.Consumer;
 
@@ -65,6 +66,7 @@ public class ArchitectureView extends BorderPane {
     private List<TangleEdgeRenderer.Edge> pendingTangleEdges;
     private String pendingTangleSelFrom;
     private String pendingTangleSelTo;
+    private Set<TangleEdgeRenderer.Edge> cycleBreakEdges = Set.of();
 
     // Lines need redraw after zoom/scroll changes (perf optimization).
     private boolean linesNeedUpdate = false;
@@ -79,6 +81,7 @@ public class ArchitectureView extends BorderPane {
     private final BooleanProperty showDependencies = new SimpleBooleanProperty(false);
     private final BooleanProperty circuitMode = new SimpleBooleanProperty(false);
     private final BooleanProperty showScc = new SimpleBooleanProperty(false);
+    private final BooleanProperty showTangleDebugLines = new SimpleBooleanProperty(true);
     // Icon visibility is shared across all open architecture views — boxes bind
     // their FontIcon visibility to this property so toggling refreshes every
     // open tab without rebuilding the tree.
@@ -155,6 +158,7 @@ public class ArchitectureView extends BorderPane {
         showDependencies.addListener((obs, was, isNow) -> applyShowDependencies(isNow));
         showScc.addListener((obs, was, isNow) -> applyShowScc(isNow));
         circuitMode.addListener((obs, was, isNow) -> applyCircuitMode());
+        showTangleDebugLines.addListener((obs, was, isNow) -> applyShowTangleDebugLines(isNow));
     }
 
     private void applyShowDependencies(boolean visible) {
@@ -195,6 +199,12 @@ public class ArchitectureView extends BorderPane {
         if (showDependencies.get() && currentRootNode != null) {
             dependencyRenderer.drawDependencyArrows(currentRootNode);
             dependencyPane.setVisible(true);
+        }
+    }
+
+    private void applyShowTangleDebugLines(boolean visible) {
+        if (tangleRenderer != null) {
+            tangleRenderer.setShowDebugLines(visible);
         }
     }
 
@@ -297,7 +307,9 @@ public class ArchitectureView extends BorderPane {
 
         tangleRenderer = new TangleEdgeRenderer(tanglePane, elementRegistry, this::setStatus);
         tangleRenderer.setCoordinateContext(zoomableContent, overlayPane);
-        tangleRenderer.setOnEdgeClicked(tangleEdgeClickedSink);
+        tangleRenderer.setOnEdgeClicked(this::handleTangleEdgeClicked);
+        tangleRenderer.setCycleBreakEdges(cycleBreakEdges);
+        tangleRenderer.setShowDebugLines(showTangleDebugLines.get());
 
         dependencyRenderer.clearDependencyArrows();
         sccRenderer.clearSccLines();
@@ -573,6 +585,18 @@ public class ArchitectureView extends BorderPane {
         showScc.set(show);
     }
 
+    public BooleanProperty showTangleDebugLinesProperty() {
+        return showTangleDebugLines;
+    }
+
+    public boolean isShowTangleDebugLines() {
+        return showTangleDebugLines.get();
+    }
+
+    public void setShowTangleDebugLines(boolean show) {
+        showTangleDebugLines.set(show);
+    }
+
     /**
      * Highlight a specific SCC edge ({@code from} → {@code to}). Pass
      * {@code null} to clear. The highlight survives subsequent SCC
@@ -628,6 +652,23 @@ public class ArchitectureView extends BorderPane {
         if (tangleRenderer != null) {
             tangleRenderer.setSelectedEdge(from, to);
         }
+    }
+
+    public Set<TangleEdgeRenderer.Edge> getCycleBreakEdges() {
+        return cycleBreakEdges;
+    }
+
+    public void setCycleBreakEdges(Set<TangleEdgeRenderer.Edge> cycleBreakEdges) {
+        this.cycleBreakEdges = cycleBreakEdges == null ? Set.of() : Set.copyOf(cycleBreakEdges);
+        if (tangleRenderer != null) {
+            tangleRenderer.setCycleBreakEdges(this.cycleBreakEdges);
+        }
+    }
+
+    private void handleTangleEdgeClicked(String from, String to) {
+        pendingTangleSelFrom = from;
+        pendingTangleSelTo = to;
+        tangleEdgeClickedSink.accept(from, to);
     }
 
     /**
@@ -688,7 +729,7 @@ public class ArchitectureView extends BorderPane {
     public void setOnTangleEdgeClicked(BiConsumer<String, String> sink) {
         this.tangleEdgeClickedSink = sink == null ? (a, b) -> {} : sink;
         if (tangleRenderer != null) {
-            tangleRenderer.setOnEdgeClicked(this.tangleEdgeClickedSink);
+            tangleRenderer.setOnEdgeClicked(this::handleTangleEdgeClicked);
         }
     }
 }

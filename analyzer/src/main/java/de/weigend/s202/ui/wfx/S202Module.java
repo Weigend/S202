@@ -3,6 +3,8 @@ package de.weigend.s202.ui.wfx;
 import de.weigend.s202.analysis.invariants.LayoutInvariantChecker;
 import de.weigend.s202.analysis.invariants.LayoutInvariantReport;
 import de.weigend.s202.analysis.quality.QualityMetrics;
+import de.weigend.s202.analysis.scc.SCCBreaker;
+import de.weigend.s202.analysis.strategy.impl.HeuristicSCCBreakingStrategy;
 import de.weigend.s202.domain.DomainModel;
 import de.weigend.s202.domain.LevelCalculator;
 import de.weigend.s202.reader.DependencyModel;
@@ -13,6 +15,8 @@ import de.weigend.s202.ui.ArchitectureView;
 import de.weigend.s202.ui.model.ArchitectureNode;
 import de.weigend.s202.ui.model.ArchitectureNodeBuilder;
 import de.weigend.s202.ui.model.DistrictRowLevelCalculator;
+import de.weigend.s202.ui.rendering.TangleEdgeRenderer;
+import de.weigend.s202.ui.wfx.events.MethodSelectionEvent;
 import de.weigend.s202.ui.wfx.events.NodeSelectionEvent;
 import de.weigend.s202.ui.wfx.events.MenuRequestEvent;
 import de.weigend.s202.ui.wfx.events.OpenTangleEvent;
@@ -55,10 +59,12 @@ import org.slf4j.LoggerFactory;
 
 import java.io.File;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.EventObject;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.stream.Collectors;
 
 /**
@@ -77,7 +83,6 @@ public class S202Module implements Module {
 
     private final ApplicationWindow applicationWindow;
     private final InputAnalyzer rawAnalyzer = new InputAnalyzer();
-    private final LevelCalculator levelCalculator = new LevelCalculator();
     private final ArchitectureNodeBuilder architectureNodeBuilder = new ArchitectureNodeBuilder();
     private final LayoutInvariantChecker invariantChecker = new LayoutInvariantChecker();
 
@@ -94,6 +99,7 @@ public class S202Module implements Module {
     private CheckBox showDependenciesCheckbox;
     private CheckBox circuitToggle;
     private CheckBox showSccCheckbox;
+    private CheckBox debugLinesCheckbox;
     private CheckBox showIconsCheckbox;
     private Button zoomOutButton;
     private Label zoomLabel;
@@ -343,6 +349,14 @@ public class S202Module implements Module {
             }
         });
 
+        debugLinesCheckbox = new CheckBox("Debug Lines");
+        debugLinesCheckbox.setTooltip(new Tooltip("Toggle visible tangle routing debug lines"));
+        debugLinesCheckbox.selectedProperty().addListener((obs, was, isNow) -> {
+            if (boundView != null) {
+                boundView.setShowTangleDebugLines(isNow);
+            }
+        });
+
         showIconsCheckbox = new CheckBox("Show Icons");
         showIconsCheckbox.setTooltip(new Tooltip("Toggle package/class/interface icons in the architecture view"));
         showIconsCheckbox.selectedProperty().addListener((obs, was, isNow) -> {
@@ -375,14 +389,14 @@ public class S202Module implements Module {
         // Everything except the Open JAR button is view-dependent.
         viewDependentToolbarNodes.addAll(List.of(
                 depthLabel, depthSpinner, refreshButton,
-                showDependenciesCheckbox, circuitToggle, showSccCheckbox, showIconsCheckbox,
+                showDependenciesCheckbox, circuitToggle, showSccCheckbox, debugLinesCheckbox, showIconsCheckbox,
                 zoomOutButton, zoomLabel, zoomInButton, zoomResetButton));
 
         applicationWindow.getToolbarItems().setAll(
                 openJarButton, new Separator(),
                 depthLabel, depthSpinner, refreshButton,
                 new Separator(),
-                showDependenciesCheckbox, circuitToggle, showSccCheckbox, showIconsCheckbox,
+                showDependenciesCheckbox, circuitToggle, showSccCheckbox, debugLinesCheckbox, showIconsCheckbox,
                 new Separator(),
                 zoomGroup, zoomResetButton);
 
@@ -421,6 +435,7 @@ public class S202Module implements Module {
         showDependenciesCheckbox.setSelected(view.isShowDependencies());
         circuitToggle.setSelected(view.isCircuitMode());
         showSccCheckbox.setSelected(view.isShowScc());
+        debugLinesCheckbox.setSelected(view.isShowTangleDebugLines());
         showIconsCheckbox.setSelected(view.isShowIcons());
 
         ReadOnlyDoubleProperty zoomProp = view.zoomFactorProperty();
@@ -695,11 +710,13 @@ public class S202Module implements Module {
                             jarName, processed, total), bytecodeProgress);
                 });
                 if (rawModel.getAllClasses().isEmpty()) {
-                    return new AnalysisResult(rawModel, null, null, null, null);
+                    return new AnalysisResult(rawModel, null, null, null, null, Set.of());
                 }
 
                 publishProgress("Calculating architectural levels...", 0.75);
-                DomainModel calculated = levelCalculator.calculate(rawModel);
+                LevelCalculator calculator = new LevelCalculator();
+                DomainModel calculated = calculator.calculate(rawModel);
+                Set<TangleEdgeRenderer.Edge> cycleBreakEdges = cycleBreakEdgesFromLastLevelCalculation(calculator);
 
                 publishProgress("Building architecture tree...", 0.85);
                 ArchitectureNode root = architectureNodeBuilder.build(calculated);
@@ -718,7 +735,7 @@ public class S202Module implements Module {
                 LayoutInvariantReport invariants = invariantChecker.check(
                         calculated, rawModel,
                         jarFiles.stream().map(File::getAbsolutePath).toList());
-                return new AnalysisResult(rawModel, root, metrics, calculated, invariants);
+                return new AnalysisResult(rawModel, root, metrics, calculated, invariants, cycleBreakEdges);
             }
         };
 
@@ -753,6 +770,7 @@ public class S202Module implements Module {
         // already query scoped data (e.g. quality module on package select).
         view.setDomainModel(result.domainModel());
         view.setRawDependencyModel(result.rawModel());
+        view.setCycleBreakEdges(result.cycleBreakEdges());
         view.setArchitectureRoot(result.rootNode());
         view.setQualityMetrics(result.metrics());
 
@@ -792,7 +810,22 @@ public class S202Module implements Module {
 
     private record AnalysisResult(DependencyModel rawModel, ArchitectureNode rootNode,
                                   QualityMetrics metrics, DomainModel domainModel,
-                                  LayoutInvariantReport invariants) {}
+                                  LayoutInvariantReport invariants,
+                                  Set<TangleEdgeRenderer.Edge> cycleBreakEdges) {}
+
+    private static Set<TangleEdgeRenderer.Edge> cycleBreakEdgesFromLastLevelCalculation(LevelCalculator calculator) {
+        var strategy = calculator.getStrategyContext().getClassLevelStrategy();
+        if (!(strategy instanceof HeuristicSCCBreakingStrategy heuristic)) {
+            return Set.of();
+        }
+        return heuristic.getLastIdentifiedBackEdges().stream()
+                .map(S202Module::toTangleEdge)
+                .collect(Collectors.toUnmodifiableSet());
+    }
+
+    private static TangleEdgeRenderer.Edge toTangleEdge(SCCBreaker.Edge edge) {
+        return new TangleEdgeRenderer.Edge(edge.from, edge.to);
+    }
 
     /**
      * Open the Tangle tab focused on a specific tangle. Each tangle entry gets
@@ -846,6 +879,7 @@ public class S202Module implements Module {
         // working when this new tab gains focus.
         tangleView.setDomainModel(sourceView.getDomainModel());
         tangleView.setRawDependencyModel(sourceView.getRawDependencyModel());
+        tangleView.setCycleBreakEdges(sourceView.getCycleBreakEdges());
         tangleView.setArchitectureRoot(filteredRoot);
         tangleView.setQualityMetrics(sourceView.getQualityMetrics());
 
@@ -879,6 +913,8 @@ public class S202Module implements Module {
         tangleView.setStatusSink(this::publishStatus);
         EventBus<EventObject> bus = Lookup.lookup(EventBus.class);
         tangleView.setOnNodeDoubleClicked(fqn -> bus.publish(new NodeSelectionEvent(fqn, tangleView)));
+        tangleView.setOnTangleEdgeClicked((from, to) ->
+                publishTangleEdgeSelection(bus, tangleView, from, to));
         var css = getClass().getResource("/de/weigend/s202/ui/styles.css");
         if (css != null) {
             tangleView.getStylesheets().add(css.toExternalForm());
@@ -891,6 +927,127 @@ public class S202Module implements Module {
         wm.register(wrapper);
         tangleViews.put(key, wrapper);
         return wrapper;
+    }
+
+    private void publishTangleEdgeSelection(EventBus<EventObject> bus,
+                                            ArchitectureView tangleView,
+                                            String from,
+                                            String to) {
+        if (from == null) {
+            bus.publish(new MethodSelectionEvent(null, null, null, tangleView));
+            return;
+        }
+        TargetMethod targetMethod =
+                firstTargetMethodCalledByDependency(tangleView.getRawDependencyModel(), from, to);
+        if (targetMethod != null) {
+            bus.publish(new MethodSelectionEvent(
+                    targetMethod.className(), targetMethod.methodName(), targetMethod.descriptor(), tangleView));
+            return;
+        }
+        bus.publish(new NodeSelectionEvent(to != null ? to : from, tangleView));
+    }
+
+    record TargetMethod(String className, String methodName, String descriptor, int callCount) {}
+
+    static TargetMethod firstTargetMethodCalledByDependency(DependencyModel rawModel,
+                                                            String from,
+                                                            String to) {
+        if (rawModel == null || from == null || to == null) {
+            return null;
+        }
+        DependencyModel.ClassInfo sourceClass = rawModel.getClass(from);
+        if (sourceClass == null) {
+            return null;
+        }
+        Map<String, TargetMethod> candidates = new HashMap<>();
+        for (DependencyModel.MethodInfo sourceMethod : sourceClass.methods.values()) {
+            for (Map.Entry<String, Integer> call : sourceMethod.methodCalls.entrySet()) {
+                String methodCall = call.getKey();
+                if (!callOwnerMatchesTarget(methodCall, to)) {
+                    continue;
+                }
+                String targetMethodName = methodCallName(methodCall);
+                if (targetMethodName == null) {
+                    continue;
+                }
+                Set<String> descriptors = sourceMethod.methodCallDescriptors.get(methodCall);
+                if (descriptors == null || descriptors.isEmpty()) {
+                    addTargetMethodCandidate(candidates, rawModel, to, targetMethodName, null, call.getValue());
+                } else {
+                    for (String descriptor : descriptors) {
+                        addTargetMethodCandidate(candidates, rawModel, to, targetMethodName, descriptor, call.getValue());
+                    }
+                }
+            }
+        }
+        return candidates.values().stream()
+                .sorted(Comparator
+                        .comparingInt(TargetMethod::callCount)
+                        .reversed()
+                        .thenComparing(TargetMethod::methodName)
+                        .thenComparing(method -> method.descriptor() == null ? "" : method.descriptor()))
+                .findFirst()
+                .orElse(null);
+    }
+
+    private static void addTargetMethodCandidate(Map<String, TargetMethod> candidates,
+                                                 DependencyModel rawModel,
+                                                 String targetClass,
+                                                 String methodName,
+                                                 String descriptor,
+                                                 Integer count) {
+        String knownDescriptor = knownTargetDescriptor(rawModel, targetClass, methodName, descriptor);
+        String key = targetClass + "#" + methodName + "#" + (knownDescriptor == null ? "" : knownDescriptor);
+        int callCount = count == null ? 0 : count;
+        TargetMethod existing = candidates.get(key);
+        if (existing == null) {
+            candidates.put(key, new TargetMethod(targetClass, methodName, knownDescriptor, callCount));
+        } else {
+            candidates.put(key, new TargetMethod(
+                    existing.className(), existing.methodName(), existing.descriptor(),
+                    existing.callCount() + callCount));
+        }
+    }
+
+    private static String knownTargetDescriptor(DependencyModel rawModel,
+                                                String targetClass,
+                                                String methodName,
+                                                String descriptor) {
+        if (descriptor == null) {
+            return null;
+        }
+        DependencyModel.ClassInfo targetInfo = rawModel.getClass(targetClass);
+        if (targetInfo == null || targetInfo.getMethod(methodName, descriptor) == null) {
+            return null;
+        }
+        return descriptor;
+    }
+
+    private static boolean callOwnerMatchesTarget(String methodCall, String targetClass) {
+        String owner = methodCallOwner(methodCall);
+        return owner != null
+                && (targetClass.equals(owner) || targetClass.equals(outerClassName(owner)));
+    }
+
+    private static String methodCallOwner(String methodCall) {
+        if (methodCall == null) {
+            return null;
+        }
+        int dot = methodCall.lastIndexOf('.');
+        return dot <= 0 ? null : methodCall.substring(0, dot);
+    }
+
+    private static String methodCallName(String methodCall) {
+        if (methodCall == null) {
+            return null;
+        }
+        int dot = methodCall.lastIndexOf('.');
+        return dot < 0 || dot == methodCall.length() - 1 ? null : methodCall.substring(dot + 1);
+    }
+
+    private static String outerClassName(String className) {
+        int dollar = className.indexOf('$');
+        return dollar < 0 ? className : className.substring(0, dollar);
     }
 
     /**
