@@ -128,16 +128,11 @@ public class TangleEdgeRenderer {
         zoomableContent.applyCss();
         zoomableContent.layout();
 
-        // 1. All visible registry nodes are routing obstacles
-        List<Bounds> obstacles = new ArrayList<>();
-        for (Node node : elementRegistry.values()) {
-            if (!isVisible(node)) continue;
-            Bounds raw = overlayPane.sceneToLocal(
-                    node.localToScene(node.getBoundsInLocal()));
-            obstacles.add(effectiveBounds(raw));
-        }
-
-        // 2. Endpoint bounds for port computation
+        // 1. Collect bounds of all tangle-edge endpoints.
+        //    We intentionally use only the class-level nodes that participate in
+        //    the tangle — NOT their parent package containers. Routing into a
+        //    package container is expected (target lives inside it); routing
+        //    through a sibling class node is what we want to avoid.
         Map<String, Bounds> boundsMap = new LinkedHashMap<>();
         for (Edge e : edges) {
             for (String name : List.of(e.from(), e.to())) {
@@ -152,13 +147,23 @@ public class TangleEdgeRenderer {
         }
         if (boundsMap.isEmpty()) { scheduleRetry(); return; }
 
-        // 3. Build obstacle-aware routes — each edge routes independently
+        // 2. Build routes.  Per-edge obstacles = all tangle nodes EXCEPT the
+        //    current edge's own source and target (their stubs already exit
+        //    outside the box; including them would block the corridor search).
         record ReadyEdge(Edge e, List<Double> pts) {}
         List<ReadyEdge> ready = new ArrayList<>();
         for (Edge e : edges) {
             Bounds sb = boundsMap.get(e.from());
             Bounds tb = boundsMap.get(e.to());
             if (sb == null || tb == null) continue;
+
+            List<Bounds> obstacles = new ArrayList<>(boundsMap.size());
+            for (Map.Entry<String, Bounds> entry : boundsMap.entrySet()) {
+                if (!entry.getKey().equals(e.from()) && !entry.getKey().equals(e.to())) {
+                    obstacles.add(entry.getValue());
+                }
+            }
+
             Port sp = sourcePort(sb, tb);
             Port tp = targetPort(tb, sb);
             ready.add(new ReadyEdge(e, buildRoute(sp, tp, obstacles)));
