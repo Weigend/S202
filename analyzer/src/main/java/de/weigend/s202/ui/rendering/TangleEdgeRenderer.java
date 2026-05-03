@@ -128,7 +128,16 @@ public class TangleEdgeRenderer {
         zoomableContent.applyCss();
         zoomableContent.layout();
 
-        // 1. Collect effective bounds for all referenced nodes
+        // 1. All visible registry nodes are routing obstacles
+        List<Bounds> obstacles = new ArrayList<>();
+        for (Node node : elementRegistry.values()) {
+            if (!isVisible(node)) continue;
+            Bounds raw = overlayPane.sceneToLocal(
+                    node.localToScene(node.getBoundsInLocal()));
+            obstacles.add(effectiveBounds(raw));
+        }
+
+        // 2. Endpoint bounds for port computation
         Map<String, Bounds> boundsMap = new LinkedHashMap<>();
         for (Edge e : edges) {
             for (String name : List.of(e.from(), e.to())) {
@@ -142,52 +151,22 @@ public class TangleEdgeRenderer {
             }
         }
         if (boundsMap.isEmpty()) { scheduleRetry(); return; }
-        Collection<Bounds> obstacles = boundsMap.values();
-
-        // 2. Compute ports and canonical corridor midpoints
-        record PortedEdge(Edge e, Port sp, Port tp,
-                          boolean bothV, boolean bothH, double mid) {}
-
-        List<PortedEdge> ported = new ArrayList<>();
-        for (Edge e : edges) {
-            Bounds sb = boundsMap.get(e.from());
-            Bounds tb = boundsMap.get(e.to());
-            if (sb == null || tb == null) continue;
-
-            Port sp = sourcePort(sb, tb);
-            Port tp = targetPort(tb, sb);
-
-            boolean spV = (sp.side == Side.TOP  || sp.side == Side.BOTTOM);
-            boolean tpV = (tp.side == Side.TOP  || tp.side == Side.BOTTOM);
-            boolean bothV = spV && tpV;
-            boolean bothH = !spV && !tpV;
-
-            // Corridor midpoint:
-            //   bothV: shared horizontal Y between the two vertical stubs
-            //   bothH: shared vertical X between the two horizontal stubs
-            //   L-turn: no shared corridor
-            double mid = bothV ? (sp.y + tp.y) / 2.0
-                       : bothH ? (sp.x + tp.x) / 2.0
-                       : 0.0;
-
-            ported.add(new PortedEdge(e, sp, tp, bothV, bothH, mid));
-        }
-        if (ported.isEmpty()) { scheduleRetry(); return; }
 
         // 3. Build obstacle-aware routes — each edge routes independently
         record ReadyEdge(Edge e, List<Double> pts) {}
         List<ReadyEdge> ready = new ArrayList<>();
-        for (PortedEdge pe : ported) {
-            List<Double> pts = buildRoute(
-                    pe.sp(), pe.tp(), pe.bothV(), pe.bothH(),
-                    pe.mid(), obstacles);
-            ready.add(new ReadyEdge(pe.e(), pts));
+        for (Edge e : edges) {
+            Bounds sb = boundsMap.get(e.from());
+            Bounds tb = boundsMap.get(e.to());
+            if (sb == null || tb == null) continue;
+            Port sp = sourcePort(sb, tb);
+            Port tp = targetPort(tb, sb);
+            ready.add(new ReadyEdge(e, buildRoute(sp, tp, obstacles)));
         }
+        if (ready.isEmpty()) { scheduleRetry(); return; }
 
         // Selected edge rendered on top
         ready.sort((a, b) -> Boolean.compare(isSelected(a.e()), isSelected(b.e())));
-
-        // 5. Render
         for (ReadyEdge re : ready) {
             renderPolyline(re.e(), re.pts());
         }
@@ -235,36 +214,38 @@ public class TangleEdgeRenderer {
     }
 
     /**
-     * Build an orthogonal polyline.
-     * bothV  -> sp.x,sp.y | sp.x,cy | tp.x,cy | tp.x,tp.y
-     * bothH  -> sp.x,sp.y | cx,sp.y | cx,tp.y | tp.x,tp.y
-     * L-turn -> sp.x,sp.y | corner  | tp.x,tp.y
+     * Build a 3-segment orthogonal route from sp to tp.
+     *
+     * <p>Routing is based on the source port axis:
+     * <ul>
+     *   <li>Source exits <b>vertically</b> (TOP/BOTTOM): find a clear horizontal
+     *       corridor Y, then route sp.x,sp.y → sp.x,cy → tp.x,cy → tp.x,tp.y.</li>
+     *   <li>Source exits <b>horizontally</b> (LEFT/RIGHT): find a clear vertical
+     *       corridor X, then route sp.x,sp.y → cx,sp.y → cx,tp.y → tp.x,tp.y.</li>
+     * </ul>
+     * This handles all cases (both-V, both-H, L-turn) uniformly with
+     * obstacle avoidance on the corridor segment.
      */
     private static List<Double> buildRoute(Port sp, Port tp,
-                                            boolean bothV, boolean bothH,
-                                            double corridor,
                                             Collection<Bounds> obstacles) {
         List<Double> pts = new ArrayList<>();
         pts.add(sp.x); pts.add(sp.y);
 
-        if (bothV) {
-            double cy = findClearY(corridor,
+        boolean spV = (sp.side == Side.TOP || sp.side == Side.BOTTOM);
+        if (spV) {
+            // Horizontal corridor between the two vertical stubs
+            double preferred = (sp.y + tp.y) / 2.0;
+            double cy = findClearY(preferred,
                     Math.min(sp.x, tp.x), Math.max(sp.x, tp.x), obstacles);
             pts.add(sp.x); pts.add(cy);
             pts.add(tp.x); pts.add(cy);
-        } else if (bothH) {
-            double cx = findClearX(corridor,
+        } else {
+            // Vertical corridor between the two horizontal stubs
+            double preferred = (sp.x + tp.x) / 2.0;
+            double cx = findClearX(preferred,
                     Math.min(sp.y, tp.y), Math.max(sp.y, tp.y), obstacles);
             pts.add(cx); pts.add(sp.y);
             pts.add(cx); pts.add(tp.y);
-        } else {
-            // L-turn
-            boolean spH = (sp.side == Side.LEFT || sp.side == Side.RIGHT);
-            if (spH) {
-                pts.add(tp.x); pts.add(sp.y);
-            } else {
-                pts.add(sp.x); pts.add(tp.y);
-            }
         }
 
         pts.add(tp.x); pts.add(tp.y);
