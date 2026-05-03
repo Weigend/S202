@@ -16,7 +16,6 @@ import de.weigend.s202.ui.model.DistrictRowLevelCalculator;
 import de.weigend.s202.ui.wfx.events.NodeSelectionEvent;
 import de.weigend.s202.ui.wfx.events.MenuRequestEvent;
 import de.weigend.s202.ui.wfx.events.OpenTangleEvent;
-import de.weigend.s202.ui.wfx.events.TangleEdgeSelectedEvent;
 import de.weigend.s202.ui.wfx.tangles.TangleFilter;
 import io.softwareecg.wfx.lookup.Lookup;
 import io.softwareecg.wfx.platform.api.EventBus;
@@ -57,7 +56,9 @@ import org.slf4j.LoggerFactory;
 import java.io.File;
 import java.util.ArrayList;
 import java.util.EventObject;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.stream.Collectors;
 
 /**
@@ -105,10 +106,9 @@ public class S202Module implements Module {
     // Reusable listener so we can detach it cleanly (no-op when boundView is null).
     private ChangeListener<Number> zoomLabelListener;
 
-    // Singleton tangle-view tab: re-used across consecutive open requests.
-    // Replaced lazily once the user closes it (i.e. WindowManager no longer
-    // holds it in its registered list).
-    private ArchitectureWfxView tangleViewSingleton;
+    // Dedicated tangle tabs keyed by the tangle's member set. Each tangle row
+    // gets one view instance and reopens/focuses that view on later requests.
+    private final Map<String, ArchitectureWfxView> tangleViews = new HashMap<>();
 
     public S202Module(ApplicationWindow applicationWindow) {
         this.applicationWindow = applicationWindow;
@@ -214,7 +214,7 @@ public class S202Module implements Module {
 
     private void subscribeToOpenTangle(EventBus<EventObject> bus) {
         bus.subscribe(OpenTangleEvent.class, ev -> {
-            openTangleView(ev.getMembers(), ev.getFromClass(), ev.getToClass());
+            openTangleView(ev.getMembers(), ev.getTangleKey(), ev.getTitle());
             return true;
         });
     }
@@ -795,26 +795,19 @@ public class S202Module implements Module {
                                   LayoutInvariantReport invariants) {}
 
     /**
-     * Open the Tangle tab focused on a specific tangle. Singleton: one tab
-     * is kept alive across multiple open requests; subsequent requests
-     * update its content and bring it to front. A new tab is only created
-     * once the user has closed the previous one.
+     * Open the Tangle tab focused on a specific tangle. Each tangle entry gets
+     * one tab, reused on later double-clicks of that same entry.
      * <p>
      * The tab uses the dedicated {@code TangleEdgeRenderer} for the cycle
      * visualisation — independent of the toolbar's Show Dependencies / Show
      * SCC checkboxes, with arrows that dock to the box perimeters and a
-     * single highlighted "selected" edge.
+     * orthogonal intra-SCC edge visualisation.
      */
-    private void openTangleView(java.util.Set<String> members, String fromClass, String toClass) {
+    private void openTangleView(java.util.Set<String> members, String tangleKey, String title) {
         if (members == null || members.isEmpty()) {
             return;
         }
-        ArchitectureWfxView source = focusedArchitectureView();
-        // Don't reuse the singleton itself as the source — that would filter
-        // an already-filtered subtree and the second click would lose context.
-        if (source == tangleViewSingleton) {
-            source = otherArchitectureView(tangleViewSingleton);
-        }
+        ArchitectureWfxView source = focusedSourceArchitectureView();
         if (source == null) {
             return;
         }
@@ -833,7 +826,10 @@ public class S202Module implements Module {
                 collectInternalEdges(filteredRoot, members);
 
         WindowManager wm = Lookup.lookup(WindowManager.class);
-        ArchitectureWfxView wrapper = reusableTangleWrapper(wm);
+        String key = tangleKey == null || tangleKey.isBlank()
+                ? members.stream().sorted().collect(Collectors.joining("|"))
+                : tangleKey;
+        ArchitectureWfxView wrapper = reusableTangleWrapper(wm, key, title);
         ArchitectureView tangleView = wrapper.getArchitectureView();
 
         // Snapshot the current zoom before setArchitectureRoot wipes it via
@@ -856,7 +852,7 @@ public class S202Module implements Module {
         // Install the dedicated tangle edge overlay. The renderer listens to
         // layoutBounds itself so the first paint lands once the box layout
         // settles — no Platform.runLater fight with the FX pulse.
-        tangleView.setTangleVisualization(edges, fromClass, toClass);
+        tangleView.setTangleVisualization(edges, null, null);
 
         // Restore the captured zoom (if any) — defer one pulse so the new
         // ZoomController has a laid-out content node to scale against.
@@ -869,34 +865,31 @@ public class S202Module implements Module {
     }
 
     /**
-     * @return the singleton tangle wrapper, reused if still registered;
-     *         otherwise a freshly created one (the previous reference has
-     *         been closed by the user).
+     * @return the tangle wrapper for {@code key}, reused if still registered;
+     *         otherwise a freshly created one.
      */
     @SuppressWarnings("unchecked")
-    private ArchitectureWfxView reusableTangleWrapper(WindowManager wm) {
-        if (tangleViewSingleton != null && wm.hasRegisteredView(tangleViewSingleton)) {
-            return tangleViewSingleton;
+    private ArchitectureWfxView reusableTangleWrapper(WindowManager wm, String key, String title) {
+        ArchitectureWfxView existing = tangleViews.get(key);
+        if (existing != null && wm.hasRegisteredView(existing)) {
+            return existing;
         }
         viewCounter++;
         ArchitectureView tangleView = new ArchitectureView();
         tangleView.setStatusSink(this::publishStatus);
         EventBus<EventObject> bus = Lookup.lookup(EventBus.class);
         tangleView.setOnNodeDoubleClicked(fqn -> bus.publish(new NodeSelectionEvent(fqn, tangleView)));
-        // Edge clicks in the graph publish onto the bus so the Top Tangles
-        // side panel can mirror the selection in its tree.
-        tangleView.setOnTangleEdgeClicked((from, to) ->
-                bus.publish(new TangleEdgeSelectedEvent(from, to, tangleView)));
         var css = getClass().getResource("/de/weigend/s202/ui/styles.css");
         if (css != null) {
             tangleView.getStylesheets().add(css.toExternalForm());
         }
+        String viewTitle = title == null || title.isBlank() ? "Tangle" : title;
         ArchitectureWfxView wrapper = new ArchitectureWfxView(
                 ArchitectureWfxView.VIEW_ID_PREFIX + viewCounter,
-                "Tangle",
+                viewTitle,
                 tangleView);
         wm.register(wrapper);
-        tangleViewSingleton = wrapper;
+        tangleViews.put(key, wrapper);
         return wrapper;
     }
 
@@ -932,13 +925,17 @@ public class S202Module implements Module {
         }
     }
 
-    /** Pick any other architecture tab to use as the source for tangle filtering. */
-    private ArchitectureWfxView otherArchitectureView(ArchitectureWfxView exclude) {
+    /** Pick a non-tangle architecture tab to use as the source for tangle filtering. */
+    private ArchitectureWfxView focusedSourceArchitectureView() {
         WindowManager wm = Lookup.lookup(WindowManager.class);
+        View focused = wm.getFocusedView();
+        if (focused instanceof ArchitectureWfxView arch && !tangleViews.containsValue(arch)) {
+            return arch;
+        }
         return wm.getRegisteredViews().stream()
                 .filter(ArchitectureWfxView.class::isInstance)
                 .map(ArchitectureWfxView.class::cast)
-                .filter(v -> v != exclude)
+                .filter(v -> !tangleViews.containsValue(v))
                 .findFirst()
                 .orElse(null);
     }

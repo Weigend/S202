@@ -348,11 +348,9 @@ public class TangleEdgeRenderer {
         Color color = selected ? SELECTED_COLOR : EDGE_COLOR;
         double width = selected ? SELECTED_WIDTH : EDGE_WIDTH;
 
-        double sx = routed.source.getCenterX();
-        double sy = routed.source.getCenterY();
-        double tx = routed.target.getCenterX();
-        double ty = routed.target.getCenterY();
         double y = routed.horizontal.y;
+        Point sourceDock = dockPoint(routed.source, routed.sourceTrack.x, y);
+        Point targetDock = dockPoint(routed.target, routed.targetTrack.x, y);
 
         Path path = new Path();
         path.setStroke(color);
@@ -362,16 +360,16 @@ public class TangleEdgeRenderer {
         path.setFill(null);
         path.setCursor(Cursor.HAND);
 
-        path.getElements().add(new MoveTo(sx, sy));
-        path.getElements().add(new LineTo(routed.sourceTrack.x, sy));
+        path.getElements().add(new MoveTo(sourceDock.x, sourceDock.y));
+        path.getElements().add(new LineTo(routed.sourceTrack.x, sourceDock.y));
         path.getElements().add(new LineTo(routed.sourceTrack.x, y));
         emitHorizontalWithBridges(path, routed.sourceTrack.x, routed.targetTrack.x, y, routed, verticalSegments);
-        path.getElements().add(new LineTo(routed.targetTrack.x, ty));
-        path.getElements().add(new LineTo(tx, ty));
+        path.getElements().add(new LineTo(routed.targetTrack.x, targetDock.y));
+        path.getElements().add(new LineTo(targetDock.x, targetDock.y));
 
-        double arrowDx = tx - routed.targetTrack.x;
-        double arrowDy = Math.abs(arrowDx) < 0.0001 ? ty - y : 0.0;
-        Polygon arrow = makeArrow(tx, ty, arrowDx, arrowDy, color);
+        double arrowDx = targetDock.x - routed.targetTrack.x;
+        double arrowDy = Math.abs(arrowDx) < 0.0001 ? targetDock.y - y : 0.0;
+        Polygon arrow = makeArrow(targetDock.x, targetDock.y, arrowDx, arrowDy, color);
 
         path.setOnMouseEntered(e -> {
             if (!isSelected(edge)) path.setStroke(EDGE_HOVER);
@@ -389,6 +387,27 @@ public class TangleEdgeRenderer {
         });
 
         pane.getChildren().addAll(path, arrow);
+    }
+
+    static Point dockPoint(Bounds box, double trackX, double horizontalY) {
+        double x = clamp(trackX, box.getMinX(), box.getMaxX());
+        if (horizontalY < box.getCenterY()) {
+            return new Point(x, box.getMinY());
+        }
+        if (horizontalY > box.getCenterY()) {
+            return new Point(x, box.getMaxY());
+        }
+        if (trackX < box.getCenterX()) {
+            return new Point(box.getMinX(), box.getCenterY());
+        }
+        if (trackX > box.getCenterX()) {
+            return new Point(box.getMaxX(), box.getCenterY());
+        }
+        return new Point(x, box.getCenterY());
+    }
+
+    private static double clamp(double v, double min, double max) {
+        return Math.max(min, Math.min(max, v));
     }
 
     private static List<VerticalSegment> collectVerticalSegments(List<RoutedTangleEdge> routed) {
@@ -543,6 +562,8 @@ public class TangleEdgeRenderer {
             return y >= Math.min(y1, y2) && y <= Math.max(y1, y2);
         }
     }
+
+    record Point(double x, double y) {}
 
     /**
      * Draws a straight line from the centre of the source box to the centre of

@@ -24,10 +24,9 @@ import java.util.function.Consumer;
  * <ol>
  *   <li>{@link TangleRow}: rank, size, member preview</li>
  *   <li>{@link EdgeRow}: a from→to edge inside the tangle</li>
- *   <li>{@link KindRow}: one row per relationship kind. {@code CALLS}
- *       expands further into one row per called method name.</li>
+ *   <li>{@link KindRow}: one row per relationship kind.</li>
  * </ol>
- * Double-clicking a {@link KindRow} triggers the configured
+ * Double-clicking a {@link TangleRow} triggers the configured
  * {@link #setOnOpenTangle open-tangle handler} so the host shell can spin
  * up a dedicated graph view filtered to that tangle's classes.
  */
@@ -39,29 +38,24 @@ public class TopTanglesView implements View {
     public sealed interface Row permits TangleRow, EdgeRow, KindRow {}
     public record TangleRow(int rank, Tangle tangle) implements Row {}
     public record EdgeRow(String from, String to) implements Row {}
-    /**
-     * One relationship-kind line beneath an {@link EdgeRow}.
-     * {@code methodName} is non-null only for {@link EdgeKind#CALLS} entries.
-     * {@code parentTangle} is held so the click handler can identify which
-     * tangle to open without traversing back up the tree.
-     */
-    public record KindRow(EdgeKind kind, String methodName, Tangle parentTangle) implements Row {}
+    /** One relationship-kind line beneath an {@link EdgeRow}. */
+    public record KindRow(EdgeKind kind) implements Row {}
 
     /** Display data for a single tangle. */
-    public record Tangle(int size, List<String> members, List<TangleEdge> edges) {}
+    public record Tangle(int size, String key, String title, List<String> members, List<TangleEdge> edges) {}
     /** A from→to edge inside a tangle, decomposed into per-kind entries. */
     public record TangleEdge(String from, String to, List<KindEntry> entries) {}
-    /** One {@code (kind, optional method name)} pair on an edge. */
-    public record KindEntry(EdgeKind kind, String methodName) {}
+    /** One relationship kind on an edge. */
+    public record KindEntry(EdgeKind kind) {}
 
     private final BorderPane root = new BorderPane();
     private final Label scopeLabel = new Label("No architecture loaded");
     private final TreeView<Row> treeView = new TreeView<>();
 
-    /** Carries enough context to open a dedicated tab for the tangle and pre-highlight an edge. */
-    public record OpenRequest(Tangle tangle, String fromClass, String toClass) {}
+    /** Carries enough context to open a dedicated tab for the tangle. */
+    public record OpenRequest(Tangle tangle) {}
 
-    /** Invoked when the user double-clicks a {@link KindRow}. May be null. */
+    /** Invoked when the user double-clicks a {@link TangleRow}. May be null. */
     private Consumer<OpenRequest> openTangleHandler;
 
     public TopTanglesView() {
@@ -73,28 +67,19 @@ public class TopTanglesView implements View {
         treeView.setCellFactory(tv -> new RowCell());
         treeView.setRoot(new TreeItem<>(null));
 
-        // EventFilter on MOUSE_PRESSED — TreeCellBehavior's expand/collapse on
-        // double-click runs in MOUSE_PRESSED of the *second* press (it's
-        // tied to clickCount, not the later MOUSE_CLICKED event). Filtering
-        // CLICKED was too late: the toggle had already fired. Filtering
-        // PRESSED with clickCount==2 catches it before the behaviour runs.
-        // Selection from the first press is already established, so our
-        // open-logic still has the right item.
+        // EventFilter on MOUSE_PRESSED: TreeCellBehavior's expand/collapse on
+        // double-click runs in MOUSE_PRESSED of the second press. Catch only
+        // TangleRow double-clicks before the default behaviour toggles them.
         treeView.addEventFilter(javafx.scene.input.MouseEvent.MOUSE_PRESSED, ev -> {
             if (ev.getButton() != MouseButton.PRIMARY || ev.getClickCount() != 2) {
                 return;
             }
             TreeItem<Row> selected = treeView.getSelectionModel().getSelectedItem();
-            if (selected != null && selected.getValue() instanceof KindRow kr
-                    && selected.getParent() != null
-                    && selected.getParent().getValue() instanceof EdgeRow er
+            if (selected != null && selected.getValue() instanceof TangleRow tr
                     && openTangleHandler != null) {
-                openTangleHandler.accept(new OpenRequest(kr.parentTangle(), er.from(), er.to()));
+                openTangleHandler.accept(new OpenRequest(tr.tangle()));
+                ev.consume();
             }
-            // Always consume — never let the default behaviour collapse the
-            // row the user just acted on. The disclosure arrow is still
-            // available for explicit expand/collapse.
-            ev.consume();
         });
 
         root.setTop(scopeLabel);
@@ -120,8 +105,7 @@ public class TopTanglesView implements View {
             for (TangleEdge edge : t.edges()) {
                 TreeItem<Row> edgeItem = new TreeItem<>(new EdgeRow(edge.from(), edge.to()));
                 for (KindEntry entry : edge.entries()) {
-                    edgeItem.getChildren().add(new TreeItem<>(
-                            new KindRow(entry.kind(), entry.methodName(), t)));
+                    edgeItem.getChildren().add(new TreeItem<>(new KindRow(entry.kind())));
                 }
                 tangleItem.getChildren().add(edgeItem);
             }
@@ -177,9 +161,8 @@ public class TopTanglesView implements View {
     }
 
     /**
-     * Set the handler invoked on double-click of a {@link KindRow}. Pass
-     * {@code null} to detach. The request carries both the tangle and the
-     * specific from→to edge that backed the clicked row.
+     * Set the handler invoked on double-click of a {@link TangleRow}. Pass
+     * {@code null} to detach.
      */
     public void setOnOpenTangle(Consumer<OpenRequest> handler) {
         this.openTangleHandler = handler;
@@ -192,23 +175,7 @@ public class TopTanglesView implements View {
     }
 
     private static String renderKind(KindRow k) {
-        if (k.kind() == EdgeKind.CALLS && k.methodName() != null) {
-            return "calls: " + k.methodName();
-        }
         return k.kind().label();
-    }
-
-    private static String previewMembers(List<String> members) {
-        StringBuilder sb = new StringBuilder();
-        int n = Math.min(2, members.size());
-        for (int i = 0; i < n; i++) {
-            if (i > 0) sb.append(", ");
-            sb.append(simple(members.get(i)));
-        }
-        if (members.size() > n) {
-            sb.append(", …");
-        }
-        return sb.toString();
     }
 
     private static final class RowCell extends TreeCell<Row> {
@@ -225,8 +192,7 @@ public class TopTanglesView implements View {
                     "top-tangles-edge-row", "top-tangles-kind-row");
             switch (item) {
                 case TangleRow t -> {
-                    setText("#" + t.rank() + "  size " + t.tangle().size()
-                            + "  (" + previewMembers(t.tangle().members()) + ")");
+                    setText(t.tangle().title());
                     getStyleClass().add("top-tangles-tangle-row");
                 }
                 case EdgeRow e -> {
@@ -254,7 +220,7 @@ public class TopTanglesView implements View {
     @Override
     public String getToolTipInfo() {
         return "Largest dependency cycles (SCCs) in the current scope. "
-                + "Double-click a method/kind row to open the tangle.";
+                + "Double-click a tangle row to open the tangle.";
     }
 
     @Override

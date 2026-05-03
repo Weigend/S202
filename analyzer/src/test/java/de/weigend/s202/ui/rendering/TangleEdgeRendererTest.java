@@ -82,4 +82,30 @@ class TangleEdgeRendererTest {
 
         assertEquals(0.0, end, 0.0001);
     }
+
+    @Test
+    void dockPointUsesTopOrBottomEdgeForVerticalApproach() {
+        Bounds box = new BoundingBox(40.0, 100.0, 20.0, 20.0);
+
+        TangleEdgeRenderer.Point top = TangleEdgeRenderer.dockPoint(box, 52.0, 80.0);
+        TangleEdgeRenderer.Point bottom = TangleEdgeRenderer.dockPoint(box, 52.0, 140.0);
+
+        assertEquals(52.0, top.x(), 0.0001);
+        assertEquals(box.getMinY(), top.y(), 0.0001);
+        assertEquals(52.0, bottom.x(), 0.0001);
+        assertEquals(box.getMaxY(), bottom.y(), 0.0001);
+    }
+
+    @Test
+    void dockPointUsesSideEdgeForSameRowApproach() {
+        Bounds box = new BoundingBox(40.0, 100.0, 20.0, 20.0);
+
+        TangleEdgeRenderer.Point left = TangleEdgeRenderer.dockPoint(box, 45.0, box.getCenterY());
+        TangleEdgeRenderer.Point right = TangleEdgeRenderer.dockPoint(box, 55.0, box.getCenterY());
+
+        assertEquals(box.getMinX(), left.x(), 0.0001);
+        assertEquals(box.getCenterY(), left.y(), 0.0001);
+        assertEquals(box.getMaxX(), right.x(), 0.0001);
+        assertEquals(box.getCenterY(), right.y(), 0.0001);
+    }
 }

@@ -1,5 +1,6 @@
 package de.weigend.s202.ui.wfx.outline;
 
+import de.weigend.s202.reader.DependencyModel;
 import de.weigend.s202.ui.ArchitectureView;
 import de.weigend.s202.ui.model.ArchitectureNode;
 import de.weigend.s202.ui.wfx.ArchitectureWfxView;
@@ -39,6 +40,8 @@ public class OutlineExplorerModule implements Module {
     private ArchitectureView boundView;
     /** Listener attached to {@link #boundView}'s root property. */
     private ChangeListener<ArchitectureNode> rootListener;
+    /** Listener attached to {@link #boundView}'s raw dependency model property. */
+    private ChangeListener<DependencyModel> rawModelListener;
 
     @Override
     public String getName() {
@@ -110,18 +113,34 @@ public class OutlineExplorerModule implements Module {
         }
 
         boundView = newBound;
-        outlineView.setArchitectureRoot(newBound.getArchitectureRoot());
+        updateOutline();
 
-        rootListener = (obs, was, isNow) -> outlineView.setArchitectureRoot(isNow);
+        rootListener = (obs, was, isNow) -> updateOutline();
+        rawModelListener = (obs, was, isNow) -> updateOutline();
         newBound.architectureRootProperty().addListener(rootListener);
+        newBound.rawDependencyModelProperty().addListener(rawModelListener);
     }
 
     private void unbind() {
-        if (boundView != null && rootListener != null) {
-            boundView.architectureRootProperty().removeListener(rootListener);
+        if (boundView != null) {
+            if (rootListener != null) {
+                boundView.architectureRootProperty().removeListener(rootListener);
+            }
+            if (rawModelListener != null) {
+                boundView.rawDependencyModelProperty().removeListener(rawModelListener);
+            }
         }
         boundView = null;
         rootListener = null;
+        rawModelListener = null;
+    }
+
+    private void updateOutline() {
+        if (boundView == null) {
+            outlineView.setArchitectureRoot(null);
+            return;
+        }
+        outlineView.setArchitectureRoot(boundView.getArchitectureRoot(), boundView.getRawDependencyModel());
     }
 
     private ArchitectureWfxView focusedArchitectureView() {

@@ -1,5 +1,6 @@
 package de.weigend.s202.ui.wfx.outline;
 
+import de.weigend.s202.reader.DependencyModel;
 import de.weigend.s202.ui.model.ArchitectureNode;
 import io.softwareecg.wfx.windowmtg.api.Position;
 import io.softwareecg.wfx.windowmtg.api.View;
@@ -12,9 +13,14 @@ import javafx.scene.layout.BorderPane;
 import javafx.scene.paint.Color;
 import org.kordamp.ikonli.javafx.FontIcon;
 import org.kordamp.ikonli.materialdesign2.MaterialDesignA;
+import org.kordamp.ikonli.materialdesign2.MaterialDesignF;
 import org.kordamp.ikonli.materialdesign2.MaterialDesignP;
 
 import java.net.URL;
+import java.util.HashSet;
+import java.util.Comparator;
+import java.util.List;
+import java.util.Set;
 import java.util.function.Consumer;
 
 /**
@@ -29,7 +35,7 @@ public class OutlineExplorerView implements View {
     public static final String VIEW_ID = "s202-outline-explorer";
 
     private final BorderPane root = new BorderPane();
-    private final TreeView<ArchitectureNode> treeView = new TreeView<>();
+    private final TreeView<OutlineRow> treeView = new TreeView<>();
     private final Label emptyPlaceholder = new Label("No JAR loaded");
 
     private Consumer<String> nodeDoubleClickHandler = fqn -> { /* no-op */ };
@@ -45,11 +51,11 @@ public class OutlineExplorerView implements View {
             if (event.getButton() != MouseButton.PRIMARY || event.getClickCount() != 2) {
                 return;
             }
-            TreeItem<ArchitectureNode> selected = treeView.getSelectionModel().getSelectedItem();
-            if (selected == null || selected.getValue() == null) {
+            TreeItem<OutlineRow> selected = treeView.getSelectionModel().getSelectedItem();
+            if (selected == null || !(selected.getValue() instanceof NodeRow row)) {
                 return;
             }
-            nodeDoubleClickHandler.accept(selected.getValue().getFullName());
+            nodeDoubleClickHandler.accept(row.node().getFullName());
         });
 
         showEmpty();
@@ -60,19 +66,31 @@ public class OutlineExplorerView implements View {
      * outline (e.g. when no architecture view is focused).
      */
     public void setArchitectureRoot(ArchitectureNode rootNode) {
+        setArchitectureRoot(rootNode, null);
+    }
+
+    public void setArchitectureRoot(ArchitectureNode rootNode, DependencyModel rawModel) {
         if (rootNode == null) {
             showEmpty();
             return;
         }
-        TreeItem<ArchitectureNode> rootItem = buildTreeItem(rootNode);
+        Set<String> expanded = expandedNodeNames();
+        String selected = selectedNodeName();
+
+        TreeItem<OutlineRow> rootItem = buildTreeItem(rootNode, rawModel);
         rootItem.setExpanded(true);
         // The architecture model carries a synthetic root; expand its first
         // level so the user immediately sees the top-level packages.
-        for (TreeItem<ArchitectureNode> child : rootItem.getChildren()) {
+        for (TreeItem<OutlineRow> child : rootItem.getChildren()) {
             child.setExpanded(true);
         }
         treeView.setRoot(rootItem);
         root.setCenter(treeView);
+
+        restoreExpanded(rootItem, expanded);
+        if (selected != null) {
+            selectByFullName(selected);
+        }
     }
 
     public void setOnNodeDoubleClick(Consumer<String> handler) {
@@ -88,15 +106,19 @@ public class OutlineExplorerView implements View {
         if (fullName == null) {
             return;
         }
-        TreeItem<ArchitectureNode> rootItem = treeView.getRoot();
+        selectByFullName(fullName);
+    }
+
+    private void selectByFullName(String fullName) {
+        TreeItem<OutlineRow> rootItem = treeView.getRoot();
         if (rootItem == null) {
             return;
         }
-        TreeItem<ArchitectureNode> match = findItem(rootItem, fullName);
+        TreeItem<OutlineRow> match = findItem(rootItem, fullName);
         if (match == null) {
             return;
         }
-        TreeItem<ArchitectureNode> ancestor = match.getParent();
+        TreeItem<OutlineRow> ancestor = match.getParent();
         while (ancestor != null) {
             ancestor.setExpanded(true);
             ancestor = ancestor.getParent();
@@ -108,13 +130,48 @@ public class OutlineExplorerView implements View {
         }
     }
 
-    private TreeItem<ArchitectureNode> findItem(TreeItem<ArchitectureNode> item, String fullName) {
-        ArchitectureNode value = item.getValue();
-        if (value != null && fullName.equals(value.getFullName())) {
+    private Set<String> expandedNodeNames() {
+        Set<String> out = new HashSet<>();
+        TreeItem<OutlineRow> rootItem = treeView.getRoot();
+        if (rootItem != null) {
+            collectExpanded(rootItem, out);
+        }
+        return out;
+    }
+
+    private void collectExpanded(TreeItem<OutlineRow> item, Set<String> out) {
+        if (item.isExpanded() && item.getValue() instanceof NodeRow row) {
+            out.add(row.node().getFullName());
+        }
+        for (TreeItem<OutlineRow> child : item.getChildren()) {
+            collectExpanded(child, out);
+        }
+    }
+
+    private void restoreExpanded(TreeItem<OutlineRow> item, Set<String> expanded) {
+        if (item.getValue() instanceof NodeRow row && expanded.contains(row.node().getFullName())) {
+            item.setExpanded(true);
+        }
+        for (TreeItem<OutlineRow> child : item.getChildren()) {
+            restoreExpanded(child, expanded);
+        }
+    }
+
+    private String selectedNodeName() {
+        TreeItem<OutlineRow> selected = treeView.getSelectionModel().getSelectedItem();
+        if (selected != null && selected.getValue() instanceof NodeRow row) {
+            return row.node().getFullName();
+        }
+        return null;
+    }
+
+    private TreeItem<OutlineRow> findItem(TreeItem<OutlineRow> item, String fullName) {
+        OutlineRow value = item.getValue();
+        if (value instanceof NodeRow row && fullName.equals(row.node().getFullName())) {
             return item;
         }
-        for (TreeItem<ArchitectureNode> child : item.getChildren()) {
-            TreeItem<ArchitectureNode> found = findItem(child, fullName);
+        for (TreeItem<OutlineRow> child : item.getChildren()) {
+            TreeItem<OutlineRow> found = findItem(child, fullName);
             if (found != null) {
                 return found;
             }
@@ -127,10 +184,22 @@ public class OutlineExplorerView implements View {
         root.setCenter(emptyPlaceholder);
     }
 
-    private TreeItem<ArchitectureNode> buildTreeItem(ArchitectureNode node) {
-        TreeItem<ArchitectureNode> item = new TreeItem<>(node);
+    private TreeItem<OutlineRow> buildTreeItem(ArchitectureNode node, DependencyModel rawModel) {
+        TreeItem<OutlineRow> item = new TreeItem<>(new NodeRow(node));
         for (ArchitectureNode child : node.getChildren()) {
-            item.getChildren().add(buildTreeItem(child));
+            item.getChildren().add(buildTreeItem(child, rawModel));
+        }
+        if (node.getType() == ArchitectureNode.NodeType.CLASS && rawModel != null) {
+            DependencyModel.ClassInfo classInfo = rawModel.getClass(node.getFullName());
+            if (classInfo != null) {
+                List<DependencyModel.MethodInfo> methods = classInfo.methods.values().stream()
+                        .sorted(Comparator.comparing((DependencyModel.MethodInfo m) -> m.name)
+                                .thenComparing(m -> m.descriptor))
+                        .toList();
+                for (DependencyModel.MethodInfo method : methods) {
+                    item.getChildren().add(new TreeItem<>(new MethodRow(method)));
+                }
+            }
         }
         return item;
     }
@@ -170,40 +239,59 @@ public class OutlineExplorerView implements View {
         return 0.30;
     }
 
-    /** Renders package, class, and interface nodes with distinct icons and style classes. */
-    private static final class ArchitectureNodeCell extends javafx.scene.control.TreeCell<ArchitectureNode> {
+    private sealed interface OutlineRow permits NodeRow, MethodRow {}
+    private record NodeRow(ArchitectureNode node) implements OutlineRow {}
+    private record MethodRow(DependencyModel.MethodInfo method) implements OutlineRow {}
+
+    /** Renders package, class, interface, and method rows with distinct icons and style classes. */
+    private static final class ArchitectureNodeCell extends javafx.scene.control.TreeCell<OutlineRow> {
         private static final Color PACKAGE_COLOR = Color.web("#e6c46a");
         private static final Color CLASS_COLOR   = Color.web("#7fb3ff");
         private static final Color INTERFACE_COLOR = Color.web("#4caf50");
+        private static final Color METHOD_COLOR = Color.web("#b0bec5");
 
         @Override
-        protected void updateItem(ArchitectureNode item, boolean empty) {
+        protected void updateItem(OutlineRow item, boolean empty) {
             super.updateItem(item, empty);
             if (empty || item == null) {
                 setText(null);
                 setGraphic(null);
-                getStyleClass().removeAll("outline-package", "outline-class", "outline-interface");
+                getStyleClass().removeAll("outline-package", "outline-class", "outline-interface", "outline-method");
                 return;
             }
-            setText(item.getSimpleName());
-            getStyleClass().removeAll("outline-package", "outline-class", "outline-interface");
+            getStyleClass().removeAll("outline-package", "outline-class", "outline-interface", "outline-method");
 
             FontIcon icon;
-            if (item.isInterfaceType()) {
+            if (item instanceof MethodRow row) {
+                setText(methodLabel(row.method()));
+                icon = new FontIcon(MaterialDesignF.FUNCTION);
+                icon.setIconColor(METHOD_COLOR);
+                getStyleClass().add("outline-method");
+            } else if (item instanceof NodeRow row && row.node().isInterfaceType()) {
+                ArchitectureNode node = row.node();
+                setText(node.getSimpleName());
                 icon = new FontIcon(MaterialDesignA.ALPHA_I_CIRCLE);
                 icon.setIconColor(INTERFACE_COLOR);
                 getStyleClass().add("outline-interface");
-            } else if (item.getType() == ArchitectureNode.NodeType.CLASS) {
+            } else if (item instanceof NodeRow row && row.node().getType() == ArchitectureNode.NodeType.CLASS) {
+                ArchitectureNode node = row.node();
+                setText(node.getSimpleName());
                 icon = new FontIcon(MaterialDesignA.ALPHA_C_CIRCLE);
                 icon.setIconColor(CLASS_COLOR);
                 getStyleClass().add("outline-class");
             } else {
+                ArchitectureNode node = ((NodeRow) item).node();
+                setText(node.getSimpleName());
                 icon = new FontIcon(MaterialDesignP.PACKAGE_VARIANT_CLOSED);
                 icon.setIconColor(PACKAGE_COLOR);
                 getStyleClass().add("outline-package");
             }
             icon.setIconSize(14);
             setGraphic(icon);
+        }
+
+        private static String methodLabel(DependencyModel.MethodInfo method) {
+            return method.name + method.descriptor;
         }
     }
 }

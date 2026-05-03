@@ -279,6 +279,14 @@
     -fx-text-fill: #d0d0d0;
 }
 
+.outline-tree .outline-interface {
+    -fx-text-fill: #d7f0d7;
+}
+
+.outline-tree .outline-method {
+    -fx-text-fill: #aeb7c0;
+}
+
 .outline-empty {
     -fx-font-size: 12px;
     -fx-text-fill: #888888;

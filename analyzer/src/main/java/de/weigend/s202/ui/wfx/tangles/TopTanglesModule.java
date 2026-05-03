@@ -9,7 +9,6 @@ import de.weigend.s202.ui.ArchitectureView;
 import de.weigend.s202.ui.model.ArchitectureNode;
 import de.weigend.s202.ui.wfx.ArchitectureWfxView;
 import de.weigend.s202.ui.wfx.events.OpenTangleEvent;
-import de.weigend.s202.ui.wfx.events.TangleEdgeSelectedEvent;
 import de.weigend.s202.ui.wfx.outline.OutlineExplorerView;
 import io.softwareecg.wfx.lookup.Lookup;
 import io.softwareecg.wfx.platform.api.EventBus;
@@ -29,7 +28,6 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
-import java.util.TreeSet;
 import java.util.stream.Collectors;
 
 /**
@@ -98,22 +96,13 @@ public class TopTanglesModule implements Module {
             wm.register(tanglesView);
         }
 
-        // Double-click on a method/kind row → bus event; S202Module turns that
-        // into a new architecture tab filtered to the tangle's classes and
-        // pre-highlights the from→to SCC edge that backed the click.
+        // Double-click on a tangle row -> bus event; S202Module opens one
+        // dedicated architecture tab per tangle entry.
         EventBus<EventObject> bus = Lookup.lookup(EventBus.class);
         tanglesView.setOnOpenTangle(req ->
                 bus.publish(new OpenTangleEvent(
                         new HashSet<>(req.tangle().members()),
-                        req.fromClass(), req.toClass(), tanglesView)));
-
-        // Reverse direction: when the user picks an edge in the Tangle tab's
-        // graph, mirror that selection in our tree so the textual list always
-        // reflects what's highlighted in the chart.
-        bus.subscribe(TangleEdgeSelectedEvent.class, ev -> {
-            tanglesView.selectEdgeRow(ev.getFrom(), ev.getTo());
-            return true;
-        });
+                        req.tangle().key(), req.tangle().title(), tanglesView)));
 
         wm.focusedViewProperty().addListener((obs, was, isNow) -> rebindToFocusedView());
         rebindToFocusedView();
@@ -273,16 +262,18 @@ public class TopTanglesModule implements Module {
         }
         edges.sort(Comparator.comparing(TopTanglesView.TangleEdge::from)
                 .thenComparing(TopTanglesView.TangleEdge::to));
-        return new TopTanglesView.Tangle(members.size(), sortedMembers, edges);
+        return new TopTanglesView.Tangle(
+                members.size(),
+                tangleKey(sortedMembers),
+                tangleTitle(sortedMembers),
+                sortedMembers,
+                edges);
     }
 
     /**
      * Decompose an edge into one entry per kind. {@link EdgeKind#CALLS}
-     * expands further into one entry per method name (sourced from
-     * {@link DependencyModel.MethodInfo#methodCalls}); falls back to a
-     * single {@code calls} entry when no method name was captured. Order
      * follows {@link EdgeKind#values()} (extends, implements, instantiates,
-     * calls), so structural relations sit above the call list.
+     * calls), so structural relations sit above call relations.
      */
     private static List<TopTanglesView.KindEntry> buildKindEntries(DependencyModel rawModel,
                                                                    String from, String to) {
@@ -295,20 +286,32 @@ public class TopTanglesModule implements Module {
             if (!kinds.contains(kind)) {
                 continue;
             }
-            if (kind == EdgeKind.CALLS) {
-                Set<String> names = lookupMethodNames(rawModel, from, to);
-                if (names.isEmpty()) {
-                    out.add(new TopTanglesView.KindEntry(EdgeKind.CALLS, null));
-                } else {
-                    for (String name : names) {
-                        out.add(new TopTanglesView.KindEntry(EdgeKind.CALLS, name));
-                    }
-                }
-            } else {
-                out.add(new TopTanglesView.KindEntry(kind, null));
-            }
+            out.add(new TopTanglesView.KindEntry(kind));
         }
         return out;
+    }
+
+    private static String tangleKey(List<String> sortedMembers) {
+        return String.join("|", sortedMembers);
+    }
+
+    private static String tangleTitle(List<String> sortedMembers) {
+        String preview = sortedMembers.stream()
+                .limit(2)
+                .map(TopTanglesModule::simple)
+                .collect(Collectors.joining(", "));
+        if (sortedMembers.size() > 2) {
+            preview += ", ...";
+        }
+        return "Tangle " + sortedMembers.size() + " (" + preview + ")";
+    }
+
+    private static String simple(String fqn) {
+        if (fqn == null) {
+            return "";
+        }
+        int i = fqn.lastIndexOf('.');
+        return i < 0 ? fqn : fqn.substring(i + 1);
     }
 
     private static Set<EdgeKind> lookupKinds(DependencyModel rawModel, String from, String to) {
@@ -317,41 +320,6 @@ public class TopTanglesModule implements Module {
         }
         DependencyModel.ClassInfo info = rawModel.getClass(from);
         return info == null ? Set.of() : info.getKinds(to);
-    }
-
-    /**
-     * Names of methods of {@code to} that are invoked from any method of
-     * {@code from}. Walks {@link DependencyModel.MethodInfo#methodCalls}
-     * (keys are {@code "owner.methodName"}) and matches against {@code to}'s
-     * outer class so inner-class call sites still attribute correctly.
-     * {@code <init>} is filtered out — INSTANTIATES already conveys that.
-     */
-    private static Set<String> lookupMethodNames(DependencyModel rawModel, String from, String to) {
-        if (rawModel == null) {
-            return Set.of();
-        }
-        DependencyModel.ClassInfo info = rawModel.getClass(from);
-        if (info == null) {
-            return Set.of();
-        }
-        Set<String> names = new TreeSet<>();
-        for (DependencyModel.MethodInfo m : info.methods.values()) {
-            for (String key : m.methodCalls.keySet()) {
-                int dot = key.lastIndexOf('.');
-                if (dot < 0) {
-                    continue;
-                }
-                String ownerClass = key.substring(0, dot);
-                String methodName = key.substring(dot + 1);
-                String outerOwner = ownerClass.contains("$")
-                        ? ownerClass.substring(0, ownerClass.indexOf('$'))
-                        : ownerClass;
-                if (outerOwner.equals(to) && !"<init>".equals(methodName)) {
-                    names.add(methodName);
-                }
-            }
-        }
-        return names;
     }
 
     private static boolean inScope(String fqn, String scope) {
