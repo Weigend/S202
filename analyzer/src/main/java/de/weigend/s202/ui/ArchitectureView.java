@@ -123,16 +123,19 @@ public class ArchitectureView extends BorderPane {
         dependencyPane.setMouseTransparent(false);
         dependencyPane.setPickOnBounds(false);
         dependencyPane.setVisible(false);
+        dependencyPane.setManaged(false);
 
         sccPane = new Pane();
         sccPane.setMouseTransparent(true);
         sccPane.setPickOnBounds(false);
         sccPane.setVisible(false);
+        sccPane.setManaged(false);
 
         tanglePane = new Pane();
         tanglePane.setMouseTransparent(false);
         tanglePane.setPickOnBounds(false);
         tanglePane.setVisible(false);
+        tanglePane.setManaged(false);
 
         contentPane = new StackPane();
         contentPane.getChildren().add(scrollPane);
