@@ -100,7 +100,7 @@ public final class CircuitBoardRenderer implements DependencyRendererStrategy {
             GridBuilder.BoxPorts dst = ports.get(req.target);
             if (src == null || dst == null) continue;
 
-            GridBuilder.Port[] vp = pickVerticalPorts(src, dst);
+            GridBuilder.Port[] vp = GridBuilder.pickDirectional(src, dst);
             GridBuilder.Port sp = vp[0];
             GridBuilder.Port tp = vp[1];
 
@@ -147,22 +147,6 @@ public final class CircuitBoardRenderer implements DependencyRendererStrategy {
     private static int manhattan(EdgeRequest req) {
         // Cheap proxy: use the port cells of TOP side as a stand-in, just for ordering.
         return 0;
-    }
-
-    /**
-     * Always pick vertical (TOP/BOTTOM) ports for both ends so traces run
-     * centred top-to-bottom through the class stack. If source sits above
-     * target, source exits BOTTOM and target enters TOP, and vice versa.
-     */
-    private static GridBuilder.Port[] pickVerticalPorts(GridBuilder.BoxPorts source,
-                                                          GridBuilder.BoxPorts target) {
-        double sY = (source.top.row + source.bottom.row) / 2.0;
-        double tY = (target.top.row + target.bottom.row) / 2.0;
-        if (sY <= tY) {
-            return new GridBuilder.Port[]{source.bottom, target.top};
-        } else {
-            return new GridBuilder.Port[]{source.top, target.bottom};
-        }
     }
 
     private List<EdgeRequest> collectEdgeRequests(ArchitectureNode root, String selectedClass) {

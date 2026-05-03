@@ -62,6 +62,46 @@ public final class GridBuilder {
         }
     }
 
+    /**
+     * Direction-aware port picker. Honours the convention:
+     * <ul>
+     *   <li>Outgoing edges leave the source via {@code BOTTOM}, {@code LEFT}
+     *       or {@code RIGHT} — never {@code TOP}.</li>
+     *   <li>Incoming edges enter the target via {@code TOP}, {@code LEFT} or
+     *       {@code RIGHT} — never {@code BOTTOM}.</li>
+     * </ul>
+     * Heuristic by relative position (axis with the larger gap dominates):
+     * <ol>
+     *   <li>Vertical-dominant, target below: {@code source.BOTTOM → target.TOP}.</li>
+     *   <li>Vertical-dominant, target above: source uses the side facing target
+     *       horizontally, target enters {@code TOP}. Forces the wire to detour
+     *       around the source's top edge instead of leaving it directly.</li>
+     *   <li>Horizontal-dominant: facing sides, e.g. {@code source.RIGHT →
+     *       target.LEFT} when target sits to the right.</li>
+     * </ol>
+     * Heuristic only — A* still resolves the actual obstacle-aware path.
+     */
+    public static Port[] pickDirectional(BoxPorts source, BoxPorts target) {
+        double sY = (source.top.row + source.bottom.row) / 2.0;
+        double tY = (target.top.row + target.bottom.row) / 2.0;
+        double sX = (source.left.col + source.right.col) / 2.0;
+        double tX = (target.left.col + target.right.col) / 2.0;
+        double dy = tY - sY;
+        double dx = tX - sX;
+
+        if (Math.abs(dy) >= Math.abs(dx)) {
+            if (dy >= 0) {
+                return new Port[]{source.bottom, target.top};
+            }
+            Port src = (dx >= 0) ? source.right : source.left;
+            return new Port[]{src, target.top};
+        }
+        if (dx >= 0) {
+            return new Port[]{source.right, target.left};
+        }
+        return new Port[]{source.left, target.right};
+    }
+
     /** Result of a grid build: the grid plus per-class port info and package ancestry. */
     public static final class Result {
         public final RoutingGrid grid;
@@ -187,6 +227,10 @@ public final class GridBuilder {
         return new Result(grid, ports, classAncestors);
     }
 
+    private static double clamp(double v, double lo, double hi) {
+        return Math.max(lo, Math.min(hi, v));
+    }
+
     private static void blockWithPadding(RoutingGrid grid, Bounds b) {
         double pad = BLOCK_PADDING * RoutingGrid.PITCH;
         grid.blockRect(b.getMinX() - pad, b.getMinY() - pad,
@@ -215,28 +259,26 @@ public final class GridBuilder {
         grid.setPort(leftCol, leftRow);
         grid.setPort(rightCol, rightRow);
 
-        // Stub attach points: snap the tangential coordinate to the port cell
-        // centre so the stub segment is purely perpendicular (no tiny kink
-        // between stub and port cell). The normal coordinate sits on the
-        // actual box edge so the arrowhead still lands on the class.
-        double topStubX    = grid.toWorldX(topCol);
-        double bottomStubX = grid.toWorldX(bottomCol);
-        double leftStubY   = grid.toWorldY(leftRow);
-        double rightStubY  = grid.toWorldY(rightRow);
+        // Stub attach point = port-cell centre on BOTH axes. The arrow tip
+        // therefore sits in the corridor between the box and the next
+        // obstacle, never on the box edge — line + arrowhead stay clear of
+        // the class rectangle. Tangential coord is clamped to the box extent
+        // so very small classes still get a stub above / below their span.
+        double topStubX    = clamp(grid.toWorldX(topCol),    b.getMinX(), b.getMaxX());
+        double bottomStubX = clamp(grid.toWorldX(bottomCol), b.getMinX(), b.getMaxX());
+        double leftStubY   = clamp(grid.toWorldY(leftRow),   b.getMinY(), b.getMaxY());
+        double rightStubY  = clamp(grid.toWorldY(rightRow),  b.getMinY(), b.getMaxY());
 
-        // Clamp stub X/Y to the actual box extent so the arrow tip never
-        // drifts outside the class rectangle when the cell centre falls
-        // beyond the edge (very small classes).
-        topStubX    = Math.max(b.getMinX(), Math.min(b.getMaxX(), topStubX));
-        bottomStubX = Math.max(b.getMinX(), Math.min(b.getMaxX(), bottomStubX));
-        leftStubY   = Math.max(b.getMinY(), Math.min(b.getMaxY(), leftStubY));
-        rightStubY  = Math.max(b.getMinY(), Math.min(b.getMaxY(), rightStubY));
+        double topStubY    = grid.toWorldY(topRow);
+        double bottomStubY = grid.toWorldY(bottomRow);
+        double leftStubX   = grid.toWorldX(leftCol);
+        double rightStubX  = grid.toWorldX(rightCol);
 
         return new BoxPorts(
-            new Port(topCol,    topRow,    Port.Side.TOP,    topStubX,      b.getMinY()),
-            new Port(rightCol,  rightRow,  Port.Side.RIGHT,  b.getMaxX(),   rightStubY),
-            new Port(bottomCol, bottomRow, Port.Side.BOTTOM, bottomStubX,   b.getMaxY()),
-            new Port(leftCol,   leftRow,   Port.Side.LEFT,   b.getMinX(),   leftStubY)
+            new Port(topCol,    topRow,    Port.Side.TOP,    topStubX,    topStubY),
+            new Port(rightCol,  rightRow,  Port.Side.RIGHT,  rightStubX,  rightStubY),
+            new Port(bottomCol, bottomRow, Port.Side.BOTTOM, bottomStubX, bottomStubY),
+            new Port(leftCol,   leftRow,   Port.Side.LEFT,   leftStubX,   leftStubY)
         );
     }
 

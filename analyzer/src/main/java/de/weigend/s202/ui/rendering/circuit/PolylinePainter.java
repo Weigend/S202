@@ -28,7 +28,7 @@ public final class PolylinePainter {
     public static final Color INCOMING_COLOR = Color.rgb(0, 128, 0);
 
     private static final double STROKE_WIDTH = 0.8;
-    private static final double ARROW_SIZE = 5.0;
+    private static final double ARROW_SIZE = 3.0;
 
     private final Pane target;
     private final RoutingGrid grid;
