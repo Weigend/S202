@@ -11,7 +11,12 @@ import javafx.scene.shape.Polygon;
 import javafx.scene.shape.Polyline;
 import javafx.scene.shape.StrokeLineJoin;
 
-import java.util.*;
+import java.util.ArrayList;
+import java.util.Collection;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Objects;
 import java.util.function.Consumer;
 
 /**
@@ -42,12 +47,8 @@ public class TangleEdgeRenderer {
     private static final double ARROW_SIZE      = 6.0;
     /** Clearance from the box edge to the port attachment stub. */
     private static final double PORT_GAP        = 4.0;
-    /** Spacing between parallel edges that share the same corridor. */
-    private static final double PARALLEL_GAP    = 3.5;
     /** Minimum effective half-size for zero-size (point) nodes. */
     private static final double MIN_BOX_HALF    = 5.0;
-    /** Corridor grouping tolerance. */
-    private static final double CORRIDOR_BUCKET = 24.0;
     /** Step when searching for an obstacle-free corridor position. */
     private static final double CLEAR_STEP      = 6.0;
     /** Extra margin around box bounds for clearance checks. */
@@ -173,38 +174,13 @@ public class TangleEdgeRenderer {
         }
         if (ported.isEmpty()) { scheduleRetry(); return; }
 
-        // 3. Group by corridor bucket; assign parallel offsets
-        Map<String, List<PortedEdge>> corridorGroups = new LinkedHashMap<>();
-        for (PortedEdge pe : ported) {
-            String key;
-            if (pe.bothV() || pe.bothH()) {
-                long bucket = Math.round(pe.mid() / CORRIDOR_BUCKET);
-                key = (pe.bothV() ? "V" : "H") + bucket;
-            } else {
-                long bx = Math.round(pe.sp().x / CORRIDOR_BUCKET);
-                long by = Math.round(pe.tp().y / CORRIDOR_BUCKET);
-                key = "L" + bx + "_" + by;
-            }
-            corridorGroups.computeIfAbsent(key, k -> new ArrayList<>()).add(pe);
-        }
-
-        Map<PortedEdge, Double> offsets = new IdentityHashMap<>();
-        for (List<PortedEdge> grp : corridorGroups.values()) {
-            int n = grp.size();
-            double base = -(n - 1) * PARALLEL_GAP / 2.0;
-            for (int i = 0; i < n; i++) {
-                offsets.put(grp.get(i), base + i * PARALLEL_GAP);
-            }
-        }
-
-        // 4. Build obstacle-aware routes
+        // 3. Build obstacle-aware routes — each edge routes independently
         record ReadyEdge(Edge e, List<Double> pts) {}
         List<ReadyEdge> ready = new ArrayList<>();
         for (PortedEdge pe : ported) {
-            double offset = offsets.getOrDefault(pe, 0.0);
             List<Double> pts = buildRoute(
                     pe.sp(), pe.tp(), pe.bothV(), pe.bothH(),
-                    pe.mid() + offset, obstacles);
+                    pe.mid(), obstacles);
             ready.add(new ReadyEdge(pe.e(), pts));
         }
 
