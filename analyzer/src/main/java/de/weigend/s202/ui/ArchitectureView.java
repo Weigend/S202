@@ -2,11 +2,13 @@ package de.weigend.s202.ui;
 
 import de.weigend.s202.analysis.quality.QualityMetrics;
 import de.weigend.s202.domain.DomainModel;
+import de.weigend.s202.reader.DependencyModel;
 import de.weigend.s202.ui.model.ArchitectureNode;
 import de.weigend.s202.ui.rendering.CircuitBoardRenderer;
 import de.weigend.s202.ui.rendering.DependencyRenderer;
 import de.weigend.s202.ui.rendering.DependencyRendererStrategy;
 import de.weigend.s202.ui.rendering.SCCRenderer;
+import de.weigend.s202.ui.rendering.TangleEdgeRenderer;
 import de.weigend.s202.ui.tree.ArchitectureTreeBuilder;
 import de.weigend.s202.ui.zoom.ZoomController;
 import javafx.beans.property.BooleanProperty;
@@ -24,8 +26,10 @@ import javafx.scene.layout.Pane;
 import javafx.scene.layout.StackPane;
 
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.function.BiConsumer;
 import java.util.function.Consumer;
 
 /**
@@ -40,7 +44,8 @@ public class ArchitectureView extends BorderPane {
     private ScrollPane scrollPane;
     private Pane dependencyPane;   // Container for dependency lines
     private Pane sccPane;          // Container for SCC lines
-    private StackPane overlayPane; // Contains both dependency and SCC panes
+    private Pane tanglePane;       // Container for the dedicated tangle-edge overlay
+    private StackPane overlayPane; // Contains dependency, SCC and tangle panes
     private StackPane contentPane;
     private ArchitectureNode currentRootNode;
     private final Map<String, javafx.scene.Node> elementRegistry = new HashMap<>();
@@ -50,8 +55,16 @@ public class ArchitectureView extends BorderPane {
     private DependencyRenderer classicRenderer;
     private CircuitBoardRenderer circuitRenderer;
     private SCCRenderer sccRenderer;
+    private TangleEdgeRenderer tangleRenderer;
     private ArchitectureTreeBuilder treeBuilder;
     private ZoomController zoomController;
+
+    // Pending tangle visualisation snapshot, applied once setArchitectureRoot
+    // (re-)builds the renderer. Set by setTangleVisualization before the root
+    // is assigned, or restored after a refreshLayout.
+    private List<TangleEdgeRenderer.Edge> pendingTangleEdges;
+    private String pendingTangleSelFrom;
+    private String pendingTangleSelTo;
 
     // Lines need redraw after zoom/scroll changes (perf optimization).
     private boolean linesNeedUpdate = false;
@@ -59,6 +72,7 @@ public class ArchitectureView extends BorderPane {
     private javafx.scene.layout.Pane zoomableContent;
     private Consumer<String> statusSink = msg -> { /* no-op default */ };
     private Consumer<String> nodeDoubleClickSink = fqn -> { /* no-op default */ };
+    private BiConsumer<String, String> tangleEdgeClickedSink = (a, b) -> { /* no-op default */ };
 
     // Externally bindable settings.
     private final IntegerProperty packageDepth = new SimpleIntegerProperty(3);
@@ -72,6 +86,7 @@ public class ArchitectureView extends BorderPane {
     private final ReadOnlyObjectWrapper<ArchitectureNode> architectureRoot = new ReadOnlyObjectWrapper<>(null);
     private final ReadOnlyObjectWrapper<QualityMetrics> qualityMetrics = new ReadOnlyObjectWrapper<>(null);
     private final ReadOnlyObjectWrapper<DomainModel> domainModel = new ReadOnlyObjectWrapper<>(null);
+    private final ReadOnlyObjectWrapper<DependencyModel> rawDependencyModel = new ReadOnlyObjectWrapper<>(null);
     private final ReadOnlyStringWrapper selectedFullName = new ReadOnlyStringWrapper(null);
 
     public ArchitectureView() {
@@ -113,6 +128,11 @@ public class ArchitectureView extends BorderPane {
         sccPane.setMouseTransparent(true);
         sccPane.setPickOnBounds(false);
         sccPane.setVisible(false);
+
+        tanglePane = new Pane();
+        tanglePane.setMouseTransparent(false);
+        tanglePane.setPickOnBounds(false);
+        tanglePane.setVisible(false);
 
         contentPane = new StackPane();
         contentPane.getChildren().add(scrollPane);
@@ -234,11 +254,14 @@ public class ArchitectureView extends BorderPane {
         dependencyPane.setVisible(false);
         sccPane.getChildren().clear();
         sccPane.setVisible(false);
+        tanglePane.getChildren().clear();
+        // Don't reset tanglePane.visible / pendingTangleEdges here — we want
+        // the per-tab tangle visualisation to survive a refreshLayout.
 
         overlayPane = new StackPane();
         overlayPane.setMouseTransparent(false);
         overlayPane.setPickOnBounds(false);
-        overlayPane.getChildren().addAll(dependencyPane, sccPane);
+        overlayPane.getChildren().addAll(dependencyPane, sccPane, tanglePane);
 
         StackPane contentWithOverlay = new StackPane();
         contentWithOverlay.getChildren().addAll(topLevelContainer, overlayPane);
@@ -269,6 +292,10 @@ public class ArchitectureView extends BorderPane {
         sccRenderer = new SCCRenderer(sccPane, elementRegistry, this::setStatus);
         sccRenderer.setCoordinateContext(zoomableContent, overlayPane, scrollPane);
 
+        tangleRenderer = new TangleEdgeRenderer(tanglePane, elementRegistry, this::setStatus);
+        tangleRenderer.setCoordinateContext(zoomableContent, overlayPane);
+        tangleRenderer.setOnEdgeClicked(tangleEdgeClickedSink);
+
         dependencyRenderer.clearDependencyArrows();
         sccRenderer.clearSccLines();
         dependencyPane.setVisible(false);
@@ -277,6 +304,14 @@ public class ArchitectureView extends BorderPane {
         // Reset overlay toggles for the new architecture so the global toolbar resyncs.
         showDependencies.set(false);
         showScc.set(false);
+
+        // Re-apply any pending tangle visualisation now that the renderer
+        // exists and the new tree is in place.
+        if (pendingTangleEdges != null) {
+            tangleRenderer.setEdges(pendingTangleEdges);
+            tangleRenderer.setSelectedEdge(pendingTangleSelFrom, pendingTangleSelTo);
+            tanglePane.setVisible(true);
+        }
 
         setStatus("Architecture loaded: " + rootNode.getLevelCount() + " levels");
 
@@ -329,6 +364,25 @@ public class ArchitectureView extends BorderPane {
 
     public void setDomainModel(DomainModel model) {
         domainModel.set(model);
+    }
+
+    /**
+     * Read-only handle to the raw bytecode-analysis result. Carries per-edge
+     * relationship kinds (extends / implements / calls / instantiates) that
+     * the {@link #domainModel} flattens away. Pushed in by the host shell
+     * after each successful analysis; needed by features that want to know
+     * "what kind of dependency is this" (e.g. the Top Tangles view).
+     */
+    public ReadOnlyObjectProperty<DependencyModel> rawDependencyModelProperty() {
+        return rawDependencyModel.getReadOnlyProperty();
+    }
+
+    public DependencyModel getRawDependencyModel() {
+        return rawDependencyModel.get();
+    }
+
+    public void setRawDependencyModel(DependencyModel model) {
+        rawDependencyModel.set(model);
     }
 
     /**
@@ -449,6 +503,16 @@ public class ArchitectureView extends BorderPane {
     }
 
     /**
+     * Set an explicit zoom factor (clamped to the controller's range).
+     * No-op if the zoom controller hasn't been initialised yet.
+     */
+    public void setZoom(double factor) {
+        if (zoomController != null) {
+            zoomController.setZoom(factor);
+        }
+    }
+
+    /**
      * Read-only zoom factor (1.0 = 100%). Returns null when no architecture is
      * loaded yet — bind via {@link #zoomFactorProperty()} for live updates.
      */
@@ -507,6 +571,63 @@ public class ArchitectureView extends BorderPane {
     }
 
     /**
+     * Highlight a specific SCC edge ({@code from} → {@code to}). Pass
+     * {@code null} to clear. The highlight survives subsequent SCC
+     * re-draws (e.g. zoom changes) until cleared. No-op if the SCC
+     * renderer hasn't been initialised yet.
+     */
+    public void highlightSccEdge(String from, String to) {
+        if (sccRenderer != null) {
+            sccRenderer.highlightEdge(from, to);
+        }
+    }
+
+    /**
+     * Install a tangle-specific edge overlay on top of the architecture
+     * tree. Replaces the legacy SCC visualisation for this view with
+     * properly clipped arrows that dock to the box perimeters and a single
+     * highlighted "selected" edge.
+     * <p>
+     * Pass {@code null} or an empty list to remove the overlay. Pinning is
+     * the caller's job — calling this method again with new data updates
+     * the overlay in place. Survives {@link #refreshLayout()}.
+     */
+    public void setTangleVisualization(List<TangleEdgeRenderer.Edge> edges,
+                                       String selectedFrom, String selectedTo) {
+        if (edges == null || edges.isEmpty()) {
+            pendingTangleEdges = null;
+            pendingTangleSelFrom = null;
+            pendingTangleSelTo = null;
+            if (tangleRenderer != null) {
+                tangleRenderer.clear();
+            }
+            if (tanglePane != null) {
+                tanglePane.setVisible(false);
+            }
+            return;
+        }
+        pendingTangleEdges = List.copyOf(edges);
+        pendingTangleSelFrom = selectedFrom;
+        pendingTangleSelTo = selectedTo;
+        if (tangleRenderer != null) {
+            tangleRenderer.setEdges(pendingTangleEdges);
+            tangleRenderer.setSelectedEdge(selectedFrom, selectedTo);
+        }
+        if (tanglePane != null) {
+            tanglePane.setVisible(true);
+        }
+    }
+
+    /** Update only the selected tangle edge without re-supplying the edge list. */
+    public void setSelectedTangleEdge(String from, String to) {
+        pendingTangleSelFrom = from;
+        pendingTangleSelTo = to;
+        if (tangleRenderer != null) {
+            tangleRenderer.setSelectedEdge(from, to);
+        }
+    }
+
+    /**
      * Global icon visibility for all package/class boxes. Backed by a static
      * property so all open architecture tabs and freshly created boxes react
      * to the same toggle.
@@ -554,5 +675,17 @@ public class ArchitectureView extends BorderPane {
     @Deprecated
     public void setOnClassDoubleClicked(Consumer<String> sink) {
         setOnNodeDoubleClicked(sink);
+    }
+
+    /**
+     * Set a sink that receives {@code (from, to)} whenever the user clicks
+     * a tangle SCC edge in the {@link TangleEdgeRenderer} overlay. Pass
+     * {@code null} to detach.
+     */
+    public void setOnTangleEdgeClicked(BiConsumer<String, String> sink) {
+        this.tangleEdgeClickedSink = sink == null ? (a, b) -> {} : sink;
+        if (tangleRenderer != null) {
+            tangleRenderer.setOnEdgeClicked(this.tangleEdgeClickedSink);
+        }
     }
 }

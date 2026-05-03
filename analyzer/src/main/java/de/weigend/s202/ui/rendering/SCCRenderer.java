@@ -30,7 +30,9 @@ import java.util.function.Consumer;
 public class SCCRenderer {
 
     private static final Color SCC_COLOR = Color.RED;
+    private static final Color SCC_HIGHLIGHT_COLOR = Color.web("#ffeb3b"); // bright yellow
     private static final double SCC_WIDTH = 1.0;
+    private static final double SCC_HIGHLIGHT_WIDTH_FACTOR = 3.0;
 
     private final Pane sccPane;
     private final Map<String, Node> elementRegistry;
@@ -38,6 +40,10 @@ public class SCCRenderer {
 
     private final List<Line> sccLines = new ArrayList<>();
     private boolean sccLinesDrawn = false;
+
+    /** Currently highlighted edge (sourceName, targetName), or null when none. */
+    private String highlightFrom;
+    private String highlightTo;
 
     // Dynamic references set by ArchitectureView
     private Pane zoomableContent;
@@ -68,12 +74,60 @@ public class SCCRenderer {
     }
 
     /**
-     * Clears all SCC lines and resets the drawn flag.
+     * Clears all SCC lines and resets the drawn flag. The highlighted edge
+     * marker is preserved across clears so a subsequent re-draw (e.g. after
+     * zoom) can restore it.
      */
     public void clearSccLines() {
         sccPane.getChildren().clear();
         sccLines.clear();
         sccLinesDrawn = false;
+    }
+
+    /**
+     * Mark the (from → to) SCC edge as the user-selected one. Subsequent
+     * draws render that line in {@link #SCC_HIGHLIGHT_COLOR} with a thicker
+     * stroke. Already-drawn lines are restyled in place. Pass either argument
+     * as null to clear.
+     */
+    public void highlightEdge(String from, String to) {
+        this.highlightFrom = from;
+        this.highlightTo = to;
+        applyHighlightToExistingLines();
+    }
+
+    private boolean isHighlighted(String from, String to) {
+        return highlightFrom != null && highlightTo != null
+                && highlightFrom.equals(from) && highlightTo.equals(to);
+    }
+
+    /**
+     * Restyle already-drawn lines so the currently selected edge — if any —
+     * stands out. Called after {@link #highlightEdge} and after each draw.
+     */
+    private void applyHighlightToExistingLines() {
+        double baseWidth = getScaledLineWidth();
+        for (Line line : sccLines) {
+            // Only mainline segments carry userData with source/target. Skip
+            // the arrowhead lines (their stroke is restyled via the array).
+            Object data = line.getUserData();
+            if (!(data instanceof Object[] meta) || meta.length < 5) {
+                continue;
+            }
+            String sourceName = (String) meta[3];
+            String targetName = (String) meta[4];
+            boolean hi = isHighlighted(sourceName, targetName);
+            Color color = hi ? SCC_HIGHLIGHT_COLOR : SCC_COLOR;
+            double width = hi ? baseWidth * SCC_HIGHLIGHT_WIDTH_FACTOR : baseWidth;
+            line.setStroke(color);
+            line.setStrokeWidth(width);
+            // Update the stored "default" colour and the arrow strokes too.
+            meta[2] = color;
+            ((Line) meta[0]).setStroke(color);
+            ((Line) meta[1]).setStroke(color);
+            ((Line) meta[0]).setStrokeWidth(width);
+            ((Line) meta[1]).setStrokeWidth(width);
+        }
     }
 
     /**
@@ -120,6 +174,9 @@ public class SCCRenderer {
 
         // Mark as drawn
         sccLinesDrawn = true;
+
+        // Re-apply the highlight (if any) on the freshly drawn lines.
+        applyHighlightToExistingLines();
 
         if (sccCount > 0) {
             statusCallback.accept("Showing " + sccCount + " SCC cycle(s) in red");
@@ -203,14 +260,18 @@ public class SCCRenderer {
             line.setStroke(SCC_COLOR);
             line.setStrokeWidth(scaledWidth);
 
-            // Hover effects
+            // Hover effects — restore via the stored "default" colour kept on
+            // userData[2], so a highlighted edge stays yellow on mouse-out.
             line.setOnMouseEntered(e -> {
                 line.setStroke(Color.DARKRED);
                 line.setCursor(javafx.scene.Cursor.HAND);
             });
 
             line.setOnMouseExited(e -> {
-                line.setStroke(SCC_COLOR);
+                Object data = line.getUserData();
+                Color restore = (data instanceof Object[] meta && meta.length > 2 && meta[2] instanceof Color c)
+                        ? c : SCC_COLOR;
+                line.setStroke(restore);
                 line.setCursor(javafx.scene.Cursor.DEFAULT);
             });
 

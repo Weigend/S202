@@ -281,7 +281,7 @@ public class InputAnalyzer {
             if (superName != null && !superName.equals("java/lang/Object")) {
                 String superClassName = convertClassName(superName);
                 if (!isSelfDependency(superClassName) && !isExternalLibraryClass(superClassName)) {
-                    currentClassInfo.dependencies.add(superClassName);
+                    currentClassInfo.addDependency(superClassName, EdgeKind.EXTENDS);
                 }
             }
 
@@ -290,7 +290,7 @@ public class InputAnalyzer {
                 for (String iface : interfaces) {
                     String ifaceClassName = convertClassName(iface);
                     if (!isSelfDependency(ifaceClassName) && !isExternalLibraryClass(ifaceClassName)) {
-                        currentClassInfo.dependencies.add(ifaceClassName);
+                        currentClassInfo.addDependency(ifaceClassName, EdgeKind.IMPLEMENTS);
                     }
                 }
             }
@@ -364,7 +364,7 @@ public class InputAnalyzer {
         @Override
         public void visitMethodInsn(int opcode, String owner, String name, String descriptor, boolean isInterface) {
             String ownerClass = owner.replace("/", ".");
-            
+
             // Map inner classes to their outer class for dependency tracking
             String dependencyClass = getOuterClassName(ownerClass);
             String methodCall = ownerClass + "." + name;
@@ -372,7 +372,12 @@ public class InputAnalyzer {
             // Track the call - filter out external library classes and self-references
             if (!isExternalLibraryClass(dependencyClass) && !dependencyClass.equals(classInfo.fullName)) {
                 methodInfo.methodCalls.merge(methodCall, 1, Integer::sum);
-                classInfo.dependencies.add(dependencyClass);
+                // INVOKESPECIAL on <init> is "new T(...)" — distinguish constructor
+                // from regular method calls so the UI can show "instantiates" vs "calls".
+                EdgeKind kind = (opcode == Opcodes.INVOKESPECIAL && "<init>".equals(name))
+                        ? EdgeKind.INSTANTIATES
+                        : EdgeKind.CALLS;
+                classInfo.addDependency(dependencyClass, kind);
             }
 
             super.visitMethodInsn(opcode, owner, name, descriptor, isInterface);

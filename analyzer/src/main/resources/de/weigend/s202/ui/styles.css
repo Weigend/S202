@@ -311,6 +311,51 @@
     -fx-background-radius: 3;
 }
 
+/* ===== Top Tangles view (left dock, between outline and quality) ===== */
+.top-tangles-view {
+    -fx-background-color: #1a1a1a;
+}
+
+.top-tangles-scope {
+    -fx-font-size: 11px;
+    -fx-text-fill: #b0bccd;
+    -fx-padding: 4 8;
+    -fx-background-color: #14202b;
+    -fx-border-color: #2b3e50;
+    -fx-border-width: 0 0 1 0;
+}
+
+.top-tangles-tree {
+    -fx-background-color: #1a1a1a;
+    -fx-control-inner-background: #1a1a1a;
+}
+
+.top-tangles-tree .tree-cell {
+    -fx-font-size: 11px;
+    -fx-text-fill: #e0e0e0;
+    -fx-background-color: transparent;
+    -fx-padding: 2 6;
+}
+
+.top-tangles-tree .tree-cell:hover {
+    -fx-background-color: #2b3e50;
+}
+
+.top-tangles-tree .tree-cell:selected,
+.top-tangles-tree .tree-cell:filled:selected:focused {
+    -fx-background-color: #3d5a80;
+    -fx-text-fill: #ffffff;
+}
+
+.top-tangles-tree .top-tangles-tangle-row {
+    -fx-font-weight: bold;
+    -fx-text-fill: #ff9070;
+}
+
+.top-tangles-tree .top-tangles-edge-row {
+    -fx-text-fill: #b0c4de;
+}
+
 /* ===== About dialog ===== */
 .about-dialog {
     -fx-background-color: #1e2a36;

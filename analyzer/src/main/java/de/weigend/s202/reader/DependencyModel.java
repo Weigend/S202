@@ -20,6 +20,8 @@ public class DependencyModel {
         public final String packageName;
         public final boolean interfaceType;
         public final Set<String> dependencies = new HashSet<>();
+        /** Kinds per dependency target. Same keys as {@link #dependencies}. */
+        public final Map<String, EnumSet<EdgeKind>> dependencyKinds = new HashMap<>();
         public final Map<String, MethodInfo> methods = new HashMap<>();
 
         public ClassInfo(String fullName, String simpleName, String packageName) {
@@ -31,6 +33,24 @@ public class DependencyModel {
             this.simpleName = simpleName;
             this.packageName = packageName;
             this.interfaceType = interfaceType;
+        }
+
+        /**
+         * Record a dependency on {@code target} with its relationship kind.
+         * Updates both the flat {@link #dependencies} set (used by level
+         * calculation, SCC analysis, etc.) and the typed
+         * {@link #dependencyKinds} map (used by features that care about
+         * "what kind of edge", e.g. the Top Tangles view).
+         */
+        public void addDependency(String target, EdgeKind kind) {
+            dependencies.add(target);
+            dependencyKinds.computeIfAbsent(target, k -> EnumSet.noneOf(EdgeKind.class)).add(kind);
+        }
+
+        /** Kinds via which this class depends on {@code target}, or empty if no such edge. */
+        public Set<EdgeKind> getKinds(String target) {
+            EnumSet<EdgeKind> set = dependencyKinds.get(target);
+            return set == null ? Set.of() : EnumSet.copyOf(set);
         }
 
         public void addMethod(String name, String descriptor) {
