@@ -156,15 +156,37 @@ public class OutlineExplorerModule implements Module {
 
     private ArchitectureWfxView focusedArchitectureView() {
         WindowManager wm = Lookup.lookup(WindowManager.class);
-        return wm.getRegisteredViews().stream()
+        ArchitectureWfxView focused = wm.getRegisteredViews().stream()
                 .filter(ArchitectureWfxView.class::isInstance)
                 .map(ArchitectureWfxView.class::cast)
                 .filter(v -> v == wm.getFocusedView())
                 .findFirst()
-                .orElseGet(() -> wm.getRegisteredViews().stream()
-                        .filter(ArchitectureWfxView.class::isInstance)
-                        .map(ArchitectureWfxView.class::cast)
-                        .findFirst()
-                        .orElse(null));
+                .orElse(null);
+        if (focused != null) {
+            return focused;
+        }
+
+        ArchitectureWfxView current = wrapperFor(boundView);
+        if (current != null) {
+            return current;
+        }
+
+        return wm.getRegisteredViews().stream()
+                .filter(ArchitectureWfxView.class::isInstance)
+                .map(ArchitectureWfxView.class::cast)
+                .findFirst()
+                .orElse(null);
+    }
+
+    private ArchitectureWfxView wrapperFor(ArchitectureView view) {
+        if (view == null) {
+            return null;
+        }
+        return Lookup.lookup(WindowManager.class).getRegisteredViews().stream()
+                .filter(ArchitectureWfxView.class::isInstance)
+                .map(ArchitectureWfxView.class::cast)
+                .filter(wrapper -> wrapper.getArchitectureView() == view)
+                .findFirst()
+                .orElse(null);
     }
 }

@@ -81,11 +81,11 @@ public class ArchitectureView extends BorderPane {
     private final BooleanProperty showDependencies = new SimpleBooleanProperty(false);
     private final BooleanProperty circuitMode = new SimpleBooleanProperty(false);
     private final BooleanProperty showScc = new SimpleBooleanProperty(false);
-    private final BooleanProperty showTangleDebugLines = new SimpleBooleanProperty(true);
+    private final BooleanProperty showTangleDebugLines = new SimpleBooleanProperty(false);
     // Icon visibility is shared across all open architecture views — boxes bind
     // their FontIcon visibility to this property so toggling refreshes every
     // open tab without rebuilding the tree.
-    private static final BooleanProperty SHOW_ICONS = new SimpleBooleanProperty(false);
+    private static final BooleanProperty SHOW_ICONS = new SimpleBooleanProperty(true);
     private final ReadOnlyObjectWrapper<ArchitectureNode> architectureRoot = new ReadOnlyObjectWrapper<>(null);
     private final ReadOnlyObjectWrapper<QualityMetrics> qualityMetrics = new ReadOnlyObjectWrapper<>(null);
     private final ReadOnlyObjectWrapper<DomainModel> domainModel = new ReadOnlyObjectWrapper<>(null);
