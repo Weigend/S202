@@ -51,6 +51,7 @@ public class TangleEdgeRenderer {
     private static final Color SELECTED_COLOR = Color.web("#d50000");
     private static final Color CUT_EDGE_COLOR = Color.web("#ff9800");
     private static final Color APPLIED_CUT_EDGE_COLOR = Color.web("#2ecc71");
+    private static final double NON_TANGLE_EDGE_WIDTH = 0.8;
     private static final double EDGE_WIDTH    = 1.2;
     private static final double SELECTED_WIDTH = 3.0;
     private static final double CUT_EDGE_WIDTH = 2.2;
@@ -942,6 +943,9 @@ public class TangleEdgeRenderer {
         }
         if (isAppliedCutEdge(edge)) {
             return CUT_EDGE_WIDTH;
+        }
+        if (!isActiveTangleEdge(edge)) {
+            return NON_TANGLE_EDGE_WIDTH;
         }
         return isCycleBreakEdge(edge) && isActiveTangleEdge(edge) ? CUT_EDGE_WIDTH : EDGE_WIDTH;
     }
