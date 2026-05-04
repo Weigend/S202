@@ -20,6 +20,7 @@ import de.weigend.s202.ui.model.ArchitectureNodeBuilder;
 import de.weigend.s202.ui.model.DistrictRowLevelCalculator;
 import de.weigend.s202.ui.rendering.TangleEdgeRenderer;
 import de.weigend.s202.ui.wfx.events.CutTangleEdgeEvent;
+import de.weigend.s202.ui.wfx.events.CutTangleEdgesEvent;
 import de.weigend.s202.ui.wfx.events.MethodSelectionEvent;
 import de.weigend.s202.ui.wfx.events.NodeSelectionEvent;
 import de.weigend.s202.ui.wfx.events.MenuRequestEvent;
@@ -243,6 +244,10 @@ public class S202Module implements Module {
     private void subscribeToTanglePreviewEvents(EventBus<EventObject> bus) {
         bus.subscribe(CutTangleEdgeEvent.class, ev -> {
             applyTanglePreviewCutToViews(ev.getFrom(), ev.getTo());
+            return true;
+        });
+        bus.subscribe(CutTangleEdgesEvent.class, ev -> {
+            applyTanglePreviewCutsToViews(ev.getEdges());
             return true;
         });
         bus.subscribe(RestoreTangleEdgeEvent.class, ev -> {
@@ -832,23 +837,20 @@ public class S202Module implements Module {
         view.setDomainModel(result.domainModel());
         view.setRawDependencyModel(result.rawModel());
         view.setCycleBreakEdges(result.cycleBreakEdges());
-        view.setArchitectureRoot(result.rootNode());
+        view.setArchitectureRootAsync(
+                result.rootNode(),
+                progress -> publishJavaFxBuildProgress("Building JavaFX architecture view", progress),
+                () -> finishAppliedAnalysisResult(jarFiles, view, source, result));
+    }
+
+    private void finishAppliedAnalysisResult(List<File> jarFiles, ArchitectureView view,
+                                             S202Project.Source source, AnalysisResult result) {
         view.setQualityMetrics(result.metrics());
         viewSources.put(view, source);
         viewInvariantReports.put(view, result.invariants());
 
         LayoutInvariantReport invariants = result.invariants();
-        String invariantSuffix = "";
-        if (invariants != null) {
-            int n = invariants.findings().size();
-            if (n == 0) {
-                invariantSuffix = " | invariants OK";
-            } else {
-                invariantSuffix = " | " + n + " invariant finding" + (n == 1 ? "" : "s");
-                LOGGER.warn("Layout invariant report ({} finding(s)):\n{}",
-                        n, invariants.toReproducerText());
-            }
-        }
+        String invariantSuffix = invariantSuffix(invariants);
         publishProgress(String.format(
                 "Loaded %d JAR(s) | %d classes | %d levels | Max level %d%s",
                 jarFiles.size(),
@@ -857,18 +859,36 @@ public class S202Module implements Module {
                 result.rootNode().getMaxLevel(),
                 invariantSuffix), 1);
 
-        // Auto-show the report dialog only on findings; clean runs stay quiet
-        // so the user is not interrupted on every successful analysis.
-        if (invariants != null && invariants.hasFindings()) {
-            // applyAnalysisResult runs inside a PauseTransition.onFinished —
-            // i.e. inside an animation pulse. Dialog.showAndWait refuses to
-            // run from there ("not allowed during animation or layout
-            // processing"); defer one tick so the dialog opens on a clean
-            // FX pulse.
-            final LayoutInvariantReport report = invariants;
-            Platform.runLater(() ->
-                    InvariantReportDialog.show(applicationWindow.getStage(), report));
+        showInvariantReportIfNeeded(invariants);
+    }
+
+    private String invariantSuffix(LayoutInvariantReport invariants) {
+        if (invariants == null) {
+            return "";
         }
+        int n = invariants.findings().size();
+        if (n == 0) {
+            return " | invariants OK";
+        }
+        LOGGER.warn("Layout invariant report ({} finding(s)):\n{}",
+                n, invariants.toReproducerText());
+        return " | " + n + " invariant finding" + (n == 1 ? "" : "s");
+    }
+
+    private void showInvariantReportIfNeeded(LayoutInvariantReport invariants) {
+        if (invariants == null || !invariants.hasFindings()) {
+            return;
+        }
+        Platform.runLater(() ->
+                InvariantReportDialog.show(applicationWindow.getStage(), invariants));
+    }
+
+    private void publishJavaFxBuildProgress(String label, ArchitectureView.BuildProgress progress) {
+        int total = Math.max(1, progress.totalNodes());
+        int processed = Math.min(progress.processedNodes(), total);
+        double fraction = Math.max(0.0, Math.min(1.0, (double) processed / total));
+        double mapped = 0.97 + fraction * 0.025;
+        publishProgress(String.format("%s: %,d/%,d nodes", label, processed, total), mapped);
     }
 
     private void saveProject() {
@@ -954,17 +974,21 @@ public class S202Module implements Module {
         view.setDomainModel(loaded.domainModel());
         view.setRawDependencyModel(loaded.rawModel());
         view.setCycleBreakEdges(loaded.cycleBreakEdges());
-        view.setArchitectureRoot(loaded.rootNode());
-        view.setQualityMetrics(loaded.metrics());
-        viewSources.put(view, loaded.project().source());
-        viewInvariantReports.put(view, loaded.invariants());
+        view.setArchitectureRootAsync(
+                loaded.rootNode(),
+                progress -> publishJavaFxBuildProgress("Building JavaFX project view", progress),
+                () -> {
+                    view.setQualityMetrics(loaded.metrics());
+                    viewSources.put(view, loaded.project().source());
+                    viewInvariantReports.put(view, loaded.invariants());
 
-        publishProgress(String.format(
-                "Loaded project %s | %d classes | %d levels | Max level %d",
-                path.getFileName(),
-                loaded.rawModel().getAllClasses().size(),
-                loaded.rootNode().getLevelCount(),
-                loaded.rootNode().getMaxLevel()), 1);
+                    publishProgress(String.format(
+                            "Loaded project %s | %d classes | %d levels | Max level %d",
+                            path.getFileName(),
+                            loaded.rawModel().getAllClasses().size(),
+                            loaded.rootNode().getLevelCount(),
+                            loaded.rootNode().getMaxLevel()), 1);
+                });
     }
 
     private void closeProject() {
@@ -1159,6 +1183,16 @@ public class S202Module implements Module {
         refactoringPreviewCuts.add(new TangleEdgeRenderer.Edge(from, to));
         for (ArchitectureWfxView wrapper : registeredArchitectureViews()) {
             wrapper.getArchitectureView().applyTangleEdgeCut(from, to);
+        }
+    }
+
+    private void applyTanglePreviewCutsToViews(Set<TangleEdgeRenderer.Edge> edges) {
+        if (edges == null || edges.isEmpty()) {
+            return;
+        }
+        refactoringPreviewCuts.addAll(edges);
+        for (ArchitectureWfxView wrapper : registeredArchitectureViews()) {
+            wrapper.getArchitectureView().applyTangleEdgeCuts(edges);
         }
     }
 

@@ -5,18 +5,22 @@ import de.weigend.s202.ui.LevelPackageBox;
 import de.weigend.s202.ui.model.ArchitectureNode;
 import de.weigend.s202.ui.model.ArchitectureNode.NodeType;
 import javafx.geometry.Insets;
+import javafx.application.Platform;
 import javafx.scene.Node;
 import javafx.scene.layout.HBox;
 import javafx.scene.layout.Priority;
 import javafx.scene.layout.VBox;
 
 import java.util.ArrayList;
+import java.util.ArrayDeque;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Queue;
 import java.util.Set;
+import java.util.function.Consumer;
 
 /**
  * Builds the UI tree representation of the architecture hierarchy.
@@ -35,6 +39,7 @@ public class ArchitectureTreeBuilder {
     private static final double TOP_LEVEL_HORIZONTAL_PADDING = 10.0;
     // Seven 6px-spaced tangle lanes need 36px span plus arrow-head clearance.
     private static final double TOP_LEVEL_VERTICAL_PADDING = 52.0;
+    private static final int ASYNC_BATCH_SIZE = 120;
 
     private final Map<String, Node> elementRegistry;
 
@@ -141,6 +146,190 @@ public class ArchitectureTreeBuilder {
         return topLevelContainer;
     }
 
+    public void buildTreeAsync(ArchitectureNode rootNode,
+                               int maxDepth,
+                               ProgressSink progressSink,
+                               Consumer<VBox> onComplete) {
+        if (rootNode == null) {
+            throw new IllegalArgumentException("rootNode cannot be null");
+        }
+        Objects.requireNonNull(onComplete, "onComplete cannot be null");
+
+        Runnable start = () -> {
+            elementRegistry.clear();
+
+            Map<String, LevelPackageBox> packageContainers = new HashMap<>();
+            Set<String> elementsAddedToParent = new HashSet<>();
+            BuildProgressCounter counter = new BuildProgressCounter(Math.max(1, rootNode.getTotalNodeCount()));
+
+            VBox topLevelContainer = createTopLevelContainer();
+            ArchitectureNode effectiveRoot = effectiveRoot(rootNode, topLevelContainer);
+
+            List<ArchitectureNode> sortedChildren = new ArrayList<>(effectiveRoot.getChildren());
+            sortedChildren.sort((a, b) -> Integer.compare(b.getLevel(), a.getLevel()));
+
+            Map<Integer, HBox> topLevelRows = new HashMap<>();
+            Queue<Runnable> queue = new ArrayDeque<>();
+            for (ArchitectureNode child : sortedChildren) {
+                queue.add(() -> processTopLevelChild(child, effectiveRoot, maxDepth, topLevelContainer,
+                        topLevelRows, packageContainers, elementsAddedToParent, queue, counter, progressSink));
+            }
+
+            runAsyncBatch(queue, topLevelContainer, onComplete);
+        };
+
+        if (Platform.isFxApplicationThread()) {
+            start.run();
+        } else {
+            Platform.runLater(start);
+        }
+    }
+
+    @FunctionalInterface
+    public interface ProgressSink {
+        void accept(int processedNodes, int totalNodes, String currentElement);
+    }
+
+    private void runAsyncBatch(Queue<Runnable> queue, VBox topLevelContainer, Consumer<VBox> onComplete) {
+        int steps = 0;
+        while (!queue.isEmpty() && steps < ASYNC_BATCH_SIZE) {
+            queue.poll().run();
+            steps++;
+        }
+        if (queue.isEmpty()) {
+            onComplete.accept(topLevelContainer);
+            return;
+        }
+        Platform.runLater(() -> runAsyncBatch(queue, topLevelContainer, onComplete));
+    }
+
+    private void processTopLevelChild(ArchitectureNode child,
+                                      ArchitectureNode effectiveRoot,
+                                      int maxDepth,
+                                      VBox topLevelContainer,
+                                      Map<Integer, HBox> topLevelRows,
+                                      Map<String, LevelPackageBox> packageContainers,
+                                      Set<String> elementsAddedToParent,
+                                      Queue<Runnable> queue,
+                                      BuildProgressCounter counter,
+                                      ProgressSink progressSink) {
+        int level = child.getLevel();
+        HBox levelRow = topLevelRows.computeIfAbsent(level, l -> {
+            HBox hbox = new HBox(8);
+            hbox.setMaxWidth(Double.MAX_VALUE);
+            VBox.setVgrow(hbox, Priority.ALWAYS);
+            topLevelContainer.getChildren().add(hbox);
+            return hbox;
+        });
+
+        if (child.getType() == NodeType.PACKAGE) {
+            LevelPackageBox packageBox = new LevelPackageBox(child.getSimpleName(), child.getLevel(), false, child.getFullName());
+            packageContainers.put(child.getFullName(), packageBox);
+            elementRegistry.put(child.getFullName(), packageBox);
+
+            packageBox.setMaxWidth(Double.MAX_VALUE);
+            packageBox.setMaxHeight(Double.MAX_VALUE);
+            HBox.setHgrow(packageBox, Priority.ALWAYS);
+            levelRow.getChildren().add(packageBox);
+
+            if (maxDepth < 1) {
+                packageBox.setExpanded(false);
+            }
+
+            enqueueChildren(child, packageContainers, packageBox, elementsAddedToParent,
+                    effectiveRoot, 1, maxDepth, queue, counter, progressSink);
+        } else if (child.getType() == NodeType.CLASS) {
+            LevelClassBox classBox = new LevelClassBox(child.getSimpleName(), child.getLevel(), child.getFullName(), child.isInterfaceType());
+            elementRegistry.put(child.getFullName(), classBox);
+            levelRow.getChildren().add(classBox);
+        }
+        elementsAddedToParent.add(child.getFullName());
+        reportProgress(counter, child, progressSink);
+    }
+
+    private void enqueueChildren(ArchitectureNode node,
+                                 Map<String, LevelPackageBox> packageContainers,
+                                 LevelPackageBox rootLevel,
+                                 Set<String> elementsAddedToParent,
+                                 ArchitectureNode archRoot,
+                                 int currentDepth,
+                                 int maxDepth,
+                                 Queue<Runnable> queue,
+                                 BuildProgressCounter counter,
+                                 ProgressSink progressSink) {
+        for (ArchitectureNode child : node.getChildren()) {
+            queue.add(() -> processChildNode(child, packageContainers, rootLevel, elementsAddedToParent,
+                    archRoot, currentDepth, maxDepth, queue, counter, progressSink));
+        }
+    }
+
+    private void processChildNode(ArchitectureNode child,
+                                  Map<String, LevelPackageBox> packageContainers,
+                                  LevelPackageBox rootLevel,
+                                  Set<String> elementsAddedToParent,
+                                  ArchitectureNode archRoot,
+                                  int currentDepth,
+                                  int maxDepth,
+                                  Queue<Runnable> queue,
+                                  BuildProgressCounter counter,
+                                  ProgressSink progressSink) {
+        if (elementsAddedToParent.contains(child.getFullName())) {
+            return;
+        }
+
+        String parentPackage = getParentPackage(child.getFullName());
+        if (parentPackage == null) {
+            parentPackage = "";
+        }
+
+        ensurePackageHierarchy(parentPackage, packageContainers, rootLevel, archRoot);
+
+        LevelPackageBox parentContainer = packageContainers.get(parentPackage);
+        if (parentContainer == null) {
+            parentContainer = rootLevel;
+        }
+
+        if (child.getType() == NodeType.PACKAGE) {
+            if (!packageContainers.containsKey(child.getFullName())) {
+                LevelPackageBox packageBox = new LevelPackageBox(child.getSimpleName(), child.getLevel(), false, child.getFullName());
+                packageContainers.put(child.getFullName(), packageBox);
+                elementRegistry.put(child.getFullName(), packageBox);
+                parentContainer.addToLevel(child.getLevel(), packageBox);
+
+                if (currentDepth >= maxDepth) {
+                    packageBox.setExpanded(false);
+                }
+            }
+            LevelPackageBox packageBox = packageContainers.get(child.getFullName());
+            enqueueChildren(child, packageContainers, packageBox == null ? rootLevel : packageBox,
+                    elementsAddedToParent, archRoot, currentDepth + 1, maxDepth, queue, counter, progressSink);
+        } else if (child.getType() == NodeType.CLASS) {
+            LevelClassBox classBox = new LevelClassBox(child.getSimpleName(), child.getLevel(), child.getFullName(), child.isInterfaceType());
+            elementRegistry.put(child.getFullName(), classBox);
+            parentContainer.addToLevel(child.getLevel(), classBox);
+        }
+
+        elementsAddedToParent.add(child.getFullName());
+        reportProgress(counter, child, progressSink);
+    }
+
+    private void reportProgress(BuildProgressCounter counter, ArchitectureNode node, ProgressSink sink) {
+        counter.processed++;
+        if (sink != null && (counter.processed == 1 || counter.processed % ASYNC_BATCH_SIZE == 0
+                || counter.processed >= counter.total)) {
+            sink.accept(counter.processed, counter.total, node.getFullName());
+        }
+    }
+
+    private static final class BuildProgressCounter {
+        final int total;
+        int processed;
+
+        BuildProgressCounter(int total) {
+            this.total = total;
+        }
+    }
+
     /**
      * Checks if a package should be displayed as transparent.
      * A package is transparent if it is the ONLY sub-package of its parent.
@@ -153,6 +342,30 @@ public class ArchitectureTreeBuilder {
                 .count();
         // Children are transparent only if there's exactly one sub-package
         return packageCount == 1;
+    }
+
+    private VBox createTopLevelContainer() {
+        VBox topLevelContainer = new VBox(8);
+        topLevelContainer.setPadding(new Insets(
+                TOP_LEVEL_VERTICAL_PADDING,
+                TOP_LEVEL_HORIZONTAL_PADDING,
+                TOP_LEVEL_VERTICAL_PADDING,
+                TOP_LEVEL_HORIZONTAL_PADDING));
+        topLevelContainer.setStyle("-fx-background-color: #f5f5f0;");
+        return topLevelContainer;
+    }
+
+    private ArchitectureNode effectiveRoot(ArchitectureNode rootNode, VBox topLevelContainer) {
+        ArchitectureNode effectiveRoot = rootNode;
+        while (shouldChildrenBeTransparent(effectiveRoot)) {
+            ArchitectureNode singleChild = effectiveRoot.getChildren().stream()
+                    .filter(c -> c.getType() == NodeType.PACKAGE)
+                    .findFirst().orElse(null);
+            if (singleChild == null) break;
+            elementRegistry.put(singleChild.getFullName(), topLevelContainer);
+            effectiveRoot = singleChild;
+        }
+        return effectiveRoot;
     }
 
     /**

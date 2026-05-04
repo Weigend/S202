@@ -25,6 +25,7 @@ import javafx.scene.layout.BorderPane;
 import javafx.scene.layout.Pane;
 import javafx.scene.layout.StackPane;
 
+import java.util.Collection;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -42,6 +43,8 @@ import java.util.function.Consumer;
  * provide a single shared toolbar that operates on the focused view.
  */
 public class ArchitectureView extends BorderPane {
+
+    public record BuildProgress(int processedNodes, int totalNodes, String currentElement) {}
 
     private ScrollPane scrollPane;
     private Pane dependencyPane;   // Container for dependency lines
@@ -233,7 +236,37 @@ public class ArchitectureView extends BorderPane {
      */
     public void setArchitectureRoot(ArchitectureNode rootNode) {
         Objects.requireNonNull(rootNode, "rootNode cannot be null");
+        beginArchitectureRootBuild(rootNode);
 
+        treeBuilder = new ArchitectureTreeBuilder(elementRegistry);
+        int maxDepth = packageDepth.get();
+        javafx.scene.layout.VBox topLevelContainer = treeBuilder.buildTree(rootNode, maxDepth);
+        finishArchitectureRootBuild(rootNode, topLevelContainer);
+    }
+
+    public void setArchitectureRootAsync(ArchitectureNode rootNode,
+                                         Consumer<BuildProgress> progressSink,
+                                         Runnable onComplete) {
+        Objects.requireNonNull(rootNode, "rootNode cannot be null");
+        beginArchitectureRootBuild(rootNode);
+
+        treeBuilder = new ArchitectureTreeBuilder(elementRegistry);
+        int maxDepth = packageDepth.get();
+        treeBuilder.buildTreeAsync(rootNode, maxDepth,
+                (processed, total, current) -> {
+                    if (progressSink != null) {
+                        progressSink.accept(new BuildProgress(processed, total, current));
+                    }
+                },
+                topLevelContainer -> {
+                    finishArchitectureRootBuild(rootNode, topLevelContainer);
+                    if (onComplete != null) {
+                        onComplete.run();
+                    }
+                });
+    }
+
+    private void beginArchitectureRootBuild(ArchitectureNode rootNode) {
         this.currentRootNode = rootNode;
         this.elementRegistry.clear();
 
@@ -262,11 +295,10 @@ public class ArchitectureView extends BorderPane {
         // Re-route double-clicks on graph boxes (class or package) through this
         // view's sink so external panels (e.g. outline explorer) can reveal it.
         GraphSelection.setOnDoubleClick(fqn -> nodeDoubleClickSink.accept(fqn));
+    }
 
-        treeBuilder = new ArchitectureTreeBuilder(elementRegistry);
-        int maxDepth = packageDepth.get();
-        javafx.scene.layout.VBox topLevelContainer = treeBuilder.buildTree(rootNode, maxDepth);
-
+    private void finishArchitectureRootBuild(ArchitectureNode rootNode,
+                                             javafx.scene.layout.VBox topLevelContainer) {
         dependencyPane.getChildren().clear();
         dependencyPane.setVisible(false);
         sccPane.getChildren().clear();
@@ -700,6 +732,34 @@ public class ArchitectureView extends BorderPane {
             tangleRenderer.setSelectedEdge(pendingTangleSelFrom, pendingTangleSelTo);
         }
         setStatus("Refactoring Preview: cut " + simple(from) + " -> " + simple(to));
+    }
+
+    public void applyTangleEdgeCuts(Collection<TangleEdgeRenderer.Edge> cuts) {
+        if (cuts == null || cuts.isEmpty()) {
+            return;
+        }
+        int added = 0;
+        for (TangleEdgeRenderer.Edge cut : cuts) {
+            if (cut == null || cut.from() == null || cut.to() == null) {
+                continue;
+            }
+            if (appliedCutEdges.add(cut)) {
+                added++;
+            }
+            if (cut.from().equals(pendingTangleSelFrom) && cut.to().equals(pendingTangleSelTo)) {
+                pendingTangleSelFrom = null;
+                pendingTangleSelTo = null;
+                tangleEdgeClickedSink.accept(null, null);
+            }
+        }
+        if (added == 0) {
+            return;
+        }
+        if (tangleRenderer != null) {
+            tangleRenderer.setAppliedCutEdges(appliedCutEdges);
+            tangleRenderer.setSelectedEdge(pendingTangleSelFrom, pendingTangleSelTo);
+        }
+        setStatus("Refactoring Preview: cut " + added + " tangle edge" + (added == 1 ? "" : "s"));
     }
 
     public void restoreTangleEdgeCut(String from, String to) {

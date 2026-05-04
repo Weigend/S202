@@ -10,6 +10,7 @@ import de.weigend.s202.ui.model.ArchitectureNode;
 import de.weigend.s202.ui.rendering.TangleEdgeRenderer;
 import de.weigend.s202.ui.wfx.ArchitectureWfxView;
 import de.weigend.s202.ui.wfx.events.CutTangleEdgeEvent;
+import de.weigend.s202.ui.wfx.events.CutTangleEdgesEvent;
 import de.weigend.s202.ui.wfx.events.OpenTangleEvent;
 import de.weigend.s202.ui.wfx.events.RestoreTangleEdgeEvent;
 import de.weigend.s202.ui.wfx.outline.OutlineExplorerView;
@@ -56,7 +57,6 @@ public class TopTanglesModule implements Module {
 
     private ArchitectureView boundView;
     private ChangeListener<ArchitectureNode> rootListener;
-    private ChangeListener<String> selectionListener;
 
     // Last data we pushed into the view. Used to short-circuit repeated
     // applyCurrentScope calls (rebind + architectureRoot fire on
@@ -113,16 +113,34 @@ public class TopTanglesModule implements Module {
                 bus.publish(new CutTangleEdgeEvent(from, to, tanglesView)));
         tanglesView.setOnRestoreEdge((from, to) ->
                 bus.publish(new RestoreTangleEdgeEvent(from, to, tanglesView)));
+        tanglesView.setOnCutAll(tangle -> {
+            Set<TangleEdgeRenderer.Edge> candidates = tangle.edges().stream()
+                    .filter(edge -> edge.cycleBreakEdge() && !edge.cutApplied())
+                    .map(edge -> new TangleEdgeRenderer.Edge(edge.from(), edge.to()))
+                    .collect(Collectors.toCollection(java.util.LinkedHashSet::new));
+            if (candidates.isEmpty()) {
+                return;
+            }
+            bus.publish(new CutTangleEdgesEvent(candidates, tanglesView));
+        });
         bus.subscribe(CutTangleEdgeEvent.class, ev -> {
             TangleEdgeRenderer.Edge edge = new TangleEdgeRenderer.Edge(ev.getFrom(), ev.getTo());
-            appliedCutEdges.add(edge);
-            applyCurrentScope();
+            if (appliedCutEdges.add(edge)) {
+                requestScopeRefresh();
+            }
+            return true;
+        });
+        bus.subscribe(CutTangleEdgesEvent.class, ev -> {
+            if (appliedCutEdges.addAll(ev.getEdges())) {
+                requestScopeRefresh();
+            }
             return true;
         });
         bus.subscribe(RestoreTangleEdgeEvent.class, ev -> {
             TangleEdgeRenderer.Edge edge = new TangleEdgeRenderer.Edge(ev.getFrom(), ev.getTo());
-            appliedCutEdges.remove(edge);
-            applyCurrentScope();
+            if (appliedCutEdges.remove(edge)) {
+                requestScopeRefresh();
+            }
             return true;
         });
 
@@ -170,9 +188,7 @@ public class TopTanglesModule implements Module {
         }
 
         rootListener = (obs, was, isNow) -> applyCurrentScope();
-        selectionListener = (obs, was, isNow) -> applyCurrentScope();
         newBound.architectureRootProperty().addListener(rootListener);
-        newBound.selectedFullNameProperty().addListener(selectionListener);
     }
 
     private void unbind() {
@@ -180,13 +196,13 @@ public class TopTanglesModule implements Module {
             if (rootListener != null) {
                 boundView.architectureRootProperty().removeListener(rootListener);
             }
-            if (selectionListener != null) {
-                boundView.selectedFullNameProperty().removeListener(selectionListener);
-            }
         }
         boundView = null;
         rootListener = null;
-        selectionListener = null;
+    }
+
+    private void requestScopeRefresh() {
+        applyCurrentScope();
     }
 
     private void applyCurrentScope() {
@@ -351,9 +367,53 @@ public class TopTanglesModule implements Module {
             if (!kinds.contains(kind)) {
                 continue;
             }
-            out.add(new TopTanglesView.KindEntry(kind));
+            if (kind == EdgeKind.CALLS) {
+                List<TopTanglesView.KindEntry> callEntries = buildCallKindEntries(rawModel, from, to);
+                if (callEntries.isEmpty()) {
+                    out.add(new TopTanglesView.KindEntry(kind, null));
+                } else {
+                    out.addAll(callEntries);
+                }
+            } else {
+                out.add(new TopTanglesView.KindEntry(kind, null));
+            }
         }
         return out;
+    }
+
+    private static List<TopTanglesView.KindEntry> buildCallKindEntries(DependencyModel rawModel,
+                                                                       String from,
+                                                                       String to) {
+        if (rawModel == null) {
+            return List.of();
+        }
+        DependencyModel.ClassInfo sourceClass = rawModel.getClass(from);
+        if (sourceClass == null) {
+            return List.of();
+        }
+        return sourceClass.methods.values().stream()
+                .flatMap(method -> method.methodCalls.keySet().stream()
+                        .filter(call -> callOwnerMatchesTarget(call, to))
+                        .flatMap(call -> callDetails(method, call).stream()
+                                .map(detail -> new TopTanglesView.KindEntry(EdgeKind.CALLS, detail))))
+                .distinct()
+                .sorted(Comparator.comparing(TopTanglesView.KindEntry::detail))
+                .toList();
+    }
+
+    private static List<String> callDetails(DependencyModel.MethodInfo sourceMethod, String methodCall) {
+        String methodName = methodCallName(methodCall);
+        if (methodName == null || "<init>".equals(methodName)) {
+            return List.of();
+        }
+        Set<String> descriptors = sourceMethod.methodCallDescriptors.get(methodCall);
+        if (descriptors == null || descriptors.isEmpty()) {
+            return List.of(methodName);
+        }
+        return descriptors.stream()
+                .sorted()
+                .map(descriptor -> methodName + descriptor)
+                .toList();
     }
 
     private static String tangleKey(List<String> sortedMembers) {
@@ -385,6 +445,33 @@ public class TopTanglesModule implements Module {
         }
         DependencyModel.ClassInfo info = rawModel.getClass(from);
         return info == null ? Set.of() : info.getKinds(to);
+    }
+
+    private static boolean callOwnerMatchesTarget(String methodCall, String targetClass) {
+        String owner = methodCallOwner(methodCall);
+        return owner != null
+                && (targetClass.equals(owner) || targetClass.equals(outerClassName(owner)));
+    }
+
+    private static String methodCallOwner(String methodCall) {
+        if (methodCall == null) {
+            return null;
+        }
+        int dot = methodCall.lastIndexOf('.');
+        return dot <= 0 ? null : methodCall.substring(0, dot);
+    }
+
+    private static String methodCallName(String methodCall) {
+        if (methodCall == null) {
+            return null;
+        }
+        int dot = methodCall.lastIndexOf('.');
+        return dot < 0 || dot == methodCall.length() - 1 ? null : methodCall.substring(dot + 1);
+    }
+
+    private static String outerClassName(String className) {
+        int dollar = className.indexOf('$');
+        return dollar < 0 ? className : className.substring(0, dollar);
     }
 
     private static boolean inScope(String fqn, String scope) {

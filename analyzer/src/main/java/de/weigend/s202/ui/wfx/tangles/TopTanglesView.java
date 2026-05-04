@@ -42,7 +42,7 @@ public class TopTanglesView implements View {
     public record TangleRow(int rank, Tangle tangle) implements Row {}
     public record EdgeRow(String from, String to, boolean cycleBreakEdge, boolean cutApplied) implements Row {}
     /** One relationship-kind line beneath an {@link EdgeRow}. */
-    public record KindRow(EdgeKind kind) implements Row {}
+    public record KindRow(EdgeKind kind, String detail) implements Row {}
     /** A cut edge that is removed from the SCC graph in the current preview. */
     public record RefactoringPreviewRow(String from, String to) implements Row {}
 
@@ -52,7 +52,7 @@ public class TopTanglesView implements View {
     public record TangleEdge(String from, String to, List<KindEntry> entries,
                              boolean cycleBreakEdge, boolean cutApplied) {}
     /** One relationship kind on an edge. */
-    public record KindEntry(EdgeKind kind) {}
+    public record KindEntry(EdgeKind kind, String detail) {}
     /** A from→to edge removed from the graph for the current refactoring preview. */
     public record RefactoringPreviewEdge(String from, String to) {}
 
@@ -67,6 +67,7 @@ public class TopTanglesView implements View {
     private Consumer<OpenRequest> openTangleHandler;
     private BiConsumer<String, String> cutEdgeHandler = (from, to) -> {};
     private BiConsumer<String, String> restoreEdgeHandler = (from, to) -> {};
+    private Consumer<Tangle> cutAllHandler = tangle -> {};
 
     public TopTanglesView() {
         root.getStyleClass().add("top-tangles-view");
@@ -124,7 +125,7 @@ public class TopTanglesView implements View {
                 TreeItem<Row> edgeItem = new TreeItem<>(
                         new EdgeRow(edge.from(), edge.to(), edge.cycleBreakEdge(), edge.cutApplied()));
                 for (KindEntry entry : edge.entries()) {
-                    edgeItem.getChildren().add(new TreeItem<>(new KindRow(entry.kind())));
+                    edgeItem.getChildren().add(new TreeItem<>(new KindRow(entry.kind(), entry.detail())));
                 }
                 tangleItem.getChildren().add(edgeItem);
             }
@@ -217,6 +218,10 @@ public class TopTanglesView implements View {
         this.restoreEdgeHandler = handler == null ? (from, to) -> {} : handler;
     }
 
+    public void setOnCutAll(Consumer<Tangle> handler) {
+        this.cutAllHandler = handler == null ? tangle -> {} : handler;
+    }
+
     private static String simple(String fqn) {
         if (fqn == null) return "";
         int i = fqn.lastIndexOf('.');
@@ -224,7 +229,9 @@ public class TopTanglesView implements View {
     }
 
     private static String renderKind(KindRow k) {
-        return k.kind().label();
+        return k.detail() == null || k.detail().isBlank()
+                ? k.kind().label()
+                : k.kind().label() + " " + k.detail();
     }
 
     private final class RowCell extends TreeCell<Row> {
@@ -247,7 +254,7 @@ public class TopTanglesView implements View {
             switch (item) {
                 case TangleRow t -> {
                     setText(t.tangle().title());
-                    setContextMenu(null);
+                    setContextMenu(tangleContextMenu(t.tangle()));
                     getStyleClass().add("top-tangles-tangle-row");
                 }
                 case EdgeRow e -> {
@@ -284,6 +291,17 @@ public class TopTanglesView implements View {
             MenuItem cut = new MenuItem("Cut");
             cut.setOnAction(e -> cutEdgeHandler.accept(row.from(), row.to()));
             return new ContextMenu(cut);
+        }
+
+        private ContextMenu tangleContextMenu(Tangle tangle) {
+            boolean hasCutCandidate = tangle.edges().stream()
+                    .anyMatch(edge -> edge.cycleBreakEdge() && !edge.cutApplied());
+            if (!hasCutCandidate) {
+                return null;
+            }
+            MenuItem cutAll = new MenuItem("Cut All");
+            cutAll.setOnAction(e -> cutAllHandler.accept(tangle));
+            return new ContextMenu(cutAll);
         }
 
         private ContextMenu restoreContextMenu(String from, String to) {
