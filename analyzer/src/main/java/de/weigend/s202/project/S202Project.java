@@ -1,0 +1,88 @@
+package de.weigend.s202.project;
+
+import de.weigend.s202.reader.EdgeKind;
+
+import java.util.List;
+import java.util.Map;
+
+/**
+ * Serializable project snapshot. It captures the analyzed data model, not UI
+ * state such as windows, zoom, package depth, selected nodes, or open tabs.
+ */
+public record S202Project(
+        String format,
+        int formatVersion,
+        CreatedWith createdWith,
+        Source source,
+        DependencyModelDto dependencyModel,
+        DomainModelDto domainModel,
+        List<CycleBreakEdgeDto> cycleBreakEdges,
+        LayoutInvariantReportDto layoutInvariantReport,
+        String savedAt) {
+
+    public static final String FORMAT = "structure202-project";
+    public static final int FORMAT_VERSION = 1;
+
+    public record CreatedWith(String app, String version) {}
+
+    public record Source(String kind, List<String> paths, String projectRoot) {}
+
+    public record DependencyModelDto(
+            Map<String, ClassInfoDto> classes,
+            Map<String, PackageInfoDto> packages) {}
+
+    public record ClassInfoDto(
+            String fullName,
+            String simpleName,
+            String packageName,
+            boolean interfaceType,
+            List<String> dependencies,
+            Map<String, List<EdgeKind>> dependencyKinds,
+            Map<String, MethodInfoDto> methods) {}
+
+    public record MethodInfoDto(
+            String name,
+            String descriptor,
+            Map<String, Integer> methodCalls,
+            Map<String, List<String>> methodCallDescriptors) {}
+
+    public record PackageInfoDto(
+            String fullName,
+            String simpleName,
+            List<String> childPackages,
+            List<String> classNames) {}
+
+    public record DomainModelDto(
+            Map<String, CalculatedElementDto> classes,
+            Map<String, CalculatedElementDto> packages) {}
+
+    public record CalculatedElementDto(
+            String fullName,
+            String simpleName,
+            String type,
+            boolean interfaceType,
+            int level,
+            List<String> dependencies,
+            List<String> dependents) {}
+
+    public record CycleBreakEdgeDto(String from, String to) {}
+
+    public record LayoutInvariantReportDto(
+            List<String> sourcePaths,
+            int maxLevel,
+            int districtCount,
+            int buildingCount,
+            int dependencyCount,
+            int identifiedBackEdgeCount,
+            List<InvariantFindingDto> findings) {}
+
+    public record InvariantFindingDto(
+            String ruleId,
+            String message,
+            String fromName,
+            String toName,
+            int fromLevel,
+            int toLevel,
+            String fromContainer,
+            String toContainer) {}
+}

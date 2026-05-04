@@ -63,6 +63,19 @@ public class S202MenuBar {
     }
 
     private void installFileMenu() {
+        MenuItem saveProjectItem = MenuUtil.createMenuItem(
+                "file.saveProject", "Save Project...",
+                e -> publish(new MenuRequestEvent.SaveProject(this)));
+        saveProjectItem.setAccelerator(new KeyCodeCombination(KeyCode.S, KeyCombination.SHORTCUT_DOWN));
+
+        MenuItem loadProjectItem = MenuUtil.createMenuItem(
+                "file.loadProject", "Load Project...",
+                e -> publish(new MenuRequestEvent.LoadProject(this)));
+
+        MenuItem closeProjectItem = MenuUtil.createMenuItem(
+                "file.closeProject", "Close Project",
+                e -> publish(new MenuRequestEvent.CloseProject(this)));
+
         MenuItem openItem = MenuUtil.createMenuItem(
                 "file.open", "Open JAR...", e -> publish(new MenuRequestEvent.OpenJar(this)));
         openItem.setAccelerator(new KeyCodeCombination(KeyCode.O, KeyCombination.SHORTCUT_DOWN));
@@ -83,7 +96,9 @@ public class S202MenuBar {
         exitItem.setAccelerator(new KeyCodeCombination(KeyCode.Q, KeyCombination.SHORTCUT_DOWN));
 
         Menu fileMenu = MenuUtil.createMenu("file", "File");
-        fileMenu.getItems().addAll(openItem, openMavenItem, openGradleItem,
+        fileMenu.getItems().addAll(saveProjectItem, loadProjectItem, closeProjectItem,
+                new SeparatorMenuItem(),
+                openItem, openMavenItem, openGradleItem,
                 new SeparatorMenuItem(), exitItem);
 
         applicationWindow.getMenu().add(0, fileMenu);

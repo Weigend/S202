@@ -26,6 +26,18 @@ public abstract class MenuRequestEvent extends EventObject {
         public OpenGradleProject(Object source) { super(source); }
     }
 
+    public static final class SaveProject extends MenuRequestEvent {
+        public SaveProject(Object source) { super(source); }
+    }
+
+    public static final class LoadProject extends MenuRequestEvent {
+        public LoadProject(Object source) { super(source); }
+    }
+
+    public static final class CloseProject extends MenuRequestEvent {
+        public CloseProject(Object source) { super(source); }
+    }
+
     public static final class Exit extends MenuRequestEvent {
         public Exit(Object source) { super(source); }
     }

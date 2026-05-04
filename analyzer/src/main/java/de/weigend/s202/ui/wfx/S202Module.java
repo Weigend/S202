@@ -7,6 +7,9 @@ import de.weigend.s202.analysis.scc.SCCBreaker;
 import de.weigend.s202.analysis.strategy.impl.HeuristicSCCBreakingStrategy;
 import de.weigend.s202.domain.DomainModel;
 import de.weigend.s202.domain.LevelCalculator;
+import de.weigend.s202.project.S202Project;
+import de.weigend.s202.project.S202ProjectMapper;
+import de.weigend.s202.project.S202ProjectStore;
 import de.weigend.s202.reader.DependencyModel;
 import de.weigend.s202.reader.GradleProjectScanner;
 import de.weigend.s202.reader.InputAnalyzer;
@@ -58,6 +61,8 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.File;
+import java.io.IOException;
+import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.EventObject;
@@ -85,10 +90,13 @@ public class S202Module implements Module {
     private final InputAnalyzer rawAnalyzer = new InputAnalyzer();
     private final ArchitectureNodeBuilder architectureNodeBuilder = new ArchitectureNodeBuilder();
     private final LayoutInvariantChecker invariantChecker = new LayoutInvariantChecker();
+    private final S202ProjectStore projectStore = new S202ProjectStore();
+    private final S202ProjectMapper projectMapper = new S202ProjectMapper();
 
     private int viewCounter;
     private File lastDirectory;
     private File lastProjectDirectory;
+    private File lastProjectFileDirectory;
 
     private S202StatusBar statusBar;
 
@@ -115,6 +123,8 @@ public class S202Module implements Module {
     // Dedicated tangle tabs keyed by the tangle's member set. Each tangle row
     // gets one view instance and reopens/focuses that view on later requests.
     private final Map<String, ArchitectureWfxView> tangleViews = new HashMap<>();
+    private final Map<ArchitectureView, S202Project.Source> viewSources = new HashMap<>();
+    private final Map<ArchitectureView, LayoutInvariantReport> viewInvariantReports = new HashMap<>();
 
     public S202Module(ApplicationWindow applicationWindow) {
         this.applicationWindow = applicationWindow;
@@ -229,6 +239,9 @@ public class S202Module implements Module {
         bus.subscribe(MenuRequestEvent.OpenJar.class, ev -> { openJarChooser(); return true; });
         bus.subscribe(MenuRequestEvent.OpenMavenProject.class, ev -> { openMavenProject(); return true; });
         bus.subscribe(MenuRequestEvent.OpenGradleProject.class, ev -> { openGradleProject(); return true; });
+        bus.subscribe(MenuRequestEvent.SaveProject.class, ev -> { saveProject(); return true; });
+        bus.subscribe(MenuRequestEvent.LoadProject.class, ev -> { loadProject(); return true; });
+        bus.subscribe(MenuRequestEvent.CloseProject.class, ev -> { closeProject(); return true; });
         bus.subscribe(MenuRequestEvent.Exit.class, ev -> { Platform.exit(); return true; });
         bus.subscribe(MenuRequestEvent.NewView.class, ev -> { newArchitectureWindow(); return true; });
         bus.subscribe(MenuRequestEvent.CloseFocusedView.class, ev -> { closeFocusedView(); return true; });
@@ -276,6 +289,9 @@ public class S202Module implements Module {
         WindowManager wm = Lookup.lookup(WindowManager.class);
         View focused = wm.getFocusedView();
         if (focused != null) {
+            if (focused instanceof ArchitectureWfxView a) {
+                forgetView(a);
+            }
             // closeView is kind-aware: TOOL is hidden (still in View menu);
             // DOCUMENT is fully unregistered. Old code called unregister
             // unconditionally, which forcibly removed Outline/Quality from
@@ -291,9 +307,22 @@ public class S202Module implements Module {
         // stay alive.
         for (View v : new ArrayList<>(wm.getVisibleViews())) {
             if (v.getKind() == ViewKind.DOCUMENT) {
+                if (v instanceof ArchitectureWfxView a) {
+                    forgetView(a);
+                }
                 wm.closeView(v);
             }
         }
+    }
+
+    private void forgetView(ArchitectureWfxView wrapper) {
+        if (wrapper == null) {
+            return;
+        }
+        ArchitectureView view = wrapper.getArchitectureView();
+        viewSources.remove(view);
+        viewInvariantReports.remove(view);
+        tangleViews.values().removeIf(wrapper::equals);
     }
 
     private void installToolbar() {
@@ -665,9 +694,16 @@ public class S202Module implements Module {
                 .ifPresent(selected -> {
                     if (!selected.isEmpty()) {
                         lastDirectory = selected.get(0).getParentFile();
-                        loadJarFiles(selected);
+                        loadJarFiles(selected, projectSource(kind, root, selected));
                     }
                 });
+    }
+
+    private S202Project.Source projectSource(String kind, File root, List<File> jars) {
+        return new S202Project.Source(
+                kind.toUpperCase(),
+                jars.stream().map(File::getAbsolutePath).toList(),
+                root == null ? null : root.getAbsolutePath());
     }
 
     @Override
@@ -682,6 +718,13 @@ public class S202Module implements Module {
      * the focused view.
      */
     private void loadJarFiles(List<File> jarFiles) {
+        if (jarFiles == null || jarFiles.isEmpty()) {
+            return;
+        }
+        loadJarFiles(jarFiles, projectSource("JAR", null, jarFiles));
+    }
+
+    private void loadJarFiles(List<File> jarFiles, S202Project.Source source) {
         if (jarFiles == null || jarFiles.isEmpty()) {
             return;
         }
@@ -749,7 +792,7 @@ public class S202Module implements Module {
             publishProgress("Building JavaFX architecture view...", 0.97);
 
             PauseTransition yieldToPulse = new PauseTransition(Duration.millis(50));
-            yieldToPulse.setOnFinished(event -> applyAnalysisResult(jarFiles, view, result));
+            yieldToPulse.setOnFinished(event -> applyAnalysisResult(jarFiles, view, source, result));
             yieldToPulse.play();
         });
         task.setOnFailed(e -> {
@@ -765,7 +808,8 @@ public class S202Module implements Module {
         analyzer.start();
     }
 
-    private void applyAnalysisResult(List<File> jarFiles, ArchitectureView view, AnalysisResult result) {
+    private void applyAnalysisResult(List<File> jarFiles, ArchitectureView view,
+                                     S202Project.Source source, AnalysisResult result) {
         // Domain model first so listeners on architectureRoot/metrics can
         // already query scoped data (e.g. quality module on package select).
         view.setDomainModel(result.domainModel());
@@ -773,6 +817,8 @@ public class S202Module implements Module {
         view.setCycleBreakEdges(result.cycleBreakEdges());
         view.setArchitectureRoot(result.rootNode());
         view.setQualityMetrics(result.metrics());
+        viewSources.put(view, source);
+        viewInvariantReports.put(view, result.invariants());
 
         LayoutInvariantReport invariants = result.invariants();
         String invariantSuffix = "";
@@ -807,6 +853,163 @@ public class S202Module implements Module {
                     InvariantReportDialog.show(applicationWindow.getStage(), report));
         }
     }
+
+    private void saveProject() {
+        ArchitectureWfxView focused = focusedSourceArchitectureView();
+        if (focused == null || focused.getArchitectureView().getDomainModel() == null
+                || focused.getArchitectureView().getRawDependencyModel() == null) {
+            showError("Save Project", "There is no loaded analysis to save.");
+            return;
+        }
+
+        FileChooser chooser = projectFileChooser("Save Structure202 Project");
+        File target = chooser.showSaveDialog(applicationWindow.getStage());
+        if (target == null) {
+            return;
+        }
+        target = withDefaultProjectExtension(target);
+        lastProjectFileDirectory = target.getParentFile();
+
+        ArchitectureView view = focused.getArchitectureView();
+        S202Project.Source source = viewSources.getOrDefault(view,
+                new S202Project.Source("UNKNOWN", List.of(), null));
+        S202Project project = projectMapper.toProject(
+                appVersion(),
+                source,
+                view.getRawDependencyModel(),
+                view.getDomainModel(),
+                viewInvariantReports.get(view),
+                view.getCycleBreakEdges());
+
+        try {
+            projectStore.save(target.toPath(), project);
+            publishProgress("Saved project: " + target.getName(), 1);
+        } catch (IOException ex) {
+            LOGGER.error("Could not save project {}", target, ex);
+            showError("Save Project", "Could not save project:\n" + ex.getMessage());
+        }
+    }
+
+    private void loadProject() {
+        FileChooser chooser = projectFileChooser("Load Structure202 Project");
+        File file = chooser.showOpenDialog(applicationWindow.getStage());
+        if (file == null) {
+            return;
+        }
+        lastProjectFileDirectory = file.getParentFile();
+        publishProgress("Loading project: " + file.getName() + "...", -1);
+
+        Task<LoadedProject> task = new Task<>() {
+            @Override
+            protected LoadedProject call() throws Exception {
+                S202Project project = projectStore.load(file.toPath());
+                DependencyModel rawModel = projectMapper.toDependencyModel(project.dependencyModel());
+                DomainModel domainModel = projectMapper.toDomainModel(project.domainModel());
+                ArchitectureNode root = architectureNodeBuilder.build(domainModel);
+                new DistrictRowLevelCalculator().assignDistrictRowLevels(root);
+                QualityMetrics metrics = QualityMetrics.compute(domainModel);
+                LayoutInvariantReport invariants = projectMapper.toLayoutInvariantReport(project.layoutInvariantReport());
+                Set<TangleEdgeRenderer.Edge> cycleBreakEdges =
+                        projectMapper.toCycleBreakEdges(project.cycleBreakEdges());
+                return new LoadedProject(project, rawModel, domainModel, root, metrics, invariants, cycleBreakEdges);
+            }
+        };
+        task.setOnSucceeded(e -> applyLoadedProject(file.toPath(), task.getValue()));
+        task.setOnFailed(e -> {
+            Throwable t = task.getException();
+            LOGGER.error("Could not load project {}", file, t);
+            String msg = t != null ? t.getMessage() : "unknown error";
+            publishProgress("Error loading project: " + msg, 1);
+            showError("Load Project", "Could not load project:\n" + msg);
+        });
+
+        Thread loader = new Thread(task, "s202-project-loader");
+        loader.setDaemon(true);
+        loader.start();
+    }
+
+    private void applyLoadedProject(Path path, LoadedProject loaded) {
+        resetProjectUi();
+
+        ArchitectureWfxView target = createArchitectureView();
+        Lookup.lookup(WindowManager.class).register(target);
+        ArchitectureView view = target.getArchitectureView();
+        view.setDomainModel(loaded.domainModel());
+        view.setRawDependencyModel(loaded.rawModel());
+        view.setCycleBreakEdges(loaded.cycleBreakEdges());
+        view.setArchitectureRoot(loaded.rootNode());
+        view.setQualityMetrics(loaded.metrics());
+        viewSources.put(view, loaded.project().source());
+        viewInvariantReports.put(view, loaded.invariants());
+
+        publishProgress(String.format(
+                "Loaded project %s | %d classes | %d levels | Max level %d",
+                path.getFileName(),
+                loaded.rawModel().getAllClasses().size(),
+                loaded.rootNode().getLevelCount(),
+                loaded.rootNode().getMaxLevel()), 1);
+    }
+
+    private void closeProject() {
+        resetProjectUi();
+        publishProgress("Ready to analyze bytecode. Click 'Open JAR' to begin.", 0);
+    }
+
+    private void resetProjectUi() {
+        WindowManager wm = Lookup.lookup(WindowManager.class);
+        for (View v : new ArrayList<>(wm.getRegisteredViews())) {
+            if (v.getKind() == ViewKind.DOCUMENT) {
+                if (v instanceof ArchitectureWfxView a) {
+                    forgetView(a);
+                }
+                wm.closeView(v);
+            }
+        }
+        tangleViews.clear();
+        viewSources.clear();
+        viewInvariantReports.clear();
+        boundView = null;
+        zoomLabelListener = null;
+        Lookup.lookup(WindowManager.class).restoreDefaultLayout();
+        bindToolbarToFocusedView();
+    }
+
+    private FileChooser projectFileChooser(String title) {
+        FileChooser chooser = new FileChooser();
+        chooser.setTitle(title);
+        chooser.getExtensionFilters().addAll(
+                new FileChooser.ExtensionFilter("Structure202 Project", "*.s202.json"),
+                new FileChooser.ExtensionFilter("JSON Files", "*.json"),
+                new FileChooser.ExtensionFilter("All Files", "*.*"));
+        File initial = lastProjectFileDirectory != null && lastProjectFileDirectory.isDirectory()
+                ? lastProjectFileDirectory
+                : (lastDirectory != null && lastDirectory.isDirectory() ? lastDirectory : null);
+        if (initial != null) {
+            chooser.setInitialDirectory(initial);
+        }
+        return chooser;
+    }
+
+    private static File withDefaultProjectExtension(File file) {
+        String name = file.getName().toLowerCase();
+        if (name.endsWith(".s202.json") || name.endsWith(".json")) {
+            return file;
+        }
+        File parent = file.getParentFile();
+        return parent == null
+                ? new File(file.getName() + ".s202.json")
+                : new File(parent, file.getName() + ".s202.json");
+    }
+
+    private String appVersion() {
+        String version = getVersion();
+        return version == null || version.isBlank() ? "dev" : version;
+    }
+
+    private record LoadedProject(S202Project project, DependencyModel rawModel,
+                                 DomainModel domainModel, ArchitectureNode rootNode,
+                                 QualityMetrics metrics, LayoutInvariantReport invariants,
+                                 Set<TangleEdgeRenderer.Edge> cycleBreakEdges) {}
 
     private record AnalysisResult(DependencyModel rawModel, ArchitectureNode rootNode,
                                   QualityMetrics metrics, DomainModel domainModel,
