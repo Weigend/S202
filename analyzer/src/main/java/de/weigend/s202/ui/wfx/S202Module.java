@@ -24,6 +24,7 @@ import de.weigend.s202.ui.wfx.events.CutTangleEdgesEvent;
 import de.weigend.s202.ui.wfx.events.MethodSelectionEvent;
 import de.weigend.s202.ui.wfx.events.NodeSelectionEvent;
 import de.weigend.s202.ui.wfx.events.MenuRequestEvent;
+import de.weigend.s202.ui.wfx.events.OpenScopeEvent;
 import de.weigend.s202.ui.wfx.events.OpenTangleEvent;
 import de.weigend.s202.ui.wfx.events.RestoreTangleEdgeEvent;
 import de.weigend.s202.ui.wfx.tangles.TangleFilter;
@@ -164,6 +165,11 @@ public class S202Module implements Module {
 
     @SuppressWarnings("unchecked")
     private ArchitectureWfxView createArchitectureView() {
+        return createArchitectureView(null);
+    }
+
+    @SuppressWarnings("unchecked")
+    private ArchitectureWfxView createArchitectureView(String title) {
         viewCounter++;
         ArchitectureView view = new ArchitectureView();
         view.setStatusSink(this::publishStatus);
@@ -181,7 +187,7 @@ public class S202Module implements Module {
 
         return new ArchitectureWfxView(
                 ArchitectureWfxView.VIEW_ID_PREFIX + viewCounter,
-                "Architecture " + viewCounter,
+                title == null || title.isBlank() ? "Architecture " + viewCounter : title,
                 view);
     }
 
@@ -226,6 +232,7 @@ public class S202Module implements Module {
         new S202MenuBar(applicationWindow, bus).install();
         subscribeToMenuRequests(bus);
         subscribeToNodeSelection(bus);
+        subscribeToOpenScope(bus);
         subscribeToOpenTangle(bus);
         subscribeToTanglePreviewEvents(bus);
 
@@ -237,6 +244,13 @@ public class S202Module implements Module {
     private void subscribeToOpenTangle(EventBus<EventObject> bus) {
         bus.subscribe(OpenTangleEvent.class, ev -> {
             openTangleView(ev.getMembers(), ev.getTangleKey(), ev.getTitle());
+            return true;
+        });
+    }
+
+    private void subscribeToOpenScope(EventBus<EventObject> bus) {
+        bus.subscribe(OpenScopeEvent.class, ev -> {
+            openScopeView(ev.getScope(), ev.getArchitectureView());
             return true;
         });
     }
@@ -304,6 +318,106 @@ public class S202Module implements Module {
 
     private void newArchitectureWindow() {
         Lookup.lookup(WindowManager.class).register(createArchitectureView());
+    }
+
+    private void openScopeView(String scope, ArchitectureView requestedSourceView) {
+        if (scope == null || scope.isBlank()) {
+            return;
+        }
+        ArchitectureView sourceView = requestedSourceView;
+        if (sourceView == null) {
+            ArchitectureWfxView source = focusedSourceArchitectureView();
+            sourceView = source == null ? null : source.getArchitectureView();
+        }
+        if (sourceView == null) {
+            return;
+        }
+        ArchitectureView finalSourceView = sourceView;
+        ArchitectureNode sourceRoot = sourceView.getArchitectureRoot();
+        if (sourceRoot == null) {
+            return;
+        }
+        ArchitectureNode scopedRoot = filterPackageScope(sourceRoot, scope);
+        if (scopedRoot == null) {
+            showError("Open Scope", "Package scope was not found in the focused architecture: " + scope);
+            return;
+        }
+
+        WindowManager wm = Lookup.lookup(WindowManager.class);
+        ArchitectureWfxView wrapper = createArchitectureView("Scope " + simple(scope));
+        ArchitectureView scopeView = wrapper.getArchitectureView();
+        scopeView.setPreferredTopTanglesScope(scope);
+        scopeView.setDomainModel(sourceView.getDomainModel());
+        scopeView.setRawDependencyModel(sourceView.getRawDependencyModel());
+        scopeView.setCycleBreakEdges(sourceView.getCycleBreakEdges());
+        scopeView.setAppliedTangleCutEdges(refactoringPreviewCuts);
+        viewSources.put(scopeView, viewSources.get(sourceView));
+        viewInvariantReports.put(scopeView, viewInvariantReports.get(sourceView));
+
+        wm.register(wrapper);
+        wm.showView(wrapper);
+
+        scopeView.setArchitectureRootAsync(
+                scopedRoot,
+                progress -> publishJavaFxBuildProgress("Building JavaFX scope view", progress),
+                () -> {
+                    scopeView.setQualityMetrics(finalSourceView.getQualityMetrics());
+                    scopeView.selectByFullName(scope);
+                    publishProgress("Opened scope " + scope, 1);
+                });
+    }
+
+    private static ArchitectureNode filterPackageScope(ArchitectureNode sourceRoot, String scope) {
+        ArchitectureNode scopeNode = findPackageNode(sourceRoot, scope);
+        if (scopeNode == null) {
+            return null;
+        }
+        ArchitectureNode root = cloneShallow(sourceRoot);
+        root.addChild(cloneTree(scopeNode));
+        return root;
+    }
+
+    private static ArchitectureNode findPackageNode(ArchitectureNode node, String scope) {
+        if (node.getType() == ArchitectureNode.NodeType.PACKAGE
+                && scope.equals(node.getFullName())) {
+            return node;
+        }
+        for (ArchitectureNode child : node.getChildren()) {
+            ArchitectureNode found = findPackageNode(child, scope);
+            if (found != null) {
+                return found;
+            }
+        }
+        return null;
+    }
+
+    private static ArchitectureNode cloneTree(ArchitectureNode source) {
+        ArchitectureNode clone = cloneShallow(source);
+        for (ArchitectureNode child : source.getChildren()) {
+            clone.addChild(cloneTree(child));
+        }
+        return clone;
+    }
+
+    private static ArchitectureNode cloneShallow(ArchitectureNode source) {
+        ArchitectureNode clone = new ArchitectureNode(
+                source.getFullName(),
+                source.getSimpleName(),
+                source.getType(),
+                source.isAutoExpanded(),
+                source.getLevel(),
+                source.isInterfaceType());
+        clone.setDependencies(source.getDependencies());
+        clone.setDependents(source.getDependents());
+        return clone;
+    }
+
+    private static String simple(String fqn) {
+        if (fqn == null) {
+            return "";
+        }
+        int dot = fqn.lastIndexOf('.');
+        return dot < 0 ? fqn : fqn.substring(dot + 1);
     }
 
     private void closeFocusedView() {
@@ -1156,6 +1270,7 @@ public class S202Module implements Module {
         }
         viewCounter++;
         ArchitectureView tangleView = new ArchitectureView();
+        tangleView.setTopTanglesScopeOwner(false);
         tangleView.setStatusSink(this::publishStatus);
         EventBus<EventObject> bus = Lookup.lookup(EventBus.class);
         tangleView.setOnNodeDoubleClicked(fqn -> bus.publish(new NodeSelectionEvent(fqn, tangleView)));

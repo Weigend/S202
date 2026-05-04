@@ -31,6 +31,7 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 import java.util.stream.Collectors;
 
@@ -63,6 +64,8 @@ public class TopTanglesModule implements Module {
     // openTangleView) when the computed tangle list is identical — replacing
     // the TreeView root would otherwise discard the user's expansion state.
     private String lastScopeLabel;
+    private String currentScope;
+    private boolean currentScopeInitialized;
     private List<TopTanglesView.Tangle> lastTangles;
     private List<TopTanglesView.RefactoringPreviewEdge> lastPreviewEdges;
     private final Set<TangleEdgeRenderer.Edge> appliedCutEdges = new HashSet<>();
@@ -172,6 +175,11 @@ public class TopTanglesModule implements Module {
         boolean sameDataset = boundView != null && newBound != null
                 && boundView.getDomainModel() != null
                 && boundView.getDomainModel() == newBound.getDomainModel();
+        String activeScope = currentScopeInitialized
+                ? currentScope
+                : scopeFor(boundView, boundView == null ? null : boundView.getDomainModel());
+        boolean sameTangleScope = sameDataset
+                && Objects.equals(activeScope, scopeFor(newBound, newBound.getDomainModel()));
 
         unbind();
 
@@ -179,15 +187,17 @@ public class TopTanglesModule implements Module {
             tanglesView.clear();
             appliedCutEdges.clear();
             lastCutDataset = null;
+            currentScope = null;
+            currentScopeInitialized = false;
             return;
         }
 
         boundView = newBound;
-        if (!sameDataset) {
-            applyCurrentScope();
+        if (!sameDataset || (!sameTangleScope && newBound.isTopTanglesScopeOwner())) {
+            applyCurrentScope(true);
         }
 
-        rootListener = (obs, was, isNow) -> applyCurrentScope();
+        rootListener = (obs, was, isNow) -> applyCurrentScope(true);
         newBound.architectureRootProperty().addListener(rootListener);
     }
 
@@ -202,13 +212,15 @@ public class TopTanglesModule implements Module {
     }
 
     private void requestScopeRefresh() {
-        applyCurrentScope();
+        applyCurrentScope(false);
     }
 
-    private void applyCurrentScope() {
+    private void applyCurrentScope(boolean updateScopeFromSelection) {
         if (boundView == null) {
             tanglesView.clear();
             lastScopeLabel = null;
+            currentScope = null;
+            currentScopeInitialized = false;
             lastTangles = null;
             lastPreviewEdges = null;
             return;
@@ -224,10 +236,16 @@ public class TopTanglesModule implements Module {
         if (model != lastCutDataset) {
             appliedCutEdges.clear();
             lastCutDataset = model;
+            currentScope = null;
+            currentScopeInitialized = false;
         }
 
-        String selected = boundView.getSelectedFullName();
-        String scope = resolveScope(model, selected);
+        if (updateScopeFromSelection || !currentScopeInitialized) {
+            currentScope = scopeFor(boundView, model);
+            currentScopeInitialized = true;
+        }
+
+        String scope = currentScope;
         String scopeLabel = scope == null ? "All classes" : scope;
 
         List<TopTanglesView.Tangle> tangles = computeTopTangles(
@@ -257,11 +275,25 @@ public class TopTanglesModule implements Module {
         if (selected == null || selected.isEmpty()) {
             return null;
         }
+        if (model == null) {
+            return selected;
+        }
         if (model.getClass(selected) != null) {
             int dot = selected.lastIndexOf('.');
             return dot < 0 ? null : selected.substring(0, dot);
         }
         return selected;
+    }
+
+    private static String scopeFor(ArchitectureView view, DomainModel model) {
+        if (view == null) {
+            return null;
+        }
+        String preferred = view.getPreferredTopTanglesScope();
+        if (preferred != null && !preferred.isBlank()) {
+            return preferred;
+        }
+        return resolveScope(model, view.getSelectedFullName());
     }
 
     /**

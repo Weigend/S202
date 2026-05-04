@@ -6,6 +6,7 @@ import de.weigend.s202.ui.model.ArchitectureNode;
 import de.weigend.s202.ui.wfx.ArchitectureWfxView;
 import de.weigend.s202.ui.wfx.events.MethodSelectionEvent;
 import de.weigend.s202.ui.wfx.events.NodeSelectionEvent;
+import de.weigend.s202.ui.wfx.events.OpenScopeEvent;
 import io.softwareecg.wfx.lookup.Lookup;
 import io.softwareecg.wfx.platform.api.EventBus;
 import io.softwareecg.wfx.platform.api.Module;
@@ -58,6 +59,8 @@ public class OutlineExplorerModule implements Module {
         EventBus<EventObject> bus = Lookup.lookup(EventBus.class);
         outlineView.setOnNodeDoubleClick(fqn ->
                 bus.publish(new NodeSelectionEvent(fqn, outlineView)));
+        outlineView.setOnOpenScope(scope ->
+                bus.publish(new OpenScopeEvent(scope, boundView, outlineView)));
     }
 
     private void waitForDemoPreloader() throws PlatformException {

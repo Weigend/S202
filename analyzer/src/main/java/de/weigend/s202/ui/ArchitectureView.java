@@ -98,6 +98,8 @@ public class ArchitectureView extends BorderPane {
     private final ReadOnlyObjectWrapper<DomainModel> domainModel = new ReadOnlyObjectWrapper<>(null);
     private final ReadOnlyObjectWrapper<DependencyModel> rawDependencyModel = new ReadOnlyObjectWrapper<>(null);
     private final ReadOnlyStringWrapper selectedFullName = new ReadOnlyStringWrapper(null);
+    private String preferredTopTanglesScope;
+    private boolean topTanglesScopeOwner = true;
 
     public ArchitectureView() {
         setupUI();
@@ -437,6 +439,27 @@ public class ArchitectureView extends BorderPane {
 
     public void setRawDependencyModel(DependencyModel model) {
         rawDependencyModel.set(model);
+    }
+
+    public String getPreferredTopTanglesScope() {
+        return preferredTopTanglesScope;
+    }
+
+    public void setPreferredTopTanglesScope(String scope) {
+        preferredTopTanglesScope = scope == null || scope.isBlank() ? null : scope;
+    }
+
+    /**
+     * Whether this view drives TopTangles scope tracking. True for all regular
+     * architecture and scope views; false for tangle satellite tabs, which
+     * inherit their scope from the source view and must not reset it on focus.
+     */
+    public boolean isTopTanglesScopeOwner() {
+        return topTanglesScopeOwner;
+    }
+
+    public void setTopTanglesScopeOwner(boolean owner) {
+        topTanglesScopeOwner = owner;
     }
 
     /**

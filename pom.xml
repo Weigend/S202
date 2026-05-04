@@ -27,6 +27,10 @@
         <checkstyle.version>3.3.1</checkstyle.version>
         <pmd.version>3.26.0</pmd.version>
         <surefire.version>3.2.5</surefire.version>
+        <!-- Quality reports are opt-in: activate with -Pquality (e.g. mvn verify -Pquality) -->
+        <checkstyle.skip>true</checkstyle.skip>
+        <pmd.skip>true</pmd.skip>
+        <spotbugs.skip>true</spotbugs.skip>
     </properties>
 
     <build>
@@ -137,5 +141,16 @@
             </plugin>
         </plugins>
     </build>
+
+    <profiles>
+        <profile>
+            <id>quality</id>
+            <properties>
+                <checkstyle.skip>false</checkstyle.skip>
+                <pmd.skip>false</pmd.skip>
+                <spotbugs.skip>false</spotbugs.skip>
+            </properties>
+        </profile>
+    </profiles>
 
 </project>

@@ -5,7 +5,9 @@ import de.weigend.s202.ui.model.ArchitectureNode;
 import io.softwareecg.wfx.windowmtg.api.Position;
 import io.softwareecg.wfx.windowmtg.api.View;
 import javafx.scene.Parent;
+import javafx.scene.control.ContextMenu;
 import javafx.scene.control.Label;
+import javafx.scene.control.MenuItem;
 import javafx.scene.control.TreeItem;
 import javafx.scene.control.TreeView;
 import javafx.scene.input.MouseButton;
@@ -39,6 +41,7 @@ public class OutlineExplorerView implements View {
     private final Label emptyPlaceholder = new Label("No JAR loaded");
 
     private Consumer<String> nodeDoubleClickHandler = fqn -> { /* no-op */ };
+    private Consumer<String> openScopeHandler = fqn -> { /* no-op */ };
 
     public OutlineExplorerView() {
         emptyPlaceholder.getStyleClass().add("outline-empty");
@@ -95,6 +98,10 @@ public class OutlineExplorerView implements View {
 
     public void setOnNodeDoubleClick(Consumer<String> handler) {
         this.nodeDoubleClickHandler = handler != null ? handler : fqn -> { };
+    }
+
+    public void setOnOpenScope(Consumer<String> handler) {
+        this.openScopeHandler = handler != null ? handler : fqn -> { };
     }
 
     /**
@@ -288,7 +295,7 @@ public class OutlineExplorerView implements View {
     private record MethodRow(DependencyModel.MethodInfo method) implements OutlineRow {}
 
     /** Renders package, class, interface, and method rows with distinct icons and style classes. */
-    private static final class ArchitectureNodeCell extends javafx.scene.control.TreeCell<OutlineRow> {
+    private final class ArchitectureNodeCell extends javafx.scene.control.TreeCell<OutlineRow> {
         private static final Color PACKAGE_COLOR = Color.web("#e6c46a");
         private static final Color CLASS_COLOR   = Color.web("#7fb3ff");
         private static final Color INTERFACE_COLOR = Color.web("#4caf50");
@@ -300,10 +307,12 @@ public class OutlineExplorerView implements View {
             if (empty || item == null) {
                 setText(null);
                 setGraphic(null);
+                setContextMenu(null);
                 getStyleClass().removeAll("outline-package", "outline-class", "outline-interface", "outline-method");
                 return;
             }
             getStyleClass().removeAll("outline-package", "outline-class", "outline-interface", "outline-method");
+            setContextMenu(null);
 
             FontIcon icon;
             if (item instanceof MethodRow row) {
@@ -329,6 +338,9 @@ public class OutlineExplorerView implements View {
                 icon = new FontIcon(MaterialDesignP.PACKAGE_VARIANT_CLOSED);
                 icon.setIconColor(PACKAGE_COLOR);
                 getStyleClass().add("outline-package");
+                MenuItem openScope = new MenuItem("Open Scope");
+                openScope.setOnAction(e -> openScopeHandler.accept(node.getFullName()));
+                setContextMenu(new ContextMenu(openScope));
             }
             icon.setIconSize(14);
             setGraphic(icon);
