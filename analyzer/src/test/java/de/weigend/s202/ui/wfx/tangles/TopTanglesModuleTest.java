@@ -30,4 +30,21 @@ class TopTanglesModuleTest {
                         && edge.to().equals("a.A")
                         && edge.cycleBreakEdge()));
     }
+
+    @Test
+    void computeTopTanglesRemovesAppliedCutEdgesFromSccGraph() {
+        DomainModel model = new DomainModel();
+        model.addClass("a.A", new DomainModel.CalculatedElementInfo(
+                "a.A", "A", "CLASS", 2, Set.of("a.B")));
+        model.addClass("a.B", new DomainModel.CalculatedElementInfo(
+                "a.B", "B", "CLASS", 1, Set.of("a.C")));
+        model.addClass("a.C", new DomainModel.CalculatedElementInfo(
+                "a.C", "C", "CLASS", 0, Set.of("a.A")));
+
+        var cutEdge = new TangleEdgeRenderer.Edge("a.C", "a.A");
+        var tangles = TopTanglesModule.computeTopTangles(
+                model, null, Set.of(cutEdge), Set.of(cutEdge), null, 5);
+
+        assertTrue(tangles.isEmpty());
+    }
 }

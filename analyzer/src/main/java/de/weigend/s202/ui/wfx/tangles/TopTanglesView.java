@@ -4,7 +4,9 @@ import de.weigend.s202.reader.EdgeKind;
 import io.softwareecg.wfx.windowmtg.api.Position;
 import io.softwareecg.wfx.windowmtg.api.View;
 import javafx.scene.Parent;
+import javafx.scene.control.ContextMenu;
 import javafx.scene.control.Label;
+import javafx.scene.control.MenuItem;
 import javafx.scene.control.TreeCell;
 import javafx.scene.control.TreeItem;
 import javafx.scene.control.TreeView;
@@ -13,6 +15,7 @@ import javafx.scene.layout.BorderPane;
 
 import java.net.URL;
 import java.util.List;
+import java.util.function.BiConsumer;
 import java.util.function.Consumer;
 
 /**
@@ -35,18 +38,23 @@ public class TopTanglesView implements View {
     public static final String VIEW_ID = "s202-top-tangles";
 
     /** Sealed model so the cell factory can render rows differently per level. */
-    public sealed interface Row permits TangleRow, EdgeRow, KindRow {}
+    public sealed interface Row permits TangleRow, EdgeRow, KindRow, RefactoringPreviewRow {}
     public record TangleRow(int rank, Tangle tangle) implements Row {}
-    public record EdgeRow(String from, String to, boolean cycleBreakEdge) implements Row {}
+    public record EdgeRow(String from, String to, boolean cycleBreakEdge, boolean cutApplied) implements Row {}
     /** One relationship-kind line beneath an {@link EdgeRow}. */
     public record KindRow(EdgeKind kind) implements Row {}
+    /** A cut edge that is removed from the SCC graph in the current preview. */
+    public record RefactoringPreviewRow(String from, String to) implements Row {}
 
     /** Display data for a single tangle. */
     public record Tangle(int size, String key, String title, List<String> members, List<TangleEdge> edges) {}
     /** A from→to edge inside a tangle, decomposed into per-kind entries. */
-    public record TangleEdge(String from, String to, List<KindEntry> entries, boolean cycleBreakEdge) {}
+    public record TangleEdge(String from, String to, List<KindEntry> entries,
+                             boolean cycleBreakEdge, boolean cutApplied) {}
     /** One relationship kind on an edge. */
     public record KindEntry(EdgeKind kind) {}
+    /** A from→to edge removed from the graph for the current refactoring preview. */
+    public record RefactoringPreviewEdge(String from, String to) {}
 
     private final BorderPane root = new BorderPane();
     private final Label scopeLabel = new Label("No architecture loaded");
@@ -57,6 +65,8 @@ public class TopTanglesView implements View {
 
     /** Invoked when the user double-clicks a {@link TangleRow}. May be null. */
     private Consumer<OpenRequest> openTangleHandler;
+    private BiConsumer<String, String> cutEdgeHandler = (from, to) -> {};
+    private BiConsumer<String, String> restoreEdgeHandler = (from, to) -> {};
 
     public TopTanglesView() {
         root.getStyleClass().add("top-tangles-view");
@@ -94,17 +104,25 @@ public class TopTanglesView implements View {
      * @param tangles    top-N tangles, already ranked. May be empty; never null.
      */
     public void setData(String scopeName, List<Tangle> tangles) {
+        setData(scopeName, tangles, List.of());
+    }
+
+    public void setData(String scopeName, List<Tangle> tangles,
+                        List<RefactoringPreviewEdge> refactoringPreviewEdges) {
         scopeLabel.setText(scopeName == null || scopeName.isEmpty()
                 ? "Scope: All classes"
                 : "Scope: " + scopeName);
 
         TreeItem<Row> rootItem = new TreeItem<>(null);
+        for (RefactoringPreviewEdge edge : refactoringPreviewEdges) {
+            rootItem.getChildren().add(new TreeItem<>(new RefactoringPreviewRow(edge.from(), edge.to())));
+        }
         int rank = 1;
         for (Tangle t : tangles) {
             TreeItem<Row> tangleItem = new TreeItem<>(new TangleRow(rank++, t));
             for (TangleEdge edge : t.edges()) {
                 TreeItem<Row> edgeItem = new TreeItem<>(
-                        new EdgeRow(edge.from(), edge.to(), edge.cycleBreakEdge()));
+                        new EdgeRow(edge.from(), edge.to(), edge.cycleBreakEdge(), edge.cutApplied()));
                 for (KindEntry entry : edge.entries()) {
                     edgeItem.getChildren().add(new TreeItem<>(new KindRow(entry.kind())));
                 }
@@ -162,11 +180,41 @@ public class TopTanglesView implements View {
     }
 
     /**
+     * Mark a tangle edge as an applied cut without rebuilding the tree, so the
+     * user's expansion state survives the interaction from the tangle view.
+     */
+    public void markCutEdge(String from, String to) {
+        if (from == null || to == null) {
+            return;
+        }
+        TreeItem<Row> root = treeView.getRoot();
+        if (root == null) {
+            return;
+        }
+        for (TreeItem<Row> tangleItem : root.getChildren()) {
+            for (TreeItem<Row> edgeItem : tangleItem.getChildren()) {
+                if (edgeItem.getValue() instanceof EdgeRow er
+                        && from.equals(er.from()) && to.equals(er.to())) {
+                    edgeItem.setValue(new EdgeRow(er.from(), er.to(), er.cycleBreakEdge(), true));
+                }
+            }
+        }
+    }
+
+    /**
      * Set the handler invoked on double-click of a {@link TangleRow}. Pass
      * {@code null} to detach.
      */
     public void setOnOpenTangle(Consumer<OpenRequest> handler) {
         this.openTangleHandler = handler;
+    }
+
+    public void setOnCutEdge(BiConsumer<String, String> handler) {
+        this.cutEdgeHandler = handler == null ? (from, to) -> {} : handler;
+    }
+
+    public void setOnRestoreEdge(BiConsumer<String, String> handler) {
+        this.restoreEdgeHandler = handler == null ? (from, to) -> {} : handler;
     }
 
     private static String simple(String fqn) {
@@ -179,34 +227,69 @@ public class TopTanglesView implements View {
         return k.kind().label();
     }
 
-    private static final class RowCell extends TreeCell<Row> {
+    private final class RowCell extends TreeCell<Row> {
         @Override
         protected void updateItem(Row item, boolean empty) {
             super.updateItem(item, empty);
             if (empty || item == null) {
                 setText(null);
+                setContextMenu(null);
                 getStyleClass().removeAll("top-tangles-tangle-row",
-                        "top-tangles-edge-row", "top-tangles-cut-edge-row", "top-tangles-kind-row");
+                        "top-tangles-edge-row", "top-tangles-cut-edge-row",
+                        "top-tangles-applied-cut-edge-row", "top-tangles-refactoring-preview-row",
+                        "top-tangles-kind-row");
                 return;
             }
             getStyleClass().removeAll("top-tangles-tangle-row",
-                    "top-tangles-edge-row", "top-tangles-cut-edge-row", "top-tangles-kind-row");
+                    "top-tangles-edge-row", "top-tangles-cut-edge-row",
+                    "top-tangles-applied-cut-edge-row", "top-tangles-refactoring-preview-row",
+                    "top-tangles-kind-row");
             switch (item) {
                 case TangleRow t -> {
                     setText(t.tangle().title());
+                    setContextMenu(null);
                     getStyleClass().add("top-tangles-tangle-row");
                 }
                 case EdgeRow e -> {
                     setText((e.cycleBreakEdge() ? "CUT " : "") + simple(e.from()) + " → " + simple(e.to()));
-                    getStyleClass().add(e.cycleBreakEdge()
-                            ? "top-tangles-cut-edge-row"
-                            : "top-tangles-edge-row");
+                    setContextMenu(edgeContextMenu(e));
+                    if (e.cutApplied()) {
+                        getStyleClass().add("top-tangles-applied-cut-edge-row");
+                    } else {
+                        getStyleClass().add(e.cycleBreakEdge()
+                                ? "top-tangles-cut-edge-row"
+                                : "top-tangles-edge-row");
+                    }
                 }
                 case KindRow k -> {
                     setText(renderKind(k));
+                    setContextMenu(null);
                     getStyleClass().add("top-tangles-kind-row");
                 }
+                case RefactoringPreviewRow p -> {
+                    setText("Refactoring Preview " + simple(p.from()) + " → " + simple(p.to()));
+                    setContextMenu(restoreContextMenu(p.from(), p.to()));
+                    getStyleClass().add("top-tangles-refactoring-preview-row");
+                }
             }
+        }
+
+        private ContextMenu edgeContextMenu(EdgeRow row) {
+            if (row.cutApplied()) {
+                return restoreContextMenu(row.from(), row.to());
+            }
+            if (!row.cycleBreakEdge()) {
+                return null;
+            }
+            MenuItem cut = new MenuItem("Cut");
+            cut.setOnAction(e -> cutEdgeHandler.accept(row.from(), row.to()));
+            return new ContextMenu(cut);
+        }
+
+        private ContextMenu restoreContextMenu(String from, String to) {
+            MenuItem restore = new MenuItem("Restore");
+            restore.setOnAction(e -> restoreEdgeHandler.accept(from, to));
+            return new ContextMenu(restore);
         }
     }
 

@@ -9,7 +9,9 @@ import de.weigend.s202.ui.ArchitectureView;
 import de.weigend.s202.ui.model.ArchitectureNode;
 import de.weigend.s202.ui.rendering.TangleEdgeRenderer;
 import de.weigend.s202.ui.wfx.ArchitectureWfxView;
+import de.weigend.s202.ui.wfx.events.CutTangleEdgeEvent;
 import de.weigend.s202.ui.wfx.events.OpenTangleEvent;
+import de.weigend.s202.ui.wfx.events.RestoreTangleEdgeEvent;
 import de.weigend.s202.ui.wfx.outline.OutlineExplorerView;
 import io.softwareecg.wfx.lookup.Lookup;
 import io.softwareecg.wfx.platform.api.EventBus;
@@ -62,6 +64,9 @@ public class TopTanglesModule implements Module {
     // the TreeView root would otherwise discard the user's expansion state.
     private String lastScopeLabel;
     private List<TopTanglesView.Tangle> lastTangles;
+    private List<TopTanglesView.RefactoringPreviewEdge> lastPreviewEdges;
+    private final Set<TangleEdgeRenderer.Edge> appliedCutEdges = new HashSet<>();
+    private DomainModel lastCutDataset;
 
     @Override
     public String getName() {
@@ -104,6 +109,22 @@ public class TopTanglesModule implements Module {
                 bus.publish(new OpenTangleEvent(
                         new HashSet<>(req.tangle().members()),
                         req.tangle().key(), req.tangle().title(), tanglesView)));
+        tanglesView.setOnCutEdge((from, to) ->
+                bus.publish(new CutTangleEdgeEvent(from, to, tanglesView)));
+        tanglesView.setOnRestoreEdge((from, to) ->
+                bus.publish(new RestoreTangleEdgeEvent(from, to, tanglesView)));
+        bus.subscribe(CutTangleEdgeEvent.class, ev -> {
+            TangleEdgeRenderer.Edge edge = new TangleEdgeRenderer.Edge(ev.getFrom(), ev.getTo());
+            appliedCutEdges.add(edge);
+            applyCurrentScope();
+            return true;
+        });
+        bus.subscribe(RestoreTangleEdgeEvent.class, ev -> {
+            TangleEdgeRenderer.Edge edge = new TangleEdgeRenderer.Edge(ev.getFrom(), ev.getTo());
+            appliedCutEdges.remove(edge);
+            applyCurrentScope();
+            return true;
+        });
 
         wm.focusedViewProperty().addListener((obs, was, isNow) -> rebindToFocusedView());
         rebindToFocusedView();
@@ -138,6 +159,8 @@ public class TopTanglesModule implements Module {
 
         if (newBound == null) {
             tanglesView.clear();
+            appliedCutEdges.clear();
+            lastCutDataset = null;
             return;
         }
 
@@ -171,6 +194,7 @@ public class TopTanglesModule implements Module {
             tanglesView.clear();
             lastScopeLabel = null;
             lastTangles = null;
+            lastPreviewEdges = null;
             return;
         }
         DomainModel model = boundView.getDomainModel();
@@ -181,23 +205,30 @@ public class TopTanglesModule implements Module {
             // the architectureRoot listener.
             return;
         }
+        if (model != lastCutDataset) {
+            appliedCutEdges.clear();
+            lastCutDataset = model;
+        }
 
         String selected = boundView.getSelectedFullName();
         String scope = resolveScope(model, selected);
         String scopeLabel = scope == null ? "All classes" : scope;
 
         List<TopTanglesView.Tangle> tangles = computeTopTangles(
-                model, boundView.getRawDependencyModel(), boundView.getCycleBreakEdges(), scope, TOP_N);
+                model, boundView.getRawDependencyModel(), boundView.getCycleBreakEdges(), appliedCutEdges, scope, TOP_N);
+        List<TopTanglesView.RefactoringPreviewEdge> previewEdges = previewEdgesForScope(appliedCutEdges, scope);
 
         // Skip the setData call when nothing actually changed — records'
         // generated equals walks the full edge / kind structure, so identical
         // tangle data short-circuits and the TreeView root stays in place.
-        if (scopeLabel.equals(lastScopeLabel) && tangles.equals(lastTangles)) {
+        if (scopeLabel.equals(lastScopeLabel) && tangles.equals(lastTangles)
+                && previewEdges.equals(lastPreviewEdges)) {
             return;
         }
         lastScopeLabel = scopeLabel;
         lastTangles = tangles;
-        tanglesView.setData(scopeLabel, tangles);
+        lastPreviewEdges = previewEdges;
+        tanglesView.setData(scopeLabel, tangles, previewEdges);
     }
 
     /**
@@ -227,6 +258,14 @@ public class TopTanglesModule implements Module {
                                                         DependencyModel rawModel,
                                                         Set<TangleEdgeRenderer.Edge> cycleBreakEdges,
                                                         String scope, int topN) {
+        return computeTopTangles(model, rawModel, cycleBreakEdges, Set.of(), scope, topN);
+    }
+
+    static List<TopTanglesView.Tangle> computeTopTangles(DomainModel model,
+                                                        DependencyModel rawModel,
+                                                        Set<TangleEdgeRenderer.Edge> cycleBreakEdges,
+                                                        Set<TangleEdgeRenderer.Edge> appliedCutEdges,
+                                                        String scope, int topN) {
         Map<String, Set<String>> graph = new HashMap<>();
         for (var entry : model.getAllClasses().entrySet()) {
             String fqn = entry.getKey();
@@ -235,6 +274,7 @@ public class TopTanglesModule implements Module {
             }
             Set<String> deps = entry.getValue().dependencies.stream()
                     .filter(d -> inScope(d, scope))
+                    .filter(d -> !isCycleBreakEdge(appliedCutEdges, fqn, d))
                     .collect(Collectors.toCollection(HashSet::new));
             graph.put(fqn, deps);
         }
@@ -244,14 +284,15 @@ public class TopTanglesModule implements Module {
                 .filter(StronglyConnectedComponent::isTangle)
                 .sorted(Comparator.comparingInt(StronglyConnectedComponent::getSize).reversed())
                 .limit(topN)
-                .map(scc -> toTangle(scc, graph, rawModel, cycleBreakEdges))
+                .map(scc -> toTangle(scc, graph, rawModel, cycleBreakEdges, appliedCutEdges))
                 .toList();
     }
 
     private static TopTanglesView.Tangle toTangle(StronglyConnectedComponent scc,
                                                   Map<String, Set<String>> graph,
                                                   DependencyModel rawModel,
-                                                  Set<TangleEdgeRenderer.Edge> cycleBreakEdges) {
+                                                  Set<TangleEdgeRenderer.Edge> cycleBreakEdges,
+                                                  Set<TangleEdgeRenderer.Edge> appliedCutEdges) {
         Set<String> members = scc.getMembers();
         List<String> sortedMembers = members.stream().sorted().toList();
         List<TopTanglesView.TangleEdge> edges = new ArrayList<>();
@@ -259,8 +300,9 @@ public class TopTanglesModule implements Module {
             for (String to : graph.getOrDefault(from, Set.of())) {
                 if (members.contains(to)) {
                     boolean cycleBreakEdge = isCycleBreakEdge(cycleBreakEdges, from, to);
+                    boolean appliedCutEdge = isCycleBreakEdge(appliedCutEdges, from, to);
                     edges.add(new TopTanglesView.TangleEdge(
-                            from, to, buildKindEntries(rawModel, from, to), cycleBreakEdge));
+                            from, to, buildKindEntries(rawModel, from, to), cycleBreakEdge, appliedCutEdge));
                 }
             }
         }
@@ -278,6 +320,19 @@ public class TopTanglesModule implements Module {
                                             String from,
                                             String to) {
         return cycleBreakEdges != null && cycleBreakEdges.contains(new TangleEdgeRenderer.Edge(from, to));
+    }
+
+    private static List<TopTanglesView.RefactoringPreviewEdge> previewEdgesForScope(
+            Set<TangleEdgeRenderer.Edge> appliedCutEdges, String scope) {
+        if (appliedCutEdges == null || appliedCutEdges.isEmpty()) {
+            return List.of();
+        }
+        return appliedCutEdges.stream()
+                .filter(edge -> inScope(edge.from(), scope) && inScope(edge.to(), scope))
+                .sorted(Comparator.comparing(TangleEdgeRenderer.Edge::from)
+                        .thenComparing(TangleEdgeRenderer.Edge::to))
+                .map(edge -> new TopTanglesView.RefactoringPreviewEdge(edge.from(), edge.to()))
+                .toList();
     }
 
     /**
@@ -341,15 +396,37 @@ public class TopTanglesModule implements Module {
 
     private ArchitectureWfxView focusedArchitectureView() {
         WindowManager wm = Lookup.lookup(WindowManager.class);
-        return wm.getRegisteredViews().stream()
+        ArchitectureWfxView focused = wm.getRegisteredViews().stream()
                 .filter(ArchitectureWfxView.class::isInstance)
                 .map(ArchitectureWfxView.class::cast)
                 .filter(v -> v == wm.getFocusedView())
                 .findFirst()
-                .orElseGet(() -> wm.getRegisteredViews().stream()
-                        .filter(ArchitectureWfxView.class::isInstance)
-                        .map(ArchitectureWfxView.class::cast)
-                        .findFirst()
-                        .orElse(null));
+                .orElse(null);
+        if (focused != null) {
+            return focused;
+        }
+
+        ArchitectureWfxView current = wrapperFor(boundView);
+        if (current != null) {
+            return current;
+        }
+
+        return wm.getRegisteredViews().stream()
+                .filter(ArchitectureWfxView.class::isInstance)
+                .map(ArchitectureWfxView.class::cast)
+                .findFirst()
+                .orElse(null);
+    }
+
+    private ArchitectureWfxView wrapperFor(ArchitectureView view) {
+        if (view == null) {
+            return null;
+        }
+        return Lookup.lookup(WindowManager.class).getRegisteredViews().stream()
+                .filter(ArchitectureWfxView.class::isInstance)
+                .map(ArchitectureWfxView.class::cast)
+                .filter(wrapper -> wrapper.getArchitectureView() == view)
+                .findFirst()
+                .orElse(null);
     }
 }

@@ -26,6 +26,7 @@ import javafx.scene.layout.Pane;
 import javafx.scene.layout.StackPane;
 
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -67,6 +68,7 @@ public class ArchitectureView extends BorderPane {
     private String pendingTangleSelFrom;
     private String pendingTangleSelTo;
     private Set<TangleEdgeRenderer.Edge> cycleBreakEdges = Set.of();
+    private final Set<TangleEdgeRenderer.Edge> appliedCutEdges = new HashSet<>();
 
     // Lines need redraw after zoom/scroll changes (perf optimization).
     private boolean linesNeedUpdate = false;
@@ -75,6 +77,8 @@ public class ArchitectureView extends BorderPane {
     private Consumer<String> statusSink = msg -> { /* no-op default */ };
     private Consumer<String> nodeDoubleClickSink = fqn -> { /* no-op default */ };
     private BiConsumer<String, String> tangleEdgeClickedSink = (a, b) -> { /* no-op default */ };
+    private BiConsumer<String, String> tangleEdgeCutSink = (a, b) -> { /* no-op default */ };
+    private BiConsumer<String, String> tangleEdgeRestoreSink = (a, b) -> { /* no-op default */ };
 
     // Externally bindable settings.
     private final IntegerProperty packageDepth = new SimpleIntegerProperty(3);
@@ -308,7 +312,10 @@ public class ArchitectureView extends BorderPane {
         tangleRenderer = new TangleEdgeRenderer(tanglePane, elementRegistry, this::setStatus);
         tangleRenderer.setCoordinateContext(zoomableContent, overlayPane);
         tangleRenderer.setOnEdgeClicked(this::handleTangleEdgeClicked);
+        tangleRenderer.setOnEdgeCut(this::handleTangleEdgeCut);
+        tangleRenderer.setOnEdgeRestore(this::handleTangleEdgeRestore);
         tangleRenderer.setCycleBreakEdges(cycleBreakEdges);
+        tangleRenderer.setAppliedCutEdges(appliedCutEdges);
         tangleRenderer.setShowDebugLines(showTangleDebugLines.get());
 
         dependencyRenderer.clearDependencyArrows();
@@ -665,10 +672,79 @@ public class ArchitectureView extends BorderPane {
         }
     }
 
+    public void setAppliedTangleCutEdges(Set<TangleEdgeRenderer.Edge> appliedCutEdges) {
+        this.appliedCutEdges.clear();
+        if (appliedCutEdges != null) {
+            this.appliedCutEdges.addAll(appliedCutEdges);
+        }
+        if (tangleRenderer != null) {
+            tangleRenderer.setAppliedCutEdges(this.appliedCutEdges);
+        }
+    }
+
+    public void applyTangleEdgeCut(String from, String to) {
+        if (from == null || to == null) {
+            return;
+        }
+        TangleEdgeRenderer.Edge cut = new TangleEdgeRenderer.Edge(from, to);
+        if (!appliedCutEdges.add(cut)) {
+            return;
+        }
+        if (from.equals(pendingTangleSelFrom) && to.equals(pendingTangleSelTo)) {
+            pendingTangleSelFrom = null;
+            pendingTangleSelTo = null;
+            tangleEdgeClickedSink.accept(null, null);
+        }
+        if (tangleRenderer != null) {
+            tangleRenderer.setAppliedCutEdges(appliedCutEdges);
+            tangleRenderer.setSelectedEdge(pendingTangleSelFrom, pendingTangleSelTo);
+        }
+        setStatus("Refactoring Preview: cut " + simple(from) + " -> " + simple(to));
+    }
+
+    public void restoreTangleEdgeCut(String from, String to) {
+        if (from == null || to == null) {
+            return;
+        }
+        TangleEdgeRenderer.Edge cut = new TangleEdgeRenderer.Edge(from, to);
+        if (!appliedCutEdges.remove(cut)) {
+            return;
+        }
+        if (tangleRenderer != null) {
+            tangleRenderer.setAppliedCutEdges(appliedCutEdges);
+        }
+        setStatus("Restored preview cut: " + simple(from) + " -> " + simple(to));
+    }
+
     private void handleTangleEdgeClicked(String from, String to) {
         pendingTangleSelFrom = from;
         pendingTangleSelTo = to;
         tangleEdgeClickedSink.accept(from, to);
+    }
+
+    private void handleTangleEdgeCut(String from, String to) {
+        if (from == null || to == null || pendingTangleEdges == null) {
+            return;
+        }
+        TangleEdgeRenderer.Edge cut = new TangleEdgeRenderer.Edge(from, to);
+        if (!pendingTangleEdges.contains(cut)) {
+            return;
+        }
+        applyTangleEdgeCut(from, to);
+        tangleEdgeCutSink.accept(from, to);
+    }
+
+    private void handleTangleEdgeRestore(String from, String to) {
+        restoreTangleEdgeCut(from, to);
+        tangleEdgeRestoreSink.accept(from, to);
+    }
+
+    private static String simple(String fqn) {
+        if (fqn == null) {
+            return "";
+        }
+        int dot = fqn.lastIndexOf('.');
+        return dot < 0 ? fqn : fqn.substring(dot + 1);
     }
 
     /**
@@ -730,6 +806,28 @@ public class ArchitectureView extends BorderPane {
         this.tangleEdgeClickedSink = sink == null ? (a, b) -> {} : sink;
         if (tangleRenderer != null) {
             tangleRenderer.setOnEdgeClicked(this::handleTangleEdgeClicked);
+        }
+    }
+
+    /**
+     * Set a sink that receives {@code (from, to)} whenever the user applies a
+     * recommended cut edge in the tangle overlay. Pass {@code null} to detach.
+     */
+    public void setOnTangleEdgeCut(BiConsumer<String, String> sink) {
+        this.tangleEdgeCutSink = sink == null ? (a, b) -> {} : sink;
+        if (tangleRenderer != null) {
+            tangleRenderer.setOnEdgeCut(this::handleTangleEdgeCut);
+        }
+    }
+
+    /**
+     * Set a sink that receives {@code (from, to)} whenever the user restores a
+     * refactoring-preview cut edge in the tangle overlay. Pass {@code null} to detach.
+     */
+    public void setOnTangleEdgeRestore(BiConsumer<String, String> sink) {
+        this.tangleEdgeRestoreSink = sink == null ? (a, b) -> {} : sink;
+        if (tangleRenderer != null) {
+            tangleRenderer.setOnEdgeRestore(this::handleTangleEdgeRestore);
         }
     }
 }

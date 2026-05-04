@@ -369,6 +369,16 @@
     -fx-text-fill: #ffb74d;
 }
 
+.top-tangles-tree .top-tangles-applied-cut-edge-row {
+    -fx-font-weight: bold;
+    -fx-text-fill: #2ecc71;
+}
+
+.top-tangles-tree .top-tangles-refactoring-preview-row {
+    -fx-font-weight: bold;
+    -fx-text-fill: #2ecc71;
+}
+
 /* ===== About dialog ===== */
 .about-dialog {
     -fx-background-color: #1e2a36;

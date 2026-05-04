@@ -6,6 +6,8 @@ import javafx.geometry.Bounds;
 import javafx.scene.Cursor;
 import javafx.scene.Node;
 import javafx.scene.Parent;
+import javafx.scene.control.ContextMenu;
+import javafx.scene.control.MenuItem;
 import javafx.scene.layout.Pane;
 import javafx.scene.paint.Color;
 import javafx.scene.shape.ArcTo;
@@ -43,10 +45,12 @@ public class TangleEdgeRenderer {
 
     public record Edge(String from, String to) {}
 
+    private static final Color NON_TANGLE_EDGE_COLOR = Color.web("#202020");
     private static final Color EDGE_COLOR     = Color.web("#ff5252");
     private static final Color EDGE_HOVER     = Color.web("#b71c1c");
     private static final Color SELECTED_COLOR = Color.web("#d50000");
     private static final Color CUT_EDGE_COLOR = Color.web("#ff9800");
+    private static final Color APPLIED_CUT_EDGE_COLOR = Color.web("#2ecc71");
     private static final double EDGE_WIDTH    = 1.2;
     private static final double SELECTED_WIDTH = 3.0;
     private static final double CUT_EDGE_WIDTH = 2.2;
@@ -74,6 +78,8 @@ public class TangleEdgeRenderer {
     private String selectedFrom;
     private String selectedTo;
     private Set<Edge> cycleBreakEdges = Set.of();
+    private Set<Edge> appliedCutEdges = Set.of();
+    private Set<Edge> activeTangleEdges = Set.of();
     private Pane zoomableContent;
     private Pane overlayPane;
     private boolean showDebugLines = true;
@@ -88,6 +94,8 @@ public class TangleEdgeRenderer {
             (obs, was, isNow) -> redraw();
 
     private java.util.function.BiConsumer<String, String> onEdgeClicked = (a, b) -> {};
+    private java.util.function.BiConsumer<String, String> onEdgeCut = (a, b) -> {};
+    private java.util.function.BiConsumer<String, String> onEdgeRestore = (a, b) -> {};
 
     public TangleEdgeRenderer(Pane pane, Map<String, Node> elementRegistry,
                                Consumer<String> statusCallback) {
@@ -111,8 +119,17 @@ public class TangleEdgeRenderer {
         this.onEdgeClicked = handler == null ? (a, b) -> {} : handler;
     }
 
+    public void setOnEdgeCut(java.util.function.BiConsumer<String, String> handler) {
+        this.onEdgeCut = handler == null ? (a, b) -> {} : handler;
+    }
+
+    public void setOnEdgeRestore(java.util.function.BiConsumer<String, String> handler) {
+        this.onEdgeRestore = handler == null ? (a, b) -> {} : handler;
+    }
+
     public void setEdges(List<Edge> edges) {
         this.edges = edges == null ? List.of() : List.copyOf(edges);
+        recomputeActiveTangleEdges();
         retriesLeft = INITIAL_RETRIES;
         settleRedrawsLeft = INITIAL_SETTLE_REDRAWS;
         redraw();
@@ -126,6 +143,12 @@ public class TangleEdgeRenderer {
 
     public void setCycleBreakEdges(Set<Edge> cycleBreakEdges) {
         this.cycleBreakEdges = cycleBreakEdges == null ? Set.of() : Set.copyOf(cycleBreakEdges);
+        redraw();
+    }
+
+    public void setAppliedCutEdges(Set<Edge> appliedCutEdges) {
+        this.appliedCutEdges = appliedCutEdges == null ? Set.of() : Set.copyOf(appliedCutEdges);
+        recomputeActiveTangleEdges();
         redraw();
     }
 
@@ -479,10 +502,7 @@ public class TangleEdgeRenderer {
             path.setStroke(edgeColor(edge));
             path.setCursor(Cursor.DEFAULT);
         });
-        path.setOnMouseClicked(e -> {
-            handleEdgeClick(edge);
-            e.consume();
-        });
+        installEdgeInteractions(path, edge);
 
         pane.getChildren().addAll(path, arrow);
     }
@@ -524,10 +544,7 @@ public class TangleEdgeRenderer {
             path.setStroke(edgeColor(edge));
             path.setCursor(Cursor.DEFAULT);
         });
-        path.setOnMouseClicked(e -> {
-            handleEdgeClick(edge);
-            e.consume();
-        });
+        installEdgeInteractions(path, edge);
 
         pane.getChildren().addAll(path, arrow);
         return true;
@@ -855,13 +872,38 @@ public class TangleEdgeRenderer {
             line.setStroke(edgeColor(edge));
             line.setCursor(Cursor.DEFAULT);
         });
-        line.setOnMouseClicked(e -> {
-            handleEdgeClick(edge);
-            e.consume();
-        });
+        installEdgeInteractions(line, edge);
 
         pane.getChildren().addAll(line, arrow);
         return true;
+    }
+
+    private void installEdgeInteractions(javafx.scene.shape.Shape shape, Edge edge) {
+        shape.setOnMouseClicked(e -> {
+            handleEdgeClick(edge);
+            e.consume();
+        });
+        if (isAppliedCutEdge(edge)) {
+            shape.setOnContextMenuRequested(e -> {
+                ContextMenu menu = new ContextMenu();
+                MenuItem restoreItem = new MenuItem("Restore");
+                restoreItem.setOnAction(action -> onEdgeRestore.accept(edge.from(), edge.to()));
+                menu.getItems().setAll(restoreItem);
+                menu.show(shape, e.getScreenX(), e.getScreenY());
+                e.consume();
+            });
+        } else if (isCycleBreakEdge(edge) && isActiveTangleEdge(edge)) {
+            shape.setOnContextMenuRequested(e -> {
+                ContextMenu menu = new ContextMenu();
+                MenuItem cutItem = new MenuItem("Cut");
+                cutItem.setOnAction(action -> onEdgeCut.accept(edge.from(), edge.to()));
+                menu.getItems().setAll(cutItem);
+                menu.show(shape, e.getScreenX(), e.getScreenY());
+                e.consume();
+            });
+        } else {
+            shape.setOnContextMenuRequested(null);
+        }
     }
 
     private void handleEdgeClick(Edge edge) {
@@ -872,7 +914,11 @@ public class TangleEdgeRenderer {
             return;
         }
         String label = simple(edge.from()) + " \u2192 " + simple(edge.to());
-        statusCallback.accept(isCycleBreakEdge(edge) ? "Recommended cut: " + label : label);
+        if (isAppliedCutEdge(edge)) {
+            statusCallback.accept("Refactoring Preview: " + label);
+        } else {
+            statusCallback.accept(isCycleBreakEdge(edge) && isActiveTangleEdge(edge) ? "Recommended cut: " + label : label);
+        }
         setSelectedEdge(edge.from(), edge.to());
         onEdgeClicked.accept(edge.from(), edge.to());
     }
@@ -881,6 +927,12 @@ public class TangleEdgeRenderer {
         if (isSelected(edge)) {
             return SELECTED_COLOR;
         }
+        if (isAppliedCutEdge(edge)) {
+            return APPLIED_CUT_EDGE_COLOR;
+        }
+        if (!isActiveTangleEdge(edge)) {
+            return NON_TANGLE_EDGE_COLOR;
+        }
         return isCycleBreakEdge(edge) ? CUT_EDGE_COLOR : EDGE_COLOR;
     }
 
@@ -888,11 +940,14 @@ public class TangleEdgeRenderer {
         if (isSelected(edge)) {
             return SELECTED_WIDTH;
         }
-        return isCycleBreakEdge(edge) ? CUT_EDGE_WIDTH : EDGE_WIDTH;
+        if (isAppliedCutEdge(edge)) {
+            return CUT_EDGE_WIDTH;
+        }
+        return isCycleBreakEdge(edge) && isActiveTangleEdge(edge) ? CUT_EDGE_WIDTH : EDGE_WIDTH;
     }
 
     private void applyEdgeDash(javafx.scene.shape.Shape shape, Edge edge) {
-        if (isCycleBreakEdge(edge)) {
+        if (isAppliedCutEdge(edge) || (isCycleBreakEdge(edge) && isActiveTangleEdge(edge))) {
             shape.getStrokeDashArray().setAll(9.0, 5.0);
         } else {
             shape.getStrokeDashArray().clear();
@@ -901,6 +956,87 @@ public class TangleEdgeRenderer {
 
     private boolean isCycleBreakEdge(Edge edge) {
         return cycleBreakEdges.contains(edge);
+    }
+
+    private boolean isAppliedCutEdge(Edge edge) {
+        return appliedCutEdges.contains(edge);
+    }
+
+    private boolean isActiveTangleEdge(Edge edge) {
+        return activeTangleEdges.contains(edge);
+    }
+
+    private void recomputeActiveTangleEdges() {
+        Map<String, Set<String>> graph = new HashMap<>();
+        for (Edge edge : edges) {
+            graph.computeIfAbsent(edge.from(), k -> new java.util.HashSet<>());
+            graph.computeIfAbsent(edge.to(), k -> new java.util.HashSet<>());
+            if (!appliedCutEdges.contains(edge)) {
+                graph.get(edge.from()).add(edge.to());
+            }
+        }
+
+        List<Set<String>> activeComponents = stronglyConnectedComponents(graph).stream()
+                .filter(component -> component.size() > 1)
+                .toList();
+
+        activeTangleEdges = edges.stream()
+                .filter(edge -> !appliedCutEdges.contains(edge))
+                .filter(edge -> activeComponents.stream()
+                        .anyMatch(component -> component.contains(edge.from()) && component.contains(edge.to())))
+                .collect(java.util.stream.Collectors.toUnmodifiableSet());
+    }
+
+    private static List<Set<String>> stronglyConnectedComponents(Map<String, Set<String>> graph) {
+        List<Set<String>> components = new ArrayList<>();
+        Map<String, Integer> indexByNode = new HashMap<>();
+        Map<String, Integer> lowlinkByNode = new HashMap<>();
+        java.util.Deque<String> stack = new java.util.ArrayDeque<>();
+        Set<String> onStack = new java.util.HashSet<>();
+        int[] nextIndex = {0};
+
+        for (String node : graph.keySet()) {
+            if (!indexByNode.containsKey(node)) {
+                strongConnect(node, graph, indexByNode, lowlinkByNode, stack, onStack, nextIndex, components);
+            }
+        }
+        return components;
+    }
+
+    private static void strongConnect(String node,
+                                      Map<String, Set<String>> graph,
+                                      Map<String, Integer> indexByNode,
+                                      Map<String, Integer> lowlinkByNode,
+                                      java.util.Deque<String> stack,
+                                      Set<String> onStack,
+                                      int[] nextIndex,
+                                      List<Set<String>> components) {
+        indexByNode.put(node, nextIndex[0]);
+        lowlinkByNode.put(node, nextIndex[0]);
+        nextIndex[0]++;
+        stack.push(node);
+        onStack.add(node);
+
+        for (String target : graph.getOrDefault(node, Set.of())) {
+            if (!indexByNode.containsKey(target)) {
+                strongConnect(target, graph, indexByNode, lowlinkByNode, stack, onStack, nextIndex, components);
+                lowlinkByNode.put(node, Math.min(lowlinkByNode.get(node), lowlinkByNode.get(target)));
+            } else if (onStack.contains(target)) {
+                lowlinkByNode.put(node, Math.min(lowlinkByNode.get(node), indexByNode.get(target)));
+            }
+        }
+
+        if (!lowlinkByNode.get(node).equals(indexByNode.get(node))) {
+            return;
+        }
+        Set<String> component = new java.util.HashSet<>();
+        String member;
+        do {
+            member = stack.pop();
+            onStack.remove(member);
+            component.add(member);
+        } while (!node.equals(member));
+        components.add(component);
     }
 
     private boolean hasVisibleEndpointWaitingForLayout(Edge edge) {

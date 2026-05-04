@@ -19,10 +19,12 @@ import de.weigend.s202.ui.model.ArchitectureNode;
 import de.weigend.s202.ui.model.ArchitectureNodeBuilder;
 import de.weigend.s202.ui.model.DistrictRowLevelCalculator;
 import de.weigend.s202.ui.rendering.TangleEdgeRenderer;
+import de.weigend.s202.ui.wfx.events.CutTangleEdgeEvent;
 import de.weigend.s202.ui.wfx.events.MethodSelectionEvent;
 import de.weigend.s202.ui.wfx.events.NodeSelectionEvent;
 import de.weigend.s202.ui.wfx.events.MenuRequestEvent;
 import de.weigend.s202.ui.wfx.events.OpenTangleEvent;
+import de.weigend.s202.ui.wfx.events.RestoreTangleEdgeEvent;
 import de.weigend.s202.ui.wfx.tangles.TangleFilter;
 import io.softwareecg.wfx.lookup.Lookup;
 import io.softwareecg.wfx.platform.api.EventBus;
@@ -67,6 +69,7 @@ import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.EventObject;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -125,6 +128,7 @@ public class S202Module implements Module {
     private final Map<String, ArchitectureWfxView> tangleViews = new HashMap<>();
     private final Map<ArchitectureView, S202Project.Source> viewSources = new HashMap<>();
     private final Map<ArchitectureView, LayoutInvariantReport> viewInvariantReports = new HashMap<>();
+    private final Set<TangleEdgeRenderer.Edge> refactoringPreviewCuts = new HashSet<>();
 
     public S202Module(ApplicationWindow applicationWindow) {
         this.applicationWindow = applicationWindow;
@@ -222,6 +226,7 @@ public class S202Module implements Module {
         subscribeToMenuRequests(bus);
         subscribeToNodeSelection(bus);
         subscribeToOpenTangle(bus);
+        subscribeToTanglePreviewEvents(bus);
 
         installToolbar();
 
@@ -231,6 +236,17 @@ public class S202Module implements Module {
     private void subscribeToOpenTangle(EventBus<EventObject> bus) {
         bus.subscribe(OpenTangleEvent.class, ev -> {
             openTangleView(ev.getMembers(), ev.getTangleKey(), ev.getTitle());
+            return true;
+        });
+    }
+
+    private void subscribeToTanglePreviewEvents(EventBus<EventObject> bus) {
+        bus.subscribe(CutTangleEdgeEvent.class, ev -> {
+            applyTanglePreviewCutToViews(ev.getFrom(), ev.getTo());
+            return true;
+        });
+        bus.subscribe(RestoreTangleEdgeEvent.class, ev -> {
+            restoreTanglePreviewCutInViews(ev.getFrom(), ev.getTo());
             return true;
         });
     }
@@ -810,6 +826,7 @@ public class S202Module implements Module {
 
     private void applyAnalysisResult(List<File> jarFiles, ArchitectureView view,
                                      S202Project.Source source, AnalysisResult result) {
+        refactoringPreviewCuts.clear();
         // Domain model first so listeners on architectureRoot/metrics can
         // already query scoped data (e.g. quality module on package select).
         view.setDomainModel(result.domainModel());
@@ -968,6 +985,7 @@ public class S202Module implements Module {
         tangleViews.clear();
         viewSources.clear();
         viewInvariantReports.clear();
+        refactoringPreviewCuts.clear();
         boundView = null;
         zoomLabelListener = null;
         Lookup.lookup(WindowManager.class).restoreDefaultLayout();
@@ -1083,6 +1101,7 @@ public class S202Module implements Module {
         tangleView.setDomainModel(sourceView.getDomainModel());
         tangleView.setRawDependencyModel(sourceView.getRawDependencyModel());
         tangleView.setCycleBreakEdges(sourceView.getCycleBreakEdges());
+        tangleView.setAppliedTangleCutEdges(refactoringPreviewCuts);
         tangleView.setArchitectureRoot(filteredRoot);
         tangleView.setQualityMetrics(sourceView.getQualityMetrics());
 
@@ -1118,6 +1137,10 @@ public class S202Module implements Module {
         tangleView.setOnNodeDoubleClicked(fqn -> bus.publish(new NodeSelectionEvent(fqn, tangleView)));
         tangleView.setOnTangleEdgeClicked((from, to) ->
                 publishTangleEdgeSelection(bus, tangleView, from, to));
+        tangleView.setOnTangleEdgeCut((from, to) ->
+                bus.publish(new CutTangleEdgeEvent(from, to, tangleView)));
+        tangleView.setOnTangleEdgeRestore((from, to) ->
+                bus.publish(new RestoreTangleEdgeEvent(from, to, tangleView)));
         var css = getClass().getResource("/de/weigend/s202/ui/styles.css");
         if (css != null) {
             tangleView.getStylesheets().add(css.toExternalForm());
@@ -1130,6 +1153,27 @@ public class S202Module implements Module {
         wm.register(wrapper);
         tangleViews.put(key, wrapper);
         return wrapper;
+    }
+
+    private void applyTanglePreviewCutToViews(String from, String to) {
+        refactoringPreviewCuts.add(new TangleEdgeRenderer.Edge(from, to));
+        for (ArchitectureWfxView wrapper : registeredArchitectureViews()) {
+            wrapper.getArchitectureView().applyTangleEdgeCut(from, to);
+        }
+    }
+
+    private void restoreTanglePreviewCutInViews(String from, String to) {
+        refactoringPreviewCuts.remove(new TangleEdgeRenderer.Edge(from, to));
+        for (ArchitectureWfxView wrapper : registeredArchitectureViews()) {
+            wrapper.getArchitectureView().restoreTangleEdgeCut(from, to);
+        }
+    }
+
+    private List<ArchitectureWfxView> registeredArchitectureViews() {
+        return Lookup.lookup(WindowManager.class).getRegisteredViews().stream()
+                .filter(ArchitectureWfxView.class::isInstance)
+                .map(ArchitectureWfxView.class::cast)
+                .toList();
     }
 
     private void publishTangleEdgeSelection(EventBus<EventObject> bus,
