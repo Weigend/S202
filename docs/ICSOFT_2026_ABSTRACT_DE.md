@@ -15,7 +15,7 @@
 
 ## Autoren
 
-Johannes Weigend (Technische Hochschule Rosenheim / QAware GmbH)
+Johannes Weigend (Technische Hochschule Rosenheim / Weigend AM GmbH & Co.KG)
 
 *Optional: Veronika Schwarz, Michael Philippsen (Co-Autoren 2021, dort publiziert als Dashuber, Philippsen) — noch anzufragen.*
 

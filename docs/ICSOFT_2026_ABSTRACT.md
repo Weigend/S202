@@ -15,7 +15,7 @@
 
 ## Authors
 
-Johannes Weigend (Rosenheim Technical University of Applied Sciences / QAware GmbH)
+Johannes Weigend (Rosenheim Technical University of Applied Sciences / Weigend AM GmbH & Co.KG)
 
 *Optional co-authors of the 2021 paper to add: Veronika Dashuber, Michael Philippsen — TBD.*
 
@@ -48,7 +48,7 @@ To our knowledge, no prior layered architecture visualization has gone this far 
 ## Open points before submission
 
 - **Co-authors.** If Dashuber and/or Philippsen want to be listed as co-authors of this follow-up, decide and update the author block.
-- **Affiliation order.** Currently "Rosenheim Technical University of Applied Sciences / QAware GmbH" — adjust to taste.
+- **Affiliation order.** Currently "Rosenheim Technical University of Applied Sciences / Weigend AM GmbH & Co.KG" — adjust to taste.
 - **Numbers to verify.** "92-module software-ekg-7" matches our local smoke-test result; double-check before final submission. The 4 038-class / 3 585-back-edge Minecraft Forge figure comes from the existing test suite.
 - **Submission system.** ICSOFT 2026 abstracts go through the INSTICC PRIMORIS portal. The system asks for keywords; suggested set: *software architecture visualization, layout invariants, software city, strongly connected components, dependency analysis, tool demonstration*.
 - **Speaker bio (camera-ready stage, not needed for the abstract itself).** Mention that the talk can be delivered in English or Portuguese.
