@@ -379,6 +379,24 @@
     -fx-text-fill: #2ecc71;
 }
 
+.top-tangles-tree .top-tangles-hotspot-header-row {
+    -fx-font-weight: bold;
+    -fx-font-size: 10px;
+    -fx-text-fill: #8a9bb0;
+    -fx-border-color: #2b3e50 transparent transparent transparent;
+    -fx-border-width: 1 0 0 0;
+    -fx-padding: 6 6 2 6;
+}
+
+.top-tangles-tree .top-tangles-hotspot-entry-row {
+    -fx-font-weight: bold;
+    -fx-text-fill: #e8a838;
+}
+
+.top-tangles-tree .top-tangles-hotspot-caller-row {
+    -fx-text-fill: #9ab0c8;
+}
+
 /* ===== About dialog ===== */
 .about-dialog {
     -fx-background-color: #1e2a36;

@@ -262,7 +262,13 @@ public class TopTanglesModule implements Module {
         lastScopeLabel = scopeLabel;
         lastTangles = tangles;
         lastPreviewEdges = previewEdges;
-        tanglesView.setData(scopeLabel, tangles, previewEdges);
+
+        // Hotspots are computed from ALL tangles so small cycles outside the
+        // top-N display list still contribute to the method edge count.
+        List<TopTanglesView.Tangle> allTangles = computeTopTangles(
+                model, boundView.getRawDependencyModel(), boundView.getCycleBreakEdges(),
+                appliedCutEdges, scope, Integer.MAX_VALUE);
+        tanglesView.setData(scopeLabel, tangles, previewEdges, computeHotspots(allTangles, TOP_N));
     }
 
     /**
@@ -446,6 +452,43 @@ public class TopTanglesModule implements Module {
                 .sorted()
                 .map(descriptor -> methodName + descriptor)
                 .toList();
+    }
+
+    static List<TopTanglesView.HotspotEntryRow> computeHotspots(List<TopTanglesView.Tangle> tangles, int topN) {
+        // Collect distinct (from→to) edge pairs per called method across all tangles.
+        // Two callers of the same method in the same tangle each count as a separate edge.
+        Map<String, Set<Map.Entry<String, String>>> methodToEdges = new HashMap<>();
+        for (TopTanglesView.Tangle tangle : tangles) {
+            for (TopTanglesView.TangleEdge edge : tangle.edges()) {
+                if (!edge.cycleBreakEdge()) continue;
+                for (TopTanglesView.KindEntry entry : edge.entries()) {
+                    if (entry.kind() == EdgeKind.CALLS && entry.detail() != null) {
+                        String label = simple(edge.to()) + "." + methodLabel(entry.detail());
+                        methodToEdges.computeIfAbsent(label, k -> new HashSet<>())
+                                .add(Map.entry(edge.from(), edge.to()));
+                    }
+                }
+            }
+        }
+        return methodToEdges.entrySet().stream()
+                .filter(e -> e.getValue().size() > 1)
+                .sorted(Comparator.<Map.Entry<String, Set<Map.Entry<String, String>>>>comparingInt(e -> e.getValue().size())
+                        .reversed()
+                        .thenComparing(Map.Entry::getKey))
+                .limit(topN)
+                .map(e -> new TopTanglesView.HotspotEntryRow(
+                        e.getKey(),
+                        e.getValue().size(),
+                        e.getValue().stream()
+                                .sorted(Comparator.comparing(p -> simple(p.getKey())))
+                                .map(p -> new TopTanglesView.HotspotCallerRow(p.getKey(), p.getValue()))
+                                .toList()))
+                .toList();
+    }
+
+    private static String methodLabel(String detail) {
+        int paren = detail.indexOf('(');
+        return paren < 0 ? detail + "()" : detail.substring(0, paren) + "()";
     }
 
     private static String tangleKey(List<String> sortedMembers) {

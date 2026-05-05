@@ -38,13 +38,19 @@ public class TopTanglesView implements View {
     public static final String VIEW_ID = "s202-top-tangles";
 
     /** Sealed model so the cell factory can render rows differently per level. */
-    public sealed interface Row permits TangleRow, EdgeRow, KindRow, RefactoringPreviewRow {}
+    public sealed interface Row permits TangleRow, EdgeRow, KindRow, RefactoringPreviewRow, HotspotHeaderRow, HotspotEntryRow, HotspotCallerRow {}
     public record TangleRow(int rank, Tangle tangle) implements Row {}
     public record EdgeRow(String from, String to, boolean cycleBreakEdge, boolean cutApplied) implements Row {}
     /** One relationship-kind line beneath an {@link EdgeRow}. */
     public record KindRow(EdgeKind kind, String detail) implements Row {}
     /** A cut edge that is removed from the SCC graph in the current preview. */
     public record RefactoringPreviewRow(String from, String to) implements Row {}
+    /** Section header separating the method-hotspot list from the tangle list. */
+    public record HotspotHeaderRow() implements Row {}
+    /** One method call that eliminates the most tangle edges when removed. */
+    public record HotspotEntryRow(String label, int edgeCount, List<HotspotCallerRow> callerRows) implements Row {}
+    /** One caller edge (with FQNs) shown as child of a {@link HotspotEntryRow}. */
+    public record HotspotCallerRow(String from, String to) implements Row {}
 
     /** Display data for a single tangle. */
     public record Tangle(int size, String key, String title, List<String> members, List<TangleEdge> edges) {}
@@ -110,6 +116,12 @@ public class TopTanglesView implements View {
 
     public void setData(String scopeName, List<Tangle> tangles,
                         List<RefactoringPreviewEdge> refactoringPreviewEdges) {
+        setData(scopeName, tangles, refactoringPreviewEdges, List.of());
+    }
+
+    public void setData(String scopeName, List<Tangle> tangles,
+                        List<RefactoringPreviewEdge> refactoringPreviewEdges,
+                        List<HotspotEntryRow> hotspots) {
         scopeLabel.setText(scopeName == null || scopeName.isEmpty()
                 ? "Scope: All classes"
                 : "Scope: " + scopeName);
@@ -130,6 +142,16 @@ public class TopTanglesView implements View {
                 tangleItem.getChildren().add(edgeItem);
             }
             rootItem.getChildren().add(tangleItem);
+        }
+        if (!hotspots.isEmpty()) {
+            rootItem.getChildren().add(new TreeItem<>(new HotspotHeaderRow()));
+            for (HotspotEntryRow h : hotspots) {
+                TreeItem<Row> hotspotItem = new TreeItem<>(h);
+                for (HotspotCallerRow caller : h.callerRows()) {
+                    hotspotItem.getChildren().add(new TreeItem<>(caller));
+                }
+                rootItem.getChildren().add(hotspotItem);
+            }
         }
         treeView.setRoot(rootItem);
     }
@@ -244,13 +266,15 @@ public class TopTanglesView implements View {
                 getStyleClass().removeAll("top-tangles-tangle-row",
                         "top-tangles-edge-row", "top-tangles-cut-edge-row",
                         "top-tangles-applied-cut-edge-row", "top-tangles-refactoring-preview-row",
-                        "top-tangles-kind-row");
+                        "top-tangles-kind-row", "top-tangles-hotspot-header-row",
+                        "top-tangles-hotspot-entry-row", "top-tangles-hotspot-caller-row");
                 return;
             }
             getStyleClass().removeAll("top-tangles-tangle-row",
                     "top-tangles-edge-row", "top-tangles-cut-edge-row",
                     "top-tangles-applied-cut-edge-row", "top-tangles-refactoring-preview-row",
-                    "top-tangles-kind-row");
+                    "top-tangles-kind-row", "top-tangles-hotspot-header-row",
+                    "top-tangles-hotspot-entry-row", "top-tangles-hotspot-caller-row");
             switch (item) {
                 case TangleRow t -> {
                     setText(t.tangle().title());
@@ -278,6 +302,22 @@ public class TopTanglesView implements View {
                     setContextMenu(restoreContextMenu(p.from(), p.to()));
                     getStyleClass().add("top-tangles-refactoring-preview-row");
                 }
+                case HotspotHeaderRow h -> {
+                    setText("Top Cut Targets");
+                    setContextMenu(null);
+                    getStyleClass().add("top-tangles-hotspot-header-row");
+                }
+                case HotspotEntryRow e -> {
+                    String suffix = e.edgeCount() == 1 ? " edge" : " edges";
+                    setText(e.label() + "  [" + e.edgeCount() + suffix + "]");
+                    setContextMenu(hotspotCutAllMenu(e));
+                    getStyleClass().add("top-tangles-hotspot-entry-row");
+                }
+                case HotspotCallerRow c -> {
+                    setText(simple(c.from()) + " → " + simple(c.to()));
+                    setContextMenu(null);
+                    getStyleClass().add("top-tangles-hotspot-caller-row");
+                }
             }
         }
 
@@ -291,6 +331,13 @@ public class TopTanglesView implements View {
             MenuItem cut = new MenuItem("Cut");
             cut.setOnAction(e -> cutEdgeHandler.accept(row.from(), row.to()));
             return new ContextMenu(cut);
+        }
+
+        private ContextMenu hotspotCutAllMenu(HotspotEntryRow row) {
+            MenuItem cutAll = new MenuItem("Cut All");
+            cutAll.setOnAction(e -> row.callerRows()
+                    .forEach(c -> cutEdgeHandler.accept(c.from(), c.to())));
+            return new ContextMenu(cutAll);
         }
 
         private ContextMenu tangleContextMenu(Tangle tangle) {

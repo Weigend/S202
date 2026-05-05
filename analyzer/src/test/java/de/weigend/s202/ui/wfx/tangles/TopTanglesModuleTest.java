@@ -6,6 +6,7 @@ import de.weigend.s202.reader.EdgeKind;
 import de.weigend.s202.ui.rendering.TangleEdgeRenderer;
 import org.junit.jupiter.api.Test;
 
+import java.util.List;
 import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -78,5 +79,31 @@ class TopTanglesModuleTest {
                 .filter(edge -> edge.from().equals("a.A") && edge.to().equals("a.B"))
                 .flatMap(edge -> edge.entries().stream())
                 .anyMatch(entry -> entry.kind() == EdgeKind.CALLS && "work(I)V".equals(entry.detail())));
+    }
+
+    @Test
+    void computeHotspotsRanksMethodsByTangleCount() {
+        var callWork = new TopTanglesView.KindEntry(EdgeKind.CALLS, "work(I)V");
+        var callOther = new TopTanglesView.KindEntry(EdgeKind.CALLS, "other()V");
+
+        // cut=true edges calling work() in two tangles → should appear as hotspot
+        var edge1 = new TopTanglesView.TangleEdge("a.A", "a.B", List.of(callWork), true, false);
+        var tangle1 = new TopTanglesView.Tangle(2, "a.A|a.B", "T1", List.of("a.A", "a.B"), List.of(edge1));
+
+        var edge2a = new TopTanglesView.TangleEdge("a.C", "a.B", List.of(callWork), true, false);
+        // cut=false edge calling other() → must not appear in hotspot
+        var edge2b = new TopTanglesView.TangleEdge("a.C", "a.D", List.of(callOther), false, false);
+        var tangle2 = new TopTanglesView.Tangle(3, "a.B|a.C|a.D", "T2",
+                List.of("a.B", "a.C", "a.D"), List.of(edge2a, edge2b));
+
+        var hotspots = TopTanglesModule.computeHotspots(List.of(tangle1, tangle2), 5);
+
+        assertEquals(1, hotspots.size());
+        assertEquals("B.work()", hotspots.get(0).label());
+        assertEquals(2, hotspots.get(0).edgeCount());
+        assertEquals(List.of(
+                new TopTanglesView.HotspotCallerRow("a.A", "a.B"),
+                new TopTanglesView.HotspotCallerRow("a.C", "a.B")),
+                hotspots.get(0).callerRows());
     }
 }
