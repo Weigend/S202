@@ -60,8 +60,10 @@ public class TangleEdgeRenderer {
     /** Debug lane constants */
     private static final Color  LANE_COLOR      = Color.web("#00bcd4", 0.30);
     private static final double LANE_WIDTH      = 0.7;
-    /** Number of potential dependency lanes shown in every free channel. */
-    private static final int POTENTIAL_LANE_COUNT = 7;
+    /** Minimum lanes per channel even when no edges cross it (fallback capacity). */
+    private static final int MIN_LANE_COUNT = 3;
+    /** Maximum lanes per channel regardless of edge density (prevents visual clutter). */
+    private static final int MAX_LANE_COUNT = 15;
     /** Fixed distance between adjacent potential lanes in both X and Y direction. */
     private static final double LANE_SPACING_PX = 6.0;
     private static final double LANE_EDGE_PADDING_PX = ARROW_SIZE + 2.0;
@@ -272,21 +274,23 @@ public class TangleEdgeRenderer {
         gaps.add(new double[]{rows.get(rows.size() - 1)[1], cb.getMaxY()});   // below last row
 
         List<HorizontalTrack> horizontalTracks = new ArrayList<>();
-        // Draw the same number of potential lanes with fixed pitch in every gap.
+        // Lane count per gap scales with the number of edges whose endpoints
+        // straddle that gap, clamped to [MIN_LANE_COUNT, MAX_LANE_COUNT].
         for (double[] gap : gaps) {
             double top    = gap[0];
             double bottom = gap[1];
-            for (double y : lanePositions(top, bottom)) {
+            int laneCount = clampLaneCount(countEdgesCrossing(top, bottom, classBoundsByName));
+            for (double y : lanePositions(top, bottom, laneCount)) {
                 horizontalTracks.add(new HorizontalTrack(y, xLeft, xRight));
                 drawDebugLine(xLeft, y, xRight, y);
             }
         }
 
-        Map<Bounds, List<VerticalTrack>> verticalTracks = drawVerticalDebugLanes(classBounds, cb.getMinY(), cb.getMaxY());
+        Map<Bounds, List<VerticalTrack>> verticalTracks = drawVerticalDebugLanes(classBounds, classBoundsByName, cb.getMinY(), cb.getMaxY());
         return new LaneLayout(horizontalTracks, verticalTracks, classBoundsByName, classBounds);
     }
 
-    static List<Double> lanePositions(double min, double max) {
+    static List<Double> lanePositions(double min, double max, int count) {
         double firstAllowed = min + LANE_EDGE_PADDING_PX;
         double lastAllowed = max - LANE_EDGE_PADDING_PX;
         if (lastAllowed < firstAllowed) {
@@ -295,8 +299,8 @@ public class TangleEdgeRenderer {
 
         List<Double> lanes = new ArrayList<>();
         double center = (min + max) / 2.0;
-        double firstOffset = -LANE_SPACING_PX * (POTENTIAL_LANE_COUNT - 1) / 2.0;
-        for (int i = 0; i < POTENTIAL_LANE_COUNT; i++) {
+        double firstOffset = -LANE_SPACING_PX * (count - 1) / 2.0;
+        for (int i = 0; i < count; i++) {
             double lane = center + firstOffset + i * LANE_SPACING_PX;
             if (lane >= firstAllowed && lane <= lastAllowed) {
                 lanes.add(lane);
@@ -305,12 +309,43 @@ public class TangleEdgeRenderer {
         return lanes;
     }
 
-    private Map<Bounds, List<VerticalTrack>> drawVerticalDebugLanes(List<Bounds> classBounds, double topLimit, double bottomLimit) {
+    private int countEdgesCrossing(double gapTop, double gapBottom, Map<String, Bounds> classBoundsByName) {
+        int count = 0;
+        for (Edge edge : edges) {
+            Bounds s = classBoundsByName.get(edge.from());
+            Bounds t = classBoundsByName.get(edge.to());
+            if (s == null || t == null) continue;
+            double sY = s.getCenterY();
+            double tY = t.getCenterY();
+            if (Math.min(sY, tY) < gapBottom && Math.max(sY, tY) > gapTop) {
+                count++;
+            }
+        }
+        return count;
+    }
+
+    private static int clampLaneCount(int count) {
+        return Math.max(MIN_LANE_COUNT, Math.min(MAX_LANE_COUNT, count));
+    }
+
+    private Map<Bounds, List<VerticalTrack>> drawVerticalDebugLanes(List<Bounds> classBounds,
+                                                                   Map<String, Bounds> classBoundsByName,
+                                                                   double topLimit, double bottomLimit) {
+        // Count how many edges touch each box (degree = in + out).
+        Map<Bounds, Integer> degreeMap = new IdentityHashMap<>();
+        for (Edge edge : edges) {
+            Bounds s = classBoundsByName.get(edge.from());
+            Bounds t = classBoundsByName.get(edge.to());
+            if (s != null) degreeMap.merge(s, 1, Integer::sum);
+            if (t != null) degreeMap.merge(t, 1, Integer::sum);
+        }
+
         Map<Bounds, List<VerticalTrack>> out = new IdentityHashMap<>();
         for (Bounds source : classBounds) {
+            int laneCount = clampLaneCount(degreeMap.getOrDefault(source, 0));
             double y = source.getCenterY();
             List<VerticalTrack> tracks = new ArrayList<>();
-            for (double x : lanePositions(source.getMinX(), source.getMaxX())) {
+            for (double x : lanePositions(source.getMinX(), source.getMaxX(), laneCount)) {
                 double top = verticalLaneEnd(x, y, classBounds, source, topLimit, true);
                 double bottom = verticalLaneEnd(x, y, classBounds, source, bottomLimit, false);
                 drawDebugLine(x, y, x, top);
@@ -414,6 +449,19 @@ public class TangleEdgeRenderer {
                 .toList();
     }
 
+    /**
+     * Like {@link #candidateVerticalTracks} but skips the occupancy check so
+     * already-used tracks remain candidates for forced (double-occupancy) routing.
+     * Physical reachability (track must span the horizontal Y) is still enforced.
+     */
+    private static List<VerticalTrack> candidateVerticalTracksForced(List<VerticalTrack> tracks, double y) {
+        if (tracks == null) return List.of();
+        return tracks.stream()
+                .filter(track -> y >= track.topY && y <= track.bottomY)
+                .sorted(Comparator.comparingDouble(TangleEdgeRenderer::verticalScore))
+                .toList();
+    }
+
     private static double horizontalScore(HorizontalTrack track, double idealY) {
         return Math.abs(track.y - idealY) + track.useCount() * TRACK_REUSE_PENALTY;
     }
@@ -511,6 +559,9 @@ public class TangleEdgeRenderer {
     private boolean renderFallbackEdge(Edge edge, Bounds source, Bounds target, LaneLayout laneLayout) {
         FallbackPath fallback = findFallbackPath(source, target, laneLayout);
         if (fallback == null) {
+            fallback = findFallbackPathForced(source, target, laneLayout);
+        }
+        if (fallback == null) {
             return renderEdge(edge);
         }
 
@@ -570,6 +621,47 @@ public class TangleEdgeRenderer {
                     if (!horizontal.canOccupy(sourceTrack.x, targetTrack.x)) {
                         continue;
                     }
+                    if (verticalSegmentHitsClass(targetTrack.x, horizontal.y, targetDock.y,
+                            laneLayout.classBounds, source, target)) {
+                        continue;
+                    }
+                    if (horizontalSegmentHitsClass(horizontal.y, sourceTrack.x, targetTrack.x,
+                            laneLayout.classBounds, source, target)) {
+                        continue;
+                    }
+                    horizontal.occupy(sourceTrack.x, targetTrack.x);
+                    sourceTrack.occupy(horizontal.y);
+                    targetTrack.occupy(horizontal.y);
+                    return new FallbackPath(sourceDock, targetDock, sourceTrack.x, targetTrack.x, horizontal.y);
+                }
+            }
+        }
+        return null;
+    }
+
+    /**
+     * Like {@link #findFallbackPath} but skips the {@code canOccupy} checks on
+     * both horizontal and vertical tracks, allowing already-used tracks to be
+     * shared (double-occupancy). Class-box hit detection is still enforced so
+     * lines never run through boxes. {@code occupy()} is still called so the
+     * use-count score steers subsequent edges away from the busiest tracks.
+     */
+    private FallbackPath findFallbackPathForced(Bounds source, Bounds target, LaneLayout laneLayout) {
+        double idealY = (source.getCenterY() + target.getCenterY()) / 2.0;
+        List<HorizontalTrack> horizontalCandidates = new ArrayList<>(laneLayout.horizontalTracks);
+        horizontalCandidates.sort(Comparator.comparingDouble(h -> horizontalScore(h, idealY)));
+
+        for (HorizontalTrack horizontal : horizontalCandidates) {
+            List<VerticalTrack> sourceTracks = candidateVerticalTracksForced(laneLayout.verticalTracks.get(source), horizontal.y);
+            List<VerticalTrack> targetTracks = candidateVerticalTracksForced(laneLayout.verticalTracks.get(target), horizontal.y);
+            for (VerticalTrack sourceTrack : sourceTracks) {
+                Point sourceDock = dockPoint(source, sourceTrack.x, horizontal.y);
+                if (verticalSegmentHitsClass(sourceTrack.x, sourceDock.y, horizontal.y,
+                        laneLayout.classBounds, source, target)) {
+                    continue;
+                }
+                for (VerticalTrack targetTrack : targetTracks) {
+                    Point targetDock = dockPoint(target, targetTrack.x, horizontal.y);
                     if (verticalSegmentHitsClass(targetTrack.x, horizontal.y, targetDock.y,
                             laneLayout.classBounds, source, target)) {
                         continue;

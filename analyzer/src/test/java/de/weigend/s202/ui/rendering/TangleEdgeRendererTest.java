@@ -14,14 +14,14 @@ class TangleEdgeRendererTest {
 
     @Test
     void narrowLaneChannelOnlyUsesTracksInsideGap() {
-        List<Double> lanes = TangleEdgeRenderer.lanePositions(0.0, 10.0);
+        List<Double> lanes = TangleEdgeRenderer.lanePositions(0.0, 10.0, 7);
 
         assertTrue(lanes.isEmpty());
     }
 
     @Test
     void regularLaneChannelDropsTracksOutsideGap() {
-        List<Double> lanes = TangleEdgeRenderer.lanePositions(10.0, 30.0);
+        List<Double> lanes = TangleEdgeRenderer.lanePositions(10.0, 30.0, 7);
 
         assertEquals(1, lanes.size());
         assertEquals(List.of(20.0), lanes);
@@ -29,7 +29,7 @@ class TangleEdgeRendererTest {
 
     @Test
     void wideLaneChannelKeepsVisibleFiveTracksWhenOnlyFiveFit() {
-        List<Double> lanes = TangleEdgeRenderer.lanePositions(0.0, 40.0);
+        List<Double> lanes = TangleEdgeRenderer.lanePositions(0.0, 40.0, 7);
 
         assertEquals(5, lanes.size());
         assertEquals(List.of(8.0, 14.0, 20.0, 26.0, 32.0), lanes);
@@ -37,16 +37,28 @@ class TangleEdgeRendererTest {
 
     @Test
     void outerLaneChannelKeepsAllSevenTracks() {
-        List<Double> lanes = TangleEdgeRenderer.lanePositions(0.0, 52.0);
+        List<Double> lanes = TangleEdgeRenderer.lanePositions(0.0, 52.0, 7);
 
         assertEquals(7, lanes.size());
         assertEquals(List.of(8.0, 14.0, 20.0, 26.0, 32.0, 38.0, 44.0), lanes);
     }
 
     @Test
+    void dynamicLaneCountScalesWithEdgeDensity() {
+        List<Double> sparse = TangleEdgeRenderer.lanePositions(0.0, 100.0, 3);
+        List<Double> dense  = TangleEdgeRenderer.lanePositions(0.0, 100.0, 10);
+
+        assertEquals(3, sparse.size());
+        assertEquals(10, dense.size());
+        // pitch is always LANE_SPACING_PX regardless of count
+        assertEquals(6.0, sparse.get(1) - sparse.get(0), 0.0001);
+        assertEquals(6.0, dense.get(1) - dense.get(0), 0.0001);
+    }
+
+    @Test
     void horizontalAndVerticalLanePositionsUseSamePitch() {
-        List<Double> horizontalYs = TangleEdgeRenderer.lanePositions(0.0, 52.0);
-        List<Double> verticalXs = TangleEdgeRenderer.lanePositions(40.0, 92.0);
+        List<Double> horizontalYs = TangleEdgeRenderer.lanePositions(0.0, 52.0, 7);
+        List<Double> verticalXs = TangleEdgeRenderer.lanePositions(40.0, 92.0, 7);
 
         for (int i = 1; i < horizontalYs.size(); i++) {
             assertEquals(6.0, horizontalYs.get(i) - horizontalYs.get(i - 1), 0.0001);
@@ -56,9 +68,9 @@ class TangleEdgeRendererTest {
 
     @Test
     void emptyLaneChannelProducesNoLines() {
-        assertTrue(TangleEdgeRenderer.lanePositions(10.0, 10.0).isEmpty());
-        assertTrue(TangleEdgeRenderer.lanePositions(10.0, 9.0).isEmpty());
-        assertTrue(TangleEdgeRenderer.lanePositions(10.0, 13.0).isEmpty());
+        assertTrue(TangleEdgeRenderer.lanePositions(10.0, 10.0, 7).isEmpty());
+        assertTrue(TangleEdgeRenderer.lanePositions(10.0, 9.0, 7).isEmpty());
+        assertTrue(TangleEdgeRenderer.lanePositions(10.0, 13.0, 7).isEmpty());
     }
 
     @Test
