@@ -35,6 +35,8 @@ Praktisch bedeutsam: Ein R2-Befund in der 92-Modul-Codebasis *software-ekg-7* id
 
 Nach unserem Kenntnisstand hat keine frühere geschichtete Architekturvisualisierung diesen Grad an Selbstvalidierung realisiert. Wir demonstrieren den Checker live auf realen Codebasen, zeigen den Weg von einem markierten Layout-Pixel zu einem scheiternden Reproducer-Test, und diskutieren die Verallgemeinerbarkeit auf andere Visualisierungstechniken.
 
+Dieses Paper beschreibt das Grundproblem der drei interagierenden Constraint-Systeme, beweist formal warum ein naiver Single-Pass-Ansatz für zyklische Abhängigkeitsgraphen nicht deterministisch ist, und zeigt dass die Trennung in zwei semantisch verschiedene Level-Konzepte die strukturell minimale korrekte Lösung darstellt — keine korrekte Implementierung kann mit einem einzigen Pass auskommen.
+
 **Wortanzahl:** ~410
 
 ---
