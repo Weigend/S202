@@ -339,7 +339,7 @@ Panel in Structure202 das die Methoden mit den meisten Cut-Edge-Vorkommen über 
 
 ## Offene Punkte
 
-- **Co-Autoren** anfragen (Dashuber, Philippsen) — weiche interne Frist: 17. Mai.
+- **Co-Autoren:** Michael Philippsen ✓ bestätigt. Veronika Schwarz noch anfragen.
 - **Zahlen verifizieren:** 92 Module software-ekg-7, 4.038 Klassen / 3.585 Rückkanten Minecraft.
 - **Kürzen auf ~350 Wörter** nach Co-Autoren-Freigabe — aktueller Text ist ~500 Wörter, INSTICC-Template lässt weniger Platz als Standard-LaTeX.
 - **Englische Übersetzung** für die Einreichung erstellen sobald der deutsche Text freigegeben ist.
