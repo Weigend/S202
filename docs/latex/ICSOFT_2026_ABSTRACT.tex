@@ -1,0 +1,270 @@
+%% ICSOFT 2026 -- Abstracts Track
+%% Template: SCITEPRESS (SCITEPRESS.sty, article.cls, apalike.sty/bst in this dir)
+%%
+%% Status: WORKING DRAFT -- German text, pending:
+%%   (1) English translation
+%%   (2) Co-author approval (Veronika Schwarz, Michael Philippsen)
+%%   (3) Trim to ~350 words for 1-page fit
+%%   (4) Verify numbers: 92 modules software-ekg-7, 4.038/3.585 Minecraft
+
+\documentclass[a4paper,twoside]{article}
+
+\usepackage{epsfig}
+\usepackage{subcaption}
+\usepackage{amssymb}
+\usepackage{amsmath}
+\usepackage{amsthm}
+\usepackage{multicol}
+\usepackage{pslatex}
+\usepackage{apalike}
+\usepackage{caption}
+\usepackage[ruled]{algorithm2e}
+\usepackage{SCITEPRESS}
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+
+%% ---------------------------------------------------------------
+\title{Korrekte Layer-Berechnung f\"{u}r hierarchische
+       Architekturvisualisierungen
+       \subtitle{Constraints, Invarianten und Pitfalls}}
+
+\author{
+  \authorname{Johannes Weigend}
+  \affiliation{Technische Hochschule Rosenheim / QAware GmbH, Germany}
+  \email{johannes.weigend@gmail.com}
+  \authorname{Veronika Schwarz}
+  \affiliation{TBD}%          % formerly published as Veronika Dashuber
+  \email{TBD}
+  \authorname{Michael Philippsen}
+  \affiliation{Friedrich-Alexander-Universit\"{a}t Erlangen-N\"{u}rnberg, Germany}
+  \email{TBD}
+}
+
+\keywords{software architecture visualization, layout invariants,
+  layered software city, strongly connected components,
+  dependency analysis, tool demonstration}
+
+\abstract{Geschichtete Architekturvisualisierungen dr\"{u}cken Abh\"{a}ngigkeitsstruktur
+durch vertikale Anordnung aus: wer von anderen abh\"{a}ngt, steht h\"{o}her.
+Ein Package auf einer niedrigeren Schicht als seine eigenen Klassen,
+zwei zyklisch abh\"{a}ngige Pakete auf unterschiedlichen Ebenen, eine
+regul\"{a}re Abh\"{a}ngigkeit die entgegen der Schichtrichtung zeigt~---
+solche Fehler in der Layer-Berechnung sehen plausibel aus, t\"{a}uschen
+aber den Betrachter. Das Prinzip klingt selbstverst\"{a}ndlich: die
+Korrektheit eines Architekturlayouts sollte das Werkzeug garantieren,
+nicht der Nutzer. Wie schwer das tats\"{a}chlich ist, zeigt erst die
+Implementierung.
+\par\smallskip
+Unser 2021 bei IVAPP ausgezeichnetes Paper \cite{Dashuber2021}
+f\"{u}hrte ein Schichtlayout ein, dessen Grundprinzip einfach ist: jede
+Klasse erh\"{a}lt ein h\"{o}heres Level als die Klassen von denen sie
+abh\"{a}ngt. Die X/Y-Position von Geb\"{a}uden auf dem Stadtgrundriss
+folgt dieser Ordnung direkt~--- foundationale Klassen stehen vorne/unten,
+hochrangige Module hinten/oben. Geb\"{a}udeh\"{o}hen kodieren orthogonal
+dazu Metriken wie Komplexit\"{a}t oder Zeilenzahl.
+Dieser Beitrag stellt eine quelloffene Referenzimplementierung (Java,
+Apache~2.0) vor sowie einen \textbf{Layout-Invarianten-Checker} der
+vier formal spezifizierte Nachbedingungen nach jedem Analyselauf
+verifiziert.
+\par\smallskip
+Die Pipeline selbst ist nicht trivial. Ein korrektes Schichtlayout
+erfordert die L\"{o}sung dreier interdependenter Constraint-Systeme~---
+Klassen-Ordnung, Package-Hierarchie und SCC-Gleichheit. Ein naiver
+Single-Pass-Algorithmus liefert bei zyklischen Graphen
+nicht-deterministische Ergebnisse. Der konzeptionelle Kern der
+L\"{o}sung: die Pipeline berechnet \textbf{zwei semantisch verschiedene
+Level-Konzepte}. Phase~1 berechnet die \emph{architektonische Tiefe}
+als l\"{a}ngsten Pfad im globalen, zyklenfreien SCC-DAG. Phase~2
+berechnet die \emph{lokale Layout-Position} innerhalb eines Packages,
+beginnend bei~0, ausschlie{\ss}lich auf Geschwister-Abh\"{a}ngigkeiten.
+Stark zyklischer Code~--- Minecraft Forge: eine SCC aus 4.038~Klassen
+mit 3.585~R\"{u}ckkanten~--- wird durch einen heuristischen SCC-Breaker
+\cite{Eades1993} zu einer nutzbaren Hierarchie aufgel\"{o}st.
+\par\smallskip
+Der Invarianten-Checker (R1--R5) unterscheidet pr\"{a}zise zwischen
+Algorithmenfehlern und tolerierten Heuristik-Verletzungen. Die
+Entwicklung dieser Regeln war selbst nicht fehlerfrei: eine fr\"{u}he
+Variante von R2 erwies sich als zu grob und musste verfeinert werden.
+Der Checker validiert damit nicht nur die Pipeline, sondern auch die
+Pr\"{a}zision der Regeln selbst~--- ein doppelter Boden den kein
+manueller Review ersetzen kann. Dieselben vier Regeln wurden portiert
+auf eine unabh\"{a}ngige 3D-Software-City in Unity/.NET~--- mit
+byte-identischen Befunden auf gemeinsamen Eingaben.
+Ein R2-Befund in der 92-Modul-Codebasis \emph{software-ekg-7}
+identifizierte einen fehlenden Package-SCC-Equalisierungsschritt und
+l\"{o}ste direkt einen Pipeline-Fix aus. Nach unserem Kenntnisstand hat
+keine fr\"{u}here geschichtete Architekturvisualisierung diesen Grad an
+Selbstvalidierung realisiert.}
+%% ---------------------------------------------------------------
+
+\begin{document}
+
+\maketitle
+
+\vfill
+
+\bibliographystyle{apalike}
+{\small
+\bibliography{icsoft2026}}
+
+%% ===================================================================
+\appendix
+\onecolumn
+
+\section*{ANHANG A --- Warum Single-Pass nicht funktioniert:
+          eine Analyse der Fehlermodi}
+
+\subsection*{Das Grundproblem: drei interagierende Constraint-Systeme}
+
+Ein korrektes Schichtlayout muss gleichzeitig drei Constraints erf\"{u}llen:
+
+\begin{enumerate}
+  \item \textbf{Klassen-Constraint}: Wenn $A \rightarrow B$ ($A$ h\"{a}ngt von $B$ ab),
+        dann muss $\text{level}(A) > \text{level}(B)$.
+  \item \textbf{Hierarchie-Constraint (R3)}: Ein Package muss auf mindestens dem Level
+        seines h\"{o}chsten Inhalts liegen.
+  \item \textbf{SCC-Constraint (R2)}: Alle Klassen in einer zyklischen Abh\"{a}ngigkeit
+        bekommen dasselbe Level; alle Packages die eine Package-SCC bilden ebenso.
+\end{enumerate}
+
+Diese drei Constraints sind einzeln l\"{o}sbar. Zusammen erzeugen sie ein
+\textbf{zirkul\"{a}res Abh\"{a}ngigkeitssystem zwischen den Ebenen der Berechnung selbst}
+--- nicht zwischen den Klassen.
+
+\subsection*{Die konkreten Fehlermodi eines Single-Pass-Ansatzes}
+
+\textbf{Fehlermodus 1: Retroaktive Korrektur.}
+Der Algorithmus iteriert \"{u}ber die Klassen und vergibt Level.
+Er sieht Klasse $A$ (in Package $P_1$), berechnet $\text{level}(A)=3$,
+setzt damit $\text{level}(P_1)=3$. Weiter trifft er Klasse $B$ (in $P_2$) und
+stellt fest: $A$ und $B$ sind in einer SCC, m\"{u}ssen gleiches Level bekommen,
+jetzt $\text{level}(A)=\text{level}(B)=5$. Damit muss $\text{level}(P_1)$
+neu berechnet werden --- aber $P_1$ und $P_3$ wurden bereits abgeschlossen.
+Die SCC-Mitgliedschaft ist erst nach vollst\"{a}ndiger Graphtraversierung bekannt.
+
+\textbf{Fehlermodus 2: Verwobene Zykluserkennung erzeugt classpath-abh\"{a}ngige
+Ergebnisse.}
+Klassen kommen aus JARs. Die Reihenfolge folgt der JAR-Packreihenfolge, die
+abh\"{a}ngt von Build-Tool (Maven vs.\ Gradle), Modul-Reihenfolge und
+Dateisystem-Sortierung --- keine davon codiert Abh\"{a}ngigkeitsrichtung.
+Derselbe Quellcode liefert so unterschiedliche Level-Layouts je nach
+Build-Konfiguration. Die Fehler sind \textbf{subtil}: Das Layout sieht plausibel aus,
+Pfeile zeigen grob in die richtige Richtung, die pr\"{a}zise Hierarchieinformation
+ist korrumpiert aber nicht sofort sichtbar.
+
+\textbf{Fehlermodus 3: Gegenseitiger Verweis zwischen Package- und Klassen-Level.}
+$\text{level}(P_1) = \max(\text{level}(c) \mid c \in \text{subtree}(P_1))$.
+Welches Level hat die h\"{o}chste Klasse? Das h\"{a}ngt von anderen Klassen ab,
+die in Packages liegen, deren Level davon abh\"{a}ngt\ldots\ Dieser zirkul\"{a}re
+Verweis macht einen gemeinsamen Pass \"{u}ber Klassen und Packages inh\"{a}rent instabil.
+
+\textbf{Fehlermodus 4: Der gro{\ss}e See.}
+Ohne Mechanismus zum Aufbrechen gro{\ss}er SCCs landen alle Mitglieder
+zwangsl\"{a}ufig auf demselben Level. Bei Minecraft Forge --- eine SCC aus
+4.038~Klassen --- liegen \"{u}ber 40\,\% aller Klassen auf Level~0: ein riesiger,
+flacher See am unteren Rand des Layouts. Der heuristische SCC-Breaker
+(In-/Out-Degree-Rankscore, verwandt mit \cite{Eades1993}) l\"{o}st dieses Problem.
+Entfernte Kanten werden als Verletzungen (rot) visualisiert, nicht ignoriert.
+
+\subsection*{Formaler Beweis: Warum ein naiver rekursiver Algorithmus versagt}
+
+Der intuitivste Ansatz ist ein rekursiver DFS mit Memoization:
+
+\begin{verbatim}
+level(A):
+  if A already computed: return level(A)
+  if A has no dependencies: return 0
+  return max(level(dep) for dep in A.dependencies) + 1
+\end{verbatim}
+
+F\"{u}r DAGs korrekt. F\"{u}r zyklische Graphen versagt er strukturell.
+
+\textbf{Gegenbeispiel} (zwei verschachtelte SCCs):
+$\text{SCC}_1 = \{A,B\}$ mit $A \rightarrow B \rightarrow A$,
+$\text{SCC}_2 = \{C,D\}$ mit $C \rightarrow D \rightarrow C$,
+Querb\"{a}ngigkeit $A \rightarrow C$.
+Korrekte Level: $\text{level}(C)=\text{level}(D)=0$, $\text{level}(A)=\text{level}(B)=1$.
+
+Rekursiver Algorithmus, startend bei $A$:
+
+\begin{verbatim}
+level(A)  [Sentinel = 0]
+  -> level(B) -> level(A): Zyklus, return 0  =>  B.level = 1
+  -> level(C)  [Sentinel = 0]
+       -> level(D) -> level(C): Zyklus, return 0  => D.level = 1
+     C.level = 2   <- FALSCH (korrekt waere 0)
+  A.level = max(1,2)+1 = 3   <- FALSCH (korrekt waere 1)
+\end{verbatim}
+
+\textbf{Satz:} Ein rekursiver Level-Algorithmus mit Sentinel-basierter
+Zykluserkennung produziert f\"{u}r Graphen mit mehreren interagierenden SCCs
+Ergebnisse, die von der Traversierungsreihenfolge abh\"{a}ngen.
+Da die Traversierungsreihenfolge bei JVM-basierter Klassenladung der
+Classpath-Reihenfolge folgt, sind die Ergebnisse \textbf{nicht deterministisch
+\"{u}ber verschiedene Build-Konfigurationen}.
+
+\subsection*{Die L\"{o}sung: zwei semantisch verschiedene Level-Konzepte}
+
+Die Fehlermodi~1--3 haben eine gemeinsame Ursache: der Versuch,
+\emph{architektonische Tiefe} und \emph{lokale Layoutposition} in einem einzigen
+Level-Begriff zu vereinen. Die Pipeline trennt beide Konzepte konsequent:
+
+\begin{itemize}
+  \item \textbf{Phase~1} berechnet die \emph{architektonische Tiefe} --- den
+        l\"{a}ngsten Pfad im globalen, zyklenfreien SCC-DAG \"{u}ber
+        \textbf{alle Klassen des Projekts}.
+  \item \textbf{Phase~2} berechnet die \emph{lokale Layout-Position} innerhalb
+        eines Packages, beginnend bei~0, ausschlie{\ss}lich auf
+        Geschwister-Abh\"{a}ngigkeiten.
+\end{itemize}
+
+\begin{verbatim}
+Phase 1: Klassen-Graph -> Tarjan -> SCC-DAG (azyklisch)
+           -> Longest-Path -> globale Level
+           -> SCC-Equalisierung (alle Mitglieder = Maximum)
+           -> Package-Level (Propagation nach oben)
+           [Iterationsloop: Step 5 + Step 4b bis stabil]
+
+Phase 2: Pro Package: Geschwister-Graph (nur interne Kanten)
+           -> Tarjan -> lokaler SCC-DAG
+           -> Longest-Path -> lokale Visualisierungs-Positionen
+\end{verbatim}
+
+\noindent\textbf{Hinweis:} Nach Phase~1 ist Level keine Eigenschaft einer einzelnen
+Klasse, sondern des SCC-Knotens dem sie angeh\"{o}rt --- gemessen als l\"{a}ngster Pfad
+im zyklenfreien Quotienten-Graphen (SCC-DAG) \"{u}ber alle Klassen des Projekts.
+
+\begin{table}[h]
+\small
+\centering
+\begin{tabular}{lll}
+\hline
+& \textbf{Phase 1} & \textbf{Phase 2} \\
+\hline
+Bedeutung    & Architekton. Tiefe im SCC-DAG & Layout-Position unter Geschwistern \\
+Scope        & Global --- alle Klassen       & Lokal --- Kinder eines Packages \\
+Startpunkt   & Blattklassen = 0              & Immer 0 f\"{u}r unterstes Element \\
+Zyklen       & SCC-Kollaps vor Berechnung    & Lokaler Tarjan \\
+Wertebereich & Hunderte m\"{o}glich           & Geschwisteranzahl $-$ 1 \\
+\hline
+\end{tabular}
+\caption{Vergleich der beiden Level-Konzepte}
+\end{table}
+
+\subsection*{R4: eine verworfene Regel --- und was das lehrt}
+
+Eine fr\"{u}he Fassung enthielt R4: \emph{,,Zyklisch voneinander abh\"{a}ngige
+Kind-Packages m\"{u}ssen dasselbe Level teilen.``} Die Regel scheiterte in der Praxis:
+Parent$\leftrightarrow$Child-Kanten, R\"{u}ckkanten des SCCBreakers und gemeinsame
+Klassen-SCCs erzeugten Schein-Zyklen und f\"{a}lschliche Equalisierungen.
+R4 wurde durch R2 ersetzt, das denselben Anspruch mit dem richtigen gefilterten
+Graphen umsetzt.
+
+\textbf{Die eigentliche Lehre:} Constraints f\"{u}r ein komplexes System korrekt zu
+formulieren ist selbst schwer. Der Checker schafft einen \emph{doppelten Boden}:
+er validiert nicht nur die Pipeline-Implementierung gegen die Regeln, sondern
+deckt auch auf wenn die Regeln selbst zu grob sind. Dass R2 danach einen echten
+Pipeline-Bug in \emph{software-ekg-7} fand, beweist dass die verschärfte Regel
+pr\"{a}zise genug war um echte Fehler von Schein-Fehlern zu trennen.
+
+\end{document}

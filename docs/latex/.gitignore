@@ -1,0 +1,13 @@
+# LaTeX build artefacts
+*.aux
+*.bbl
+*.blg
+*.log
+*.pdf
+*.out
+*.toc
+*.fls
+*.fdb_latexmk
+*.synctex.gz
+missfont.log
+q.log
