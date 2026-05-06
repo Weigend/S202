@@ -79,18 +79,21 @@ reader's --- the implementation shows how hard that actually is.
 Our 2021 IVAPP Paper, \emph{A Layered Software City for Dependency
 Visualization} \cite{Dashuber2021}, introduced a city layout in which the X/Y
 position of class buildings follows dependency-derived levels, while building
-height encodes orthogonal metrics such as complexity or lines of code. We present Structure202, an open-source Java reference implementation
-under Apache~2.0, together with a Layout Invariant Checker that verifies the
-layout after every analysis run.
+height along the Z axis encodes orthogonal metrics such as complexity or lines
+of code. S202 reimplements and validates the dependency-level pipeline of that
+layout as an open-source Java tool under Apache~2.0, together with a Layout
+Invariant Checker that verifies the layout after every analysis run.
 \par\smallskip
 Correct level computation turns out not to be a single ordering problem. It requires coordinating three interdependent
 constraint systems: class ordering, package containment, and level equality
-within SCCs. Structure202 therefore computes two semantically
+within SCCs. S202 therefore computes two semantically
 different level concepts: global architectural depth as a longest path in the
 SCC-collapsed class dependency DAG, and local layout position within each
-package, starting at zero and using only sibling dependencies. Highly cyclic
-code bases are handled by a heuristic SCC breaker; its cut edges are not hidden
-but marked as violations.
+package, starting at zero and using only sibling dependencies. A subsequent
+horizontal row-ordering pass keeps same-row elements with dependencies close to
+each other without changing their levels. Highly cyclic code bases are handled
+by a heuristic SCC breaker; its cut edges are not hidden but marked as
+violations.
 \par\smallskip
 The Layout Invariant Checker verifies four postconditions: non-heuristic class
 dependencies must point downward (R1); packages in a filtered package-level SCC
@@ -108,9 +111,9 @@ marked layout element to a failing reproducer test. In the 92-module
 \emph{software-ekg-7} system, an R2 finding exposed a missing package-SCC
 equalization step and directly triggered a pipeline fix. All four invariants
 were ported to an independent Unity/.NET 3D software city and produced
-identical findings on shared inputs. The two-phase separation is not a design choice---no correct
-level-computation pipeline can collapse the global and local questions into a
-single pass. To our knowledge, no previous layered
+identical findings on shared inputs. The separation of global and local level
+concepts is not a design choice---no correct level-computation pipeline can
+collapse both questions into a single pass. To our knowledge, no previous layered
 architecture visualization has provided this degree of machine-checkable
 self-validation; we also discuss generalization to other layered
 visualization techniques.}
@@ -284,11 +287,11 @@ use a heuristic or approximation.
 A well-known related heuristic is due to Eades, Lin, and Smyth \cite{Eades1993}.
 It orders nodes according to the difference between outgoing and incoming
 degree, then classifies edges that point backward in the resulting sequence as
-feedback edges. The intuition is similar to Structure202: high out-degree
+feedback edges. The intuition is similar to S202: high out-degree
 suggests a higher-level element; high in-degree suggests a foundational
 element.
 
-Structure202 uses a deliberately simpler variant: a direct normalized score per
+S202 uses a deliberately simpler variant: a direct normalized score per
 node,
 
 \[
@@ -302,14 +305,14 @@ graphs, where the heuristic reflects architectural intuition rather than
 claiming mathematical optimality.
 
 The important distinction is transparency. Many tools break cycles implicitly,
-but Structure202 classifies heuristic cut edges explicitly. They are marked as
+but S202 classifies heuristic cut edges explicitly. They are marked as
 \texttt{VIOLATION}, rendered in red, and known to the invariant checker. This
 makes algorithmic defects separable from tolerated heuristic artifacts.
 
 \subsection*{The Solution: Two Semantically Different Level Concepts}
 
 Failure modes 1 to 3 share the same root cause: trying to use a single level
-concept for two different questions. Structure202 separates them:
+concept for two different questions. S202 separates them:
 
 \begin{itemize}
   \item \textbf{Phase 1} computes architectural depth: the longest path in the
@@ -370,11 +373,13 @@ structurally correct and readable.
 \textbf{Value range}  & Project-dependent; can reach hundreds   & Small integers (sibling count $-1$) \\
 \hline
 \end{tabular}
-\caption{The two level concepts computed by Structure202.}
+\caption{The two level concepts computed by S202.}
 \end{table}
 
-The two phases define four machine-checkable postconditions verified by the
-Layout Invariant Checker after every analysis run:
+\subsection*{Layout Invariants for Level Correctness}
+
+The two level phases define four machine-checkable postconditions verified by
+the Layout Invariant Checker after every analysis run:
 
 \begin{table}[h]
 \centering\small
@@ -393,6 +398,12 @@ R5 & Edge classifications (\texttt{NORMAL}, \texttt{VIOLATION}, \texttt{BACK\_ED
 \caption{The four layout invariants verified after every analysis run.}
 \end{table}
 
+When we deployed the invariant checker against large real-world code bases---including
+Minecraft Forge and \emph{software-ekg-7}---it immediately surfaced R2 violations:
+subtle structural bugs that had gone completely unnoticed despite a fully green unit-test
+suite.
+These findings were only detectable through automated structural analysis; the
+checker's own 156-test suite was fully green throughout.
 Figure~\ref{fig:invariant-r2} shows a sample R2 report from Minecraft Forge;
 the same checker exposed a real R2 bug in \emph{software-ekg-7} (see also below).
 
@@ -405,6 +416,34 @@ the same checker exposed a real R2 bug in \emph{software-ekg-7} (see also below)
   to concrete level-pipeline constraints.}
   \label{fig:invariant-r2}
 \end{figure}
+
+The invariant checker connects the visual symptom to a reproducible
+algorithm defect. The R2 finding shown in Figure~\ref{fig:invariant-r2} is
+precisely the class of defect addressed by the fixpoint in Step~5c,
+which is described in detail in the Implementation section below.
+
+\subsection*{The Remaining Rules: R1, R3, and R5}
+
+\textbf{R1} ($A \rightarrow B \Rightarrow \text{level}(A) > \text{level}(B)$) is the most
+straightforward invariant: it is a direct corollary of longest-path computation on the
+SCC-DAG and holds trivially for any correctly implemented level assignment.
+Its value lies not in detecting subtle bugs but in providing an immediate sanity check---a
+failing R1 signals a fundamental breakdown in the pipeline.
+
+\textbf{R3} (a container's level $\geq$ max level of its contents) is less obvious.
+Packages are assigned levels independently of the class-level phase; if the two phases
+are not composed in the right order, or if an incremental update touches only one of them,
+a package can end up \emph{below} its highest-level class.
+The checker catches this silently drifting inconsistency that would otherwise only manifest
+as a visual anomaly in the city view.
+
+\textbf{R5} validates that every edge's stored classification
+(\texttt{NORMAL}, \texttt{VIOLATION}, \texttt{BACK\_EDGE}) is still consistent with
+the current level assignment and SCC membership.
+Edge labels are computed during analysis and cached in the model; after any algorithmic
+change they can silently become stale.
+R5 is therefore a cross-cutting consistency guard: it ties the structural output of the
+level pipeline back to the semantic annotations visible to the user.
 
 \subsection*{R4: A Retired Rule and What It Teaches}
 
@@ -443,11 +482,14 @@ become more precise. The later R2 finding in \emph{software-ekg-7} shows that
 the refined rule was precise enough to distinguish real pipeline bugs from
 apparent ones.
 
+\newpage
 \subsection*{Implementation: The Complete Pipeline}
 
 The conceptual two-phase structure expands into the following concrete
-implementation steps.
+implementation steps plus a rendering-order optimization.
 
+\setcounter{algocf}{0}
+\vspace{1em}
 \begin{algorithm}[H]
 \caption{Phase~1 -- Global Level Computation (\texttt{LevelCalculator})}
 \DontPrintSemicolon
@@ -457,7 +499,7 @@ implementation steps.
 \textbf{Step~3:} Compute class levels\;
 \Indp
   $\rightarrow$ Tarjan on class graph\;
-  $\rightarrow$ SCCBreaker: identify back edges (iterates until no SCC $\ge 3$ remains)\;
+  $\rightarrow$ SCCBreaker: identify heuristic back edges in large SCCs ($|SCC| \ge 3$)\;
   $\rightarrow$ Remove back edges $\rightarrow$ filtered class DAG\;
   $\rightarrow$ Condense filtered DAG into SCC super-nodes\;
   $\rightarrow$ Single longest-path pass on condensed DAG\;
@@ -486,6 +528,7 @@ internally because they have already been collapsed before longest-path
 computation. This is the fundamental difference from naive recursive
 approaches, and it is the reason why Phase 2 must be a separate computation.
 
+\vspace{1em}
 \begin{algorithm}[H]
 \DontPrintSemicolon
 \caption{Phase~2 -- Local Visualization Positions (\texttt{DistrictRowLevelCalculator}, recursively per package)}
@@ -528,7 +571,30 @@ explicit and is validated by the same R2/R3 invariants.
 The term ``two phases'' refers to the conceptual separation between global
 architectural depth and local layout position, not to the number of
 implementation steps. Phase 1 is an ordered pipeline with one monotone package
-fixpoint. Phase 2 is an independent local computation.
+fixpoint. Phase 2 is an independent local computation. Phase 3 is a
+same-row ordering optimization over the already fixed Phase~2 rows.
+
+\vspace{1em}
+\begin{algorithm}[H]
+\DontPrintSemicolon
+\caption{Phase~3 -- Horizontal Row Ordering (\texttt{HorizontalRowLayoutOptimizer})}
+\textbf{for each} package $P$:\;
+\Indp
+  \textbf{Step~1:} Group direct children by their Phase~2 level\;
+  \textbf{Step~2:} Collect subtree classes per row element\;
+  \textbf{Step~3:} Build weighted undirected proximity links from inter-sibling class dependencies\;
+  \textbf{Step~4:} Run bounded barycentric sweeps across rows\;
+  \textbf{Step~5:} Store the result in \texttt{horizontalLayoutOrder}\;
+\Indm
+\textbf{rendering:} sort a copied child view by level, then \texttt{horizontalLayoutOrder}, then full name\;
+\end{algorithm}
+
+Phase~3 is not a third level concept. It does not move an element to another
+row and is deliberately excluded from the layout invariants. Its only purpose
+is to make optional dependency overlays more legible: if dependencies are
+drawn, same-row elements connected to nearby rows should appear horizontally
+near each other. The implementation stores this as a separate
+\texttt{horizontalLayoutOrder} field and never sorts the semantic child list.
 
 \subsection*{R2 Fix in \emph{software-ekg-7}: Visual Evidence}
 
@@ -583,10 +649,6 @@ different input model.
   \label{fig:swekg7-metrics}
 \end{figure}
 
-The invariant checker connects the visual symptom to a reproducible
-algorithm defect. The R2 finding shown in Figure~\ref{fig:invariant-r2} is
-precisely the class of defect addressed by the fixpoint in Step~5c.
-
 \section*{Summary}
 
 Correct level computation for layered architecture visualizations requires
@@ -595,12 +657,14 @@ ordering, package containment (R3), and SCC level equality (R2). No single
 traversal pass can satisfy all three; the failure modes documented above are
 structural, not accidental.
 
-Structure202 resolves this by separating two semantically distinct level
+S202 resolves this by separating two semantically distinct level
 concepts: global architectural depth, computed as the longest path in the
 SCC-collapsed class dependency DAG, and local layout position within a package,
-derived exclusively from sibling dependencies. The Layout Invariant Checker
-verifies four machine-checkable postconditions (R1, R2, R3, R5) after every
-analysis run and emits copy-paste-ready reproducer blocks for each finding.
+derived exclusively from sibling dependencies. A separate horizontal
+row-ordering pass improves dependency overlays without changing those levels or
+mutating the semantic child order. The Layout Invariant Checker verifies four
+machine-checkable postconditions (R1, R2, R3, R5) after every analysis run and
+emits copy-paste-ready reproducer blocks for each finding.
 
 The \emph{software-ekg-7} case demonstrates that the checker catches defects
 invisible to visual inspection: a plausible city layout reported 167 violations
