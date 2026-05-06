@@ -22,13 +22,14 @@ import java.util.logging.Logger;
  *   Step 5c Equalize package SCCs (R2)       Tarjan on filtered graph → lift to max
  *   Step 6  Set reverse dependencies
  *
- * Step 5b uses a simple cross-package graph (intra-subtree edges removed only) so that
- * the topo-sort pass converges in one traversal. Step 5c uses the fully filtered graph
+ * Step 5b uses a simple cross-package graph (intra-subtree edges removed only) for
+ * one DFS post-order ordering pass. Step 5c uses the fully filtered graph
  * (back-edges and shared-class-SCC edges also removed) to equalize only genuine cyclic
  * peer packages — the same graph the R2 invariant checker uses.
  *
- * Steps 5a–5c replace the earlier fixpoint loop. Sorting by topological position makes
- * each step converge in a single pass (Bellman-Ford on a DAG = O(V+E)).
+ * Step 5c and the parent lift are coupled: SCC equalization can lift a child package,
+ * and parent lifting can then lift an SCC member again. They therefore run to a monotonic
+ * fixpoint: the loop stops when neither operation raises any package level.
  */
 public class LevelCalculator {
 
@@ -83,15 +84,14 @@ public class LevelCalculator {
         applyPackageDependencyOrdering(model, simplePkgGraph);
 
         // Steps 5c + lift: equalize package SCCs (R2) then re-propagate to parents.
-        // liftParentPackageLevels always runs at least once (Step 5b may have set child
-        // packages above their parents). Subsequent iterations handle the case where
-        // lifting a parent-SCC-member breaks equalization again. Levels grow monotonically
-        // so the loop terminates; in practice 1–2 iterations.
-        for (int i = 0; i < 5; i++) {
-            boolean changed = equalizePackageSccLevels(model, filteredPkgGraph);
-            liftParentPackageLevels(model, rawModel);
-            if (!changed) break;
-        }
+        // The fixpoint is reached only when neither operation lifts any package.
+        // Both operations are monotonic and only copy existing maximum levels, so
+        // the loop terminates without an arbitrary iteration cap.
+        boolean changed;
+        do {
+            changed = equalizePackageSccLevels(model, filteredPkgGraph);
+            changed |= liftParentPackageLevels(model, rawModel);
+        } while (changed);
 
         // Step 6: Set reverse dependencies
         updateDependentRelationships(model);
@@ -144,12 +144,15 @@ public class LevelCalculator {
      * Lifts each parent package to the maximum level of its direct children.
      * Packages sorted deepest-first (most dots) guarantee children are finalized
      * before their parent is visited — single pass, no loop needed.
+     *
+     * @return true if at least one package level was raised
      */
-    private void liftParentPackageLevels(DomainModel model, DependencyModel rawModel) {
+    private boolean liftParentPackageLevels(DomainModel model, DependencyModel rawModel) {
         List<String> pkgNames = new ArrayList<>(model.getAllPackages().keySet());
         pkgNames.sort((a, b) -> packageDepth(b) - packageDepth(a));
 
         Map<String, DomainModel.CalculatedElementInfo> packages = model.getAllPackages();
+        boolean changed = false;
         for (String pkgName : pkgNames) {
             DependencyModel.PackageInfo rawPkg = rawModel.getPackage(pkgName);
             if (rawPkg == null || rawPkg.childPackages.isEmpty()) continue;
@@ -160,8 +163,12 @@ public class LevelCalculator {
                 DomainModel.CalculatedElementInfo childInfo = packages.get(child);
                 if (childInfo != null && childInfo.level > maxChild) maxChild = childInfo.level;
             }
-            if (maxChild > pkgInfo.level) pkgInfo.setLevel(maxChild);
+            if (maxChild > pkgInfo.level) {
+                pkgInfo.setLevel(maxChild);
+                changed = true;
+            }
         }
+        return changed;
     }
 
     private static int packageDepth(String name) {

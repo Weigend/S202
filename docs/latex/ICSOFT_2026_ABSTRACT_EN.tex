@@ -11,6 +11,7 @@
 \documentclass[a4paper,twoside]{article}
 
 \usepackage{epsfig}
+\usepackage{graphicx}
 \usepackage{subcaption}
 \usepackage{amssymb}
 \usepackage{amsmath}
@@ -19,10 +20,32 @@
 \usepackage{pslatex}
 \usepackage{apalike}
 \usepackage{caption}
+\usepackage{listings}
 \usepackage[ruled]{algorithm2e}
 \usepackage{SCITEPRESS}
 \usepackage[utf8]{inputenc}
 \usepackage[T1]{fontenc}
+
+\captionsetup{font=small}
+
+\lstdefinestyle{appendixjava}{
+  language=Java,
+  basicstyle=\scriptsize\ttfamily,
+  numbers=left,
+  numberstyle=\tiny,
+  stepnumber=1,
+  numbersep=6pt,
+  breaklines=true,
+  breakatwhitespace=false,
+  columns=fullflexible,
+  keepspaces=true,
+  showstringspaces=false,
+  tabsize=4,
+  frame=single,
+  literate={→}{{$\rightarrow$}}1
+           {↔}{{$\leftrightarrow$}}1
+           {—}{{---}}1
+}
 
 %% ---------------------------------------------------------------
 \title{Verifiable Layered Architecture Visualizations
@@ -86,7 +109,8 @@ marked layout element to a failing reproducer test. In the 92-module
 equalization step and directly triggered a pipeline fix. All four invariants
 were ported to an independent Unity/.NET 3D software city and produced
 byte-identical findings on shared inputs. The two-phase separation is not a design choice---no correct
-level-computation pipeline can compress it into one pass. To our knowledge, no previous layered
+level-computation pipeline can collapse the global and local questions into one
+raw traversal. To our knowledge, no previous layered
 architecture visualization has provided this degree of machine-checkable
 self-validation; we also discuss generalization to other layered
 visualization techniques.}
@@ -106,7 +130,7 @@ visualization techniques.}
 \appendix
 \onecolumn
 
-\section*{Appendix A -- Why Single-Pass Does Not Work: Failure Modes}
+\section*{Appendix A -- Why Naive Single-Pass Does Not Work: Failure Modes}
 
 \subsection*{The Core Problem: Three Interacting Constraint Systems}
 
@@ -135,7 +159,7 @@ discovers that $A$ and $B$ are in the same SCC and must share a level, now
 $\text{level}(A)=\text{level}(B)=5$. This forces $P_1$ to be recomputed. If
 $P_1$ depends on $P_3$, $P_3$ may need to move as well. A cascade follows.
 
-In a single-pass implementation, however, $P_1$ and $P_3$ may already have
+In a naive single-pass implementation, however, $P_1$ and $P_3$ may already have
 been finalized. SCC membership is only known after the relevant graph has been
 traversed; if level assignment and SCC discovery are interleaved, the iteration
 order decides whether the correction is still applied in time.
@@ -345,14 +369,14 @@ implementation steps.
 \BlankLine
 \textbf{Step~4:} Package level $\gets \max(\text{level of contained classes})$\;
 \BlankLine
-\textbf{Step~5a:} Lift parent package levels --- single bottom-up pass:\;
+\textbf{Step~5a:} Lift parent package levels --- initial bottom-up pass:\;
 \Indp sort packages deepest-first; $\text{parent.level} \gets \max(\text{child.level})$\;\Indm
 \BlankLine
-\textbf{Step~5b:} Order packages by cross-package dependencies --- single topo-sort pass:\;
-\Indp DFS post-order on cross-package DAG; $\text{pkg.level} \gets \max(\text{dep.level})+1$\;\Indm
+\textbf{Step~5b:} Order packages by cross-package dependencies --- DFS post-order pass:\;
+\Indp DFS post-order on simple cross-package graph; $\text{pkg.level} \gets \max(\text{dep.level})+1$\;\Indm
 \BlankLine
-\textbf{Step~5c:} Equalize package SCCs (R2) --- single pass:\;
-\Indp Tarjan on cross-package graph; lift SCC members to $\max(\text{level})$\;\Indm
+\textbf{Step~5c:} Equalize package SCCs (R2) and re-lift parents to a fixpoint:\;
+\Indp repeat Tarjan-SCC max equalization and parent lift until no package level changes\;\Indm
 \BlankLine
 \textbf{Step~6:} Set reverse dependencies (dependents)\;
 \end{algorithm}
@@ -386,23 +410,110 @@ approaches, and it is the reason why Phase 2 must be a separate computation.
 \Indm
 \end{algorithm}
 
-Steps~5a--5c replace what an earlier version of the pipeline expressed as a
-fixpoint loop. The loop appeared natural because package-SCC equalization can
-lift a package level, which can lift its parent, which can seem to require
-another equalization pass. However, after the SCC condensation in Step~3 the
-class dependency graph is a DAG by construction, and longest-path computation on
-a DAG converges in \emph{one} topological-order pass --- Bellman-Ford relaxation
-on a DAG needs only $O(V+E)$, not $O(V \cdot E)$ iterations. The same argument
-applies to the cross-package ordering in Step~5b: processing packages in
-depth-first post-order (dependencies before dependents) makes every level
-assignment final in a single traversal. The original loop with a 20-iteration
-guard was a symptom of processing nodes in an arbitrary order; sorting by
-topological position eliminates the need for re-processing entirely.
+Step~5c is intentionally a monotone fixpoint, not an arbitrary bounded loop.
+The R2 equalization step can lift a package-SCC member to the maximum level of
+its peer group. A subsequent parent lift can then raise a parent package that is
+itself part of another package-SCC, which may require one more R2 equalization.
+Both operations only raise levels and only copy existing maximum levels; no rule
+creates an unbounded sequence of fresh levels. Since the number of packages and
+level values is finite, the iteration terminates when neither operation changes
+any package level. The result is the least fixpoint satisfying package-SCC
+equality (R2) and container dominance (R3) after cross-package ordering.
+
+A single-pass implementation is possible, but only by moving complexity earlier:
+one must first build a combined constraint graph containing the filtered
+package-dependency constraints and the child-to-parent containment constraints,
+condense that graph into components, initialize each component with the maximum
+level of its members, and then run a single topological max-propagation pass on
+the resulting component DAG. The implemented fixpoint keeps these concerns
+explicit and is validated by the same R2/R3 invariants.
 
 The term ``two phases'' refers to the conceptual separation between global
 architectural depth and local layout position, not to the raw number of
-implementation steps. Phase 1 is an ordered pipeline of single topological-sort passes.
-Phase 2 is an independent local computation.
+implementation steps. Phase 1 is an ordered pipeline with one monotone package
+fixpoint. Phase 2 is an independent local computation.
+
+\subsection*{R2 Fix in \emph{software-ekg-7}: Visual Evidence}
+
+The \emph{software-ekg-7} case is the concrete failure that forced the
+monotone Step~5c fixpoint. Before the fix, the city view still looked plausible:
+the package rectangles and dependency streets formed a readable layout, and no
+single visual element made the pipeline defect obvious. The metrics panel,
+however, exposed the inconsistency: 167 dependency violations were reported and
+the maximum architectural level had inflated to 160. After the R2 fixpoint was
+introduced, the same input produced zero violations and a maximum level of 18.
+The number of classes, packages, dependencies, cyclic classes, and tests stayed
+constant; the change is therefore attributable to level propagation, not to a
+different input model.
+
+\begin{figure}[h]
+  \centering
+  \begin{subfigure}{0.49\textwidth}
+    \centering
+    \includegraphics[width=\linewidth]{figures/SW-EKG7-Baseline.png}
+    \caption{Before the R2 fix: the full city view looks plausible, but the
+    metric panel reports 167 violations and MaxLevel 160.}
+  \end{subfigure}
+  \hfill
+  \begin{subfigure}{0.49\textwidth}
+    \centering
+    \includegraphics[width=\linewidth]{figures/SW-EKG7-Nach-Level-Fix-per-Constraint-Analyses.png}
+    \caption{After the monotone R2 fixpoint: the same analyzed system reports
+    zero violations and MaxLevel 18.}
+  \end{subfigure}
+  \caption{Full-screen before/after screenshots of the \emph{software-ekg-7}
+  software city. The visible city changes only subtly; the level metrics reveal
+  the correction.}
+  \label{fig:swekg7-before-after}
+\end{figure}
+
+\begin{figure}[h]
+  \centering
+  \begin{subfigure}{0.31\textwidth}
+    \centering
+    \includegraphics[width=\linewidth]{figures/Vor-Constraintfix.png}
+    \caption{Before: 167 violations, MaxLevel 160.}
+  \end{subfigure}
+  \hspace{0.08\textwidth}
+  \begin{subfigure}{0.31\textwidth}
+    \centering
+    \includegraphics[width=\linewidth]{figures/Nach-Constraintfix.png}
+    \caption{After: zero violations, MaxLevel 18.}
+  \end{subfigure}
+  \caption{Cropped metric panels from Figure~\ref{fig:swekg7-before-after}.
+  These panels are the clearest user-visible symptom of the R2 propagation
+  defect and its fix.}
+  \label{fig:swekg7-metrics}
+\end{figure}
+
+The invariant checker closes the loop from visual symptom to reproducible
+algorithm defect. Figure~\ref{fig:invariant-dialogs} shows two dialog outputs
+from the checker: an R2 package-SCC equal-level finding and an R3 container
+dominance finding. The R2 finding is precisely the class of defect addressed by
+the fixpoint in Step~5c; R3 demonstrates why the parent lift must remain part of
+the same monotone constraint system rather than being treated as an unrelated
+post-processing step.
+
+\begin{figure}[h]
+  \centering
+  \begin{subfigure}{0.49\textwidth}
+    \centering
+    \includegraphics[width=\linewidth]{\detokenize{figures/Invariant Finding R2.png}}
+    \caption{R2 report: packages in a filtered package-SCC are placed on
+    different levels.}
+  \end{subfigure}
+  \hfill
+  \begin{subfigure}{0.49\textwidth}
+    \centering
+    \includegraphics[width=\linewidth]{\detokenize{figures/Invariant Finding R3.png}}
+    \caption{R3 report: a parent package is below one of its contained
+    packages.}
+  \end{subfigure}
+  \caption{Invariant-checker dialogs. Findings are reported as algorithm-bug
+  candidates with a copy-paste-ready reproducer block, which makes the visual
+  failure traceable to concrete level-pipeline constraints.}
+  \label{fig:invariant-dialogs}
+\end{figure}
 
 \subsection*{R4: A Retired Rule and What It Teaches}
 
@@ -482,6 +593,14 @@ The important distinction is transparency. Many tools break cycles implicitly,
 but Structure202 classifies heuristic cut edges explicitly. They are marked as
 \texttt{VIOLATION}, rendered in red, and known to the invariant checker. This
 makes algorithmic defects separable from tolerated heuristic artifacts.
+
+\section*{Appendix B -- LevelCalculator Reference Implementation}
+
+The following source excerpt is the complete Java implementation of the global
+level pipeline discussed above. It includes the monotone Step~5c fixpoint that
+replaced the former hard-coded iteration bound.
+
+\lstinputlisting[style=appendixjava]{../../analyzer/src/main/java/de/weigend/s202/domain/LevelCalculator.java}
 
 \section*{Open Points Before Submission}
 
