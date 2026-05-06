@@ -594,6 +594,29 @@ but Structure202 classifies heuristic cut edges explicitly. They are marked as
 \texttt{VIOLATION}, rendered in red, and known to the invariant checker. This
 makes algorithmic defects separable from tolerated heuristic artifacts.
 
+\section*{Summary}
+
+Correct level computation for layered architecture visualizations requires
+satisfying three interacting constraint systems simultaneously: class dependency
+ordering, package containment (R3), and SCC level equality (R2). No single
+traversal pass can satisfy all three; the failure modes documented above are
+structural, not accidental.
+
+Structure202 resolves this by separating two semantically distinct level
+concepts: global architectural depth, computed as the longest path in the
+SCC-collapsed class dependency DAG, and local layout position within a package,
+derived exclusively from sibling dependencies. The Layout Invariant Checker
+verifies four machine-checkable postconditions (R1, R2, R3, R5) after every
+analysis run and emits copy-paste-ready reproducer blocks for each finding.
+
+The \emph{software-ekg-7} case demonstrates that the checker catches defects
+invisible to visual inspection: a plausible city layout reported 167 violations
+and a maximum architectural level of 160; after the R2 equalization step was
+corrected, the same input produced zero violations and a maximum level of~18,
+with no change to the analyzed source code.
+
+\clearpage
+
 \section*{Appendix B -- LevelCalculator Reference Implementation}
 
 The following source excerpt is the complete Java implementation of the global
