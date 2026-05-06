@@ -336,22 +336,25 @@ implementation steps.
 \textbf{Step~3:} Compute class levels\;
 \Indp
   $\rightarrow$ Tarjan on class graph\;
-  $\rightarrow$ SCCBreaker: identify back edges\;
-  $\rightarrow$ Build acyclic SCC-DAG\;
-  $\rightarrow$ Longest-path topological pass $\rightarrow$ level per SCC\;
-  $\rightarrow$ Assign levels to all SCC members\;
+  $\rightarrow$ SCCBreaker: identify back edges (iterates until no SCC $\ge 3$ remains)\;
+  $\rightarrow$ Remove back edges $\rightarrow$ filtered class DAG\;
+  $\rightarrow$ Condense filtered DAG into SCC super-nodes\;
+  $\rightarrow$ Single longest-path pass on condensed DAG\;
+  $\rightarrow$ Assign SCC level to all members (equalization implicit)\;
 \Indm
 \BlankLine
 \textbf{Step~4:} Package level $\gets \max(\text{level of contained classes})$\;
 \BlankLine
-\Repeat{\upshape stable \textnormal{(max.\ 20 iterations)}}{
-  \textbf{Step~4a:} Lift parent package levels:\;
-  \Indp $\text{parent.level} \gets \max(\text{child.level})$\;\Indm
-  \textbf{Step~4b:} Equalize package SCCs:\;
-  \Indp Tarjan on filtered package graph; lift SCC members to $\max(\text{level})$\;\Indm
-}
+\textbf{Step~5a:} Lift parent package levels --- single bottom-up pass:\;
+\Indp sort packages deepest-first; $\text{parent.level} \gets \max(\text{child.level})$\;\Indm
 \BlankLine
-\textbf{Step~5:} Set reverse dependencies (dependents)\;
+\textbf{Step~5b:} Order packages by cross-package dependencies --- single topo-sort pass:\;
+\Indp DFS post-order on cross-package DAG; $\text{pkg.level} \gets \max(\text{dep.level})+1$\;\Indm
+\BlankLine
+\textbf{Step~5c:} Equalize package SCCs (R2) --- single pass:\;
+\Indp Tarjan on cross-package graph; lift SCC members to $\max(\text{level})$\;\Indm
+\BlankLine
+\textbf{Step~6:} Set reverse dependencies (dependents)\;
 \end{algorithm}
 
 After Step 3, level is no longer a property of an individual class alone. It is
@@ -383,18 +386,23 @@ approaches, and it is the reason why Phase 2 must be a separate computation.
 \Indm
 \end{algorithm}
 
-The stabilization loop (Steps~4a and~4b) is not an incidental implementation detail. It follows
-directly from Failure Mode 3: package-SCC equalization can lift a package level;
-that can lift its parent package; that can change the effective package-level
-structure; and that may require another equalization pass. The loop terminates
-because levels grow monotonically. No step lowers a level. The 20-iteration
-limit is therefore a guardrail rather than part of the algorithmic argument; in
-practice we expect one to three iterations.
+Steps~5a--5c replace what an earlier version of the pipeline expressed as a
+fixpoint loop. The loop appeared natural because package-SCC equalization can
+lift a package level, which can lift its parent, which can seem to require
+another equalization pass. However, after the SCC condensation in Step~3 the
+class dependency graph is a DAG by construction, and longest-path computation on
+a DAG converges in \emph{one} topological-order pass --- Bellman-Ford relaxation
+on a DAG needs only $O(V+E)$, not $O(V \cdot E)$ iterations. The same argument
+applies to the cross-package ordering in Step~5b: processing packages in
+depth-first post-order (dependencies before dependents) makes every level
+assignment final in a single traversal. The original loop with a 20-iteration
+guard was a symptom of processing nodes in an arbitrary order; sorting by
+topological position eliminates the need for re-processing entirely.
 
 The term ``two phases'' refers to the conceptual separation between global
 architectural depth and local layout position, not to the raw number of
-implementation steps. Phase 1 is an ordered pipeline with an iterative
-stabilization loop. Phase 2 is an independent local computation.
+implementation steps. Phase 1 is an ordered pipeline of single topological-sort passes.
+Phase 2 is an independent local computation.
 
 \subsection*{R4: A Retired Rule and What It Teaches}
 

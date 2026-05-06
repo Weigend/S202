@@ -6,7 +6,10 @@
 - **Was:** Zwei Screenshots nebeneinander
   - Links: fehlerhaftes Layout — Package auf falschem Level (R2-Verletzung sichtbar)
   - Rechts: korrigiertes Layout nach Pipeline-Fix
-- **Wo in Structure202:** software-ekg-7 Projekt laden, Checker-Output mit R2-Befund
+- **Wo:** 3D Software City (Unity/.NET) — das Finding wurde dort zuerst entdeckt
+  und gefixt, danach auf Structure202 übertragen. Structure202 konnte
+  software-ekg-7 zum damaligen Zeitpunkt noch nicht laden (kein POM-Loading).
+  Die 3D-Version zeigt den ursprünglichen Befund.
 - **Caption-Entwurf:** "An R2 violation in software-ekg-7 (left) exposed a missing
   package-SCC equalization step; the corrected pipeline produces the expected
   level assignment (right)."

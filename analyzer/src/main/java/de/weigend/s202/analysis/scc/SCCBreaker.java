@@ -5,246 +5,155 @@ import java.util.stream.Collectors;
 
 /**
  * Breaks up large Strongly Connected Components (SCCs) using heuristics.
- * 
- * <h2>Problem</h2>
- * In highly interconnected projects (like Minecraft), almost all classes end up in one
- * giant SCC, resulting in a flat, useless hierarchy where everything is on the same level.
- * 
- * <h2>Solution</h2>
- * This class identifies "back edges" - edges that go against the natural flow of dependencies
- * and breaks cycles by ignoring these edges for level calculation purposes.
- * 
- * <h2>Heuristic: In-Degree / Out-Degree Analysis</h2>
- * <ul>
- *   <li>Classes with HIGH in-degree (many dependents) are likely "foundational" → lower levels</li>
- *   <li>Classes with HIGH out-degree (many dependencies) are likely "high-level" → higher levels</li>
- *   <li>Edges FROM high-in-degree TO high-out-degree classes are "back edges" → ignored</li>
- * </ul>
- * 
- * <h2>Algorithm</h2>
- * <ol>
- *   <li>Calculate a "rank score" for each class: outDegree - inDegree</li>
- *   <li>Higher score = higher in hierarchy (uses more than it provides)</li>
- *   <li>Identify edges that go from lower-ranked to higher-ranked classes as "back edges"</li>
- *   <li>Mark these back edges as "violations" to be ignored in level calculation</li>
- * </ol>
+ *
+ * Iterates until the filtered graph contains no more SCCs of size >= MIN_SCC_SIZE_TO_BREAK.
+ * A single pass may leave residual sub-cycles inside a large SCC, which cause level
+ * inversions in the topo-sort propagation step; the loop eliminates them.
+ *
+ * Heuristic: In-Degree / Out-Degree rank score.
+ *   High in-degree  → foundational element  → lower level
+ *   High out-degree → high-level element     → higher level
+ *   Edges from lower-ranked to higher-ranked classes are identified as back edges.
  */
 public class SCCBreaker {
-    
-    /** Minimum SCC size to consider for breaking. Smaller SCCs are left as-is. */
+
     private static final int MIN_SCC_SIZE_TO_BREAK = 3;
-    
+
     private final Map<String, Set<String>> originalGraph;
     private final Set<Edge> backEdges = new HashSet<>();
-    
-    /**
-     * Represents a directed edge in the dependency graph.
-     */
+
     public static class Edge {
         public final String from;
         public final String to;
-        
+
         public Edge(String from, String to) {
             this.from = from;
-            this.to = to;
+            this.to   = to;
         }
-        
-        @Override
-        public boolean equals(Object o) {
+
+        @Override public boolean equals(Object o) {
             if (this == o) return true;
             if (o == null || getClass() != o.getClass()) return false;
             Edge edge = (Edge) o;
             return Objects.equals(from, edge.from) && Objects.equals(to, edge.to);
         }
-        
-        @Override
-        public int hashCode() {
-            return Objects.hash(from, to);
-        }
-        
-        @Override
-        public String toString() {
-            return from + " → " + to;
-        }
+
+        @Override public int hashCode() { return Objects.hash(from, to); }
+
+        @Override public String toString() { return from + " → " + to; }
     }
-    
-    /**
-     * Creates an SCCBreaker for the given dependency graph.
-     * 
-     * @param dependencyGraph Map from class name to set of classes it depends on
-     */
+
     public SCCBreaker(Map<String, Set<String>> dependencyGraph) {
         this.originalGraph = new HashMap<>();
         for (Map.Entry<String, Set<String>> entry : dependencyGraph.entrySet()) {
             this.originalGraph.put(entry.getKey(), new HashSet<>(entry.getValue()));
         }
     }
-    
+
     /**
-     * Analyzes the graph and identifies back edges that should be ignored for level calculation.
-     * 
-     * @return Set of edges that are identified as "back edges" (violations)
+     * Identifies back edges in a single pass over all large SCCs.
+     * Uses the original graph so that the set of cut edges remains stable and
+     * predictable — the UI displays these edges as violations (red), so
+     * iterating to a fixpoint would change the visual output unpredictably.
      */
     public Set<Edge> findBackEdges() {
         backEdges.clear();
-        
-        // Find all SCCs
-        TarjanSCCFinder sccFinder = new TarjanSCCFinder(originalGraph);
-        List<StronglyConnectedComponent> sccs = sccFinder.findSCCs();
-        
-        // Process each large SCC
-        for (StronglyConnectedComponent scc : sccs) {
+
+        Map<String, Set<String>> filteredGraph = buildFilteredGraph();
+        for (StronglyConnectedComponent scc : new TarjanSCCFinder(filteredGraph).findSCCs()) {
             if (scc.getSize() >= MIN_SCC_SIZE_TO_BREAK) {
-                Set<Edge> sccBackEdges = breakSCC(scc);
-                backEdges.addAll(sccBackEdges);
+                backEdges.addAll(breakSCC(scc, filteredGraph));
             }
         }
-        
+
         return new HashSet<>(backEdges);
     }
-    
-    /**
-     * Returns a modified dependency graph with back edges removed.
-     * This graph should be acyclic or have much smaller SCCs.
-     * 
-     * @return Dependency graph without the identified back edges
-     */
+
+    /** Returns the dependency graph with all identified back edges removed. */
     public Map<String, Set<String>> getGraphWithoutBackEdges() {
-        if (backEdges.isEmpty()) {
-            findBackEdges();
-        }
-        
-        Map<String, Set<String>> modifiedGraph = new HashMap<>();
+        if (backEdges.isEmpty()) findBackEdges();
+        return buildFilteredGraph();
+    }
+
+    /** Builds the graph with the current set of back edges removed. */
+    private Map<String, Set<String>> buildFilteredGraph() {
+        Map<String, Set<String>> filtered = new HashMap<>(originalGraph.size());
         for (Map.Entry<String, Set<String>> entry : originalGraph.entrySet()) {
             String from = entry.getKey();
-            Set<String> filteredDeps = new HashSet<>();
-            
+            Set<String> deps = new HashSet<>();
             for (String to : entry.getValue()) {
-                Edge edge = new Edge(from, to);
-                if (!backEdges.contains(edge)) {
-                    filteredDeps.add(to);
-                }
+                if (!backEdges.contains(new Edge(from, to))) deps.add(to);
             }
-            modifiedGraph.put(from, filteredDeps);
+            filtered.put(from, deps);
         }
-        
-        return modifiedGraph;
+        return filtered;
     }
-    
+
     /**
-     * Breaks a single SCC by identifying back edges using the rank heuristic.
+     * Identifies back edges within a single SCC using the rank heuristic.
+     * Uses the current filtered graph so degrees reflect already-removed edges.
      */
-    private Set<Edge> breakSCC(StronglyConnectedComponent scc) {
+    private Set<Edge> breakSCC(StronglyConnectedComponent scc,
+                                Map<String, Set<String>> filteredGraph) {
         Set<String> members = scc.getMembers();
         Set<Edge> identifiedBackEdges = new HashSet<>();
-        
-        // Calculate in-degree and out-degree for each member (only within SCC)
-        Map<String, Integer> inDegree = new HashMap<>();
+
+        Map<String, Integer> inDegree  = new HashMap<>();
         Map<String, Integer> outDegree = new HashMap<>();
-        
+        for (String m : members) { inDegree.put(m, 0); outDegree.put(m, 0); }
+
         for (String member : members) {
-            inDegree.put(member, 0);
-            outDegree.put(member, 0);
-        }
-        
-        // Count edges within the SCC
-        for (String member : members) {
-            Set<String> deps = originalGraph.getOrDefault(member, Set.of());
-            for (String dep : deps) {
+            for (String dep : filteredGraph.getOrDefault(member, Set.of())) {
                 if (members.contains(dep)) {
                     outDegree.merge(member, 1, Integer::sum);
-                    inDegree.merge(dep, 1, Integer::sum);
+                    inDegree.merge(dep,    1, Integer::sum);
                 }
             }
         }
-        
-        // Calculate rank score: higher = more likely to be high-level
-        // Score = (outDegree - inDegree) normalized
+
         Map<String, Double> rankScore = new HashMap<>();
         for (String member : members) {
-            int out = outDegree.get(member);
-            int in = inDegree.get(member);
-            // Normalize to avoid division issues
-            double score = (out - in) / (double) Math.max(1, out + in);
-            rankScore.put(member, score);
+            int out = outDegree.get(member), in = inDegree.get(member);
+            rankScore.put(member, (out - in) / (double) Math.max(1, out + in));
         }
-        
-        // Sort members by rank score (ascending = low-level first)
-        List<String> sortedMembers = members.stream()
-            .sorted(Comparator.comparingDouble(rankScore::get))
-            .collect(Collectors.toList());
-        
-        // Assign preliminary levels based on sorted order
-        Map<String, Integer> preliminaryLevel = new HashMap<>();
-        for (int i = 0; i < sortedMembers.size(); i++) {
-            preliminaryLevel.put(sortedMembers.get(i), i);
-        }
-        
-        // Find back edges: edges from lower preliminary level to higher preliminary level
-        // that also go from higher rank score to lower rank score
+
         for (String member : members) {
-            Set<String> deps = originalGraph.getOrDefault(member, Set.of());
-            for (String dep : deps) {
-                if (members.contains(dep)) {
-                    // This is an edge within the SCC: member → dep
-                    // Normal flow: high-level depends on low-level
-                    // Back edge: low-level depends on high-level (violation)
-                    
-                    double memberRank = rankScore.get(member);
-                    double depRank = rankScore.get(dep);
-                    
-                    // If the dependency goes from low-rank to high-rank, it's likely a back edge
-                    // We use a threshold to avoid over-cutting
-                    if (memberRank < depRank - 0.1) {
-                        identifiedBackEdges.add(new Edge(member, dep));
-                    }
+            for (String dep : filteredGraph.getOrDefault(member, Set.of())) {
+                if (members.contains(dep)
+                        && rankScore.get(member) < rankScore.get(dep) - 0.1) {
+                    identifiedBackEdges.add(new Edge(member, dep));
                 }
             }
         }
-        
-        // Limit the number of back edges to avoid breaking too many connections
-        // Use Feedback Arc Set approximation: cut at most (edges / 2) edges
-        int maxBackEdges = countInternalEdges(scc) / 3;
+
+        int maxBackEdges = Math.max(1, countInternalEdges(scc, filteredGraph) / 3);
         if (identifiedBackEdges.size() > maxBackEdges) {
-            // Keep only the most "violating" back edges (largest rank difference)
-            List<Edge> sortedBackEdges = identifiedBackEdges.stream()
-                .sorted((e1, e2) -> {
-                    double diff1 = rankScore.get(e1.to) - rankScore.get(e1.from);
-                    double diff2 = rankScore.get(e2.to) - rankScore.get(e2.from);
-                    return Double.compare(diff2, diff1); // Descending
-                })
+            List<Edge> sorted = identifiedBackEdges.stream()
+                .sorted((e1, e2) -> Double.compare(
+                    rankScore.get(e2.to) - rankScore.get(e2.from),
+                    rankScore.get(e1.to) - rankScore.get(e1.from)))
                 .limit(maxBackEdges)
                 .collect(Collectors.toList());
-            identifiedBackEdges = new HashSet<>(sortedBackEdges);
+            identifiedBackEdges = new HashSet<>(sorted);
         }
-        
+
         return identifiedBackEdges;
     }
-    
-    /**
-     * Counts the number of edges within an SCC.
-     */
-    private int countInternalEdges(StronglyConnectedComponent scc) {
+
+    private int countInternalEdges(StronglyConnectedComponent scc,
+                                    Map<String, Set<String>> graph) {
         Set<String> members = scc.getMembers();
         int count = 0;
         for (String member : members) {
-            Set<String> deps = originalGraph.getOrDefault(member, Set.of());
-            for (String dep : deps) {
-                if (members.contains(dep)) {
-                    count++;
-                }
+            for (String dep : graph.getOrDefault(member, Set.of())) {
+                if (members.contains(dep)) count++;
             }
         }
         return count;
     }
-    
-    /**
-     * Returns statistics about the breaking operation.
-     */
+
     public String getStatistics() {
-        if (backEdges.isEmpty()) {
-            return "No back edges identified (no large SCCs or not analyzed yet)";
-        }
+        if (backEdges.isEmpty()) return "No back edges identified";
         return String.format("Identified %d back edges to break cycles", backEdges.size());
     }
 }
