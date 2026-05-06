@@ -108,9 +108,9 @@ marked layout element to a failing reproducer test. In the 92-module
 \emph{software-ekg-7} system, an R2 finding exposed a missing package-SCC
 equalization step and directly triggered a pipeline fix. All four invariants
 were ported to an independent Unity/.NET 3D software city and produced
-byte-identical findings on shared inputs. The two-phase separation is not a design choice---no correct
-level-computation pipeline can collapse the global and local questions into one
-raw traversal. To our knowledge, no previous layered
+identical findings on shared inputs. The two-phase separation is not a design choice---no correct
+level-computation pipeline can collapse the global and local questions into a
+single pass. To our knowledge, no previous layered
 architecture visualization has provided this degree of machine-checkable
 self-validation; we also discuss generalization to other layered
 visualization techniques.}
@@ -178,7 +178,7 @@ build tool, module order in a multi-module build, filesystem ordering on the
 build server, and other implementation details. None of these orders is
 semantically meaningful; none encodes architectural dependency direction.
 
-The result is dangerous: the same source code can produce different level
+The result is unreliable: the same source code can produce different level
 layouts under different build configurations. The errors are subtle. The layout
 may still look plausible, arrows may mostly point in the expected direction,
 and no obvious visual break appears. Yet the precise hierarchy information is
@@ -276,7 +276,7 @@ assignment: Tarjan, then SCC-DAG, then longest path.
 
 \subsection*{The Solution: Two Semantically Different Level Concepts}
 
-Failure modes 1 to 3 share the same root cause: trying to use one single level
+Failure modes 1 to 3 share the same root cause: trying to use a single level
 concept for two different questions. Structure202 separates them:
 
 \begin{itemize}
@@ -318,10 +318,10 @@ their local structure unreadable. Phase 2 sees only sibling relationships and
 produces a package-local ordering that is independent of the global
 architectural depth.
 
-The central argument is that no single level concept can serve both purposes
-well. A purely global level is often visually useless inside a package; a
-purely local level has no architectural meaning. The explicit separation
-enables a layout that is both structurally correct and readable.
+No single level concept can serve both purposes well. A purely global level is
+often visually useless inside a package; a purely local level has no
+architectural meaning. The explicit separation enables a layout that is both
+structurally correct and readable.
 
 \begin{table}[h]
 \centering
@@ -342,9 +342,8 @@ enables a layout that is both structurally correct and readable.
 \end{table}
 
 The implemented invariants R1, R2, R3, and R5 are machine-checkable
-postconditions for exactly this pipeline separation. The fact that the checker
-found a real R2 bug in \emph{software-ekg-7} shows that the rules are not
-trivial to satisfy, even for the authors of the algorithm.
+postconditions for exactly this pipeline separation. The checker found a real R2 bug in \emph{software-ekg-7}, showing that the
+rules are not trivial to satisfy, even for the authors of the algorithm.
 
 \subsection*{Implementation: The Complete Pipeline}
 
@@ -429,7 +428,7 @@ the resulting component DAG. The implemented fixpoint keeps these concerns
 explicit and is validated by the same R2/R3 invariants.
 
 The term ``two phases'' refers to the conceptual separation between global
-architectural depth and local layout position, not to the raw number of
+architectural depth and local layout position, not to the number of
 implementation steps. Phase 1 is an ordered pipeline with one monotone package
 fixpoint. Phase 2 is an independent local computation.
 
@@ -486,7 +485,7 @@ different input model.
   \label{fig:swekg7-metrics}
 \end{figure}
 
-The invariant checker closes the loop from visual symptom to reproducible
+The invariant checker connects the visual symptom to a reproducible
 algorithm defect. Figure~\ref{fig:invariant-dialogs} shows two dialog outputs
 from the checker: an R2 package-SCC equal-level finding and an R3 container
 dominance finding. The R2 finding is precisely the class of defect addressed by
@@ -545,7 +544,7 @@ caused by shared class SCCs before running Tarjan on the remaining package
 graph.
 
 Specifying invariants for a three-level constraint system turns out to be
-non-trivial in its own right. The checker therefore provides a second safety
+harder than it appears. The checker therefore provides a second safety
 net: it not only tests the implementation against the rules, but also exposes
 when the rules themselves are too broad or too coarse. False positives force the rule to
 become more precise. The later R2 finding in \emph{software-ekg-7} shows that
@@ -560,7 +559,7 @@ identified by the SCCBreaker. For each method, the panel shows the involved
 caller classes; a \emph{Cut All} context menu removes all associated edges at
 once. This closes the gap between a visual diagnosis --- a red edge in the city
 layout --- and a targeted refactoring action: the user sees which concrete call
-must be removed or inverted to dissolve the most tangles with the least effort.
+must be removed or inverted to eliminate the most cycles with the least refactoring effort.
 
 \subsection*{Relation to Feedback Arc Set Heuristics}
 
