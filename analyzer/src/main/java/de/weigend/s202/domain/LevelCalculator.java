@@ -82,13 +82,15 @@ public class LevelCalculator {
         // the resulting levels may be approximate for cyclic packages, which Step 5c corrects.
         applyPackageDependencyOrdering(model, simplePkgGraph);
 
-        // Steps 5c + lift: equalize package SCCs (R2) and re-propagate to parents.
-        // A single pass is insufficient: liftParentPackageLevels can raise an SCC member
-        // that is also a parent package, breaking equalization. The loop alternates until
-        // stable — levels grow monotonically so it terminates; in practice 1–3 iterations.
+        // Steps 5c + lift: equalize package SCCs (R2) then re-propagate to parents.
+        // liftParentPackageLevels always runs at least once (Step 5b may have set child
+        // packages above their parents). Subsequent iterations handle the case where
+        // lifting a parent-SCC-member breaks equalization again. Levels grow monotonically
+        // so the loop terminates; in practice 1–2 iterations.
         for (int i = 0; i < 5; i++) {
-            if (!equalizePackageSccLevels(model, filteredPkgGraph)) break;
+            boolean changed = equalizePackageSccLevels(model, filteredPkgGraph);
             liftParentPackageLevels(model, rawModel);
+            if (!changed) break;
         }
 
         // Step 6: Set reverse dependencies
