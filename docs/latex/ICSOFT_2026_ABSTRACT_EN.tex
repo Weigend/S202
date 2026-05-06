@@ -21,6 +21,7 @@
 \usepackage{apalike}
 \usepackage{caption}
 \usepackage{listings}
+\usepackage{float}
 \usepackage[ruled]{algorithm2e}
 \usepackage{SCITEPRESS}
 \usepackage[utf8]{inputenc}
@@ -69,14 +70,13 @@
   dependency analysis, software engineering tools}
 
 \abstract{Layered architecture visualizations communicate dependency structure
-through spatial order: elements that depend on others are placed higher. If the
+through vertical position: elements that depend on others are placed higher. If the
 level-assignment pipeline is wrong, the picture can still look plausible while
-misleading the viewer: a package may appear below its own classes, cyclic peer
-packages may be placed on different levels, or a regular dependency may point
-against the intended layer direction. Layout correctness should be the tool's responsibility, not the
+misleading the viewer: cyclic peer packages may be placed on different levels,
+or a regular dependency may point against the intended layer direction. Layout correctness should be the tool's responsibility, not the
 reader's --- the implementation shows how hard that actually is.
 \par\smallskip
-Our 2021 IVAPP Best Paper, \emph{A Layered Software City for Dependency
+Our 2021 IVAPP Paper, \emph{A Layered Software City for Dependency
 Visualization} \cite{Dashuber2021}, introduced a city layout in which the X/Y
 position of class buildings follows dependency-derived levels, while building
 height encodes orthogonal metrics such as complexity or lines of code. We present Structure202, an open-source Java reference implementation
@@ -137,7 +137,7 @@ visualization techniques.}
 A correct layered layout must satisfy three constraints at the same time:
 
 \begin{enumerate}
-  \item \textbf{Class constraint:} If $A \rightarrow B$ means that $A$ depends
+  \item \textbf{Class constraint (R1):} If $A \rightarrow B$ means that $A$ depends
         on $B$, then $\text{level}(A) > \text{level}(B)$.
   \item \textbf{Hierarchy constraint (R3):} A package must be placed at least
         as high as its highest contained element.
@@ -150,7 +150,7 @@ Each constraint is individually manageable. Together they create a circular
 dependency system between the levels of computation themselves, not merely
 between classes.
 
-\subsection*{Failure Mode 1: Retroactive Correction}
+\subsection*{Failure Mode 1: Cascading Level Updates}
 
 An algorithm iterates over classes and assigns levels. It first sees class $A$
 in package $P_1$, computes $\text{level}(A)=3$, and therefore sets
@@ -189,34 +189,6 @@ partition on the complete graph, then build the SCC-DAG, then assign levels.
 Tarjan's algorithm computes the SCC partition in $O(V+E)$; with deterministic
 input ordering, the implementation becomes reproducible and independent of
 classpath traversal artifacts.
-
-\subsection*{Failure Mode 3: Mutual Dependency Between Package and Class Levels}
-
-Package $P_1$ is placed on the level of its highest class (R3). But the level of
-that highest class depends on the classes it calls. Those classes live in
-packages whose levels are again derived from their contents and dependencies.
-The package graph is not available as a stable input beforehand; it is derived
-from the class graph.
-
-This mutual dependency makes a shared single pass over classes and packages
-inherently unstable.
-
-\subsection*{Failure Mode 4: The Big Lake -- SCCs Without Heuristics Collapse
-the Layout}
-
-Without a mechanism for breaking large SCCs, all members of a cyclic group must
-be placed on the same level. For small cycles of two to five classes this is
-acceptable. For Minecraft Forge, however, we observed a single SCC containing
-4,038 classes. Without a breaker, more than 40 percent of the project would
-land on one flat level at the bottom of the layout. Everything else would stand
-above it, but the interesting internal structure of the core would be
-invisible.
-
-The heuristic SCC breaker solves this practical problem. It identifies back
-edges, meaning dependencies that run against the natural architectural flow,
-and temporarily removes them for level computation. The removed edges are
-visualized as violations instead of being ignored. The layout remains honest
-about architectural debt while still producing a usable hierarchy.
 
 \subsection*{Formal Counterexample: Why a Naive Recursive Algorithm Fails}
 
@@ -273,6 +245,66 @@ assignment can produce traversal-order-dependent results on graphs with
 interacting SCCs. In JVM-based tools, that traversal order can be influenced by
 classpath and packaging order. The correct solution collapses SCCs before level
 assignment: Tarjan, then SCC-DAG, then longest path.
+
+\subsection*{Failure Mode 3: Mutual Dependency Between Package and Class Levels}
+
+Package $P_1$ is placed on the level of its highest class (R3). But the level of
+that highest class depends on the classes it calls. Those classes live in
+packages whose levels are again derived from their contents and dependencies.
+The package graph is not available as a stable input beforehand; it is derived
+from the class graph.
+
+This mutual dependency makes a shared single pass over classes and packages
+inherently unstable.
+
+\subsection*{Failure Mode 4: The Big Lake -- SCCs Without Heuristics Collapse
+the Layout}
+
+Without a mechanism for breaking large SCCs, all members of a cyclic group must
+be placed on the same level. For small cycles of two to five classes this is
+acceptable. For Minecraft Forge, however, we observed a single SCC containing
+4,038 classes. Without a breaker, more than 40 percent of the project would
+land on one flat level at the bottom of the layout. Everything else would stand
+above it, but the interesting internal structure of the core would be
+invisible.
+
+The heuristic SCC breaker solves this practical problem. It identifies back
+edges, meaning dependencies that run against the natural architectural flow,
+and temporarily removes them for level computation. The removed edges are
+visualized as violations instead of being ignored. The layout remains honest
+about architectural debt while still producing a usable hierarchy.
+
+\subsection*{Relation to Feedback Arc Set Heuristics}
+
+Failure Mode 4 is an instance of the Minimum Feedback Arc Set problem: remove a
+minimal set of directed edges so the graph becomes acyclic. The problem is
+NP-hard \cite{Karp1972}, so any practical polynomial-time implementation must
+use a heuristic or approximation.
+
+A well-known related heuristic is due to Eades, Lin, and Smyth \cite{Eades1993}.
+It orders nodes according to the difference between outgoing and incoming
+degree, then classifies edges that point backward in the resulting sequence as
+feedback edges. The intuition is similar to Structure202: high out-degree
+suggests a higher-level element; high in-degree suggests a foundational
+element.
+
+Structure202 uses a deliberately simpler variant: a direct normalized score per
+node,
+
+\[
+  \frac{\text{outDegree} - \text{inDegree}}
+       {\max(1, \text{outDegree} + \text{inDegree})}.
+\]
+
+Edges from lower-ranked to higher-ranked nodes are classified as back-edge
+candidates. This is easier to implement and sufficient for software dependency
+graphs, where the heuristic reflects architectural intuition rather than
+claiming mathematical optimality.
+
+The important distinction is transparency. Many tools break cycles implicitly,
+but Structure202 classifies heuristic cut edges explicitly. They are marked as
+\texttt{VIOLATION}, rendered in red, and known to the invariant checker. This
+makes algorithmic defects separable from tolerated heuristic artifacts.
 
 \subsection*{The Solution: Two Semantically Different Level Concepts}
 
@@ -341,9 +373,75 @@ structurally correct and readable.
 \caption{The two level concepts computed by Structure202.}
 \end{table}
 
-The implemented invariants R1, R2, R3, and R5 are machine-checkable
-postconditions for exactly this pipeline separation. The checker found a real R2 bug in \emph{software-ekg-7}, showing that the
-rules are not trivial to satisfy, even for the authors of the algorithm.
+The two phases define four machine-checkable postconditions verified by the
+Layout Invariant Checker after every analysis run:
+
+\begin{table}[h]
+\centering\small
+\begin{tabular}{lp{10cm}}
+\hline
+\textbf{Rule} & \textbf{Postcondition} \\
+\hline
+R1 & Non-heuristic class dependencies point strictly downward:
+     $A \rightarrow B \Rightarrow \text{level}(A) > \text{level}(B)$ \\
+R2 & All packages in a filtered package-level SCC share the same level \\
+R3 & A container's level equals or exceeds the maximum level of its contents \\
+R5 & Edge classifications (\texttt{NORMAL}, \texttt{VIOLATION}, \texttt{BACK\_EDGE})
+     are consistent with the current level assignment and SCC membership \\
+\hline
+\end{tabular}
+\caption{The four layout invariants verified after every analysis run.}
+\end{table}
+
+Figure~\ref{fig:invariant-r2} shows a sample R2 report from Minecraft Forge;
+the same checker exposed a real R2 bug in \emph{software-ekg-7} (see also below).
+
+\begin{figure}[H]
+  \centering
+  \includegraphics[width=0.7\linewidth]{\detokenize{figures/Invariant Finding R2.png}}
+  \caption{R2 checker report: packages in a filtered package-SCC are placed on
+  different levels. Findings are reported as algorithm-bug candidates with a
+  copy-paste-ready reproducer block, which makes the visual failure traceable
+  to concrete level-pipeline constraints.}
+  \label{fig:invariant-r2}
+\end{figure}
+
+\subsection*{R4: A Retired Rule and What It Teaches}
+
+An early version of the invariant checker contained R4:
+
+\begin{verbatim}
+Cyclic child packages must share a level.
+\end{verbatim}
+
+The rule sounds reasonable and is correct in simple cases. In practice it
+failed because the raw package graph contains relationships that should not be
+interpreted as peer-level architectural cycles:
+
+\begin{itemize}
+  \item \textbf{Parent-child edges} create apparent bidirectional relationships
+        because a parent contains its children and children belong to their
+        parent. Without filtering, many parent/child pairs look cyclic.
+  \item \textbf{SCCBreaker back edges} connect packages that are not
+        necessarily architectural peers. A rule that includes these edges
+        equalizes the wrong candidates.
+  \item \textbf{Shared class SCCs} can make two packages appear
+        package-dependent without representing a true structural peer
+        relationship.
+\end{itemize}
+
+R4 was replaced by R2, which expresses the same intention on the correct
+filtered graph. R2 removes heuristic back edges, intra-subtree edges, and edges
+caused by shared class SCCs before running Tarjan on the remaining package
+graph.
+
+Specifying invariants for a three-level constraint system turns out to be
+harder than it appears. The checker therefore provides a second safety
+net: it not only tests the implementation against the rules, but also exposes
+when the rules themselves are too broad or too coarse. False positives force the rule to
+become more precise. The later R2 finding in \emph{software-ekg-7} shows that
+the refined rule was precise enough to distinguish real pipeline bugs from
+apparent ones.
 
 \subsection*{Implementation: The Complete Pipeline}
 
@@ -445,7 +543,7 @@ The number of classes, packages, dependencies, cyclic classes, and tests stayed
 constant; the change is therefore attributable to level propagation, not to a
 different input model.
 
-\begin{figure}[h]
+\begin{figure}[H]
   \centering
   \begin{subfigure}{0.49\textwidth}
     \centering
@@ -466,15 +564,15 @@ different input model.
   \label{fig:swekg7-before-after}
 \end{figure}
 
-\begin{figure}[h]
+\begin{figure}[H]
   \centering
-  \begin{subfigure}{0.31\textwidth}
+  \begin{subfigure}{0.18\textwidth}
     \centering
     \includegraphics[width=\linewidth]{figures/Vor-Constraintfix.png}
     \caption{Before: 167 violations, MaxLevel 160.}
   \end{subfigure}
-  \hspace{0.08\textwidth}
-  \begin{subfigure}{0.31\textwidth}
+  \hspace{0.04\textwidth}
+  \begin{subfigure}{0.18\textwidth}
     \centering
     \includegraphics[width=\linewidth]{figures/Nach-Constraintfix.png}
     \caption{After: zero violations, MaxLevel 18.}
@@ -486,112 +584,8 @@ different input model.
 \end{figure}
 
 The invariant checker connects the visual symptom to a reproducible
-algorithm defect. Figure~\ref{fig:invariant-dialogs} shows two dialog outputs
-from the checker: an R2 package-SCC equal-level finding and an R3 container
-dominance finding. The R2 finding is precisely the class of defect addressed by
-the fixpoint in Step~5c; R3 demonstrates why the parent lift must remain part of
-the same monotone constraint system rather than being treated as an unrelated
-post-processing step.
-
-\begin{figure}[h]
-  \centering
-  \begin{subfigure}{0.49\textwidth}
-    \centering
-    \includegraphics[width=\linewidth]{\detokenize{figures/Invariant Finding R2.png}}
-    \caption{R2 report: packages in a filtered package-SCC are placed on
-    different levels.}
-  \end{subfigure}
-  \hfill
-  \begin{subfigure}{0.49\textwidth}
-    \centering
-    \includegraphics[width=\linewidth]{\detokenize{figures/Invariant Finding R3.png}}
-    \caption{R3 report: a parent package is below one of its contained
-    packages.}
-  \end{subfigure}
-  \caption{Invariant-checker dialogs. Findings are reported as algorithm-bug
-  candidates with a copy-paste-ready reproducer block, which makes the visual
-  failure traceable to concrete level-pipeline constraints.}
-  \label{fig:invariant-dialogs}
-\end{figure}
-
-\subsection*{R4: A Retired Rule and What It Teaches}
-
-An early version of the invariant checker contained R4:
-
-\begin{verbatim}
-Cyclic child packages must share a level.
-\end{verbatim}
-
-The rule sounds reasonable and is correct in simple cases. In practice it
-failed because the raw package graph contains relationships that should not be
-interpreted as peer-level architectural cycles:
-
-\begin{itemize}
-  \item \textbf{Parent-child edges} create apparent bidirectional relationships
-        because a parent contains its children and children belong to their
-        parent. Without filtering, many parent/child pairs look cyclic.
-  \item \textbf{SCCBreaker back edges} connect packages that are not
-        necessarily architectural peers. A rule that includes these edges
-        equalizes the wrong candidates.
-  \item \textbf{Shared class SCCs} can make two packages appear
-        package-dependent without representing a true structural peer
-        relationship.
-\end{itemize}
-
-R4 was replaced by R2, which expresses the same intention on the correct
-filtered graph. R2 removes heuristic back edges, intra-subtree edges, and edges
-caused by shared class SCCs before running Tarjan on the remaining package
-graph.
-
-Specifying invariants for a three-level constraint system turns out to be
-harder than it appears. The checker therefore provides a second safety
-net: it not only tests the implementation against the rules, but also exposes
-when the rules themselves are too broad or too coarse. False positives force the rule to
-become more precise. The later R2 finding in \emph{software-ekg-7} shows that
-the refined rule was precise enough to distinguish real pipeline bugs from
-apparent ones.
-
-\subsection*{Interactive Debt Navigation: Top-Cut-Targets}
-
-For interactive debt resolution, a \emph{Top-Cut-Targets} panel lists the
-specific method calls that appear most frequently across the cut edges
-identified by the SCCBreaker. For each method, the panel shows the involved
-caller classes; a \emph{Cut All} context menu removes all associated edges at
-once. This closes the gap between a visual diagnosis --- a red edge in the city
-layout --- and a targeted refactoring action: the user sees which concrete call
-must be removed or inverted to eliminate the most cycles with the least refactoring effort.
-
-\subsection*{Relation to Feedback Arc Set Heuristics}
-
-Failure Mode 4 is an instance of the Minimum Feedback Arc Set problem: remove a
-minimal set of directed edges so the graph becomes acyclic. The problem is
-NP-hard \cite{Karp1972}, so any practical polynomial-time implementation must
-use a heuristic or approximation.
-
-A well-known related heuristic is due to Eades, Lin, and Smyth \cite{Eades1993}.
-It orders nodes according to the difference between outgoing and incoming
-degree, then classifies edges that point backward in the resulting sequence as
-feedback edges. The intuition is similar to Structure202: high out-degree
-suggests a higher-level element; high in-degree suggests a foundational
-element.
-
-Structure202 uses a deliberately simpler variant: a direct normalized score per
-node,
-
-\[
-  \frac{\text{outDegree} - \text{inDegree}}
-       {\max(1, \text{outDegree} + \text{inDegree})}.
-\]
-
-Edges from lower-ranked to higher-ranked nodes are classified as back-edge
-candidates. This is easier to implement and sufficient for software dependency
-graphs, where the heuristic reflects architectural intuition rather than
-claiming mathematical optimality.
-
-The important distinction is transparency. Many tools break cycles implicitly,
-but Structure202 classifies heuristic cut edges explicitly. They are marked as
-\texttt{VIOLATION}, rendered in red, and known to the invariant checker. This
-makes algorithmic defects separable from tolerated heuristic artifacts.
+algorithm defect. The R2 finding shown in Figure~\ref{fig:invariant-r2} is
+precisely the class of defect addressed by the fixpoint in Step~5c.
 
 \section*{Summary}
 
