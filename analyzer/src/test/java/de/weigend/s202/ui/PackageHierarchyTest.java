@@ -1,8 +1,5 @@
 package de.weigend.s202.ui;
 
-import javafx.application.Platform;
-import javafx.scene.layout.VBox;
-import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 
 import java.util.HashMap;
@@ -15,17 +12,6 @@ import static org.junit.jupiter.api.Assertions.*;
  * Specifically tests that missing parent packages are automatically created.
  */
 public class PackageHierarchyTest {
-    
-    @BeforeAll
-    static void initJavaFX() {
-        if (!Platform.isFxApplicationThread()) {
-            try {
-                Platform.startup(() -> {});
-            } catch (Exception e) {
-                // JavaFX already started or exception during startup
-            }
-        }
-    }
 
     @Test
     public void testPackageHierarchyCreation() {

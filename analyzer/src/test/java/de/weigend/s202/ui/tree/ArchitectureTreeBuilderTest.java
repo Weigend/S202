@@ -1,12 +1,12 @@
 package de.weigend.s202.ui.tree;
 
-import de.weigend.s202.ui.LevelPackageBox;
 import de.weigend.s202.ui.model.ArchitectureNode;
 import de.weigend.s202.ui.model.ArchitectureNode.NodeType;
 import javafx.application.Platform;
 import javafx.scene.Node;
 import javafx.scene.layout.HBox;
 import javafx.scene.layout.VBox;
+import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 
@@ -26,6 +26,11 @@ public class ArchitectureTreeBuilderTest {
         } catch (Exception e) {
             // JavaFX already started
         }
+    }
+
+    @AfterAll
+    static void stopJavaFX() {
+        Platform.exit();
     }
 
     /**

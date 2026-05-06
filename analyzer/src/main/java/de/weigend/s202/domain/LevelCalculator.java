@@ -82,19 +82,14 @@ public class LevelCalculator {
         // the resulting levels may be approximate for cyclic packages, which Step 5c corrects.
         applyPackageDependencyOrdering(model, simplePkgGraph);
 
-        // Step 5c: Equalize package SCCs (R2) — single Tarjan pass on the filtered graph.
-        // The filtered graph removes back-edges and shared-class-SCC edges so that only
-        // genuine cyclic peer packages are equalized — exactly what the R2 checker verifies.
-        // Should produce the definitive equalization; a warning is logged if Step 5b left
-        // any SCC members at different levels (which would indicate a missed cycle above).
-        boolean step5cChanged = equalizePackageSccLevels(model, filteredPkgGraph);
-        if (step5cChanged) {
-            LOG.fine("Step 5c (R2) equalized package SCC members after Step 5b — " +
-                     "expected for cycles that exist only in the simple graph.");
+        // Steps 5c + lift: equalize package SCCs (R2) and re-propagate to parents.
+        // A single pass is insufficient: liftParentPackageLevels can raise an SCC member
+        // that is also a parent package, breaking equalization. The loop alternates until
+        // stable — levels grow monotonically so it terminates; in practice 1–3 iterations.
+        for (int i = 0; i < 5; i++) {
+            if (!equalizePackageSccLevels(model, filteredPkgGraph)) break;
+            liftParentPackageLevels(model, rawModel);
         }
-
-        // Re-propagate: lift parents of any packages raised in 5b/5c.
-        liftParentPackageLevels(model, rawModel);
 
         // Step 6: Set reverse dependencies
         updateDependentRelationships(model);
