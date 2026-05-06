@@ -36,6 +36,7 @@ public class ArchitectureNode {
     private Set<String> dependencies;
     private Set<String> dependents;
     private int level;
+    private int horizontalLayoutOrder;
 
     public ArchitectureNode(String fullName, String simpleName, NodeType type, boolean autoExpanded) {
         this.fullName = Objects.requireNonNull(fullName, "fullName cannot be null");
@@ -47,6 +48,7 @@ public class ArchitectureNode {
         this.dependencies = new HashSet<>();
         this.dependents = new HashSet<>();
         this.level = 0;
+        this.horizontalLayoutOrder = 0;
     }
     
     /**
@@ -68,6 +70,7 @@ public class ArchitectureNode {
         this.dependencies = new HashSet<>();
         this.dependents = new HashSet<>();
         this.level = level;
+        this.horizontalLayoutOrder = 0;
     }
 
     // ===== Getters =====
@@ -100,6 +103,10 @@ public class ArchitectureNode {
         return level;
     }
 
+    public int getHorizontalLayoutOrder() {
+        return horizontalLayoutOrder;
+    }
+
     public Set<String> getDependencies() {
         return new HashSet<>(dependencies);
     }
@@ -112,6 +119,10 @@ public class ArchitectureNode {
     
     public void setLevel(int level) {
         this.level = level;
+    }
+
+    public void setHorizontalLayoutOrder(int horizontalLayoutOrder) {
+        this.horizontalLayoutOrder = horizontalLayoutOrder;
     }
 
     public void addChild(ArchitectureNode child) {

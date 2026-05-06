@@ -2,6 +2,7 @@ package de.weigend.s202.ui.tree;
 
 import de.weigend.s202.ui.LevelClassBox;
 import de.weigend.s202.ui.LevelPackageBox;
+import de.weigend.s202.ui.layout.horizontal.HorizontalLayoutOrdering;
 import de.weigend.s202.ui.model.ArchitectureNode;
 import de.weigend.s202.ui.model.ArchitectureNode.NodeType;
 import javafx.geometry.Insets;
@@ -103,9 +104,8 @@ public class ArchitectureTreeBuilder {
             effectiveRoot = singleChild;
         }
 
-        // Process children of effective root, sorted by level descending (higher levels at top)
-        List<ArchitectureNode> sortedChildren = new ArrayList<>(effectiveRoot.getChildren());
-        sortedChildren.sort((a, b) -> Integer.compare(b.getLevel(), a.getLevel()));
+        // Process children from a sorted layout view: level desc, then horizontal row order.
+        List<ArchitectureNode> sortedChildren = HorizontalLayoutOrdering.childrenInLayoutOrder(effectiveRoot);
 
         // Group top-level children by level into HBox rows (same level = side by side)
         Map<Integer, HBox> topLevelRows = new HashMap<>();
@@ -165,8 +165,7 @@ public class ArchitectureTreeBuilder {
             VBox topLevelContainer = createTopLevelContainer();
             ArchitectureNode effectiveRoot = effectiveRoot(rootNode, topLevelContainer);
 
-            List<ArchitectureNode> sortedChildren = new ArrayList<>(effectiveRoot.getChildren());
-            sortedChildren.sort((a, b) -> Integer.compare(b.getLevel(), a.getLevel()));
+            List<ArchitectureNode> sortedChildren = HorizontalLayoutOrdering.childrenInLayoutOrder(effectiveRoot);
 
             Map<Integer, HBox> topLevelRows = new HashMap<>();
             Queue<Runnable> queue = new ArrayDeque<>();
@@ -257,7 +256,7 @@ public class ArchitectureTreeBuilder {
                                  Queue<Runnable> queue,
                                  BuildProgressCounter counter,
                                  ProgressSink progressSink) {
-        for (ArchitectureNode child : node.getChildren()) {
+        for (ArchitectureNode child : HorizontalLayoutOrdering.childrenInLayoutOrder(node)) {
             queue.add(() -> processChildNode(child, packageContainers, rootLevel, elementsAddedToParent,
                     archRoot, currentDepth, maxDepth, queue, counter, progressSink));
         }
@@ -385,7 +384,7 @@ public class ArchitectureTreeBuilder {
                                          int currentDepth,
                                          int maxDepth) {
 
-        for (ArchitectureNode child : node.getChildren()) {
+        for (ArchitectureNode child : HorizontalLayoutOrdering.childrenInLayoutOrder(node)) {
             // Skip if already processed
             if (elementsAddedToParent.contains(child.getFullName())) {
                 continue;

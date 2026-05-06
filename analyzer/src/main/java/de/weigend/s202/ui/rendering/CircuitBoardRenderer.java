@@ -3,7 +3,6 @@ package de.weigend.s202.ui.rendering;
 import de.weigend.s202.ui.LevelClassBox;
 import de.weigend.s202.ui.model.ArchitectureNode;
 import de.weigend.s202.ui.rendering.circuit.AStarEdgeRouter;
-import de.weigend.s202.ui.rendering.circuit.ClassReorderer;
 import de.weigend.s202.ui.rendering.circuit.GridBuilder;
 import de.weigend.s202.ui.rendering.circuit.PolylinePainter;
 import de.weigend.s202.ui.rendering.circuit.RoutedEdge;
@@ -22,7 +21,7 @@ import java.util.function.Consumer;
 /**
  * Street-map / circuit-board style dependency renderer.
  *
- * <p>Pipeline: ClassReorderer → GridBuilder → A* routing → PolylinePainter.
+ * <p>Pipeline: GridBuilder → A* routing → PolylinePainter.
  * Lines are rectilinear, never cross class boxes, bundle along corridors,
  * and render half-circle bridges at unavoidable crossings.
  */
@@ -67,15 +66,7 @@ public final class CircuitBoardRenderer implements DependencyRendererStrategy {
 
         dependencyPane.getChildren().clear();
 
-        // Phase 2: re-order class rows to reduce crossings
-        try {
-            ClassReorderer reorderer = new ClassReorderer(rootNode, elementRegistry);
-            reorderer.reorder(zoomableContent);
-        } catch (Exception ignore) {
-            // Reorder is an optimisation — never block rendering on failure.
-        }
-
-        // Force a full layout so bounds reflect any reorder
+        // Force a full layout so bounds reflect the model-side row order.
         zoomableContent.applyCss();
         zoomableContent.layout();
 

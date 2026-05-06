@@ -15,6 +15,7 @@ import de.weigend.s202.reader.GradleProjectScanner;
 import de.weigend.s202.reader.InputAnalyzer;
 import de.weigend.s202.reader.MavenProjectScanner;
 import de.weigend.s202.ui.ArchitectureView;
+import de.weigend.s202.ui.layout.horizontal.HorizontalRowLayoutOptimizer;
 import de.weigend.s202.ui.model.ArchitectureNode;
 import de.weigend.s202.ui.model.ArchitectureNodeBuilder;
 import de.weigend.s202.ui.model.DistrictRowLevelCalculator;
@@ -899,6 +900,7 @@ public class S202Module implements Module {
                 publishProgress("Building architecture tree...", 0.85);
                 ArchitectureNode root = architectureNodeBuilder.build(calculated);
                 new DistrictRowLevelCalculator().assignDistrictRowLevels(root);
+                new HorizontalRowLayoutOptimizer().assignHorizontalLayoutOrders(root);
 
                 publishProgress("Preparing quality metrics...", 0.90);
                 QualityMetrics metrics = QualityMetrics.compute(calculated);
@@ -1058,6 +1060,7 @@ public class S202Module implements Module {
                 DomainModel domainModel = projectMapper.toDomainModel(project.domainModel());
                 ArchitectureNode root = architectureNodeBuilder.build(domainModel);
                 new DistrictRowLevelCalculator().assignDistrictRowLevels(root);
+                new HorizontalRowLayoutOptimizer().assignHorizontalLayoutOrders(root);
                 QualityMetrics metrics = QualityMetrics.compute(domainModel);
                 LayoutInvariantReport invariants = projectMapper.toLayoutInvariantReport(project.layoutInvariantReport());
                 Set<TangleEdgeRenderer.Edge> cycleBreakEdges =
