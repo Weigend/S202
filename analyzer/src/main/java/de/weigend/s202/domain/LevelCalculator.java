@@ -246,12 +246,15 @@ public class LevelCalculator {
                 }
             }
 
-            // Propagate each vote up to all ancestor packages, stopping when the
-            // ancestor is in the same subtree as the target (intra-subtree edge).
+            // Propagate each vote up to all ancestor packages.
+            // Stop when toPkg is a descendant of the current ancestor (ancestor → child
+            // edge — a package depending on its own sub-package) or when ancestor == toPkg.
+            // Do NOT stop when toPkg is an ancestor of leafPkg: that edge (child depending
+            // on ancestor) is a valid upward dependency that determines ordering.
             for (String toPkg : targetPkgs) {
                 String ancestor = leafPkg;
                 while (ancestor != null && weights.containsKey(ancestor)) {
-                    if (isInSameSubtree(ancestor, toPkg)) break;
+                    if (ancestor.equals(toPkg) || toPkg.startsWith(ancestor + ".")) break;
                     weights.get(ancestor).merge(toPkg, 1, Integer::sum);
                     ancestor = extractPackageName(ancestor);
                 }
