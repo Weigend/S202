@@ -1,8 +1,10 @@
 package de.weigend.s202.domain;
 
+import de.weigend.s202.analysis.scc.SCCBreaker;
 import de.weigend.s202.analysis.scc.StronglyConnectedComponent;
 import de.weigend.s202.analysis.scc.TarjanSCCFinder;
 import de.weigend.s202.analysis.strategy.LevelCalculationStrategyContext;
+import de.weigend.s202.analysis.strategy.impl.HeuristicSCCBreakingStrategy;
 import de.weigend.s202.reader.DependencyModel;
 
 import java.util.*;
@@ -70,9 +72,10 @@ public class LevelCalculator {
         // Step 3: Compute class levels
         calculateClassLevels(model);
 
-        // Step 4: Compute package levels from weighted inter-package graph
-        //         and store the graph in the model for checker + visualization
-        calculatePackageLevels(model);
+        // Step 4: Compute package levels from weighted inter-package graph.
+        // Class back-edges are passed so child→parent lifting excludes them.
+        Set<SCCBreaker.Edge> classBackEdges = classBackEdgesFromStrategy();
+        calculatePackageLevels(model, classBackEdges);
 
         // Step 5: Set reverse dependencies
         updateDependentRelationships(model);
@@ -82,6 +85,14 @@ public class LevelCalculator {
 
     public LevelCalculationStrategyContext getStrategyContext() {
         return strategyContext;
+    }
+
+    private Set<SCCBreaker.Edge> classBackEdgesFromStrategy() {
+        var strategy = strategyContext.getClassLevelStrategy();
+        if (strategy instanceof HeuristicSCCBreakingStrategy h) {
+            return h.getLastIdentifiedBackEdges();
+        }
+        return Set.of();
     }
 
     // -------------------------------------------------------------------------
@@ -105,7 +116,7 @@ public class LevelCalculator {
     // Step 4 — package levels via weighted inter-package graph
     // -------------------------------------------------------------------------
 
-    private void calculatePackageLevels(DomainModel model) {
+    private void calculatePackageLevels(DomainModel model, Set<SCCBreaker.Edge> classBackEdges) {
         if (model.getAllPackages().isEmpty()) return;
         Set<String> allPkgNames = model.getAllPackages().keySet();
 
@@ -180,9 +191,31 @@ public class LevelCalculator {
             }
         }
 
+        // Child→parent lift: for each package P, find the max class-level of classes
+        // in P that are depended on by classes in CHILD packages of P (sub-packages).
+        // SCC back-edges are excluded. This ensures figurapi.primitive ends up strictly
+        // above figurapi.Rotation (class L1), while external deps are unaffected.
+        Map<String, Integer> childPkgUsedLevel = new HashMap<>();
+        for (DomainModel.CalculatedElementInfo cls : model.getAllClasses().values()) {
+            String fromPkg = extractPackageName(cls.fullName);
+            if (fromPkg == null) continue;
+            for (String dep : cls.dependencies) {
+                String toPkg = extractPackageName(dep);
+                if (toPkg == null || fromPkg.equals(toPkg)) continue;
+                // Only child→parent edges: fromPkg is a sub-package of toPkg
+                if (!fromPkg.startsWith(toPkg + ".")) continue;
+                // Skip class-level back-edges
+                if (classBackEdges.contains(new SCCBreaker.Edge(cls.fullName, dep))) continue;
+                DomainModel.CalculatedElementInfo depCls = model.getAllClasses().get(dep);
+                if (depCls == null) continue;
+                childPkgUsedLevel.merge(toPkg, depCls.level, Math::max);
+            }
+        }
+
         // Longest-path levels on SCC-DAG.
-        // Package levels are derived purely from the package dependency graph.
-        // Class levels are a separate coordinate system and are not mixed in here.
+        // For child→parent package edges, effective dep height =
+        //   max(pkgLevel, childPkgUsedLevel) so the dependent lands above the classes
+        //   it uses from its parent package. External cross-package deps use pkgLevel only.
         Map<Integer, Integer> sccLevels = new HashMap<>();
         for (StronglyConnectedComponent scc : sccs) sccLevels.put(scc.getId(), 0);
         boolean lvlChanged = true;
@@ -191,7 +224,20 @@ public class LevelCalculator {
             for (StronglyConnectedComponent scc : sccs) {
                 int maxDep = -1;
                 for (int depId : sccDeps.getOrDefault(scc.getId(), Set.of())) {
-                    maxDep = Math.max(maxDep, sccLevels.getOrDefault(depId, 0));
+                    int depPkgLevel = sccLevels.getOrDefault(depId, 0);
+                    int effectiveDep = depPkgLevel;
+                    // Check if any member of this SCC is a child of any member of depSCC
+                    for (String fromMember : scc.getMembers()) {
+                        for (Map.Entry<String, StronglyConnectedComponent> e : pkgToScc.entrySet()) {
+                            if (e.getValue().getId() != depId) continue;
+                            String depMember = e.getKey();
+                            if (fromMember.startsWith(depMember + ".")) {
+                                effectiveDep = Math.max(effectiveDep,
+                                    childPkgUsedLevel.getOrDefault(depMember, 0));
+                            }
+                        }
+                    }
+                    maxDep = Math.max(maxDep, effectiveDep);
                 }
                 int newLevel = maxDep >= 0 ? maxDep + 1 : 0;
                 if (sccLevels.get(scc.getId()) != newLevel) {
