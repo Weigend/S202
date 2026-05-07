@@ -44,7 +44,7 @@ public class LevelCalculatorIntegrationTest {
         assertEquals(0, examplePkg.level, "com.example should be L0 (no cross-pkg deps)");
         // com.example1: no cross-pkg deps → L0
         assertEquals(0, example1Pkg.level, "com.example1 should be L0 (no cross-pkg deps)");
-        // com.example2: depends on com.example(0) and com.example1(0) → L1
-        assertEquals(1, example2Pkg.level, "com.example2 depends on com.example → L1");
+        // com.example2: uses com.example.B (class L1) → package L2 (above the used class)
+        assertEquals(2, example2Pkg.level, "com.example2 uses com.example.B (class L1) → package L2");
     }
 }

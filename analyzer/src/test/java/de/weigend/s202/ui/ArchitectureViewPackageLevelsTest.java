@@ -31,12 +31,12 @@ public class ArchitectureViewPackageLevelsTest {
         // Package levels reflect inter-package dependency position, not class levels.
         // com.example: no cross-pkg deps → L0
         // com.example1: no cross-pkg deps → L0
-        // com.example2: depends on com.example(0) and com.example1(0) → L1
+        // com.example2: uses com.example.B (class L1) → package L2 (above the used class)
         // com: no own cross-pkg deps → L0 (containment ≠ dependency)
         assertEquals(0, domainModel.getPackage("com").level, "com has no own cross-pkg deps → L0");
         assertEquals(0, domainModel.getPackage("com.example").level, "com.example has no cross-pkg deps → L0");
         assertEquals(0, domainModel.getPackage("com.example1").level);
-        assertEquals(1, domainModel.getPackage("com.example2").level, "com.example2 depends on com.example → L1");
+        assertEquals(2, domainModel.getPackage("com.example2").level, "com.example2 uses com.example.B (class L1) → package L2");
 
         // Step 3: Build architecture node tree
         ArchitectureNodeBuilder builder = new ArchitectureNodeBuilder();
@@ -46,7 +46,7 @@ public class ArchitectureViewPackageLevelsTest {
         ArchitectureNode example2Node = findNodeByName(rootNode, "com.example2");
         assertNotNull(example2Node, "com.example2 should be found");
         assertEquals(NodeType.PACKAGE, example2Node.getType(), "com.example2 should be a PACKAGE");
-        assertEquals(1, example2Node.getLevel(), "com.example2 package level 1");
+        assertEquals(2, example2Node.getLevel(), "com.example2 package level 2");
         
         System.out.println("Found com.example2 at level " + example2Node.getLevel());
     }
