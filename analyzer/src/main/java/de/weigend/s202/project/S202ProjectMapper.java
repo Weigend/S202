@@ -6,7 +6,6 @@ import de.weigend.s202.domain.DomainModel;
 import de.weigend.s202.reader.DependencyModel;
 import de.weigend.s202.reader.EdgeKind;
 import de.weigend.s202.ui.rendering.TangleEdgeRenderer;
-
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Comparator;

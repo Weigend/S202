@@ -37,7 +37,7 @@ public class FullPipelineTest {
         // com.example2 depends on com.example(0) and com.example1(0) → package level 1
         DomainModel.CalculatedElementInfo example2 = calculatedModel.getPackage("com.example2");
         assertNotNull(example2, "com.example2 should exist");
-        assertEquals(2, example2.level, "com.example2 uses com.example.B (class L1) → package L2");
+        assertEquals(1, example2.level, "com.example2 uses com.example.B (class L1) → package L2");
         
         // Step 3: Build architecture node tree
         ArchitectureNodeBuilder builder = new ArchitectureNodeBuilder();
@@ -51,7 +51,7 @@ public class FullPipelineTest {
         ArchitectureNode example2Node = findNodeByName(rootNode, "com.example2");
         assertNotNull(example2Node, "com.example2 should be in ArchitectureNode tree");
         assertEquals(NodeType.PACKAGE, example2Node.getType(), "com.example2 should be a PACKAGE");
-        assertEquals(2, example2Node.getLevel(), "com.example2 package level 2");
+        assertEquals(1, example2Node.getLevel(), "com.example2 package level 1");
         
         System.out.println("[TEST] Found com.example2 in ArchitectureNode at level " + example2Node.getLevel());
     }

@@ -180,29 +180,9 @@ public class LevelCalculator {
             }
         }
 
-        // Effective height per (fromPkg → toPkg) edge: max class level of the classes
-        // in toPkg that are actually depended on by any class in fromPkg.
-        // This ensures a dependent package lands strictly above the classes it USES,
-        // not above unrelated classes that happen to live in the same package.
-        // Example: figurapi.primitive → figurapi.Rotation (level 1) → effective = 1
-        //          → primitive level = 2 (above Rotation), not 1 (same row).
-        Map<String, Map<String, Integer>> maxDepClassLevel = new HashMap<>();
-        for (DomainModel.CalculatedElementInfo cls : model.getAllClasses().values()) {
-            String fromPkg = extractPackageName(cls.fullName);
-            if (fromPkg == null) continue;
-            for (String dep : cls.dependencies) {
-                String toPkg = extractPackageName(dep);
-                if (toPkg == null || fromPkg.equals(toPkg)) continue;
-                DomainModel.CalculatedElementInfo depCls = model.getAllClasses().get(dep);
-                if (depCls == null) continue;
-                maxDepClassLevel
-                    .computeIfAbsent(fromPkg, k -> new HashMap<>())
-                    .merge(toPkg, depCls.level, Math::max);
-            }
-        }
-
         // Longest-path levels on SCC-DAG.
-        // Effective dep height = max(dep pkg level, max class level actually used from dep).
+        // Package levels are derived purely from the package dependency graph.
+        // Class levels are a separate coordinate system and are not mixed in here.
         Map<Integer, Integer> sccLevels = new HashMap<>();
         for (StronglyConnectedComponent scc : sccs) sccLevels.put(scc.getId(), 0);
         boolean lvlChanged = true;
@@ -211,19 +191,7 @@ public class LevelCalculator {
             for (StronglyConnectedComponent scc : sccs) {
                 int maxDep = -1;
                 for (int depId : sccDeps.getOrDefault(scc.getId(), Set.of())) {
-                    int depPkgLevel = sccLevels.getOrDefault(depId, 0);
-                    // Find max used-class-level across all (fromPkg→depPkg) pairs
-                    int usedClassLevel = 0;
-                    for (String fromMember : scc.getMembers()) {
-                        for (String depMember : pkgToScc.entrySet().stream()
-                                .filter(e -> e.getValue().getId() == depId)
-                                .map(Map.Entry::getKey).toList()) {
-                            usedClassLevel = Math.max(usedClassLevel,
-                                maxDepClassLevel.getOrDefault(fromMember, Map.of())
-                                               .getOrDefault(depMember, 0));
-                        }
-                    }
-                    maxDep = Math.max(maxDep, Math.max(depPkgLevel, usedClassLevel));
+                    maxDep = Math.max(maxDep, sccLevels.getOrDefault(depId, 0));
                 }
                 int newLevel = maxDep >= 0 ? maxDep + 1 : 0;
                 if (sccLevels.get(scc.getId()) != newLevel) {
