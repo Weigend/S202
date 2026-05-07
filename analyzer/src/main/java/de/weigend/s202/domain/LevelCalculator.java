@@ -123,7 +123,7 @@ public class LevelCalculator {
         // Iteratively break SCCs using weight-based rank, then assign levels
         // via SCC-collapsed DAG longest-path. Remaining SCCs (equal-rank peers)
         // are collapsed to the same level without cutting any edge.
-        Set<String> backEdgeKeys = new HashSet<>(); // "from\0to"
+        Set<String> backEdgeKeys = new LinkedHashSet<>(); // "from\0to" — tracked for R3
         boolean changed = true;
         while (changed) {
             changed = false;
@@ -243,8 +243,9 @@ public class LevelCalculator {
             }
         }
 
-        // Store the weighted graph in the model for LayoutInvariantChecker and visualization
+        // Store the weighted graph and identified back-edges in the model
         model.setPackageEdgeWeights(weights);
+        model.setPackageBackEdges(backEdgeKeys);
 
         // Populate package dependencies (unweighted) for reverse-dependency tracking
         for (Map.Entry<String, Map<String, Integer>> entry : weights.entrySet()) {

@@ -19,6 +19,13 @@ public class DomainModel {
     private Map<String, Map<String, Integer>> packageEdgeWeights = new LinkedHashMap<>();
 
     /**
+     * Package back-edges identified and cut during SCC-breaking of the package graph.
+     * Stored as "from\0to" keys. R3 excludes these from level-direction checks,
+     * mirroring how R1 excludes class-level back-edges.
+     */
+    private Set<String> packageBackEdgeKeys = new LinkedHashSet<>();
+
+    /**
      * Information about a calculated element (class or package) with its level.
      */
     public static class CalculatedElementInfo {
@@ -61,6 +68,14 @@ public class DomainModel {
 
     public void setPackageEdgeWeights(Map<String, Map<String, Integer>> weights) {
         packageEdgeWeights = new LinkedHashMap<>(weights);
+    }
+
+    public void setPackageBackEdges(Set<String> backEdgeKeys) {
+        packageBackEdgeKeys = new LinkedHashSet<>(backEdgeKeys);
+    }
+
+    public boolean isPackageBackEdge(String from, String to) {
+        return packageBackEdgeKeys.contains(from + "\0" + to);
     }
 
     /** Returns the full weighted inter-package graph (unmodifiable). */

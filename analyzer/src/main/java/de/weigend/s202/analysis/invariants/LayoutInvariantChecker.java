@@ -103,7 +103,7 @@ public final class LayoutInvariantChecker {
         List<InvariantFinding> findings = new ArrayList<>();
         int dependencyCount = checkLevelInversionAcrossNonBackEdge(
                 classes, classToScc, backEdges, brokenSccIds, findings);
-        checkPackageEdgeDirection(packages, domainModel.getPackageEdgeWeights(), findings);
+        checkPackageEdgeDirection(packages, domainModel.getPackageEdgeWeights(), domainModel, findings);
         checkPkgSccEqualLevel(classes, packages, rawModel, classToScc, backEdges, findings);
         checkViolationFlagConsistency(classes, classGraph, classToScc, findings);
 
@@ -262,6 +262,7 @@ public final class LayoutInvariantChecker {
     private static void checkPackageEdgeDirection(
             Map<String, CalculatedElementInfo> packages,
             Map<String, Map<String, Integer>> packageWeights,
+            DomainModel domainModel,
             List<InvariantFinding> findings) {
 
         for (Map.Entry<String, Map<String, Integer>> fromEntry : packageWeights.entrySet()) {
@@ -276,8 +277,13 @@ public final class LayoutInvariantChecker {
                 CalculatedElementInfo toInfo = packages.get(toPkg);
                 if (toInfo == null) continue;
 
-                // Only check the dominant direction; skip back-edges and equal-weight peers
+                // Skip non-dominant and equal-weight (peer) edges
                 if (wAB <= wBA) continue;
+
+                // Skip edges cut during package SCC-breaking — these are architectural
+                // violations the algorithm deliberately removed from the level DAG,
+                // analogous to class-level back-edges excluded from R1.
+                if (domainModel.isPackageBackEdge(fromPkg, toPkg)) continue;
 
                 if (fromInfo.level <= toInfo.level) {
                     findings.add(new InvariantFinding(
