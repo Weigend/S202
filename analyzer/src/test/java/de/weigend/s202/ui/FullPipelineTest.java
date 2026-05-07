@@ -31,12 +31,13 @@ public class FullPipelineTest {
             System.out.println("    " + pkg.fullName + " -> L" + pkg.level);
         }
         
-        assertEquals(4, calculatedModel.getAllPackages().size(), "Should have 4 packages");
+        // 4 com.* packages + 7 sccs.* packages (adversarial SCC example)
+        assertEquals(11, calculatedModel.getAllPackages().size(), "Should have 11 packages");
         
-        // Verify com.example2 is at Level 3 (max class level = E at L3)
+        // com.example2 depends on com.example(0) and com.example1(0) → package level 1
         DomainModel.CalculatedElementInfo example2 = calculatedModel.getPackage("com.example2");
         assertNotNull(example2, "com.example2 should exist");
-        assertEquals(3, example2.level, "com.example2 should be at level 3");
+        assertEquals(1, example2.level, "com.example2 depends on com.example → package level 1");
         
         // Step 3: Build architecture node tree
         ArchitectureNodeBuilder builder = new ArchitectureNodeBuilder();
@@ -50,7 +51,7 @@ public class FullPipelineTest {
         ArchitectureNode example2Node = findNodeByName(rootNode, "com.example2");
         assertNotNull(example2Node, "com.example2 should be in ArchitectureNode tree");
         assertEquals(NodeType.PACKAGE, example2Node.getType(), "com.example2 should be a PACKAGE");
-        assertEquals(3, example2Node.getLevel(), "com.example2 should have level 3");
+        assertEquals(1, example2Node.getLevel(), "com.example2 package level 1");
         
         System.out.println("[TEST] Found com.example2 in ArchitectureNode at level " + example2Node.getLevel());
     }

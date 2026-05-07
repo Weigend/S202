@@ -1,6 +1,7 @@
 package de.weigend.s202.domain;
 
 import java.util.*;
+import java.util.Collections;
 
 /**
  * Model containing calculated level information for classes and packages.
@@ -8,6 +9,14 @@ import java.util.*;
 public class DomainModel {
     private final Map<String, CalculatedElementInfo> classes = new HashMap<>();
     private final Map<String, CalculatedElementInfo> packages = new HashMap<>();
+
+    /**
+     * Weighted inter-package dependency graph.
+     * weight(P_A → P_B) = number of distinct classes in P_A that depend on
+     * at least one class in P_B (intra-subtree edges excluded).
+     * Populated by LevelCalculator after package-level computation.
+     */
+    private Map<String, Map<String, Integer>> packageEdgeWeights = new LinkedHashMap<>();
 
     /**
      * Information about a calculated element (class or package) with its level.
@@ -46,6 +55,22 @@ public class DomainModel {
         public void addDependent(String dependent) {
             this.dependents.add(dependent);
         }
+    }
+
+    // ===== Package graph API =====
+
+    public void setPackageEdgeWeights(Map<String, Map<String, Integer>> weights) {
+        packageEdgeWeights = new LinkedHashMap<>(weights);
+    }
+
+    /** Returns the full weighted inter-package graph (unmodifiable). */
+    public Map<String, Map<String, Integer>> getPackageEdgeWeights() {
+        return Collections.unmodifiableMap(packageEdgeWeights);
+    }
+
+    /** Returns the weight of edge P_A → P_B, or 0 if no edge exists. */
+    public int getPackageEdgeWeight(String from, String to) {
+        return packageEdgeWeights.getOrDefault(from, Map.of()).getOrDefault(to, 0);
     }
 
     // ===== Public API =====
