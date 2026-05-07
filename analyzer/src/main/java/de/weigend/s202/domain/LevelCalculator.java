@@ -75,7 +75,7 @@ public class LevelCalculator {
         // Step 4: Compute package levels from weighted inter-package graph.
         // Class back-edges are passed so child→parent lifting excludes them.
         Set<SCCBreaker.Edge> classBackEdges = classBackEdgesFromStrategy();
-        calculatePackageLevels(model, classBackEdges);
+        calculatePackageLevels(model, rawModel, classBackEdges);
 
         // Step 5: Set reverse dependencies
         updateDependentRelationships(model);
@@ -116,13 +116,14 @@ public class LevelCalculator {
     // Step 4 — package levels via weighted inter-package graph
     // -------------------------------------------------------------------------
 
-    private void calculatePackageLevels(DomainModel model, Set<SCCBreaker.Edge> classBackEdges) {
+    private void calculatePackageLevels(DomainModel model, DependencyModel rawModel,
+                                        Set<SCCBreaker.Edge> classBackEdges) {
         if (model.getAllPackages().isEmpty()) return;
         Set<String> allPkgNames = model.getAllPackages().keySet();
 
         // Build weighted graph: weight[from][to] = # distinct classes in 'from'
         // with at least one dependency on a class in 'to' (subtree edges excluded).
-        Map<String, Map<String, Integer>> weights = buildWeightedPackageGraph(model);
+        Map<String, Map<String, Integer>> weights = buildWeightedPackageGraph(model, rawModel);
 
         // Unweighted adjacency for Tarjan (direction matters, zero-weight edges excluded)
         Map<String, Set<String>> graph = new LinkedHashMap<>();
@@ -278,33 +279,63 @@ public class LevelCalculator {
      * This ensures parent packages like {@code de.weigend.s202.ui} correctly reflect
      * the cumulative dependencies of all their sub-packages.
      */
-    private Map<String, Map<String, Integer>> buildWeightedPackageGraph(DomainModel model) {
+    /**
+     * Builds the weighted inter-package dependency graph.
+     * weight(P_A → P_B) = total method-call count from classes in P_A's subtree
+     * to classes in P_B. Method calls are a stronger signal than distinct-class
+     * counts: a class that is called hundreds of times clearly dominates a class
+     * that is called once, making SCC-breaking direction unambiguous.
+     * Intra-package and intra-subtree calls are excluded.
+     */
+    private Map<String, Map<String, Integer>> buildWeightedPackageGraph(
+            DomainModel model, DependencyModel rawModel) {
         Map<String, Map<String, Integer>> weights = new HashMap<>();
         for (String pkg : model.getAllPackages().keySet()) weights.put(pkg, new LinkedHashMap<>());
 
+        Set<String> allPkgNames = weights.keySet();
+
         for (DomainModel.CalculatedElementInfo cls : model.getAllClasses().values()) {
             String leafPkg = extractPackageName(cls.fullName);
-            if (leafPkg == null || !weights.containsKey(leafPkg)) continue;
+            if (leafPkg == null || !allPkgNames.contains(leafPkg)) continue;
 
-            // Distinct target packages for this class
-            Set<String> targetPkgs = new LinkedHashSet<>();
+            // Count method calls per target package using raw model data
+            Map<String, Integer> callCountPerPkg = new LinkedHashMap<>();
+            DependencyModel.ClassInfo rawCls = rawModel.getClass(cls.fullName);
+            if (rawCls != null) {
+                for (DependencyModel.MethodInfo method : rawCls.methods.values()) {
+                    for (Map.Entry<String, Integer> call : method.methodCalls.entrySet()) {
+                        // Method call key format: "ownerClass.methodName"
+                        // Find the target class by checking known dependencies
+                        String calledKey = call.getKey();
+                        for (String dep : cls.dependencies) {
+                            if (calledKey.startsWith(dep + ".")) {
+                                String toPkg = extractPackageName(dep);
+                                if (toPkg != null && !leafPkg.equals(toPkg)
+                                        && allPkgNames.contains(toPkg)) {
+                                    callCountPerPkg.merge(toPkg, call.getValue(), Integer::sum);
+                                }
+                                break;
+                            }
+                        }
+                    }
+                }
+            }
+            // Fall back to 1 per target package for structural deps with no call data
             for (String dep : cls.dependencies) {
                 String toPkg = extractPackageName(dep);
-                if (toPkg != null && !leafPkg.equals(toPkg) && weights.containsKey(toPkg)) {
-                    targetPkgs.add(toPkg);
+                if (toPkg != null && !leafPkg.equals(toPkg) && allPkgNames.contains(toPkg)) {
+                    callCountPerPkg.putIfAbsent(toPkg, 1);
                 }
             }
 
-            // Propagate each vote up to all ancestor packages.
-            // Stop when toPkg is a descendant of the current ancestor (ancestor → child
-            // edge — a package depending on its own sub-package) or when ancestor == toPkg.
-            // Do NOT stop when toPkg is an ancestor of leafPkg: that edge (child depending
-            // on ancestor) is a valid upward dependency that determines ordering.
-            for (String toPkg : targetPkgs) {
+            // Propagate each weight up to ancestor packages
+            for (Map.Entry<String, Integer> entry : callCountPerPkg.entrySet()) {
+                String toPkg = entry.getKey();
+                int callCount = entry.getValue();
                 String ancestor = leafPkg;
-                while (ancestor != null && weights.containsKey(ancestor)) {
+                while (ancestor != null && allPkgNames.contains(ancestor)) {
                     if (ancestor.equals(toPkg) || toPkg.startsWith(ancestor + ".")) break;
-                    weights.get(ancestor).merge(toPkg, 1, Integer::sum);
+                    weights.get(ancestor).merge(toPkg, callCount, Integer::sum);
                     ancestor = extractPackageName(ancestor);
                 }
             }
