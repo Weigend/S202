@@ -104,7 +104,7 @@ public final class LayoutInvariantChecker {
         int dependencyCount = checkLevelInversionAcrossNonBackEdge(
                 classes, classToScc, backEdges, brokenSccIds, findings);
         checkPackageEdgeDirection(packages, domainModel.getPackageEdgeWeights(), domainModel, findings);
-        checkPkgSccEqualLevel(classes, packages, rawModel, classToScc, backEdges, findings);
+        checkPkgSccEqualLevel(classes, packages, rawModel, domainModel, classToScc, backEdges, findings);
         checkViolationFlagConsistency(classes, classGraph, classToScc, findings);
 
         List<String> paths = sourcePaths != null
@@ -304,12 +304,14 @@ public final class LayoutInvariantChecker {
             Map<String, CalculatedElementInfo> classes,
             Map<String, CalculatedElementInfo> packages,
             DependencyModel rawModel,
+            DomainModel domainModel,
             Map<String, StronglyConnectedComponent> classToScc,
             Set<SCCBreaker.Edge> backEdges,
             List<InvariantFinding> findings) {
 
         // Build the same filtered package-dep graph LevelCalculator uses:
-        //   - drop back-edges identified by the SccBreaker
+        //   - drop class-level back-edges identified by the SccBreaker
+        //   - drop package-level back-edges identified during package SCC-breaking
         //   - drop deps where both classes share an SCC (handled by R1 already)
         //   - drop edges between packages in the same subtree (parent ↔ child)
         Map<String, Set<String>> pkgGraph = new HashMap<>();
@@ -331,6 +333,10 @@ public final class LayoutInvariantChecker {
                 if (backEdges.contains(new SCCBreaker.Edge(cls.fullName, depName))) continue;
                 StronglyConnectedComponent toScc = classToScc.get(depName);
                 if (fromScc != null && toScc != null && fromScc.getId() == toScc.getId()) continue;
+
+                // Skip package-level back-edges: LevelCalculator broke this SCC
+                // and deliberately assigned different levels — not a peer violation.
+                if (domainModel.isPackageBackEdge(fromPkg, toPkg)) continue;
 
                 pkgGraph.get(fromPkg).add(toPkg);
             }
