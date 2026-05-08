@@ -454,29 +454,31 @@ R5 & Edge classifications (\texttt{NORMAL}, \texttt{VIOLATION}, \texttt{BACK\_ED
 \caption{The four layout invariants verified after every analysis run.}
 \end{table}
 
-When we deployed the invariant checker against large real-world code bases, it
-guided refinement of both the pipeline and the rules themselves.
-Against Minecraft Forge (2\,895 classes, 220 packages), the checker initially
-reported two R2 violations. Investigation showed these were \emph{false positives}:
-R2 filtered class-level heuristic back-edges but not the package-level back-edges
-that the package SCC-breaker had already removed. R3 already applied the correct
-filter; once R2 was aligned, the Minecraft findings disappeared.
-Figure~\ref{fig:invariant-r2} shows the original R2 output before this refinement.
+Throughout the iterative development of the level pipeline, R2 repeatedly
+surfaced real implementation bugs after algorithm changes---findings that were
+only detectable through automated structural analysis while the unit-test suite
+remained fully green.
+Figure~\ref{fig:invariant-r2} shows a representative R2 report.
+In \emph{software-ekg-7}, for instance, an R2 finding exposed a missing
+package-SCC equalization step and directly triggered a pipeline fix.
 
 \begin{figure}[H]
   \centering
   \includegraphics[width=0.7\linewidth]{\detokenize{figures/Invariant Finding R2.png}}
-  \caption{R2 checker output on Minecraft Forge before the package back-edge filter
-  was added. The report was a false positive: the packages were correctly broken out
-  of their SCC by the package-level heuristic---R2 had not yet been taught to
-  respect that cut. False positives of this kind forced the rule to become more precise.}
+  \caption{R2 checker report: packages in a filtered package-SCC are placed on
+  different levels. Findings are reported as algorithm-bug candidates with a
+  copy-paste-ready reproducer block, which makes the visual failure traceable
+  to concrete level-pipeline constraints.}
   \label{fig:invariant-r2}
 \end{figure}
 
-Against \emph{software-ekg-7}, in contrast, R2 surfaced a genuine pipeline bug:
-a missing package-SCC equalization step had left peer packages at different levels.
-This finding was only detectable through automated structural analysis; the
-checker's own 155-test suite was fully green throughout.
+R2 also guided refinement of the rule itself.
+Against Minecraft~Forge (2\,895 classes, 220 packages, 188 of 207 packages
+in a single package-level SCC), two R2 reports turned out to be
+\emph{false positives}: R2 filtered class-level heuristic back-edges but not
+the package-level back-edges that the package SCC-breaker had already removed.
+R3 already applied the correct filter; once R2 was aligned, the Minecraft
+findings disappeared and all 155 invariant tests pass.
 The invariant checker connects the visual symptom to a reproducible algorithm defect.
 
 \subsection*{The Remaining Rules: R1, R3, and R5}
