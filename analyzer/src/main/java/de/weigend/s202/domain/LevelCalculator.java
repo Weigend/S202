@@ -18,8 +18,8 @@ import java.util.logging.Logger;
  *   Step 2  Create package objects     (all levels = 0)
  *   Step 3  Compute class levels       strategy (Tarjan → SCC-break → DAG → longest-path)
  *   Step 4  Compute package levels     weighted inter-package graph → SCC-break → DAG → longest-path
- *   Step 5  Lift parent packages       single bottom-up pass: parent = max(child package levels)
- *   Step 6  Set reverse dependencies
+ *                                      + child→parent lift for class-level alignment
+ *   Step 5  Set reverse dependencies
  *
  * Package levels are computed independently from class levels using a weighted
  * inter-package dependency graph. The weight of an edge P_A → P_B is the number
@@ -271,21 +271,14 @@ public class LevelCalculator {
 
     /**
      * Builds the weighted inter-package dependency graph.
-     * weight(P_A → P_B) = number of distinct classes anywhere in the subtree of P_A
-     * that have at least one dependency on any class in P_B (intra-subtree edges excluded).
-     *
-     * Each class vote is propagated up to all ancestor packages of the class's direct
-     * parent, stopping when the ancestor enters the same subtree as the target package.
-     * This ensures parent packages like {@code de.weigend.s202.ui} correctly reflect
-     * the cumulative dependencies of all their sub-packages.
-     */
-    /**
-     * Builds the weighted inter-package dependency graph.
      * weight(P_A → P_B) = total method-call count from classes in P_A's subtree
      * to classes in P_B. Method calls are a stronger signal than distinct-class
-     * counts: a class that is called hundreds of times clearly dominates a class
-     * that is called once, making SCC-breaking direction unambiguous.
-     * Intra-package and intra-subtree calls are excluded.
+     * counts: a class called hundreds of times clearly dominates one called once,
+     * making SCC-breaking direction unambiguous. Intra-subtree calls are excluded.
+     * Child-to-ancestor edges (e.g. sub-package calling into its parent package)
+     * are included; parent-to-child edges are excluded.
+     * Each call count is propagated to all ancestor packages up to the point where
+     * the ancestor would enter the same subtree as the target.
      */
     private Map<String, Map<String, Integer>> buildWeightedPackageGraph(
             DomainModel model, DependencyModel rawModel) {
@@ -344,40 +337,7 @@ public class LevelCalculator {
     }
 
     // -------------------------------------------------------------------------
-    // Step 5 — lift parent package levels
-    // -------------------------------------------------------------------------
-
-    /**
-     * Sets each parent package's level to the maximum of its direct children's levels.
-     * Packages sorted deepest-first guarantee children are finalised before parents.
-     */
-    private void liftParentPackageLevels(DomainModel model, DependencyModel rawModel) {
-        List<String> pkgNames = new ArrayList<>(model.getAllPackages().keySet());
-        pkgNames.sort((a, b) -> packageDepth(b) - packageDepth(a));
-
-        Map<String, DomainModel.CalculatedElementInfo> packages = model.getAllPackages();
-        for (String pkgName : pkgNames) {
-            DependencyModel.PackageInfo rawPkg = rawModel.getPackage(pkgName);
-            if (rawPkg == null || rawPkg.childPackages.isEmpty()) continue;
-            DomainModel.CalculatedElementInfo pkgInfo = packages.get(pkgName);
-            if (pkgInfo == null) continue;
-            int maxChild = pkgInfo.level;
-            for (String child : rawPkg.childPackages) {
-                DomainModel.CalculatedElementInfo childInfo = packages.get(child);
-                if (childInfo != null && childInfo.level > maxChild) maxChild = childInfo.level;
-            }
-            if (maxChild > pkgInfo.level) pkgInfo.setLevel(maxChild);
-        }
-    }
-
-    private static int packageDepth(String name) {
-        int d = 0;
-        for (int i = 0; i < name.length(); i++) if (name.charAt(i) == '.') d++;
-        return d;
-    }
-
-    // -------------------------------------------------------------------------
-    // Step 6 — reverse dependencies
+    // Step 5 — reverse dependencies
     // -------------------------------------------------------------------------
 
     private void updateDependentRelationships(DomainModel model) {
