@@ -115,8 +115,7 @@ marked layout element to a failing reproducer test. In the 92-module
 equalization step and directly triggered a pipeline fix. All four invariants
 were ported to an independent Unity/.NET 3D software city and produced
 identical findings on shared inputs. No previous layered architecture visualization known to us has provided this
-degree of machine-checkable self-validation; we also discuss generalization
-to other layered visualization techniques.}
+degree of machine-checkable self-validation.}
 %% ---------------------------------------------------------------
 
 \begin{document}
@@ -408,7 +407,7 @@ $\rightarrow$ Assign SCC level to all member classes (equalization implicit)\;\I
 \Indm
 \end{algorithm}
 
-Phase~1 is reproducible because SCCs are collapsed before levels are assigned.
+Phase~1 produces classpath-independent results because SCCs are collapsed before levels are assigned.
 Phase~2 treats class levels and package levels as independent coordinate systems:
 a package with no outgoing cross-package calls lands at level~0, even if its
 contained classes are at high class levels. The child--parent lift in Phase~2
@@ -460,10 +459,9 @@ R5 & Edge classifications (\texttt{NORMAL}, \texttt{VIOLATION}, \texttt{BACK\_ED
 \caption{The four layout invariants verified after every analysis run.}
 \end{table}
 
-Throughout the iterative development of the level pipeline, R2 repeatedly
-surfaced real implementation bugs after algorithm changes---findings that were
-only detectable through automated structural analysis while the unit-test suite
-remained fully green.
+Throughout the iterative development of the level pipeline, R2 surfaced
+implementation bugs after algorithm changes that the unit-test suite had not
+detected.
 Figure~\ref{fig:invariant-r2} shows a representative R2 report.
 In \emph{software-ekg-7}, for instance, an R2 finding exposed a missing
 package-SCC equalization step and directly triggered a pipeline fix.
