@@ -18,7 +18,6 @@ import de.weigend.s202.ui.ArchitectureView;
 import de.weigend.s202.ui.layout.horizontal.HorizontalRowLayoutOptimizer;
 import de.weigend.s202.ui.model.ArchitectureNode;
 import de.weigend.s202.ui.model.ArchitectureNodeBuilder;
-import de.weigend.s202.ui.model.DistrictRowLevelCalculator;
 import de.weigend.s202.ui.rendering.TangleEdgeRenderer;
 import de.weigend.s202.ui.wfx.events.CutTangleEdgeEvent;
 import de.weigend.s202.ui.wfx.events.CutTangleEdgesEvent;
@@ -899,7 +898,6 @@ public class S202Module implements Module {
 
                 publishProgress("Building architecture tree...", 0.85);
                 ArchitectureNode root = architectureNodeBuilder.build(calculated);
-                new DistrictRowLevelCalculator().assignDistrictRowLevels(root);
                 new HorizontalRowLayoutOptimizer().assignHorizontalLayoutOrders(root);
 
                 publishProgress("Preparing quality metrics...", 0.90);
@@ -1059,7 +1057,6 @@ public class S202Module implements Module {
                 DependencyModel rawModel = projectMapper.toDependencyModel(project.dependencyModel());
                 DomainModel domainModel = projectMapper.toDomainModel(project.domainModel());
                 ArchitectureNode root = architectureNodeBuilder.build(domainModel);
-                new DistrictRowLevelCalculator().assignDistrictRowLevels(root);
                 new HorizontalRowLayoutOptimizer().assignHorizontalLayoutOrders(root);
                 QualityMetrics metrics = QualityMetrics.compute(domainModel);
                 LayoutInvariantReport invariants = projectMapper.toLayoutInvariantReport(project.layoutInvariantReport());

@@ -39,12 +39,12 @@ public class LevelCalculatorIntegrationTest {
         assertNotNull(example1Pkg, "com.example1 package should exist");
         assertNotNull(example2Pkg, "com.example2 package should exist");
         
-        // com.example has max class level = C at L2
-        assertEquals(2, examplePkg.level, "com.example should be L2 (max class level = C)");
-        // com.example1 has max class level = X at L0
-        assertEquals(0, example1Pkg.level, "com.example1 should be L0 (max class level = X)");
-        
-        // com.example2 has max class level = E at L3 (SCC-aware calculation)
-        assertEquals(3, example2Pkg.level, "com.example2 should be L3 (max class level = E)");
+        // Package levels reflect inter-package dependency position, not class levels.
+        // com.example: no cross-pkg deps → L0
+        assertEquals(0, examplePkg.level, "com.example should be L0 (no cross-pkg deps)");
+        // com.example1: no cross-pkg deps → L0
+        assertEquals(0, example1Pkg.level, "com.example1 should be L0 (no cross-pkg deps)");
+        // com.example2: depends on com.example and com.example1 → package L1
+        assertEquals(1, example2Pkg.level, "com.example2 depends on com.example → package L1");
     }
 }

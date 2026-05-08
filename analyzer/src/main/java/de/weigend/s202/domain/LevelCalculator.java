@@ -4,6 +4,7 @@ import de.weigend.s202.analysis.scc.SCCBreaker;
 import de.weigend.s202.analysis.scc.StronglyConnectedComponent;
 import de.weigend.s202.analysis.scc.TarjanSCCFinder;
 import de.weigend.s202.analysis.strategy.LevelCalculationStrategyContext;
+import de.weigend.s202.analysis.strategy.impl.HeuristicSCCBreakingStrategy;
 import de.weigend.s202.reader.DependencyModel;
 
 import java.util.*;
@@ -12,28 +13,32 @@ import java.util.logging.Logger;
 /**
  * Calculates architectural levels for classes and packages based on dependencies.
  *
- * Phase 1 pipeline:
- *   Step 1  Create class objects             (all levels = 0)
- *   Step 2  Create package objects           (all levels = 0)
- *   Step 3  Compute class levels             Tarjan → SCCBreaker (iterative) → SCC-DAG → longest-path
- *   Step 4  Package level = max(contained class levels)
- *   Step 5a Lift parent package levels       single bottom-up pass (deepest-first sort)
- *   Step 5b Cross-package dependency order   DFS post-order on simple cross-package graph
- *   Step 5c Equalize package SCCs (R2)       Tarjan on filtered graph → lift to max
- *   Step 6  Set reverse dependencies
+ * Pipeline:
+ *   Step 1  Create class objects       (all levels = 0)
+ *   Step 2  Create package objects     (all levels = 0)
+ *   Step 3  Compute class levels       strategy (Tarjan → SCC-break → DAG → longest-path)
+ *   Step 4  Compute package levels     weighted inter-package graph → SCC-break → DAG → longest-path
+ *                                      + child→parent lift for class-level alignment
+ *   Step 5  Set reverse dependencies
  *
- * Step 5b uses a simple cross-package graph (intra-subtree edges removed only) for
- * one DFS post-order ordering pass. Step 5c uses the fully filtered graph
- * (back-edges and shared-class-SCC edges also removed) to equalize only genuine cyclic
- * peer packages — the same graph the R2 invariant checker uses.
+ * Package levels are computed independently from class levels using a weighted
+ * inter-package dependency graph. The weight of an edge P_A → P_B is the number
+ * of distinct classes in P_A that depend on at least one class in P_B (intra-subtree
+ * edges excluded). This separates the containment hierarchy from the dependency
+ * hierarchy and correctly handles disconnected package trees (they are levelled
+ * independently, both starting at 0).
  *
- * Step 5c and the parent lift are coupled: SCC equalization can lift a child package,
- * and parent lifting can then lift an SCC member again. They therefore run to a monotonic
- * fixpoint: the loop stops when neither operation raises any package level.
+ * Package SCC-breaking uses a weight-based rank score:
+ *   rank(P) = (Σ outgoing weights within SCC − Σ incoming weights within SCC)
+ *             / max(1, sum of both)
+ * Edge P_A→P_B is a back-edge when rank(P_A) < rank(P_B) − 0.1.
+ * Equal-rank pairs (symmetric dependency) are left in the same SCC and assigned
+ * the same level — they are genuine peers with no dominant dependency direction.
  */
 public class LevelCalculator {
 
     private static final Logger LOG = Logger.getLogger(LevelCalculator.class.getName());
+    private static final double RANK_THRESHOLD = 0.1;
 
     private final LevelCalculationStrategyContext strategyContext;
 
@@ -64,36 +69,15 @@ public class LevelCalculator {
                 packageName, rawPkg.simpleName, "PACKAGE", 0, new HashSet<>()));
         }
 
-        // Step 3: Compute class levels (iterative SCCBreaker → SCC-DAG → longest-path)
+        // Step 3: Compute class levels
         calculateClassLevels(model);
 
-        // Step 4: Package level = max(level of contained classes)
-        setPackageLevelsFromClasses(model);
+        // Step 4: Compute package levels from weighted inter-package graph.
+        // Class back-edges are passed so child→parent lifting excludes them.
+        Set<SCCBreaker.Edge> classBackEdges = classBackEdgesFromStrategy();
+        calculatePackageLevels(model, rawModel, classBackEdges);
 
-        // Pre-compute both package graphs once — Step 5b and 5c use different graphs.
-        Map<String, Set<String>> simplePkgGraph   = buildSimplePackageGraph(model);
-        Map<String, Set<String>> filteredPkgGraph = buildFilteredPackageGraph(model);
-
-        // Step 5a: Lift parent package levels — single bottom-up pass (deepest-first)
-        liftParentPackageLevels(model, rawModel);
-
-        // Step 5b: Cross-package dependency order — single DFS post-order pass.
-        // Uses the simple cross-package graph (intra-subtree edges removed only).
-        // Cycles in this graph are handled gracefully by the DFS (in-stack skip);
-        // the resulting levels may be approximate for cyclic packages, which Step 5c corrects.
-        applyPackageDependencyOrdering(model, simplePkgGraph);
-
-        // Steps 5c + lift: equalize package SCCs (R2) then re-propagate to parents.
-        // The fixpoint is reached only when neither operation lifts any package.
-        // Both operations are monotonic and only copy existing maximum levels, so
-        // the loop terminates without an arbitrary iteration cap.
-        boolean changed;
-        do {
-            changed = equalizePackageSccLevels(model, filteredPkgGraph);
-            changed |= liftParentPackageLevels(model, rawModel);
-        } while (changed);
-
-        // Step 6: Set reverse dependencies
+        // Step 5: Set reverse dependencies
         updateDependentRelationships(model);
 
         return model;
@@ -103,8 +87,16 @@ public class LevelCalculator {
         return strategyContext;
     }
 
+    private Set<SCCBreaker.Edge> classBackEdgesFromStrategy() {
+        var strategy = strategyContext.getClassLevelStrategy();
+        if (strategy instanceof HeuristicSCCBreakingStrategy h) {
+            return h.getLastIdentifiedBackEdges();
+        }
+        return Set.of();
+    }
+
     // -------------------------------------------------------------------------
-    // Step 3
+    // Step 3 — class levels
     // -------------------------------------------------------------------------
 
     private void calculateClassLevels(DomainModel model) {
@@ -121,237 +113,231 @@ public class LevelCalculator {
     }
 
     // -------------------------------------------------------------------------
-    // Step 4
+    // Step 4 — package levels via weighted inter-package graph
     // -------------------------------------------------------------------------
 
-    private void setPackageLevelsFromClasses(DomainModel model) {
-        Map<String, Integer> max = new HashMap<>();
-        for (DomainModel.CalculatedElementInfo c : model.getAllClasses().values()) {
-            String pkg = extractPackageName(c.fullName);
-            if (pkg != null) max.merge(pkg, c.level, Math::max);
+    private void calculatePackageLevels(DomainModel model, DependencyModel rawModel,
+                                        Set<SCCBreaker.Edge> classBackEdges) {
+        if (model.getAllPackages().isEmpty()) return;
+        Set<String> allPkgNames = model.getAllPackages().keySet();
+
+        // Build weighted graph: weight[from][to] = # distinct classes in 'from'
+        // with at least one dependency on a class in 'to' (subtree edges excluded).
+        Map<String, Map<String, Integer>> weights = buildWeightedPackageGraph(model, rawModel);
+
+        // Unweighted adjacency for Tarjan (direction matters, zero-weight edges excluded)
+        Map<String, Set<String>> graph = new LinkedHashMap<>();
+        for (String pkg : allPkgNames) graph.put(pkg, new LinkedHashSet<>());
+        for (Map.Entry<String, Map<String, Integer>> entry : weights.entrySet()) {
+            graph.get(entry.getKey()).addAll(entry.getValue().keySet());
         }
-        for (Map.Entry<String, Integer> e : max.entrySet()) {
-            DomainModel.CalculatedElementInfo info = model.getPackage(e.getKey());
-            if (info != null) info.setLevel(e.getValue());
-        }
-    }
 
-    // -------------------------------------------------------------------------
-    // Step 5a — single bottom-up pass
-    // -------------------------------------------------------------------------
+        // Iteratively break SCCs using weight-based rank, then assign levels
+        // via SCC-collapsed DAG longest-path. Remaining SCCs (equal-rank peers)
+        // are collapsed to the same level without cutting any edge.
+        Set<String> backEdgeKeys = new LinkedHashSet<>(); // "from\0to" — tracked for R3
+        boolean changed = true;
+        while (changed) {
+            changed = false;
+            for (StronglyConnectedComponent scc : new TarjanSCCFinder(graph).findSCCs()) {
+                if (scc.getSize() < 2) continue;
+                Set<String> members = scc.getMembers();
 
-    /**
-     * Lifts each parent package to the maximum level of its direct children.
-     * Packages sorted deepest-first (most dots) guarantee children are finalized
-     * before their parent is visited — single pass, no loop needed.
-     *
-     * @return true if at least one package level was raised
-     */
-    private boolean liftParentPackageLevels(DomainModel model, DependencyModel rawModel) {
-        List<String> pkgNames = new ArrayList<>(model.getAllPackages().keySet());
-        pkgNames.sort((a, b) -> packageDepth(b) - packageDepth(a));
-
-        Map<String, DomainModel.CalculatedElementInfo> packages = model.getAllPackages();
-        boolean changed = false;
-        for (String pkgName : pkgNames) {
-            DependencyModel.PackageInfo rawPkg = rawModel.getPackage(pkgName);
-            if (rawPkg == null || rawPkg.childPackages.isEmpty()) continue;
-            DomainModel.CalculatedElementInfo pkgInfo = packages.get(pkgName);
-            if (pkgInfo == null) continue;
-            int maxChild = pkgInfo.level;
-            for (String child : rawPkg.childPackages) {
-                DomainModel.CalculatedElementInfo childInfo = packages.get(child);
-                if (childInfo != null && childInfo.level > maxChild) maxChild = childInfo.level;
-            }
-            if (maxChild > pkgInfo.level) {
-                pkgInfo.setLevel(maxChild);
-                changed = true;
-            }
-        }
-        return changed;
-    }
-
-    private static int packageDepth(String name) {
-        int d = 0;
-        for (int i = 0; i < name.length(); i++) if (name.charAt(i) == '.') d++;
-        return d;
-    }
-
-    // -------------------------------------------------------------------------
-    // Step 5b — single DFS post-order pass on simple cross-package graph
-    // -------------------------------------------------------------------------
-
-    /**
-     * Applies cross-package dependency ordering via DFS post-order.
-     * Uses the simple package graph (intra-subtree edges removed only) so that the
-     * pass is O(V+E). Cycles are skipped by the DFS (in-stack detection); any
-     * remaining level inconsistencies for cyclic packages are corrected in Step 5c.
-     */
-    private void applyPackageDependencyOrdering(DomainModel model,
-                                                 Map<String, Set<String>> pkgGraph) {
-        if (pkgGraph.isEmpty()) return;
-        Map<String, DomainModel.CalculatedElementInfo> packages = model.getAllPackages();
-
-        for (String pkg : topoSortDfsPostOrder(pkgGraph)) {
-            DomainModel.CalculatedElementInfo pkgInfo = packages.get(pkg);
-            if (pkgInfo == null) continue;
-            for (String dep : pkgGraph.getOrDefault(pkg, Collections.emptySet())) {
-                DomainModel.CalculatedElementInfo depInfo = packages.get(dep);
-                if (depInfo != null && pkgInfo.level <= depInfo.level) {
-                    pkgInfo.setLevel(depInfo.level + 1);
+                // Compute weight-based rank for each member within this SCC
+                Map<String, Double> rank = new HashMap<>();
+                for (String m : members) {
+                    int out = 0, in = 0;
+                    for (String other : members) {
+                        if (other.equals(m)) continue;
+                        out += weights.getOrDefault(m, Map.of()).getOrDefault(other, 0);
+                        in  += weights.getOrDefault(other, Map.of()).getOrDefault(m, 0);
+                    }
+                    rank.put(m, (out - in) / (double) Math.max(1, out + in));
                 }
-            }
-        }
-    }
 
-    /**
-     * Iterative DFS post-order traversal (dependencies before dependents).
-     * Cycles are handled by skipping nodes already on the current DFS stack.
-     */
-    private static List<String> topoSortDfsPostOrder(Map<String, Set<String>> graph) {
-        Set<String> visited = new HashSet<>();
-        Set<String> inStack = new HashSet<>();
-        List<String> result = new ArrayList<>(graph.size());
-
-        for (String start : graph.keySet()) {
-            if (visited.contains(start)) continue;
-
-            // Explicit stack of (node, dep-iterator) pairs — avoids recursion depth limits.
-            Deque<Object[]> stack = new ArrayDeque<>();
-            Iterator<String> startDeps = graph.getOrDefault(start, Collections.emptySet()).iterator();
-            stack.push(new Object[]{start, startDeps});
-            inStack.add(start);
-
-            while (!stack.isEmpty()) {
-                Object[] frame = stack.peek();
-                String node = (String) frame[0];
-                @SuppressWarnings("unchecked")
-                Iterator<String> deps = (Iterator<String>) frame[1];
-
-                boolean pushed = false;
-                while (deps.hasNext()) {
-                    String dep = deps.next();
-                    if (!visited.contains(dep) && !inStack.contains(dep)) {
-                        Iterator<String> depDeps =
-                            graph.getOrDefault(dep, Collections.emptySet()).iterator();
-                        stack.push(new Object[]{dep, depDeps});
-                        inStack.add(dep);
-                        pushed = true;
-                        break;
+                // Identify back-edges: from→to where rank(from) < rank(to) - threshold
+                for (String from : new ArrayList<>(members)) {
+                    for (String to : new ArrayList<>(graph.getOrDefault(from, Set.of()))) {
+                        if (!members.contains(to)) continue;
+                        if (rank.get(from) < rank.get(to) - RANK_THRESHOLD) {
+                            String key = from + "\0" + to;
+                            if (backEdgeKeys.add(key)) {
+                                graph.get(from).remove(to);
+                                changed = true;
+                            }
+                        }
                     }
                 }
+            }
+        }
 
-                if (!pushed) {
-                    stack.pop();
-                    inStack.remove(node);
-                    visited.add(node);
-                    result.add(node);
+        // Assign package levels: SCC-collapsed DAG → longest-path
+        List<StronglyConnectedComponent> sccs = new TarjanSCCFinder(graph).findSCCs();
+        Map<String, StronglyConnectedComponent> pkgToScc = new HashMap<>();
+        for (StronglyConnectedComponent scc : sccs) {
+            for (String m : scc.getMembers()) pkgToScc.put(m, scc);
+        }
+
+        // SCC dependency graph (between SCC IDs)
+        Map<Integer, Set<Integer>> sccDeps = new HashMap<>();
+        for (StronglyConnectedComponent scc : sccs) {
+            sccDeps.put(scc.getId(), new HashSet<>());
+            for (String m : scc.getMembers()) {
+                for (String to : graph.getOrDefault(m, Set.of())) {
+                    StronglyConnectedComponent toScc = pkgToScc.get(to);
+                    if (toScc != null && toScc.getId() != scc.getId()) {
+                        sccDeps.get(scc.getId()).add(toScc.getId());
+                    }
                 }
             }
         }
-        return result;
-    }
 
-    // -------------------------------------------------------------------------
-    // Step 5c — single Tarjan pass for R2
-    // -------------------------------------------------------------------------
-
-    /**
-     * Equalizes every multi-member package-SCC to its members' maximum level.
-     * Uses the filtered graph (back-edges and shared-class-SCC edges removed) so
-     * that only genuine cyclic peer packages are equalized — consistent with R2.
-     *
-     * @return true if any level was changed (expected when cycles exist only in
-     *         the simple graph used by Step 5b; logged at FINE level)
-     */
-    private boolean equalizePackageSccLevels(DomainModel model,
-                                              Map<String, Set<String>> filteredPkgGraph) {
-        if (filteredPkgGraph.isEmpty()) return false;
-        Map<String, DomainModel.CalculatedElementInfo> packages = model.getAllPackages();
-        boolean changed = false;
-        for (StronglyConnectedComponent scc : new TarjanSCCFinder(filteredPkgGraph).findSCCs()) {
-            if (scc.getSize() <= 1) continue;
-            int maxLevel = Integer.MIN_VALUE;
-            for (String m : scc.getMembers()) {
-                DomainModel.CalculatedElementInfo p = packages.get(m);
-                if (p != null && p.level > maxLevel) maxLevel = p.level;
-            }
-            if (maxLevel == Integer.MIN_VALUE) continue;
-            for (String m : scc.getMembers()) {
-                DomainModel.CalculatedElementInfo p = packages.get(m);
-                if (p != null && p.level < maxLevel) { p.setLevel(maxLevel); changed = true; }
-            }
-        }
-        return changed;
-    }
-
-    // -------------------------------------------------------------------------
-    // Package graph builders
-    // -------------------------------------------------------------------------
-
-    /**
-     * Simple cross-package graph: removes only intra-subtree edges (parent↔child).
-     * Used by Step 5b for the topo-sort ordering pass.
-     */
-    private Map<String, Set<String>> buildSimplePackageGraph(DomainModel model) {
-        Map<String, Set<String>> pkgGraph = new HashMap<>();
-        for (String pkg : model.getAllPackages().keySet()) pkgGraph.put(pkg, new HashSet<>());
+        // Child→parent lift: for each package P, find the max class-level of classes
+        // in P that are depended on by classes in CHILD packages of P (sub-packages).
+        // SCC back-edges are excluded. This ensures figurapi.primitive ends up strictly
+        // above figurapi.Rotation (class L1), while external deps are unaffected.
+        Map<String, Integer> childPkgUsedLevel = new HashMap<>();
         for (DomainModel.CalculatedElementInfo cls : model.getAllClasses().values()) {
             String fromPkg = extractPackageName(cls.fullName);
             if (fromPkg == null) continue;
             for (String dep : cls.dependencies) {
                 String toPkg = extractPackageName(dep);
                 if (toPkg == null || fromPkg.equals(toPkg)) continue;
-                if (isInSameSubtree(fromPkg, toPkg)) continue;
-                pkgGraph.get(fromPkg).add(toPkg);
+                // Only child→parent edges: fromPkg is a sub-package of toPkg
+                if (!fromPkg.startsWith(toPkg + ".")) continue;
+                // Skip class-level back-edges
+                if (classBackEdges.contains(new SCCBreaker.Edge(cls.fullName, dep))) continue;
+                DomainModel.CalculatedElementInfo depCls = model.getAllClasses().get(dep);
+                if (depCls == null) continue;
+                childPkgUsedLevel.merge(toPkg, depCls.level, Math::max);
             }
         }
-        return pkgGraph;
+
+        // Longest-path levels on SCC-DAG.
+        // For child→parent package edges, effective dep height =
+        //   max(pkgLevel, childPkgUsedLevel) so the dependent lands above the classes
+        //   it uses from its parent package. External cross-package deps use pkgLevel only.
+        Map<Integer, Integer> sccLevels = new HashMap<>();
+        for (StronglyConnectedComponent scc : sccs) sccLevels.put(scc.getId(), 0);
+        boolean lvlChanged = true;
+        while (lvlChanged) {
+            lvlChanged = false;
+            for (StronglyConnectedComponent scc : sccs) {
+                int maxDep = -1;
+                for (int depId : sccDeps.getOrDefault(scc.getId(), Set.of())) {
+                    int depPkgLevel = sccLevels.getOrDefault(depId, 0);
+                    int effectiveDep = depPkgLevel;
+                    // Check if any member of this SCC is a child of any member of depSCC
+                    for (String fromMember : scc.getMembers()) {
+                        for (Map.Entry<String, StronglyConnectedComponent> e : pkgToScc.entrySet()) {
+                            if (e.getValue().getId() != depId) continue;
+                            String depMember = e.getKey();
+                            if (fromMember.startsWith(depMember + ".")) {
+                                effectiveDep = Math.max(effectiveDep,
+                                    childPkgUsedLevel.getOrDefault(depMember, 0));
+                            }
+                        }
+                    }
+                    maxDep = Math.max(maxDep, effectiveDep);
+                }
+                int newLevel = maxDep >= 0 ? maxDep + 1 : 0;
+                if (sccLevels.get(scc.getId()) != newLevel) {
+                    sccLevels.put(scc.getId(), newLevel);
+                    lvlChanged = true;
+                }
+            }
+        }
+
+        // Apply levels to all packages
+        Map<String, DomainModel.CalculatedElementInfo> pkgInfos = model.getAllPackages();
+        for (StronglyConnectedComponent scc : sccs) {
+            int level = sccLevels.get(scc.getId());
+            for (String member : scc.getMembers()) {
+                DomainModel.CalculatedElementInfo pkg = pkgInfos.get(member);
+                if (pkg != null) pkg.setLevel(level);
+            }
+        }
+
+        // Store the weighted graph and identified back-edges in the model
+        model.setPackageEdgeWeights(weights);
+        model.setPackageBackEdges(backEdgeKeys);
+
+        // Populate package dependencies (unweighted) for reverse-dependency tracking
+        for (Map.Entry<String, Map<String, Integer>> entry : weights.entrySet()) {
+            DomainModel.CalculatedElementInfo pkg = pkgInfos.get(entry.getKey());
+            if (pkg != null) entry.getValue().keySet().forEach(pkg::addDependency);
+        }
     }
 
     /**
-     * Filtered cross-package graph: additionally removes heuristic back-edges and
-     * edges caused by shared class SCCs. Used by Step 5c (R2 equalization) — the
-     * same filtering the LayoutInvariantChecker applies for its R2 check.
+     * Builds the weighted inter-package dependency graph.
+     * weight(P_A → P_B) = total method-call count from classes in P_A's subtree
+     * to classes in P_B. Method calls are a stronger signal than distinct-class
+     * counts: a class called hundreds of times clearly dominates one called once,
+     * making SCC-breaking direction unambiguous. Intra-subtree calls are excluded.
+     * Child-to-ancestor edges (e.g. sub-package calling into its parent package)
+     * are included; parent-to-child edges are excluded.
+     * Each call count is propagated to all ancestor packages up to the point where
+     * the ancestor would enter the same subtree as the target.
      */
-    private Map<String, Set<String>> buildFilteredPackageGraph(DomainModel model) {
-        Map<String, DomainModel.CalculatedElementInfo> classes = model.getAllClasses();
-        if (classes.isEmpty()) return Collections.emptyMap();
+    private Map<String, Map<String, Integer>> buildWeightedPackageGraph(
+            DomainModel model, DependencyModel rawModel) {
+        Map<String, Map<String, Integer>> weights = new HashMap<>();
+        for (String pkg : model.getAllPackages().keySet()) weights.put(pkg, new LinkedHashMap<>());
 
-        Map<String, Set<String>> classGraph = new HashMap<>(classes.size());
-        for (DomainModel.CalculatedElementInfo cls : classes.values()) {
-            Set<String> deps = new HashSet<>();
-            for (String d : cls.dependencies) if (classes.containsKey(d)) deps.add(d);
-            classGraph.put(cls.fullName, deps);
-        }
+        Set<String> allPkgNames = weights.keySet();
 
-        Map<String, Integer> classToSccId = new HashMap<>();
-        for (StronglyConnectedComponent scc : new TarjanSCCFinder(classGraph).findSCCs()) {
-            for (String m : scc.getMembers()) classToSccId.put(m, scc.getId());
-        }
-        Set<SCCBreaker.Edge> backEdges = new SCCBreaker(classGraph).findBackEdges();
+        for (DomainModel.CalculatedElementInfo cls : model.getAllClasses().values()) {
+            String leafPkg = extractPackageName(cls.fullName);
+            if (leafPkg == null || !allPkgNames.contains(leafPkg)) continue;
 
-        Map<String, Set<String>> pkgGraph = new HashMap<>();
-        for (String pkg : model.getAllPackages().keySet()) pkgGraph.put(pkg, new HashSet<>());
-        for (DomainModel.CalculatedElementInfo cls : classes.values()) {
-            String fromPkg = extractPackageName(cls.fullName);
-            if (fromPkg == null) continue;
-            Integer fromScc = classToSccId.get(cls.fullName);
+            // Count method calls per target package using raw model data
+            Map<String, Integer> callCountPerPkg = new LinkedHashMap<>();
+            DependencyModel.ClassInfo rawCls = rawModel.getClass(cls.fullName);
+            if (rawCls != null) {
+                for (DependencyModel.MethodInfo method : rawCls.methods.values()) {
+                    for (Map.Entry<String, Integer> call : method.methodCalls.entrySet()) {
+                        // Method call key format: "ownerClass.methodName"
+                        // Find the target class by checking known dependencies
+                        String calledKey = call.getKey();
+                        for (String dep : cls.dependencies) {
+                            if (calledKey.startsWith(dep + ".")) {
+                                String toPkg = extractPackageName(dep);
+                                if (toPkg != null && !leafPkg.equals(toPkg)
+                                        && allPkgNames.contains(toPkg)) {
+                                    callCountPerPkg.merge(toPkg, call.getValue(), Integer::sum);
+                                }
+                                break;
+                            }
+                        }
+                    }
+                }
+            }
+            // Fall back to 1 per target package for structural deps with no call data
             for (String dep : cls.dependencies) {
                 String toPkg = extractPackageName(dep);
-                if (toPkg == null || fromPkg.equals(toPkg)) continue;
-                if (isInSameSubtree(fromPkg, toPkg)) continue;
-                if (backEdges.contains(new SCCBreaker.Edge(cls.fullName, dep))) continue;
-                Integer toScc = classToSccId.get(dep);
-                if (fromScc != null && toScc != null && fromScc.equals(toScc)) continue;
-                pkgGraph.get(fromPkg).add(toPkg);
+                if (toPkg != null && !leafPkg.equals(toPkg) && allPkgNames.contains(toPkg)) {
+                    callCountPerPkg.putIfAbsent(toPkg, 1);
+                }
+            }
+
+            // Propagate each weight up to ancestor packages
+            for (Map.Entry<String, Integer> entry : callCountPerPkg.entrySet()) {
+                String toPkg = entry.getKey();
+                int callCount = entry.getValue();
+                String ancestor = leafPkg;
+                while (ancestor != null && allPkgNames.contains(ancestor)) {
+                    if (ancestor.equals(toPkg) || toPkg.startsWith(ancestor + ".")) break;
+                    weights.get(ancestor).merge(toPkg, callCount, Integer::sum);
+                    ancestor = extractPackageName(ancestor);
+                }
             }
         }
-        return pkgGraph;
+        return weights;
     }
 
     // -------------------------------------------------------------------------
-    // Step 6
+    // Step 5 — reverse dependencies
     // -------------------------------------------------------------------------
 
     private void updateDependentRelationships(DomainModel model) {

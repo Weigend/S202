@@ -175,8 +175,11 @@ class ArchitectureNodeTest {
 
     @Test
     void testDomainMaxLevelIs3() {
-        // Max level is 3 due to example2.E depending on classes at level 2
-        assertEquals(3, rootNode.getMaxLevel(), "Max level should be 3 (com.example2.E at L3)");
+        // Max class level is 3 (example2.E depends on classes at L2). Package levels
+        // may be higher due to the sccs.* adversarial example in the JAR.
+        ArchitectureNode classE = findNodeByName(rootNode, "com.example2.E");
+        assertNotNull(classE, "Class E should exist");
+        assertEquals(3, classE.getLevel(), "com.example2.E should be at class level 3");
     }
 
     @Test
@@ -213,15 +216,16 @@ class ArchitectureNodeTest {
 
     @Test
     void testDomainPackagesCorrectlyPlaced() {
-        // Package com.example should be in level 2 (max class level = C at L2)
-        boolean comExampleLevel2 = rootNode.getNodesAtLevel(2).stream()
+        // Package levels reflect inter-package dependency position, not class levels.
+        // com.example: no cross-pkg deps → L0
+        boolean comExampleLevel0 = rootNode.getNodesAtLevel(0).stream()
             .anyMatch(e -> "com.example".equals(e.getFullName()) && e.getType() == NodeType.PACKAGE);
-        assertTrue(comExampleLevel2, "Package com.example should be in level 2 (max class level = C)");
-        
-        // Package com should be in level 3 (inherits from child com.example2 which is L3)
-        boolean comLevel3 = rootNode.getNodesAtLevel(3).stream()
+        assertTrue(comExampleLevel0, "Package com.example has no cross-pkg deps → level 0");
+
+        // com has no own cross-package dependencies → L0 (containment ≠ dependency)
+        boolean comLevel0 = rootNode.getNodesAtLevel(0).stream()
             .anyMatch(e -> "com".equals(e.getFullName()) && e.getType() == NodeType.PACKAGE);
-        assertTrue(comLevel3, "Package com should be in level 3 (inherits max level of children)");
+        assertTrue(comLevel0, "Package com has no own cross-pkg deps → level 0");
     }
 
     @Test

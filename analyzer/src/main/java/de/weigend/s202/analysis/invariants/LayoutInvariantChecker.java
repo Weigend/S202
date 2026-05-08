@@ -39,8 +39,10 @@ import java.util.Set;
  *       package-dep level (after filtering back-edges, same-class-SCC deps
  *       and intra-subtree edges) are architectural peers and must share a
  *       level.</li>
- *   <li><b>R3 ContainerLevelGEContent</b> — a package's level must be
- *       &gt;= every class and child package inside it.</li>
+ *   <li><b>R3 PackageEdgeDirection</b> — for every weighted package edge
+ *       P_A → P_B where weight(P_A→P_B) &gt; weight(P_B→P_A), the dominant
+ *       direction means P_A depends on P_B and must be at a strictly higher
+ *       level: level(P_A) &gt; level(P_B).</li>
  *   <li><b>R5 ViolationFlag</b> — every dependency's classification
  *       (NORMAL / VIOLATION / INTRA_SCC) must match what the current level
  *       and SCC state say it should be.</li>
@@ -101,7 +103,7 @@ public final class LayoutInvariantChecker {
         List<InvariantFinding> findings = new ArrayList<>();
         int dependencyCount = checkLevelInversionAcrossNonBackEdge(
                 classes, classToScc, backEdges, brokenSccIds, findings);
-        checkContainerLevelGEContent(classes, packages, rawModel, findings);
+        checkPackageEdgeDirection(packages, domainModel.getPackageEdgeWeights(), domainModel, findings);
         checkPkgSccEqualLevel(classes, packages, rawModel, classToScc, backEdges, findings);
         checkViolationFlagConsistency(classes, classGraph, classToScc, findings);
 
@@ -249,44 +251,50 @@ public final class LayoutInvariantChecker {
 
     // ---------------------------------------------------------------- R3
 
-    private static void checkContainerLevelGEContent(
-            Map<String, CalculatedElementInfo> classes,
+    // ---------------------------------------------------------------- R3
+
+    /**
+     * For every weighted package edge P_A → P_B where weight(P_A→P_B) > weight(P_B→P_A),
+     * P_A is the dominant dependent and must be at a strictly higher level than P_B.
+     * Equal-weight pairs are true peers and are handled by R2 (same level expected).
+     * Edges where weight(P_A→P_B) < weight(P_B→P_A) are back-edges and are skipped.
+     */
+    private static void checkPackageEdgeDirection(
             Map<String, CalculatedElementInfo> packages,
-            DependencyModel rawModel,
+            Map<String, Map<String, Integer>> packageWeights,
+            DomainModel domainModel,
             List<InvariantFinding> findings) {
 
-        for (CalculatedElementInfo cls : classes.values()) {
-            String pkgName = packageOf(rawModel, cls.fullName);
-            if (pkgName == null || pkgName.isEmpty()) continue;
-            CalculatedElementInfo pkg = packages.get(pkgName);
-            if (pkg == null) continue;
-            if (pkg.level >= cls.level) continue;
+        for (Map.Entry<String, Map<String, Integer>> fromEntry : packageWeights.entrySet()) {
+            String fromPkg = fromEntry.getKey();
+            CalculatedElementInfo fromInfo = packages.get(fromPkg);
+            if (fromInfo == null) continue;
 
-            findings.add(new InvariantFinding(
-                    "R3",
-                    "Containing package level is below its own class level.",
-                    pkg.fullName, cls.fullName,
-                    pkg.level, cls.level,
-                    pkg.fullName, pkgName));
-        }
+            for (Map.Entry<String, Integer> toEntry : fromEntry.getValue().entrySet()) {
+                String toPkg = toEntry.getKey();
+                int wAB = toEntry.getValue();
+                int wBA = packageWeights.getOrDefault(toPkg, Map.of()).getOrDefault(fromPkg, 0);
+                CalculatedElementInfo toInfo = packages.get(toPkg);
+                if (toInfo == null) continue;
 
-        // Parent-package vs. sub-package check. Walk from each package up to
-        // its parent (derived from the dotted name) and verify parent.level
-        // >= child.level. A standalone root package has no parent and is
-        // skipped silently.
-        for (CalculatedElementInfo pkg : packages.values()) {
-            String parentName = parentPackageName(pkg.fullName);
-            if (parentName == null) continue;
-            CalculatedElementInfo parent = packages.get(parentName);
-            if (parent == null) continue;
-            if (parent.level >= pkg.level) continue;
+                // Skip non-dominant and equal-weight (peer) edges
+                if (wAB <= wBA) continue;
 
-            findings.add(new InvariantFinding(
-                    "R3",
-                    "Parent package level is below child package level.",
-                    parent.fullName, pkg.fullName,
-                    parent.level, pkg.level,
-                    parent.fullName, pkg.fullName));
+                // Skip edges cut during package SCC-breaking — these are architectural
+                // violations the algorithm deliberately removed from the level DAG,
+                // analogous to class-level back-edges excluded from R1.
+                if (domainModel.isPackageBackEdge(fromPkg, toPkg)) continue;
+
+                if (fromInfo.level <= toInfo.level) {
+                    findings.add(new InvariantFinding(
+                            "R3",
+                            String.format("Package edge direction violated: %s (w=%d) dominates %s (w=%d) but level(%d) <= level(%d).",
+                                    fromPkg, wAB, toPkg, wBA, fromInfo.level, toInfo.level),
+                            fromPkg, toPkg,
+                            fromInfo.level, toInfo.level,
+                            fromPkg, toPkg));
+                }
+            }
         }
     }
 

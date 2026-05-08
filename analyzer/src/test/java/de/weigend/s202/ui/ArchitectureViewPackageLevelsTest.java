@@ -28,22 +28,25 @@ public class ArchitectureViewPackageLevelsTest {
         LevelCalculator calculator = new LevelCalculator();
         DomainModel domainModel = calculator.calculate(rawModel);
         
-        // Verify DomainModel has correct levels
-        // Package level = max class level, parent packages inherit max from children
-        assertEquals(3, domainModel.getPackage("com").level, "com inherits L3 from child com.example2");
-        assertEquals(2, domainModel.getPackage("com.example").level, "com.example should be L2 (max class = C)");
+        // Package levels reflect inter-package dependency position, not class levels.
+        // com.example: no cross-pkg deps → L0
+        // com.example1: no cross-pkg deps → L0
+        // com.example2: depends on com.example and com.example1 → package L1
+        // com: no own cross-pkg deps → L0 (containment ≠ dependency)
+        assertEquals(0, domainModel.getPackage("com").level, "com has no own cross-pkg deps → L0");
+        assertEquals(0, domainModel.getPackage("com.example").level, "com.example has no cross-pkg deps → L0");
         assertEquals(0, domainModel.getPackage("com.example1").level);
-        assertEquals(3, domainModel.getPackage("com.example2").level, "com.example2 should be L3 (max class = E)");
-        
+        assertEquals(1, domainModel.getPackage("com.example2").level, "com.example2 depends on com.example → package L1");
+
         // Step 3: Build architecture node tree
         ArchitectureNodeBuilder builder = new ArchitectureNodeBuilder();
         ArchitectureNode rootNode = builder.build(domainModel);
-        
+
         // Verify ArchitectureNode has correct levels
         ArchitectureNode example2Node = findNodeByName(rootNode, "com.example2");
         assertNotNull(example2Node, "com.example2 should be found");
         assertEquals(NodeType.PACKAGE, example2Node.getType(), "com.example2 should be a PACKAGE");
-        assertEquals(3, example2Node.getLevel(), "com.example2 should have level 3");
+        assertEquals(1, example2Node.getLevel(), "com.example2 package level 1");
         
         System.out.println("Found com.example2 at level " + example2Node.getLevel());
     }
