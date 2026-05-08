@@ -5,7 +5,6 @@
 %% Source: docs/ICSOFT_2026_ABSTRACT.md
 %% Pending:
 %%   (1) Veronika Schwarz confirmation and affiliation
-%%   (2) Veronika Schwarz affiliation confirmation (currently QAware)
 
 
 \documentclass[a4paper,twoside]{article}
@@ -53,7 +52,7 @@
 %% ---------------------------------------------------------------
 \title{Verifiable Layered Architecture Visualizations
        \subtitle{Invariants for Correct Level Computation
-       \\ \normalsize\textit{[Draft for co-author review]}}}
+       \\ \normalsize\textit{[Draft Version 2 -- for co-author review]}}}
 
 \author{
   \authorname{Johannes Weigend}
@@ -76,8 +75,8 @@ through vertical position: elements that depend on others are placed higher. If 
 level-assignment pipeline is wrong, the picture can still look plausible while
 misleading the viewer: cyclic peer packages may be placed on different levels,
 or a regular dependency may point against the intended layer direction. Layout
-correctness should be the tool's responsibility, not the reader's---the
-implementation shows how hard that actually is.
+correctness should be the tool's responsibility, not the reader's---this
+paper documents why correct level computation is harder than it looks.
 \par\smallskip
 Our 2021 IVAPP paper, \emph{A Layered Software City for Dependency
 Visualization}~\cite{Dashuber2021}, introduced a city layout in which the X/Y
@@ -115,15 +114,18 @@ marked layout element to a failing reproducer test. In the 92-module
 \emph{software-ekg-7} system, an R2 finding exposed a missing package-SCC
 equalization step and directly triggered a pipeline fix. All four invariants
 were ported to an independent Unity/.NET 3D software city and produced
-identical findings on shared inputs. To our knowledge, no previous layered
-architecture visualization has provided this degree of machine-checkable
-self-validation; we also discuss generalization to other layered
-visualization techniques.}
+identical findings on shared inputs. No previous layered architecture visualization known to us has provided this
+degree of machine-checkable self-validation; we also discuss generalization
+to other layered visualization techniques.}
 %% ---------------------------------------------------------------
 
 \begin{document}
 
 \maketitle
+
+\begin{center}
+  \fbox{\textbf{\large Draft Version 2 \quad|\quad \today}}
+\end{center}
 
 \vfill
 
@@ -144,12 +146,12 @@ A correct layered layout must satisfy three constraints simultaneously:
 \begin{enumerate}
   \item \textbf{Class constraint (R1):} If $A \rightarrow B$ denotes a dependency
         of $A$ on $B$, then $\text{level}(A) > \text{level}(B)$.
-  \item \textbf{Package-order constraint (R3):} In the weighted inter-package
-        dependency graph, the package with the dominant call volume must be placed
-        at a strictly higher level than the package it calls into.
   \item \textbf{SCC constraint (R2):} All classes in a cyclic dependency group
         receive the same level; packages that form a cyclic group in the filtered
         package dependency graph must also share a level.
+  \item \textbf{Package-order constraint (R3):} In the weighted inter-package
+        dependency graph, the package with the highest aggregate method-call count
+        must be placed at a strictly higher level than the package it calls into.
 \end{enumerate}
 
 Each constraint is individually manageable. Together they create a circular
@@ -279,17 +281,17 @@ the Layout}
 
 Without a mechanism for breaking large SCCs, all members of a cyclic group must
 be placed on the same level. For small cycles of two to five classes this is
-acceptable. For Minecraft Forge, however, we observed a single SCC containing
-4,038 classes. Without a breaker, more than 40 percent of the project would
-land on one flat level at the bottom of the layout. Everything else would stand
-above it, but the interesting internal structure of the core would be
-invisible.
+acceptable. For Minecraft Forge~1.19.2 (5\,123 classes), however, we observed a single
+SCC containing 2\,857 classes. Without a breaker, more than 55~percent of the
+project would be assigned the same level. All remaining classes would be
+distributed above, but the internal dependency hierarchy within this large
+cycle would be invisible.
 
 The heuristic SCC breaker solves this practical problem. It identifies back
-edges, meaning dependencies that run against the natural architectural flow,
-and temporarily removes them for level computation. The removed edges are
-visualized as violations instead of being ignored. The layout remains honest
-about architectural debt while still producing a usable hierarchy.
+edges---dependencies that run against the natural architectural flow---and
+removes them for level computation. The removed edges are visualized as
+violations instead of being ignored. The layout preserves visibility of
+cyclic dependencies while still producing a usable hierarchy.
 
 \subsection*{Relation to Feedback Arc Set Heuristics}
 
@@ -351,9 +353,9 @@ level~0 regardless of the class levels inside them. Two disconnected package
 trees processed from the same JAR are each levelled from zero in their own
 connected component; no false ordering between them is induced.
 
-The separation of class levels and package levels is not a design choice---no
-correct level-computation pipeline can derive both coordinate systems from a
-single graph in a single pass.
+The separation of class levels and package levels is a structural necessity:
+no correct level-computation pipeline can derive both from a single graph in
+a single pass (Failure Modes 1--3 demonstrate this).
 
 The two phases have the following algorithmic structure:
 
@@ -362,7 +364,7 @@ The two phases have the following algorithmic structure:
 \caption{Phase~1 -- Global Class Levels (\texttt{LevelCalculator}, Step~3)}
 class dependency graph\;
 \Indp $\rightarrow$ Tarjan (SCCs)\;
-$\rightarrow$ SCCBreaker: identify heuristic back-edges in large SCCs ($|S| \geq 3$)\;
+$\rightarrow$ SCCBreaker: identify heuristic back-edges in large SCCs ($|S| \geq 3$; 2-class SCCs are equalized instead)\;
 \hspace{1.5em} rank$(P)=(\text{outDeg}-\text{inDeg})\,/\,\max(1,\text{outDeg}+\text{inDeg})$\;
 \hspace{1.5em} edge $A\!\to\!B$ is a back-edge candidate if $\text{rank}(A)<\text{rank}(B)-0.1$\;
 $\rightarrow$ Remove back-edges $\rightarrow$ filtered class DAG\;
@@ -384,7 +386,7 @@ $\rightarrow$ Assign SCC level to all member classes (equalization implicit)\;\I
 \BlankLine
 \textbf{Iterative SCC-breaking} (repeat until stable):\;
 \Indp
-  Tarjan on current graph $\rightarrow$ find SCCs with $|S|\ge 2$\;
+  Tarjan on current graph $\rightarrow$ find SCCs with $|S|\ge 2$ (2-package SCCs broken if rank differs; equalized otherwise)\;\;
   For each member $P \in S$:\;
   \hspace{1em} $r(P) = \bigl(\sum_{Q\in S}w(P,Q)-\sum_{Q\in S}w(Q,P)\bigr)\;/\;\max\!\bigl(1,\textstyle\sum_{Q\in S}w(P,Q)+\sum_{Q\in S}w(Q,P)\bigr)$\;
   Edge $P_A\!\to\!P_B$ inside $S$ is a back-edge if $r(P_A) < r(P_B) - 0.1$; remove it\;
