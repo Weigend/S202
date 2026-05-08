@@ -454,27 +454,30 @@ R5 & Edge classifications (\texttt{NORMAL}, \texttt{VIOLATION}, \texttt{BACK\_ED
 \caption{The four layout invariants verified after every analysis run.}
 \end{table}
 
-When we deployed the invariant checker against large real-world code bases---including
-Minecraft Forge and \emph{software-ekg-7}---it immediately surfaced R2 violations:
-subtle structural bugs that had gone completely unnoticed despite a fully green unit-test
-suite.
-These findings were only detectable through automated structural analysis; the
-checker's own 154-test suite was fully green throughout.
-Figure~\ref{fig:invariant-r2} shows a sample R2 report from Minecraft Forge;
-the same checker exposed a real R2 bug in \emph{software-ekg-7} (see also below).
+When we deployed the invariant checker against large real-world code bases, it
+guided refinement of both the pipeline and the rules themselves.
+Against Minecraft Forge (2\,895 classes, 220 packages), the checker initially
+reported two R2 violations. Investigation showed these were \emph{false positives}:
+R2 filtered class-level heuristic back-edges but not the package-level back-edges
+that the package SCC-breaker had already removed. R3 already applied the correct
+filter; once R2 was aligned, the Minecraft findings disappeared.
+Figure~\ref{fig:invariant-r2} shows the original R2 output before this refinement.
 
 \begin{figure}[H]
   \centering
   \includegraphics[width=0.7\linewidth]{\detokenize{figures/Invariant Finding R2.png}}
-  \caption{R2 checker report: packages in a filtered package-SCC are placed on
-  different levels. Findings are reported as algorithm-bug candidates with a
-  copy-paste-ready reproducer block, which makes the visual failure traceable
-  to concrete level-pipeline constraints.}
+  \caption{R2 checker output on Minecraft Forge before the package back-edge filter
+  was added. The report was a false positive: the packages were correctly broken out
+  of their SCC by the package-level heuristic---R2 had not yet been taught to
+  respect that cut. False positives of this kind forced the rule to become more precise.}
   \label{fig:invariant-r2}
 \end{figure}
 
-The invariant checker connects the visual symptom to a reproducible
-algorithm defect.
+Against \emph{software-ekg-7}, in contrast, R2 surfaced a genuine pipeline bug:
+a missing package-SCC equalization step had left peer packages at different levels.
+This finding was only detectable through automated structural analysis; the
+checker's own 155-test suite was fully green throughout.
+The invariant checker connects the visual symptom to a reproducible algorithm defect.
 
 \subsection*{The Remaining Rules: R1, R3, and R5}
 
@@ -526,9 +529,9 @@ interpreted as peer-level architectural cycles:
 \end{itemize}
 
 R4 was replaced by R2, which expresses the same intention on the correctly
-filtered graph. R2 removes heuristic back-edges, intra-subtree edges, and edges
-caused by shared class SCCs before running Tarjan on the remaining package
-graph.
+filtered graph. R2 removes class-level heuristic back-edges, package-level
+SCC-breaking back-edges, intra-subtree edges, and edges caused by shared class
+SCCs before running Tarjan on the remaining package graph.
 
 Specifying invariants for a three-level constraint system turns out to be
 harder than it appears. The checker therefore provides a second safety
