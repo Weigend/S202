@@ -46,6 +46,8 @@
   literate={→}{{$\rightarrow$}}1
            {↔}{{$\leftrightarrow$}}1
            {—}{{---}}1
+           {Σ}{{$\Sigma$}}1
+           {−}{{$-$}}1
 }
 
 %% ---------------------------------------------------------------
@@ -348,6 +350,10 @@ independent, packages with no cross-package dependencies correctly land at
 level~0 regardless of the class levels inside them. Two disconnected package
 trees processed from the same JAR are each levelled from zero in their own
 connected component; no false ordering between them is induced.
+
+The separation of class levels and package levels is not a design choice---no
+correct level-computation pipeline can derive both coordinate systems from a
+single graph in a single pass.
 
 The two phases have the following algorithmic structure:
 
