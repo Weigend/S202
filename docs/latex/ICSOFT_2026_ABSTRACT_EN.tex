@@ -353,9 +353,13 @@ level~0 regardless of the class levels inside them. Two disconnected package
 trees processed from the same JAR are each levelled from zero in their own
 connected component; no false ordering between them is induced.
 
-The separation of class levels and package levels is a structural necessity:
-no correct level-computation pipeline can derive both from a single graph in
-a single pass (Failure Modes 1--3 demonstrate this).
+The separation of class levels and package levels is an engineering choice
+driven by semantic clarity. A unified single-graph approach is theoretically
+possible, but it conflates two semantically distinct concerns---global
+architectural depth and module dependency order---into a single coordinate
+system, making the pipeline hard to reason about, test, and maintain. More
+concretely, every obvious simplification of such a unified approach leads to
+one of the failure modes above.
 
 The two phases have the following algorithmic structure:
 
@@ -691,8 +695,9 @@ different input model.
 Correct level computation for layered architecture visualizations requires
 satisfying three interacting constraint systems simultaneously: class dependency
 ordering (R1), package dependency ordering (R3), and SCC level equality (R2).
-No single traversal pass can satisfy all three; the failure modes documented
-above are structural, not accidental.
+Every straightforward single-pass approach over a unified graph fails to
+satisfy all three correctly; the failure modes documented above show why
+each obvious simplification breaks down in practice.
 
 S202 resolves this by computing two semantically distinct level coordinates on
 independent dependency graphs. Class levels are the longest path in the
