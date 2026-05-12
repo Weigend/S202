@@ -663,6 +663,25 @@ public class ArchitectureView extends BorderPane {
         if (whatIfRenderer != null) {
             whatIfRenderer.redraw(whatIfModel);
         }
+        applyVirtuallyMovedDecorations();
+    }
+
+    private void applyVirtuallyMovedDecorations() {
+        if (whatIfModel == null) {
+            return;
+        }
+        for (Map.Entry<String, javafx.scene.Node> entry : elementRegistry.entrySet()) {
+            String fqcn = entry.getKey();
+            boolean moved = whatIfModel.identity().hasOverride(fqcn);
+            javafx.scene.Node node = entry.getValue();
+            if (node instanceof LevelClassBox cls) {
+                cls.setVirtuallyMoved(moved);
+            } else if (node instanceof LevelPackageBox pkg) {
+                pkg.setVirtuallyMoved(moved);
+                String virtualSelf = whatIfModel.identity().virtualFullName(fqcn);
+                pkg.setVirtualLevel(whatIfModel.graph().levelOf(virtualSelf));
+            }
+        }
     }
 
     /**

@@ -5,6 +5,7 @@ import javafx.geometry.Pos;
 import javafx.scene.Cursor;
 import javafx.scene.Node;
 import javafx.scene.control.Label;
+import javafx.scene.effect.DropShadow;
 import javafx.scene.input.MouseButton;
 import javafx.scene.layout.HBox;
 import javafx.scene.layout.Priority;
@@ -34,9 +35,12 @@ public class LevelPackageBox extends VBox implements GraphSelection.Selectable {
     private static final Color PACKAGE_COLOR = Color.web("#e6c46a");
 
     private Label toggleIcon;
+    private Label nameLabel;
     private VBox contentContainer;
     private boolean isExpanded = true;
-    private final String levelName;
+    private final String simpleName;
+    private final int staticLevel;
+    private String levelName;
     private final String fullName;
     private final Map<Integer, HBox> levelRows;
     private final boolean transparent;
@@ -75,6 +79,8 @@ public class LevelPackageBox extends VBox implements GraphSelection.Selectable {
      */
     public LevelPackageBox(String levelName, int level, boolean transparent, String fullName) {
         super(transparent ? 0 : 3);
+        this.simpleName = levelName;
+        this.staticLevel = level;
         this.levelName = level >= 0 ? levelName + " (L:" + level + ")" : levelName;
         this.transparent = transparent;
         this.fullName = fullName;
@@ -167,7 +173,7 @@ public class LevelPackageBox extends VBox implements GraphSelection.Selectable {
         packageIcon.visibleProperty().bind(ArchitectureView.showIconsProperty());
         packageIcon.managedProperty().bind(ArchitectureView.showIconsProperty());
 
-        Label nameLabel = new Label(levelName);
+        nameLabel = new Label(levelName);
         nameLabel.getStyleClass().add("package-name");
         nameLabel.setMaxWidth(Double.MAX_VALUE);
         HBox.setHgrow(nameLabel, Priority.ALWAYS);
@@ -264,5 +270,32 @@ public class LevelPackageBox extends VBox implements GraphSelection.Selectable {
     public void applyUnselectedStyle() {
         selected = false;
         applyBaseStyle();
+    }
+
+    /**
+     * Toggle the "this box has been virtually moved" decoration: an orange
+     * drop-shadow glow on the package frame, mirroring {@link LevelClassBox}.
+     */
+    public void setVirtuallyMoved(boolean moved) {
+        if (moved) {
+            setEffect(new DropShadow(10, Color.rgb(217, 70, 30, 0.85)));
+        } else {
+            setEffect(null);
+        }
+    }
+
+    /**
+     * Update the displayed architectural level. Pass {@code -1} to revert to
+     * the static level baked in at construction. Idempotent.
+     */
+    public void setVirtualLevel(int level) {
+        int shown = level >= 0 ? level : staticLevel;
+        String text = shown >= 0 ? simpleName + " (L:" + shown + ")" : simpleName;
+        if (!text.equals(this.levelName)) {
+            this.levelName = text;
+            if (nameLabel != null) {
+                nameLabel.setText(text);
+            }
+        }
     }
 }

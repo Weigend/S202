@@ -3,8 +3,9 @@ package de.weigend.s202.ui.whatif;
 import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class VirtualIdentityTest {
 
@@ -120,6 +121,17 @@ class VirtualIdentityTest {
 
         assertEquals("X", vi.virtualFullName("X"));
         assertEquals("", vi.virtualParent("X"));
+    }
+
+    @Test
+    void hasOverrideReportsDirectEntriesOnly() {
+        VirtualIdentity vi = new VirtualIdentity();
+        vi.setOverride("a.b", "x");
+
+        assertTrue(vi.hasOverride("a.b"));
+        // Children inherit via parent walk but do not carry a direct override.
+        assertFalse(vi.hasOverride("a.b.c"));
+        assertFalse(vi.hasOverride("a.b.C"));
     }
 
     @Test

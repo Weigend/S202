@@ -67,6 +67,11 @@ public final class VirtualIdentity {
         return overrides.isEmpty();
     }
 
+    /** True if {@code fqcn} carries a direct override (not just an inherited one). */
+    public boolean hasOverride(String fqcn) {
+        return overrides.containsKey(fqcn);
+    }
+
     /**
      * The virtual fully-qualified name of {@code fqcn}. If no override on
      * the path applies, returns {@code fqcn} unchanged.
