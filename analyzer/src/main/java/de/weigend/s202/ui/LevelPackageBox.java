@@ -96,6 +96,8 @@ public class LevelPackageBox extends VBox implements GraphSelection.Selectable {
 
         this.getChildren().add(contentContainer);
 
+        ArchitectureDragController.makeDraggable(this);
+
         // Selectable click target on the package frame itself (free area outside
         // the header). The toggle icon and inner boxes consume their own clicks
         // so they do not bubble up here.
@@ -216,6 +218,7 @@ public class LevelPackageBox extends VBox implements GraphSelection.Selectable {
             hbox.setMaxHeight(Double.MAX_VALUE);
             hbox.setAlignment(Pos.CENTER);
             VBox.setVgrow(hbox, Priority.ALWAYS);
+            ArchitectureDragController.markAsRow(hbox);
 
             insertLevelRowAtCorrectPosition(levelNumber, hbox);
 

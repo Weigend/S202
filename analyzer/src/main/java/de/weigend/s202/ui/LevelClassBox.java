@@ -62,6 +62,8 @@ public class LevelClassBox extends HBox implements GraphSelection.Selectable {
 
         this.getChildren().addAll(icon, nameLabel);
 
+        ArchitectureDragController.makeDraggable(this);
+
         // Single click toggles selection. Double click ensures the class stays
         // selected (no toggle off) and notifies the double-click listener so
         // external panels — e.g. the outline explorer — can reveal the class.

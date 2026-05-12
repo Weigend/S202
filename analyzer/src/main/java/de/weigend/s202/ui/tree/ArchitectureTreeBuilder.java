@@ -1,5 +1,6 @@
 package de.weigend.s202.ui.tree;
 
+import de.weigend.s202.ui.ArchitectureDragController;
 import de.weigend.s202.ui.LevelClassBox;
 import de.weigend.s202.ui.LevelPackageBox;
 import de.weigend.s202.ui.layout.horizontal.HorizontalLayoutOrdering;
@@ -115,6 +116,7 @@ public class ArchitectureTreeBuilder {
                 HBox hbox = new HBox(8);
                 hbox.setMaxWidth(Double.MAX_VALUE);
                 VBox.setVgrow(hbox, Priority.ALWAYS);
+                ArchitectureDragController.markAsRow(hbox);
                 topLevelContainer.getChildren().add(hbox);
                 return hbox;
             });
