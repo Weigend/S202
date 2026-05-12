@@ -88,13 +88,15 @@ public final class VirtualIdentity {
     private String resolve(String fqcn) {
         String direct = overrides.get(fqcn);
         if (direct != null) {
-            return direct + "." + simpleName(fqcn);
+            return direct.isEmpty() ? simpleName(fqcn) : direct + "." + simpleName(fqcn);
         }
         String ancestor = parentOf(fqcn);
         while (!ancestor.isEmpty()) {
             String ancestorOverride = overrides.get(ancestor);
             if (ancestorOverride != null) {
-                String virtualAncestor = ancestorOverride + "." + simpleName(ancestor);
+                String virtualAncestor = ancestorOverride.isEmpty()
+                        ? simpleName(ancestor)
+                        : ancestorOverride + "." + simpleName(ancestor);
                 String suffix = fqcn.substring(ancestor.length() + 1);
                 return virtualAncestor + "." + suffix;
             }

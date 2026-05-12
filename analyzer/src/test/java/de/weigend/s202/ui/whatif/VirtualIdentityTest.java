@@ -124,6 +124,29 @@ class VirtualIdentityTest {
     }
 
     @Test
+    void emptyParentOverrideRelocatesNodeToTopLevel() {
+        // Moving package a.b to the root namespace: virtual fullName drops a.b's
+        // ancestors and becomes just "b", classes inside become "b.C", "b.c.X" etc.
+        VirtualIdentity vi = new VirtualIdentity();
+        vi.setOverride("a.b", "");
+
+        assertEquals("b", vi.virtualFullName("a.b"));
+        assertEquals("", vi.virtualParent("a.b"));
+        assertEquals("b.C", vi.virtualFullName("a.b.C"));
+        assertEquals("b", vi.virtualParent("a.b.C"));
+        assertEquals("b.c.X", vi.virtualFullName("a.b.c.X"));
+    }
+
+    @Test
+    void emptyParentDirectOverrideOnClassDropsAllAncestors() {
+        VirtualIdentity vi = new VirtualIdentity();
+        vi.setOverride("a.b.X", "");
+
+        assertEquals("X", vi.virtualFullName("a.b.X"));
+        assertEquals("", vi.virtualParent("a.b.X"));
+    }
+
+    @Test
     void hasOverrideReportsDirectEntriesOnly() {
         VirtualIdentity vi = new VirtualIdentity();
         vi.setOverride("a.b", "x");

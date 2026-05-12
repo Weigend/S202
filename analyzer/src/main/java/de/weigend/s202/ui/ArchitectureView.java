@@ -510,11 +510,18 @@ public class ArchitectureView extends BorderPane {
         if (movedFqcn == null || movedFqcn.isEmpty()) {
             return;
         }
-        LevelPackageBox container = findEnclosingPackage(destinationRow);
-        if (container == null || container.getFullName() == null || container.getFullName().isEmpty()) {
+        String destinationContainerFqcn = resolveDestinationContainer(destinationRow);
+        if (destinationContainerFqcn == null) {
             return;
         }
-        String newVirtualParent = whatIfModel.identity().virtualFullName(container.getFullName());
+        String newVirtualParent = destinationContainerFqcn.isEmpty()
+                ? ""
+                : whatIfModel.identity().virtualFullName(destinationContainerFqcn);
+        String currentVirtualParent = whatIfModel.identity().virtualParent(movedFqcn);
+        if (currentVirtualParent.equals(newVirtualParent)) {
+            setStatus("What-If: " + simple(movedFqcn) + " — visual reorder only (same virtual parent)");
+            return;
+        }
         whatIfModel.applyMove(movedFqcn, newVirtualParent);
         setStatus(buildWhatIfStatusMessage(movedFqcn, newVirtualParent));
     }
@@ -530,11 +537,24 @@ public class ArchitectureView extends BorderPane {
         return false;
     }
 
-    private static LevelPackageBox findEnclosingPackage(javafx.scene.Node node) {
-        javafx.scene.Node n = node == null ? null : node.getParent();
+    /**
+     * Resolve the static fqcn of the package container the drop landed in.
+     * Walks up the scene graph from the destination row: the first enclosing
+     * {@link LevelPackageBox} wins. If the drop lands at top level (no
+     * enclosing package box), the row stack is tagged with the effective
+     * root's fqcn by the tree builder and that value is returned — an empty
+     * string then means "drop at the architecture's effective root".
+     */
+    private static String resolveDestinationContainer(javafx.scene.Node row) {
+        javafx.scene.Node n = row == null ? null : row.getParent();
         while (n != null) {
             if (n instanceof LevelPackageBox lpb) {
-                return lpb;
+                String fqcn = lpb.getFullName();
+                return fqcn == null ? "" : fqcn;
+            }
+            Object rootTag = n.getProperties().get("s202.whatif.rootFqcn");
+            if (rootTag instanceof String s) {
+                return s;
             }
             n = n.getParent();
         }

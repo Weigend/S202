@@ -105,6 +105,10 @@ public class ArchitectureTreeBuilder {
             elementRegistry.put(singleChild.getFullName(), topLevelContainer);
             effectiveRoot = singleChild;
         }
+        // Tag the top-level stack with the effective root's fqcn so the
+        // What-If drop handler can resolve a "dropped at top level" event.
+        topLevelContainer.getProperties().put("s202.whatif.rootFqcn",
+                effectiveRoot.getFullName() == null ? "" : effectiveRoot.getFullName());
 
         // Process children from a sorted layout view: level desc, then horizontal row order.
         List<ArchitectureNode> sortedChildren = HorizontalLayoutOrdering.childrenInLayoutOrder(effectiveRoot);
@@ -368,6 +372,8 @@ public class ArchitectureTreeBuilder {
             elementRegistry.put(singleChild.getFullName(), topLevelContainer);
             effectiveRoot = singleChild;
         }
+        topLevelContainer.getProperties().put("s202.whatif.rootFqcn",
+                effectiveRoot.getFullName() == null ? "" : effectiveRoot.getFullName());
         return effectiveRoot;
     }
 
