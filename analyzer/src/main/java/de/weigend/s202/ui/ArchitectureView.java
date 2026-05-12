@@ -6,7 +6,6 @@ import de.weigend.s202.reader.DependencyModel;
 import de.weigend.s202.ui.model.ArchitectureNode;
 import de.weigend.s202.ui.whatif.ClassEdges;
 import de.weigend.s202.ui.whatif.WhatIfModel;
-import de.weigend.s202.ui.whatif.view.WhatIfDependenciesView;
 import de.weigend.s202.ui.rendering.CircuitBoardRenderer;
 import de.weigend.s202.ui.rendering.DependencyRenderer;
 import de.weigend.s202.ui.rendering.DependencyRendererStrategy;
@@ -92,7 +91,11 @@ public class ArchitectureView extends BorderPane {
     // a DependencyModel is pushed in; nulled on no-analysis state.
     private WhatIfModel whatIfModel;
     private ArchitectureDragController.DropListener whatIfDropListener;
-    private WhatIfDependenciesView whatIfDependenciesView;
+
+    // Pulses every time the arrow overlay finishes a redraw. WFX side panels
+    // (e.g. the Dependencies module) can subscribe to refresh themselves.
+    private final javafx.beans.property.LongProperty redrawTick =
+            new javafx.beans.property.SimpleLongProperty(0);
 
     private javafx.scene.layout.Pane zoomableContent;
     private Consumer<String> statusSink = msg -> { /* no-op default */ };
@@ -185,9 +188,6 @@ public class ArchitectureView extends BorderPane {
         });
 
         setCenter(contentPane);
-
-        whatIfDependenciesView = new WhatIfDependenciesView();
-        setLeft(whatIfDependenciesView);
     }
 
     private void wirePropertyListeners() {
@@ -373,9 +373,6 @@ public class ArchitectureView extends BorderPane {
 
         whatIfRenderer = new WhatIfUpwardEdgeRenderer(whatIfPane, elementRegistry);
         whatIfRenderer.setCoordinateContext(zoomableContent, overlayPane);
-        if (whatIfDependenciesView != null) {
-            whatIfDependenciesView.setModel(whatIfModel, rawDependencyModel.get(), whatIfRenderer);
-        }
 
         tangleRenderer = new TangleEdgeRenderer(tanglePane, elementRegistry, this::setStatus);
         tangleRenderer.setCoordinateContext(zoomableContent, overlayPane);
@@ -481,9 +478,6 @@ public class ArchitectureView extends BorderPane {
         if (whatIfModel != null) {
             whatIfModel.addChangeListener(arrowsCoalescer::markDirty);
         }
-        if (whatIfDependenciesView != null) {
-            whatIfDependenciesView.setModel(whatIfModel, model, whatIfRenderer);
-        }
         ensureWhatIfDropListenerRegistered();
         arrowsCoalescer.markDirty();
     }
@@ -576,6 +570,21 @@ public class ArchitectureView extends BorderPane {
     /** Read-only handle to the current What-If model, or {@code null} when no analysis is loaded. */
     public WhatIfModel getWhatIfModel() {
         return whatIfModel;
+    }
+
+    /** Renderer that paints wrong-direction edges — exposed so side panels can query violations. */
+    public WhatIfUpwardEdgeRenderer getWhatIfRenderer() {
+        return whatIfRenderer;
+    }
+
+    /**
+     * Long-typed pulse counter that increments after every successful
+     * arrow-overlay flush. Side panels that derive their content from the
+     * current scene positions (e.g. the What-If Dependencies module) bind
+     * to this to refresh in sync with the canvas.
+     */
+    public javafx.beans.value.ObservableValue<Number> redrawTickProperty() {
+        return redrawTick;
     }
 
     public String getPreferredTopTanglesScope() {
@@ -719,6 +728,7 @@ public class ArchitectureView extends BorderPane {
         }
         getScene().getRoot().layout();
         redrawVisibleArrows();
+        redrawTick.set(redrawTick.get() + 1);
     }
 
     /**

@@ -1,4 +1,4 @@
-package de.weigend.s202.ui.whatif.view;
+package de.weigend.s202.ui.wfx.whatif;
 
 import de.weigend.s202.analysis.scc.StronglyConnectedComponent;
 import de.weigend.s202.reader.DependencyModel;
@@ -7,45 +7,49 @@ import de.weigend.s202.ui.rendering.WhatIfUpwardEdgeRenderer;
 import de.weigend.s202.ui.whatif.ClassEdge;
 import de.weigend.s202.ui.whatif.VirtualPackageGraph;
 import de.weigend.s202.ui.whatif.WhatIfModel;
+import io.softwareecg.wfx.windowmtg.api.Position;
+import io.softwareecg.wfx.windowmtg.api.View;
 import javafx.collections.FXCollections;
 import javafx.collections.ObservableList;
 import javafx.geometry.Insets;
 import javafx.scene.Node;
+import javafx.scene.Parent;
 import javafx.scene.control.Label;
 import javafx.scene.control.ListView;
 import javafx.scene.control.Separator;
 import javafx.scene.control.TreeItem;
 import javafx.scene.control.TreeView;
+import javafx.scene.layout.BorderPane;
 import javafx.scene.layout.Priority;
 import javafx.scene.layout.VBox;
 
+import java.net.URL;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
 import java.util.TreeMap;
 
 /**
- * Side panel listing the current What-If consequences (ADR §2.6). Driven
- * entirely by the live scene positions of the architecture boxes:
+ * WFX side-panel view that lists the current What-If consequences for the
+ * focused {@link de.weigend.s202.ui.ArchitectureView ArchitectureView}.
+ * Decoupled from the chart — wired in by {@link WhatIfDependenciesModule},
+ * fed by a renderer + model triple.
  *
  * <ul>
  *   <li><b>Wrong-direction edges</b> — same data the
- *       {@link WhatIfUpwardEdgeRenderer} draws on the canvas, grouped by
- *       (source box, target box) pair. Each top-level entry expands into
- *       the underlying class-to-class edges; each class edge expands into
- *       the method calls behind it (from the raw {@link DependencyModel}).</li>
- *   <li><b>Package tangles</b> — static package SCCs extracted from the
- *       analyzer. These reflect cycles in the code itself and are
- *       independent of any visual rearrangement.</li>
+ *       {@link WhatIfUpwardEdgeRenderer} paints on the canvas, rolled up to
+ *       the currently-visible source/target box and grouped per pair.
+ *       Drilldown: aggregate → class-to-class edges → method calls.</li>
+ *   <li><b>Package tangles</b> — static package SCCs from the analyzer.
+ *       Independent of any visual rearrangement.</li>
  * </ul>
- *
- * <p>The view subscribes to {@link WhatIfModel#addChangeListener} for
- * override-triggered refreshes; layout-triggered refreshes come through
- * the architecture view's pulse-coalescer calling {@link #refresh()}
- * after each redraw pass.
  */
-public final class WhatIfDependenciesView extends VBox {
+public final class WhatIfDependenciesView implements View {
 
+    public static final String VIEW_ID = "s202-whatif-dependencies";
+
+    private final BorderPane root = new BorderPane();
+    private final VBox content = new VBox(6);
     private final Label upwardHeader = new Label();
     private final TreeView<String> upwardTree = new TreeView<>();
     private final Label sccHeader = new Label();
@@ -54,15 +58,9 @@ public final class WhatIfDependenciesView extends VBox {
     private WhatIfModel model;
     private DependencyModel rawDepModel;
     private WhatIfUpwardEdgeRenderer renderer;
-    private final Runnable changeListener = this::refresh;
 
     public WhatIfDependenciesView() {
-        super(6);
-        setPadding(new Insets(8));
-        setMinWidth(280);
-        setPrefWidth(320);
-        setMaxWidth(380);
-        setStyle("-fx-background-color: #fafafa; -fx-border-color: #d0d0d0; -fx-border-width: 0 1 0 0;");
+        content.setPadding(new Insets(8));
 
         upwardHeader.setStyle("-fx-font-weight: bold; -fx-font-size: 12;");
         sccHeader.setStyle("-fx-font-weight: bold; -fx-font-size: 12;");
@@ -72,28 +70,24 @@ public final class WhatIfDependenciesView extends VBox {
 
         sccList.setPrefHeight(160);
 
-        getChildren().addAll(
+        content.getChildren().addAll(
                 upwardHeader,
                 upwardTree,
                 new Separator(),
                 sccHeader,
                 sccList);
 
+        root.setCenter(content);
         refresh();
     }
 
-    public void setModel(WhatIfModel newModel,
-                         DependencyModel rawDepModel,
-                         WhatIfUpwardEdgeRenderer renderer) {
-        if (this.model != null) {
-            this.model.removeChangeListener(changeListener);
-        }
-        this.model = newModel;
+    /** Re-bind the view to a different architecture context. Pass nulls to clear. */
+    public void bind(WhatIfModel model,
+                     DependencyModel rawDepModel,
+                     WhatIfUpwardEdgeRenderer renderer) {
+        this.model = model;
         this.rawDepModel = rawDepModel;
         this.renderer = renderer;
-        if (this.model != null) {
-            this.model.addChangeListener(changeListener);
-        }
         refresh();
     }
 
@@ -117,17 +111,17 @@ public final class WhatIfDependenciesView extends VBox {
     }
 
     private TreeItem<String> buildUpwardTree(List<WhatIfUpwardEdgeRenderer.Violation> violations) {
-        TreeItem<String> root = new TreeItem<>("");
+        TreeItem<String> rootItem = new TreeItem<>("");
         if (violations.isEmpty()) {
-            return root;
+            return rootItem;
         }
-        // Stable display order — by source label, then target label.
-        violations = violations.stream()
-                .sorted(Comparator.comparing((WhatIfUpwardEdgeRenderer.Violation v) -> endpointLabel(v.source()))
+        List<WhatIfUpwardEdgeRenderer.Violation> sorted = violations.stream()
+                .sorted(Comparator
+                        .comparing((WhatIfUpwardEdgeRenderer.Violation v) -> endpointLabel(v.source()))
                         .thenComparing(v -> endpointLabel(v.target())))
                 .toList();
 
-        for (WhatIfUpwardEdgeRenderer.Violation v : violations) {
+        for (WhatIfUpwardEdgeRenderer.Violation v : sorted) {
             String label = endpointLabel(v.source()) + " ↑ " + endpointLabel(v.target())
                     + "  (" + v.classEdges().size() + ")";
             TreeItem<String> top = new TreeItem<>(label);
@@ -139,9 +133,9 @@ public final class WhatIfDependenciesView extends VBox {
                 attachMethodCallChildren(classItem, edge);
                 top.getChildren().add(classItem);
             }
-            root.getChildren().add(top);
+            rootItem.getChildren().add(top);
         }
-        return root;
+        return rootItem;
     }
 
     private void attachMethodCallChildren(TreeItem<String> classItem, ClassEdge edge) {
@@ -198,5 +192,42 @@ public final class WhatIfDependenciesView extends VBox {
     private static String simple(String fqcn) {
         int dot = fqcn.lastIndexOf('.');
         return dot < 0 ? fqcn : fqcn.substring(dot + 1);
+    }
+
+    // ===== View interface =====
+
+    @Override
+    public String getViewId() {
+        return VIEW_ID;
+    }
+
+    @Override
+    public String getTitle() {
+        return "Dependencies";
+    }
+
+    @Override
+    public String getToolTipInfo() {
+        return "Wrong-direction class edges and package tangles for the focused architecture";
+    }
+
+    @Override
+    public Position getDefaultPosition() {
+        return Position.LEFT;
+    }
+
+    @Override
+    public Parent getRootNode() {
+        return root;
+    }
+
+    @Override
+    public URL getViewImagePath() {
+        return null;
+    }
+
+    @Override
+    public double getViewAreaSize() {
+        return 0.30;
     }
 }
