@@ -10,6 +10,7 @@ import javafx.scene.layout.Region;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.CopyOnWriteArrayList;
 
 /**
  * Drag-and-drop controller for the architecture view. Phase 2 of the
@@ -47,6 +48,30 @@ public final class ArchitectureDragController {
     private static HBox currentDropRow;
     private static int currentDropSlot = -1;
     private static Region insertMarker;
+
+    private static final List<DropListener> dropListeners = new CopyOnWriteArrayList<>();
+
+    /**
+     * Callback invoked when a drag finishes with a successful visual drop.
+     * Receives the original drag source plus the row it was dropped into so
+     * the listener can resolve the containing architecture context (e.g.
+     * walk up to a {@link LevelPackageBox} for its fqcn) on its own. Phase 3
+     * uses this to update the What-If model.
+     */
+    @FunctionalInterface
+    public interface DropListener {
+        void onDrop(Node movedSource, HBox destinationRow);
+    }
+
+    /** Register a drop listener. Listeners must self-filter by scene graph. */
+    public static void addDropListener(DropListener listener) {
+        dropListeners.add(listener);
+    }
+
+    /** Unregister a previously added drop listener. */
+    public static void removeDropListener(DropListener listener) {
+        dropListeners.remove(listener);
+    }
 
     private ArchitectureDragController() {}
 
@@ -102,8 +127,11 @@ public final class ArchitectureDragController {
             reset();
             return;
         }
+        Node movedSource = dragSource;
+        HBox droppedInto = null;
         if (currentDropRow != null && currentDropSlot >= 0
                 && isValidDrop(currentDropRow, currentDropSlot)) {
+            droppedInto = currentDropRow;
             performDrop();
         }
         if (dragSource != null) {
@@ -111,6 +139,15 @@ public final class ArchitectureDragController {
         }
         reset();
         e.consume();
+        if (droppedInto != null) {
+            fireDrop(movedSource, droppedInto);
+        }
+    }
+
+    private static void fireDrop(Node movedSource, HBox destinationRow) {
+        for (DropListener listener : dropListeners) {
+            listener.onDrop(movedSource, destinationRow);
+        }
     }
 
     private static void beginDrag() {

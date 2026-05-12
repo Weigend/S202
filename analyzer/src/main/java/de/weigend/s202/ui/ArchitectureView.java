@@ -1,9 +1,13 @@
 package de.weigend.s202.ui;
 
 import de.weigend.s202.analysis.quality.QualityMetrics;
+import de.weigend.s202.analysis.scc.StronglyConnectedComponent;
 import de.weigend.s202.domain.DomainModel;
 import de.weigend.s202.reader.DependencyModel;
 import de.weigend.s202.ui.model.ArchitectureNode;
+import de.weigend.s202.ui.whatif.ClassEdges;
+import de.weigend.s202.ui.whatif.PackageAggregate;
+import de.weigend.s202.ui.whatif.WhatIfModel;
 import de.weigend.s202.ui.rendering.CircuitBoardRenderer;
 import de.weigend.s202.ui.rendering.DependencyRenderer;
 import de.weigend.s202.ui.rendering.DependencyRendererStrategy;
@@ -81,6 +85,11 @@ public class ArchitectureView extends BorderPane {
     // ADR_PULSE_COALESCING_AND_DND.
     private final PulseCoalescer arrowsCoalescer =
             new PulseCoalescer(javafx.application.Platform::runLater, this::flushArrowsRedraw);
+
+    // What-If layer: virtual identity + aggregated package graph. Built when
+    // a DependencyModel is pushed in; nulled on no-analysis state.
+    private WhatIfModel whatIfModel;
+    private ArchitectureDragController.DropListener whatIfDropListener;
 
     private javafx.scene.layout.Pane zoomableContent;
     private Consumer<String> statusSink = msg -> { /* no-op default */ };
@@ -446,6 +455,91 @@ public class ArchitectureView extends BorderPane {
 
     public void setRawDependencyModel(DependencyModel model) {
         rawDependencyModel.set(model);
+        rebuildWhatIfModel(model);
+    }
+
+    private void rebuildWhatIfModel(DependencyModel model) {
+        whatIfModel = model == null ? null : new WhatIfModel(ClassEdges.fromDependencyModel(model));
+        ensureWhatIfDropListenerRegistered();
+    }
+
+    private void ensureWhatIfDropListenerRegistered() {
+        if (whatIfDropListener != null) {
+            return;
+        }
+        whatIfDropListener = this::handleWhatIfDrop;
+        ArchitectureDragController.addDropListener(whatIfDropListener);
+    }
+
+    private void handleWhatIfDrop(javafx.scene.Node movedSource, javafx.scene.layout.HBox destinationRow) {
+        if (whatIfModel == null) {
+            return;
+        }
+        if (!isInsideThisView(movedSource)) {
+            return;
+        }
+        if (!(movedSource instanceof GraphSelection.Selectable selectable)) {
+            return;
+        }
+        String movedFqcn = selectable.getFullName();
+        if (movedFqcn == null || movedFqcn.isEmpty()) {
+            return;
+        }
+        LevelPackageBox container = findEnclosingPackage(destinationRow);
+        if (container == null || container.getFullName() == null || container.getFullName().isEmpty()) {
+            return;
+        }
+        String newVirtualParent = whatIfModel.identity().virtualFullName(container.getFullName());
+        whatIfModel.applyMove(movedFqcn, newVirtualParent);
+        setStatus(buildWhatIfStatusMessage(movedFqcn, newVirtualParent));
+    }
+
+    private boolean isInsideThisView(javafx.scene.Node node) {
+        javafx.scene.Node n = node;
+        while (n != null) {
+            if (n == this) {
+                return true;
+            }
+            n = n.getParent();
+        }
+        return false;
+    }
+
+    private static LevelPackageBox findEnclosingPackage(javafx.scene.Node node) {
+        javafx.scene.Node n = node == null ? null : node.getParent();
+        while (n != null) {
+            if (n instanceof LevelPackageBox lpb) {
+                return lpb;
+            }
+            n = n.getParent();
+        }
+        return null;
+    }
+
+    private String buildWhatIfStatusMessage(String movedFqcn, String newVirtualParent) {
+        int upwardClassEdges = 0;
+        for (PackageAggregate aggregate : whatIfModel.aggregator().aggregates().values()) {
+            int srcLevel = whatIfModel.graph().levelOf(aggregate.source());
+            int tgtLevel = whatIfModel.graph().levelOf(aggregate.target());
+            if (srcLevel >= 0 && tgtLevel >= 0 && srcLevel < tgtLevel) {
+                upwardClassEdges += aggregate.classEdgeCount();
+            }
+        }
+        int tangles = 0;
+        for (StronglyConnectedComponent scc : whatIfModel.graph().sccs()) {
+            if (scc.isTangle()) {
+                tangles++;
+            }
+        }
+        return String.format("What-If: %s → %s — %d upward class edge%s, %d tangle%s",
+                simple(movedFqcn), newVirtualParent,
+                upwardClassEdges, upwardClassEdges == 1 ? "" : "s",
+                tangles, tangles == 1 ? "" : "s");
+    }
+
+    /** Read-only handle to the current What-If model, or {@code null} when no analysis is loaded. */
+    public WhatIfModel getWhatIfModel() {
+        return whatIfModel;
     }
 
     public String getPreferredTopTanglesScope() {
