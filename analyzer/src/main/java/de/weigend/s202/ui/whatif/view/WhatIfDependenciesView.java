@@ -2,14 +2,15 @@ package de.weigend.s202.ui.whatif.view;
 
 import de.weigend.s202.analysis.scc.StronglyConnectedComponent;
 import de.weigend.s202.reader.DependencyModel;
+import de.weigend.s202.ui.GraphSelection;
 import de.weigend.s202.ui.rendering.WhatIfUpwardEdgeRenderer;
 import de.weigend.s202.ui.whatif.ClassEdge;
-import de.weigend.s202.ui.whatif.PackageAggregate;
 import de.weigend.s202.ui.whatif.VirtualPackageGraph;
 import de.weigend.s202.ui.whatif.WhatIfModel;
 import javafx.collections.FXCollections;
 import javafx.collections.ObservableList;
 import javafx.geometry.Insets;
+import javafx.scene.Node;
 import javafx.scene.control.Label;
 import javafx.scene.control.ListView;
 import javafx.scene.control.Separator;
@@ -19,31 +20,29 @@ import javafx.scene.layout.Priority;
 import javafx.scene.layout.VBox;
 
 import java.util.Comparator;
-import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
 import java.util.TreeMap;
 
 /**
- * Side panel that lists the current What-If consequences. Phase 5 of the
- * What-If refactor (ADR §2.6).
+ * Side panel listing the current What-If consequences (ADR §2.6). Driven
+ * entirely by the live scene positions of the architecture boxes:
  *
- * <p>Two sections:
  * <ul>
- *   <li><b>Upward Edges</b> — TreeView with three drill levels. Roots are
- *       aggregated package-to-package edges where source's virtual level is
- *       below target's. Children are the individual class-to-class edges in
- *       that aggregate. Grandchildren are the method calls behind each
- *       class edge (extracted lazily from {@link DependencyModel}).</li>
- *   <li><b>Package SCCs</b> — ListView showing the current virtual tangles
- *       annotated with a diff vs. the static baseline: tangles introduced
- *       by What-If moves are tagged {@code NEW}, tangles the moves
- *       dissolved are tagged {@code dissolved}.</li>
+ *   <li><b>Wrong-direction edges</b> — same data the
+ *       {@link WhatIfUpwardEdgeRenderer} draws on the canvas, grouped by
+ *       (source box, target box) pair. Each top-level entry expands into
+ *       the underlying class-to-class edges; each class edge expands into
+ *       the method calls behind it (from the raw {@link DependencyModel}).</li>
+ *   <li><b>Package tangles</b> — static package SCCs extracted from the
+ *       analyzer. These reflect cycles in the code itself and are
+ *       independent of any visual rearrangement.</li>
  * </ul>
  *
- * <p>The view subscribes to {@link WhatIfModel#addChangeListener} so it
- * refreshes automatically after every move.
+ * <p>The view subscribes to {@link WhatIfModel#addChangeListener} for
+ * override-triggered refreshes; layout-triggered refreshes come through
+ * the architecture view's pulse-coalescer calling {@link #refresh()}
+ * after each redraw pass.
  */
 public final class WhatIfDependenciesView extends VBox {
 
@@ -54,6 +53,7 @@ public final class WhatIfDependenciesView extends VBox {
 
     private WhatIfModel model;
     private DependencyModel rawDepModel;
+    private WhatIfUpwardEdgeRenderer renderer;
     private final Runnable changeListener = this::refresh;
 
     public WhatIfDependenciesView() {
@@ -82,17 +82,15 @@ public final class WhatIfDependenciesView extends VBox {
         refresh();
     }
 
-    /**
-     * Bind to a model. Pass {@code null} to detach the view (e.g. when no
-     * analysis is loaded). The raw dependency model carries the per-method
-     * call data used for the deepest drill level.
-     */
-    public void setModel(WhatIfModel newModel, DependencyModel rawDepModel) {
+    public void setModel(WhatIfModel newModel,
+                         DependencyModel rawDepModel,
+                         WhatIfUpwardEdgeRenderer renderer) {
         if (this.model != null) {
             this.model.removeChangeListener(changeListener);
         }
         this.model = newModel;
         this.rawDepModel = rawDepModel;
+        this.renderer = renderer;
         if (this.model != null) {
             this.model.addChangeListener(changeListener);
         }
@@ -100,66 +98,50 @@ public final class WhatIfDependenciesView extends VBox {
     }
 
     public void refresh() {
-        TreeItem<String> root = buildUpwardTree();
-        upwardTree.setRoot(root);
-        int wrongEdgeCount = countWrongDirectionClassEdges();
-        upwardHeader.setText("Wrong-direction edges — " + wrongEdgeCount + " class edge"
-                + (wrongEdgeCount == 1 ? "" : "s"));
+        List<WhatIfUpwardEdgeRenderer.Violation> violations = currentViolations();
+        upwardTree.setRoot(buildUpwardTree(violations));
+        int totalClassEdges = violations.stream().mapToInt(v -> v.classEdges().size()).sum();
+        upwardHeader.setText("Wrong-direction edges — " + totalClassEdges + " class edge"
+                + (totalClassEdges == 1 ? "" : "s"));
 
-        ObservableList<String> sccItems = buildSccDiffList();
+        ObservableList<String> sccItems = buildSccList();
         sccList.setItems(sccItems);
-        sccHeader.setText("Package tangles — " + sccItems.size());
+        sccHeader.setText("Package tangles (static) — " + sccItems.size());
     }
 
-    private int countWrongDirectionClassEdges() {
-        if (model == null) {
-            return 0;
+    private List<WhatIfUpwardEdgeRenderer.Violation> currentViolations() {
+        if (renderer == null || model == null) {
+            return List.of();
         }
-        VirtualPackageGraph graph = model.graph();
-        int count = 0;
-        for (PackageAggregate aggregate : model.aggregator().aggregates().values()) {
-            if (WhatIfUpwardEdgeRenderer.isWrongDirection(graph, aggregate)) {
-                count += aggregate.classEdgeCount();
-            }
-        }
-        return count;
+        return renderer.findVisibleViolations(model.staticEdges());
     }
 
-    private TreeItem<String> buildUpwardTree() {
+    private TreeItem<String> buildUpwardTree(List<WhatIfUpwardEdgeRenderer.Violation> violations) {
         TreeItem<String> root = new TreeItem<>("");
-        if (model == null) {
+        if (violations.isEmpty()) {
             return root;
         }
-        VirtualPackageGraph graph = model.graph();
-        // Sort aggregates for stable display (source pkg asc, then target pkg asc).
-        List<PackageAggregate> sorted = model.aggregator().aggregates().values().stream()
-                .filter(a -> WhatIfUpwardEdgeRenderer.isWrongDirection(graph, a))
-                .sorted(Comparator.<PackageAggregate, String>comparing(PackageAggregate::source)
-                        .thenComparing(PackageAggregate::target))
+        // Stable display order — by source label, then target label.
+        violations = violations.stream()
+                .sorted(Comparator.comparing((WhatIfUpwardEdgeRenderer.Violation v) -> endpointLabel(v.source()))
+                        .thenComparing(v -> endpointLabel(v.target())))
                 .toList();
 
-        for (PackageAggregate aggregate : sorted) {
-            boolean cycle = graph.sccIdOf(aggregate.source()) == graph.sccIdOf(aggregate.target())
-                    && graph.isInTangle(aggregate.source());
-            String arrow = cycle ? " ⟲ " : " ↑ ";
-            String label = aggregate.source() + arrow + aggregate.target()
-                    + "  (" + aggregate.classEdgeCount() + ")";
-            TreeItem<String> pkgItem = new TreeItem<>(label);
-            for (ClassEdge edge : sortClassEdges(aggregate.classEdges())) {
+        for (WhatIfUpwardEdgeRenderer.Violation v : violations) {
+            String label = endpointLabel(v.source()) + " ↑ " + endpointLabel(v.target())
+                    + "  (" + v.classEdges().size() + ")";
+            TreeItem<String> top = new TreeItem<>(label);
+            List<ClassEdge> sortedEdges = v.classEdges().stream()
+                    .sorted(Comparator.comparing(ClassEdge::source).thenComparing(ClassEdge::target))
+                    .toList();
+            for (ClassEdge edge : sortedEdges) {
                 TreeItem<String> classItem = new TreeItem<>(simple(edge.source()) + " → " + simple(edge.target()));
                 attachMethodCallChildren(classItem, edge);
-                pkgItem.getChildren().add(classItem);
+                top.getChildren().add(classItem);
             }
-            root.getChildren().add(pkgItem);
+            root.getChildren().add(top);
         }
         return root;
-    }
-
-    private static List<ClassEdge> sortClassEdges(List<ClassEdge> edges) {
-        return edges.stream()
-                .sorted(Comparator.<ClassEdge, String>comparing(ClassEdge::source)
-                        .thenComparing(ClassEdge::target))
-                .toList();
     }
 
     private void attachMethodCallChildren(TreeItem<String> classItem, ClassEdge edge) {
@@ -188,41 +170,29 @@ public final class WhatIfDependenciesView extends VBox {
         }
     }
 
-    private ObservableList<String> buildSccDiffList() {
+    private ObservableList<String> buildSccList() {
         ObservableList<String> items = FXCollections.observableArrayList();
         if (model == null) {
             return items;
         }
-        Set<Set<String>> current = tangleMemberSets(model.graph());
-        Set<Set<String>> baseline = tangleMemberSets(model.staticGraph());
-
-        // Display current tangles first (stable across moves), then dissolved
-        // tangles separately.
-        for (Set<String> tangle : current) {
-            String suffix = baseline.contains(tangle) ? "" : "   [NEW]";
-            items.add(formatTangle(tangle) + suffix);
-        }
-        for (Set<String> tangle : baseline) {
-            if (!current.contains(tangle)) {
-                items.add(formatTangle(tangle) + "   [dissolved]");
+        VirtualPackageGraph staticGraph = model.staticGraph();
+        for (StronglyConnectedComponent scc : staticGraph.sccs()) {
+            if (scc.isTangle()) {
+                items.add(formatTangle(scc.getMembers().stream().sorted().toList()));
             }
         }
         return items;
     }
 
-    private static Set<Set<String>> tangleMemberSets(VirtualPackageGraph graph) {
-        Set<Set<String>> result = new HashSet<>();
-        for (StronglyConnectedComponent scc : graph.sccs()) {
-            if (scc.isTangle()) {
-                result.add(new HashSet<>(scc.getMembers()));
-            }
+    private static String endpointLabel(Node node) {
+        if (node instanceof GraphSelection.Selectable s && s.getFullName() != null) {
+            return s.getFullName();
         }
-        return result;
+        return node.getClass().getSimpleName();
     }
 
-    private static String formatTangle(Set<String> members) {
-        List<String> sorted = members.stream().sorted().toList();
-        return "{ " + String.join(", ", sorted) + " }";
+    private static String formatTangle(List<String> members) {
+        return "{ " + String.join(", ", members) + " }";
     }
 
     private static String simple(String fqcn) {

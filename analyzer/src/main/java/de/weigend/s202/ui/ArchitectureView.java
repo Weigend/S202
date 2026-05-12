@@ -1,12 +1,10 @@
 package de.weigend.s202.ui;
 
 import de.weigend.s202.analysis.quality.QualityMetrics;
-import de.weigend.s202.analysis.scc.StronglyConnectedComponent;
 import de.weigend.s202.domain.DomainModel;
 import de.weigend.s202.reader.DependencyModel;
 import de.weigend.s202.ui.model.ArchitectureNode;
 import de.weigend.s202.ui.whatif.ClassEdges;
-import de.weigend.s202.ui.whatif.PackageAggregate;
 import de.weigend.s202.ui.whatif.WhatIfModel;
 import de.weigend.s202.ui.whatif.view.WhatIfDependenciesView;
 import de.weigend.s202.ui.rendering.CircuitBoardRenderer;
@@ -15,7 +13,6 @@ import de.weigend.s202.ui.rendering.DependencyRendererStrategy;
 import de.weigend.s202.ui.rendering.SCCRenderer;
 import de.weigend.s202.ui.rendering.TangleEdgeRenderer;
 import de.weigend.s202.ui.rendering.WhatIfUpwardEdgeRenderer;
-import de.weigend.s202.ui.whatif.VirtualPackageGraph;
 import de.weigend.s202.ui.tree.ArchitectureTreeBuilder;
 import de.weigend.s202.ui.zoom.ZoomController;
 import javafx.beans.property.BooleanProperty;
@@ -376,6 +373,9 @@ public class ArchitectureView extends BorderPane {
 
         whatIfRenderer = new WhatIfUpwardEdgeRenderer(whatIfPane, elementRegistry);
         whatIfRenderer.setCoordinateContext(zoomableContent, overlayPane);
+        if (whatIfDependenciesView != null) {
+            whatIfDependenciesView.setModel(whatIfModel, rawDependencyModel.get(), whatIfRenderer);
+        }
 
         tangleRenderer = new TangleEdgeRenderer(tanglePane, elementRegistry, this::setStatus);
         tangleRenderer.setCoordinateContext(zoomableContent, overlayPane);
@@ -482,7 +482,7 @@ public class ArchitectureView extends BorderPane {
             whatIfModel.addChangeListener(arrowsCoalescer::markDirty);
         }
         if (whatIfDependenciesView != null) {
-            whatIfDependenciesView.setModel(whatIfModel, model);
+            whatIfDependenciesView.setModel(whatIfModel, model, whatIfRenderer);
         }
         ensureWhatIfDropListenerRegistered();
         arrowsCoalescer.markDirty();
@@ -562,31 +562,15 @@ public class ArchitectureView extends BorderPane {
     }
 
     private String buildWhatIfStatusMessage(String movedFqcn, String newVirtualParent) {
-        int upwardClassEdges = 0;
-        int cycleClassEdges = 0;
-        VirtualPackageGraph graph = whatIfModel.graph();
-        for (PackageAggregate aggregate : whatIfModel.aggregator().aggregates().values()) {
-            int srcLevel = graph.levelOf(aggregate.source());
-            int tgtLevel = graph.levelOf(aggregate.target());
-            int srcScc = graph.sccIdOf(aggregate.source());
-            int tgtScc = graph.sccIdOf(aggregate.target());
-            boolean upward = srcLevel >= 0 && tgtLevel >= 0 && srcLevel < tgtLevel;
-            boolean cycle = srcScc >= 0 && srcScc == tgtScc && graph.isInTangle(aggregate.source());
-            if (upward) {
-                upwardClassEdges += aggregate.classEdgeCount();
-            } else if (cycle) {
-                cycleClassEdges += aggregate.classEdgeCount();
+        int wrongDirectionClassEdges = 0;
+        if (whatIfRenderer != null && whatIfModel != null) {
+            for (var v : whatIfRenderer.findVisibleViolations(whatIfModel.staticEdges())) {
+                wrongDirectionClassEdges += v.classEdges().size();
             }
         }
-        int tangles = 0;
-        for (StronglyConnectedComponent scc : graph.sccs()) {
-            if (scc.isTangle()) {
-                tangles++;
-            }
-        }
-        return String.format("What-If: %s → %s — %d upward, %d cycle, %d tangle%s",
+        return String.format("What-If: %s → %s — %d wrong-direction class edge%s",
                 simple(movedFqcn), newVirtualParent,
-                upwardClassEdges, cycleClassEdges, tangles, tangles == 1 ? "" : "s");
+                wrongDirectionClassEdges, wrongDirectionClassEdges == 1 ? "" : "s");
     }
 
     /** Read-only handle to the current What-If model, or {@code null} when no analysis is loaded. */
@@ -714,8 +698,6 @@ public class ArchitectureView extends BorderPane {
                 cls.setVirtuallyMoved(moved);
             } else if (node instanceof LevelPackageBox pkg) {
                 pkg.setVirtuallyMoved(moved);
-                String virtualSelf = whatIfModel.identity().virtualFullName(fqcn);
-                pkg.setVirtualLevel(whatIfModel.graph().levelOf(virtualSelf));
             }
         }
     }

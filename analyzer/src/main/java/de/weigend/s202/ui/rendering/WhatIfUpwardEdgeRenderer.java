@@ -1,10 +1,7 @@
 package de.weigend.s202.ui.rendering;
 
 import de.weigend.s202.ui.LevelClassBox;
-import de.weigend.s202.ui.LevelPackageBox;
 import de.weigend.s202.ui.whatif.ClassEdge;
-import de.weigend.s202.ui.whatif.PackageAggregate;
-import de.weigend.s202.ui.whatif.VirtualPackageGraph;
 import de.weigend.s202.ui.whatif.WhatIfModel;
 import javafx.geometry.Bounds;
 import javafx.scene.Node;
@@ -15,29 +12,30 @@ import javafx.scene.shape.Line;
 import javafx.scene.text.Font;
 import javafx.scene.text.Text;
 
-import java.util.HashMap;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 
 /**
- * Phase 4 renderer for What-If upward dependency edges (ADR §2.5). After
- * each {@link WhatIfModel} change the renderer paints every class-to-class
- * dependency whose virtual source-package level is strictly less than its
- * virtual target-package level — i.e. the edge runs <i>upward</i> against
- * the architectural direction.
+ * Phase 4 renderer for "wrong-direction" dependency edges in the
+ * architecture view. The visual layout itself encodes the architecture
+ * direction — sources are placed above their dependencies. A class edge is
+ * a violation precisely when its source box is now positioned <i>below</i>
+ * its target box (larger scene-Y). After every DnD move or layout pulse
+ * the renderer iterates the static class-edge list, rolls each endpoint up
+ * to the closest currently-visible ancestor box, and paints an orange
+ * arrow for any edge whose source-Y is greater than its target-Y.
  *
- * <p>Rendering granularity follows the user spec:
- * <ul>
- *   <li>If both source and target class boxes are visible (their enclosing
- *       packages are expanded), draw an individual class-to-class line.</li>
- *   <li>Otherwise roll up to the closest visible ancestor box on each end
- *       and draw a single aggregated line with an "↑ N" count label.</li>
- *   <li>If the rollups on both ends coincide, the edge is hidden (it
- *       degenerates into a self-loop on one collapsed package).</li>
- * </ul>
+ * <p>Class-to-class edges with both endpoints expanded render as single
+ * lines. Edges that roll up to a package on either side aggregate into a
+ * single line per (source-box, target-box) pair with an "↑ N" count badge.
  *
- * <p>Style: warning orange, thicker than the regular dependency stroke,
- * filled-triangle-style arrowhead at the target endpoint.
+ * <p>The same rollup-and-Y-compare logic is exposed via
+ * {@link #findVisibleViolations} so the Dependencies-View side panel
+ * displays exactly the same violations it sees on the canvas.
  */
 public final class WhatIfUpwardEdgeRenderer {
 
@@ -66,62 +64,51 @@ public final class WhatIfUpwardEdgeRenderer {
         pane.getChildren().clear();
     }
 
-    /**
-     * Repaint all upward edges for the given What-If model. Idempotent — a
-     * {@code null} model simply clears the pane.
-     */
     public void redraw(WhatIfModel model) {
         clear();
         if (model == null || zoomableContent == null || overlayPane == null) {
             return;
         }
-        VirtualPackageGraph graph = model.graph();
-        Map<EndpointKey, MutableCount> rollups = new HashMap<>();
-
-        for (PackageAggregate aggregate : model.aggregator().aggregates().values()) {
-            if (!isWrongDirection(graph, aggregate)) {
-                continue;
-            }
-            for (ClassEdge edge : aggregate.classEdges()) {
-                Node srcEndpoint = findVisibleEndpoint(edge.source());
-                Node tgtEndpoint = findVisibleEndpoint(edge.target());
-                if (srcEndpoint == null || tgtEndpoint == null || srcEndpoint == tgtEndpoint) {
-                    continue;
-                }
-                boolean bothClassesVisible =
-                        srcEndpoint instanceof LevelClassBox && tgtEndpoint instanceof LevelClassBox;
-                if (bothClassesVisible) {
-                    drawArrow(srcEndpoint, tgtEndpoint, null);
-                } else {
-                    rollups.computeIfAbsent(new EndpointKey(srcEndpoint, tgtEndpoint),
-                            k -> new MutableCount()).count++;
-                }
-            }
-        }
-
-        for (Map.Entry<EndpointKey, MutableCount> entry : rollups.entrySet()) {
-            EndpointKey key = entry.getKey();
-            drawArrow(key.source(), key.target(), "↑ " + entry.getValue().count);
+        for (Violation violation : findVisibleViolations(model.staticEdges())) {
+            boolean bothClasses = violation.source() instanceof LevelClassBox
+                    && violation.target() instanceof LevelClassBox;
+            String badge = bothClasses ? null : "↑ " + violation.classEdges().size();
+            drawArrow(violation.source(), violation.target(), badge);
         }
     }
 
     /**
-     * An aggregated package edge is "wrong-direction" if its source virtual
-     * level lies below the target's (a classic level-violation), or if both
-     * endpoints sit inside the same virtual tangle. Cycle edges have equal
-     * SCC levels by construction, so the plain srcLevel &lt; tgtLevel check
-     * misses them — but they are exactly the edges the user wants to see
-     * after a move that introduces or preserves a cycle.
+     * Group all upward (source-Y &gt; target-Y) class-to-class edges by the
+     * currently-visible source/target box pair. Edges whose endpoints roll
+     * up to the same visible box are filtered out (degenerate self-loop).
      */
-    public static boolean isWrongDirection(VirtualPackageGraph graph, PackageAggregate aggregate) {
-        int srcLevel = graph.levelOf(aggregate.source());
-        int tgtLevel = graph.levelOf(aggregate.target());
-        if (srcLevel >= 0 && tgtLevel >= 0 && srcLevel < tgtLevel) {
-            return true;
+    public List<Violation> findVisibleViolations(Iterable<ClassEdge> edges) {
+        if (edges == null || zoomableContent == null) {
+            return List.of();
         }
-        int srcScc = graph.sccIdOf(aggregate.source());
-        int tgtScc = graph.sccIdOf(aggregate.target());
-        return srcScc >= 0 && srcScc == tgtScc && graph.isInTangle(aggregate.source());
+        Map<EndpointKey, List<ClassEdge>> grouped = new LinkedHashMap<>();
+        for (ClassEdge edge : edges) {
+            Node src = findVisibleEndpoint(edge.source());
+            Node tgt = findVisibleEndpoint(edge.target());
+            if (src == null || tgt == null || src == tgt) {
+                continue;
+            }
+            double[] sc = centerInPane(src);
+            double[] tc = centerInPane(tgt);
+            if (sc == null || tc == null) {
+                continue;
+            }
+            if (sc[1] <= tc[1]) {
+                continue;
+            }
+            grouped.computeIfAbsent(new EndpointKey(src, tgt), k -> new ArrayList<>()).add(edge);
+        }
+        List<Violation> result = new ArrayList<>(grouped.size());
+        for (Map.Entry<EndpointKey, List<ClassEdge>> entry : grouped.entrySet()) {
+            result.add(new Violation(entry.getKey().source(), entry.getKey().target(),
+                    Collections.unmodifiableList(entry.getValue())));
+        }
+        return result;
     }
 
     private Node findVisibleEndpoint(String fqcn) {
@@ -132,11 +119,9 @@ public final class WhatIfUpwardEdgeRenderer {
         if (isActuallyVisible(node)) {
             return node;
         }
-        // Roll up via the scene graph — reflects where the box actually lives
-        // after any What-If move, not the static package chain.
         Node n = node.getParent();
         while (n != null) {
-            if (n instanceof LevelPackageBox && isActuallyVisible(n)) {
+            if (n instanceof de.weigend.s202.ui.LevelPackageBox && isActuallyVisible(n)) {
                 return n;
             }
             n = n.getParent();
@@ -200,11 +185,6 @@ public final class WhatIfUpwardEdgeRenderer {
         }
     }
 
-    /**
-     * Coordinate transform from {@code node}'s local space to the overlay
-     * pane. Mirrors {@code DependencyRenderer.getNodeCenterInPane} so both
-     * renderers stay locked to the same overlay frame.
-     */
     private double[] centerInPane(Node node) {
         try {
             Bounds localBounds = node.getBoundsInLocal();
@@ -224,9 +204,8 @@ public final class WhatIfUpwardEdgeRenderer {
         }
     }
 
-    private record EndpointKey(Node source, Node target) {}
+    /** A class edge pair after rollup to currently-visible boxes. */
+    public record Violation(Node source, Node target, List<ClassEdge> classEdges) {}
 
-    private static final class MutableCount {
-        int count;
-    }
+    private record EndpointKey(Node source, Node target) {}
 }
