@@ -1,6 +1,7 @@
 package de.weigend.s202.ui.rendering;
 
 import de.weigend.s202.ui.LevelClassBox;
+import de.weigend.s202.ui.LevelPackageBox;
 import de.weigend.s202.ui.whatif.ClassEdge;
 import de.weigend.s202.ui.whatif.PackageAggregate;
 import de.weigend.s202.ui.whatif.VirtualPackageGraph;
@@ -108,23 +109,22 @@ public final class WhatIfUpwardEdgeRenderer {
 
     private Node findVisibleEndpoint(String fqcn) {
         Node node = elementRegistry.get(fqcn);
-        if (node != null && isActuallyVisible(node)) {
+        if (node == null) {
+            return null;
+        }
+        if (isActuallyVisible(node)) {
             return node;
         }
-        String parent = parentOf(fqcn);
-        while (!parent.isEmpty()) {
-            Node parentNode = elementRegistry.get(parent);
-            if (parentNode != null && isActuallyVisible(parentNode)) {
-                return parentNode;
+        // Roll up via the scene graph — reflects where the box actually lives
+        // after any What-If move, not the static package chain.
+        Node n = node.getParent();
+        while (n != null) {
+            if (n instanceof LevelPackageBox && isActuallyVisible(n)) {
+                return n;
             }
-            parent = parentOf(parent);
+            n = n.getParent();
         }
         return null;
-    }
-
-    private static String parentOf(String fqcn) {
-        int dot = fqcn.lastIndexOf('.');
-        return dot < 0 ? "" : fqcn.substring(0, dot);
     }
 
     private static boolean isActuallyVisible(Node node) {
