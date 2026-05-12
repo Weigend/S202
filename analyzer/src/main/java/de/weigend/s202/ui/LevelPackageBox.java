@@ -99,6 +99,7 @@ public class LevelPackageBox extends VBox implements GraphSelection.Selectable {
         contentContainer = new VBox(6);
         contentContainer.setPadding(transparent ? new Insets(0, 0, 0, 10) : new Insets(6, 6, 6, 20));
         contentContainer.setMaxWidth(Double.MAX_VALUE);
+        ArchitectureDragController.markAsRowStack(contentContainer);
 
         this.getChildren().add(contentContainer);
 

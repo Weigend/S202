@@ -91,6 +91,7 @@ public class ArchitectureTreeBuilder {
                 TOP_LEVEL_VERTICAL_PADDING,
                 TOP_LEVEL_HORIZONTAL_PADDING));
         topLevelContainer.setStyle("-fx-background-color: #f5f5f0;");
+        ArchitectureDragController.markAsRowStack(topLevelContainer);
 
         // Skip transparent top-level packages (de, weigend, s202, etc.)
         // Follow the chain of single-child packages until we reach the first "real" package
@@ -353,6 +354,7 @@ public class ArchitectureTreeBuilder {
                 TOP_LEVEL_VERTICAL_PADDING,
                 TOP_LEVEL_HORIZONTAL_PADDING));
         topLevelContainer.setStyle("-fx-background-color: #f5f5f0;");
+        ArchitectureDragController.markAsRowStack(topLevelContainer);
         return topLevelContainer;
     }
 

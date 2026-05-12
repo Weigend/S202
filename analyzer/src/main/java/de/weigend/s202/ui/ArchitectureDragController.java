@@ -1,12 +1,16 @@
 package de.weigend.s202.ui;
 
 import javafx.geometry.Bounds;
+import javafx.geometry.Pos;
 import javafx.scene.Node;
 import javafx.scene.input.MouseButton;
 import javafx.scene.input.MouseEvent;
 import javafx.scene.input.PickResult;
 import javafx.scene.layout.HBox;
+import javafx.scene.layout.Pane;
+import javafx.scene.layout.Priority;
 import javafx.scene.layout.Region;
+import javafx.scene.layout.VBox;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -14,70 +18,80 @@ import java.util.concurrent.CopyOnWriteArrayList;
 
 /**
  * Drag-and-drop controller for the architecture view. Phase 2 of the
- * What-If refactor (see ADR_PULSE_COALESCING_AND_DND §2.3): enables moving
- * class and package boxes between slots in any layout row, including
- * cross-parent moves. Reine UI — no model mutation yet; the dropped node is
- * simply removed from its old HBox and added at the target slot. Model
- * synchronisation comes in Phase 3.
+ * What-If refactor (ADR §2.3) with row-stack support added later for
+ * dropping a node into a new row between existing rows.
  *
- * <p>Drop targets are slots between children in any HBox row tagged via
- * {@link #markAsRow(HBox)}. While the pointer hovers over a valid slot a
- * thin blue insert marker is inserted there to show the proposed position.
+ * <p>Drop targets come in two flavours:
+ * <ul>
+ *   <li><b>Row slot</b> — a horizontal gap between siblings inside an HBox
+ *       row tagged via {@link #markAsRow(HBox)}. A vertical blue marker is
+ *       inserted at the proposed slot.</li>
+ *   <li><b>Stack gap</b> — a vertical gap between rows inside a VBox row
+ *       stack tagged via {@link #markAsRowStack(VBox)}. A horizontal blue
+ *       marker spans the stack's width to signal "a new row would land
+ *       here". On drop, a fresh HBox row is created at the gap and the
+ *       dragged node becomes its sole child.</li>
+ * </ul>
  *
  * <p>API is intentionally static: there is exactly one active drag at a
- * time, scene-wide, so a singleton matches the domain. The opacity ghost of
- * the dragged source stays in place at half opacity until drop or cancel.
+ * time, scene-wide.
  */
 public final class ArchitectureDragController {
 
     private static final String ROW_TAG = "s202.dnd.row";
+    private static final String STACK_TAG = "s202.dnd.stack";
     private static final String DRAGGABLE_TAG = "s202.dnd.draggable";
 
     private static final double DRAG_THRESHOLD_PX = 4.0;
-    private static final double INSERT_MARKER_WIDTH = 6.0;
+    private static final double INSERT_MARKER_THICKNESS = 6.0;
     private static final String INSERT_MARKER_STYLE =
             "-fx-background-color: #3b82f6;"
                     + "-fx-background-radius: 2;"
                     + "-fx-opacity: 0.85;";
+
+    private enum DropMode { ROW, STACK }
 
     private static Node dragSource;
     private static double dragStartScreenX;
     private static double dragStartScreenY;
     private static boolean dragActive;
 
-    private static HBox currentDropRow;
-    private static int currentDropSlot = -1;
+    private static Pane currentDropContainer;
+    private static DropMode currentDropMode;
+    private static int currentDropIndex = -1;
     private static Region insertMarker;
 
     private static final List<DropListener> dropListeners = new CopyOnWriteArrayList<>();
 
     /**
      * Callback invoked when a drag finishes with a successful visual drop.
-     * Receives the original drag source plus the row it was dropped into so
-     * the listener can resolve the containing architecture context (e.g.
-     * walk up to a {@link LevelPackageBox} for its fqcn) on its own. Phase 3
-     * uses this to update the What-If model.
+     * Receives the original drag source plus the HBox row it now sits in —
+     * for row-slot drops that's the existing target row, for stack-gap
+     * drops it's the freshly created row.
      */
     @FunctionalInterface
     public interface DropListener {
         void onDrop(Node movedSource, HBox destinationRow);
     }
 
-    /** Register a drop listener. Listeners must self-filter by scene graph. */
     public static void addDropListener(DropListener listener) {
         dropListeners.add(listener);
     }
 
-    /** Unregister a previously added drop listener. */
     public static void removeDropListener(DropListener listener) {
         dropListeners.remove(listener);
     }
 
     private ArchitectureDragController() {}
 
-    /** Tag an HBox as a valid drop-target row. Idempotent. */
+    /** Tag an HBox as a valid drop-target row (horizontal slots between children). */
     public static void markAsRow(HBox row) {
         row.getProperties().put(ROW_TAG, Boolean.TRUE);
+    }
+
+    /** Tag a VBox as a row stack — gaps between its rows become drop targets. */
+    public static void markAsRowStack(VBox stack) {
+        stack.getProperties().put(STACK_TAG, Boolean.TRUE);
     }
 
     /**
@@ -122,17 +136,14 @@ public final class ArchitectureDragController {
 
     private static void onRelease(MouseEvent e) {
         if (!dragActive) {
-            // Mouse press without enough movement to trigger a drag — let the
-            // click handlers fire normally. Just clear the press-tracking.
             reset();
             return;
         }
         Node movedSource = dragSource;
         HBox droppedInto = null;
-        if (currentDropRow != null && currentDropSlot >= 0
-                && isValidDrop(currentDropRow, currentDropSlot)) {
-            droppedInto = currentDropRow;
-            performDrop();
+        if (currentDropContainer != null && currentDropIndex >= 0
+                && isValidDrop(currentDropContainer, currentDropIndex)) {
+            droppedInto = performDrop();
         }
         if (dragSource != null) {
             dragSource.setOpacity(1.0);
@@ -156,15 +167,31 @@ public final class ArchitectureDragController {
     }
 
     private static void updateDropTarget(MouseEvent e) {
-        HBox row = findEnclosingRow(e);
-        int slot = computeSlot(row, e.getSceneX());
+        Pane container = null;
+        DropMode mode = null;
+        int index = -1;
 
-        if (row != currentDropRow || slot != currentDropSlot) {
+        HBox row = findEnclosingRow(e);
+        if (row != null) {
+            container = row;
+            mode = DropMode.ROW;
+            index = computeIndexInRow(row, e.getSceneX());
+        } else {
+            VBox stack = findEnclosingStack(e);
+            if (stack != null) {
+                container = stack;
+                mode = DropMode.STACK;
+                index = computeIndexInStack(stack, e.getSceneY());
+            }
+        }
+
+        if (container != currentDropContainer || mode != currentDropMode || index != currentDropIndex) {
             removeInsertMarker();
-            currentDropRow = row;
-            currentDropSlot = slot;
-            if (row != null && slot >= 0 && isValidDrop(row, slot)) {
-                installInsertMarker(row, slot);
+            currentDropContainer = container;
+            currentDropMode = mode;
+            currentDropIndex = index;
+            if (container != null && index >= 0 && isValidDrop(container, index)) {
+                installInsertMarker();
             }
         }
     }
@@ -184,12 +211,32 @@ public final class ArchitectureDragController {
         return null;
     }
 
-    private static int computeSlot(HBox row, double sceneX) {
-        if (row == null) {
-            return -1;
+    private static VBox findEnclosingStack(MouseEvent e) {
+        PickResult pick = e.getPickResult();
+        if (pick == null) {
+            return null;
         }
-        var children = row.getChildren();
-        List<Double> midXs = new ArrayList<>(children.size());
+        Node n = pick.getIntersectedNode();
+        while (n != null) {
+            if (n instanceof VBox v && Boolean.TRUE.equals(v.getProperties().get(STACK_TAG))) {
+                return v;
+            }
+            n = n.getParent();
+        }
+        return null;
+    }
+
+    private static int computeIndexInRow(HBox row, double sceneX) {
+        return computeIndex(row, sceneX, true);
+    }
+
+    private static int computeIndexInStack(VBox stack, double sceneY) {
+        return computeIndex(stack, sceneY, false);
+    }
+
+    private static int computeIndex(Pane container, double scenePos, boolean horizontal) {
+        var children = container.getChildren();
+        List<Double> midpoints = new ArrayList<>(children.size());
         List<Integer> slotForChild = new ArrayList<>(children.size());
         for (int i = 0; i < children.size(); i++) {
             Node child = children.get(i);
@@ -197,96 +244,173 @@ public final class ArchitectureDragController {
                 continue;
             }
             Bounds b = child.localToScene(child.getBoundsInLocal());
-            midXs.add((b.getMinX() + b.getMaxX()) / 2.0);
+            double mid = horizontal
+                    ? (b.getMinX() + b.getMaxX()) / 2.0
+                    : (b.getMinY() + b.getMaxY()) / 2.0;
+            midpoints.add(mid);
             slotForChild.add(i);
         }
-        int idx = slotIndexForMidpoints(midXs, sceneX);
+        int idx = slotIndexForMidpoints(midpoints, scenePos);
         return idx < slotForChild.size() ? slotForChild.get(idx) : children.size();
     }
 
     /**
-     * Pure slot-picking arithmetic: given the centre-X of each non-marker
-     * child, return the index of the slot whose insertion would land before
-     * the first child whose centre lies to the right of {@code sceneX}. Slot
-     * {@code midpoints.size()} means "after the last child".
+     * Pure midpoint-picking arithmetic. Given the centre coordinate of each
+     * non-marker child along the relevant axis, return the index of the slot
+     * that lies before the first child whose centre is past {@code scenePos}.
      */
-    static int slotIndexForMidpoints(List<Double> midpoints, double sceneX) {
+    static int slotIndexForMidpoints(List<Double> midpoints, double scenePos) {
         for (int i = 0; i < midpoints.size(); i++) {
-            if (sceneX < midpoints.get(i)) {
+            if (scenePos < midpoints.get(i)) {
                 return i;
             }
         }
         return midpoints.size();
     }
 
-    private static boolean isValidDrop(HBox row, int slot) {
-        if (dragSource == null || row == null || slot < 0) {
+    private static boolean isValidDrop(Pane container, int index) {
+        if (dragSource == null || container == null || index < 0) {
             return false;
         }
         // No drop into own subtree (hierarchy move would be self-referential).
-        Node n = row;
+        Node n = container;
         while (n != null) {
             if (n == dragSource) {
                 return false;
             }
             n = n.getParent();
         }
-        // No-op drop (same row, same neighbourhood as current position).
-        if (dragSource.getParent() == row) {
-            int srcIdx = row.getChildren().indexOf(dragSource);
-            if (slot == srcIdx || slot == srcIdx + 1) {
+        // Row mode: no-op if dropping back at source's current adjacent slot.
+        if (currentDropMode == DropMode.ROW && dragSource.getParent() == container) {
+            int srcIdx = container.getChildren().indexOf(dragSource);
+            if (index == srcIdx || index == srcIdx + 1) {
                 return false;
             }
         }
         return true;
     }
 
-    private static void installInsertMarker(HBox row, int slot) {
+    private static void installInsertMarker() {
         if (insertMarker == null) {
             insertMarker = new Region();
-            insertMarker.setPrefWidth(INSERT_MARKER_WIDTH);
-            insertMarker.setMinWidth(INSERT_MARKER_WIDTH);
-            insertMarker.setMaxWidth(INSERT_MARKER_WIDTH);
             insertMarker.setStyle(INSERT_MARKER_STYLE);
             insertMarker.setMouseTransparent(true);
         }
-        int safeSlot = Math.min(slot, row.getChildren().size());
-        row.getChildren().add(safeSlot, insertMarker);
+        if (currentDropMode == DropMode.ROW) {
+            insertMarker.setPrefWidth(INSERT_MARKER_THICKNESS);
+            insertMarker.setMinWidth(INSERT_MARKER_THICKNESS);
+            insertMarker.setMaxWidth(INSERT_MARKER_THICKNESS);
+            insertMarker.setPrefHeight(Region.USE_COMPUTED_SIZE);
+            insertMarker.setMinHeight(Region.USE_COMPUTED_SIZE);
+            insertMarker.setMaxHeight(Double.MAX_VALUE);
+        } else {
+            insertMarker.setPrefHeight(INSERT_MARKER_THICKNESS);
+            insertMarker.setMinHeight(INSERT_MARKER_THICKNESS);
+            insertMarker.setMaxHeight(INSERT_MARKER_THICKNESS);
+            insertMarker.setPrefWidth(Region.USE_COMPUTED_SIZE);
+            insertMarker.setMinWidth(Region.USE_COMPUTED_SIZE);
+            insertMarker.setMaxWidth(Double.MAX_VALUE);
+        }
+        int safeIndex = Math.min(currentDropIndex, currentDropContainer.getChildren().size());
+        currentDropContainer.getChildren().add(safeIndex, insertMarker);
     }
 
     private static void removeInsertMarker() {
-        if (insertMarker != null && insertMarker.getParent() instanceof HBox h) {
-            h.getChildren().remove(insertMarker);
+        if (insertMarker != null && insertMarker.getParent() instanceof Pane p) {
+            p.getChildren().remove(insertMarker);
         }
     }
 
-    private static void performDrop() {
+    /**
+     * Execute the visual drop. Returns the HBox the dragged source now sits
+     * in (existing target row for ROW mode, freshly created row for STACK
+     * mode), or {@code null} if the drop couldn't proceed.
+     */
+    private static HBox performDrop() {
+        if (currentDropMode == DropMode.ROW) {
+            return performRowDrop();
+        }
+        return performStackDrop();
+    }
+
+    private static HBox performRowDrop() {
+        HBox dropRow = (HBox) currentDropContainer;
         if (!(dragSource.getParent() instanceof HBox srcRow)) {
-            return;
+            return null;
         }
         int srcIdx = srcRow.getChildren().indexOf(dragSource);
-        int targetIdx = currentDropSlot;
+        int targetIdx = currentDropIndex;
         srcRow.getChildren().remove(dragSource);
-        // Removing source from same row shifts indices left for any slot
-        // after source's old position. The insert marker has already been
-        // removed in reset() — but reset runs after performDrop. Account for
-        // the marker (still in the row at currentDropSlot) by recomputing.
-        if (insertMarker != null && insertMarker.getParent() == currentDropRow) {
-            targetIdx = currentDropRow.getChildren().indexOf(insertMarker);
-            currentDropRow.getChildren().remove(insertMarker);
-        } else if (srcRow == currentDropRow && srcIdx < targetIdx) {
+        if (insertMarker != null && insertMarker.getParent() == dropRow) {
+            targetIdx = dropRow.getChildren().indexOf(insertMarker);
+            dropRow.getChildren().remove(insertMarker);
+        } else if (srcRow == dropRow && srcIdx < targetIdx) {
             targetIdx--;
         }
-        targetIdx = Math.min(targetIdx, currentDropRow.getChildren().size());
-        currentDropRow.getChildren().add(targetIdx, dragSource);
+        targetIdx = Math.min(targetIdx, dropRow.getChildren().size());
+        dropRow.getChildren().add(targetIdx, dragSource);
+        cleanupEmptySourceRow(srcRow);
+        return dropRow;
+    }
+
+    private static HBox performStackDrop() {
+        VBox stack = (VBox) currentDropContainer;
+        HBox srcRow = dragSource.getParent() instanceof HBox h ? h : null;
+        int targetIdx = currentDropIndex;
+        if (insertMarker != null && insertMarker.getParent() == stack) {
+            targetIdx = stack.getChildren().indexOf(insertMarker);
+            stack.getChildren().remove(insertMarker);
+        }
+        if (srcRow != null) {
+            srcRow.getChildren().remove(dragSource);
+        }
+        HBox newRow = createDropRow();
+        targetIdx = Math.min(targetIdx, stack.getChildren().size());
+        stack.getChildren().add(targetIdx, newRow);
+        newRow.getChildren().add(dragSource);
+        cleanupEmptySourceRow(srcRow);
+        return newRow;
+    }
+
+    /** Build an HBox styled like the existing layout rows and tag it as a drop row. */
+    private static HBox createDropRow() {
+        HBox row = new HBox(8);
+        row.setMaxWidth(Double.MAX_VALUE);
+        row.setMaxHeight(Double.MAX_VALUE);
+        row.setAlignment(Pos.CENTER);
+        row.setStyle("-fx-background-color: transparent;");
+        VBox.setVgrow(row, Priority.ALWAYS);
+        markAsRow(row);
+        return row;
+    }
+
+    /**
+     * Remove a row from its stack if it ended up empty after the source was
+     * extracted. Only removes rows that we tagged as drop rows and that sit
+     * in a tagged stack, so it cannot strip layout scaffolding by accident.
+     */
+    private static void cleanupEmptySourceRow(HBox srcRow) {
+        if (srcRow == null || srcRow == currentDropContainer) {
+            return;
+        }
+        if (!srcRow.getChildren().isEmpty()) {
+            return;
+        }
+        if (!Boolean.TRUE.equals(srcRow.getProperties().get(ROW_TAG))) {
+            return;
+        }
+        if (srcRow.getParent() instanceof VBox parentStack
+                && Boolean.TRUE.equals(parentStack.getProperties().get(STACK_TAG))) {
+            parentStack.getChildren().remove(srcRow);
+        }
     }
 
     private static void reset() {
         removeInsertMarker();
         dragSource = null;
         dragActive = false;
-        currentDropRow = null;
-        currentDropSlot = -1;
+        currentDropContainer = null;
+        currentDropMode = null;
+        currentDropIndex = -1;
     }
-
 }
