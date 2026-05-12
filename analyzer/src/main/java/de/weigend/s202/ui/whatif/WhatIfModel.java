@@ -25,6 +25,7 @@ public final class WhatIfModel {
     private final List<Runnable> changeListeners = new ArrayList<>();
 
     private VirtualPackageGraph graph;
+    private final VirtualPackageGraph staticGraph;
 
     public WhatIfModel(Collection<ClassEdge> staticEdges) {
         if (staticEdges == null) {
@@ -32,6 +33,8 @@ public final class WhatIfModel {
         }
         this.staticEdges = List.copyOf(staticEdges);
         recompute();
+        // Snapshot the override-free graph as the baseline for SCC diffs.
+        this.staticGraph = this.graph;
     }
 
     /**
@@ -65,6 +68,15 @@ public final class WhatIfModel {
 
     public VirtualPackageGraph graph() {
         return graph;
+    }
+
+    /**
+     * The override-free baseline graph, computed once at construction. Useful
+     * for diffing the current state against the static analysis (e.g. "which
+     * tangles did my moves create or dissolve?").
+     */
+    public VirtualPackageGraph staticGraph() {
+        return staticGraph;
     }
 
     public List<ClassEdge> staticEdges() {

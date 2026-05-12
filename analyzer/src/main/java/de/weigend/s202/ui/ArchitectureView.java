@@ -8,6 +8,7 @@ import de.weigend.s202.ui.model.ArchitectureNode;
 import de.weigend.s202.ui.whatif.ClassEdges;
 import de.weigend.s202.ui.whatif.PackageAggregate;
 import de.weigend.s202.ui.whatif.WhatIfModel;
+import de.weigend.s202.ui.whatif.view.WhatIfDependenciesView;
 import de.weigend.s202.ui.rendering.CircuitBoardRenderer;
 import de.weigend.s202.ui.rendering.DependencyRenderer;
 import de.weigend.s202.ui.rendering.DependencyRendererStrategy;
@@ -93,6 +94,7 @@ public class ArchitectureView extends BorderPane {
     // a DependencyModel is pushed in; nulled on no-analysis state.
     private WhatIfModel whatIfModel;
     private ArchitectureDragController.DropListener whatIfDropListener;
+    private WhatIfDependenciesView whatIfDependenciesView;
 
     private javafx.scene.layout.Pane zoomableContent;
     private Consumer<String> statusSink = msg -> { /* no-op default */ };
@@ -185,6 +187,9 @@ public class ArchitectureView extends BorderPane {
         });
 
         setCenter(contentPane);
+
+        whatIfDependenciesView = new WhatIfDependenciesView();
+        setLeft(whatIfDependenciesView);
     }
 
     private void wirePropertyListeners() {
@@ -474,6 +479,9 @@ public class ArchitectureView extends BorderPane {
         whatIfModel = model == null ? null : new WhatIfModel(ClassEdges.fromDependencyModel(model));
         if (whatIfModel != null) {
             whatIfModel.addChangeListener(arrowsCoalescer::markDirty);
+        }
+        if (whatIfDependenciesView != null) {
+            whatIfDependenciesView.setModel(whatIfModel, model);
         }
         ensureWhatIfDropListenerRegistered();
         arrowsCoalescer.markDirty();
