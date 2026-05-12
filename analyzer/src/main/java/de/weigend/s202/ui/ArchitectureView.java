@@ -15,6 +15,7 @@ import de.weigend.s202.ui.rendering.DependencyRendererStrategy;
 import de.weigend.s202.ui.rendering.SCCRenderer;
 import de.weigend.s202.ui.rendering.TangleEdgeRenderer;
 import de.weigend.s202.ui.rendering.WhatIfUpwardEdgeRenderer;
+import de.weigend.s202.ui.whatif.VirtualPackageGraph;
 import de.weigend.s202.ui.tree.ArchitectureTreeBuilder;
 import de.weigend.s202.ui.zoom.ZoomController;
 import javafx.beans.property.BooleanProperty;
@@ -542,23 +543,30 @@ public class ArchitectureView extends BorderPane {
 
     private String buildWhatIfStatusMessage(String movedFqcn, String newVirtualParent) {
         int upwardClassEdges = 0;
+        int cycleClassEdges = 0;
+        VirtualPackageGraph graph = whatIfModel.graph();
         for (PackageAggregate aggregate : whatIfModel.aggregator().aggregates().values()) {
-            int srcLevel = whatIfModel.graph().levelOf(aggregate.source());
-            int tgtLevel = whatIfModel.graph().levelOf(aggregate.target());
-            if (srcLevel >= 0 && tgtLevel >= 0 && srcLevel < tgtLevel) {
+            int srcLevel = graph.levelOf(aggregate.source());
+            int tgtLevel = graph.levelOf(aggregate.target());
+            int srcScc = graph.sccIdOf(aggregate.source());
+            int tgtScc = graph.sccIdOf(aggregate.target());
+            boolean upward = srcLevel >= 0 && tgtLevel >= 0 && srcLevel < tgtLevel;
+            boolean cycle = srcScc >= 0 && srcScc == tgtScc && graph.isInTangle(aggregate.source());
+            if (upward) {
                 upwardClassEdges += aggregate.classEdgeCount();
+            } else if (cycle) {
+                cycleClassEdges += aggregate.classEdgeCount();
             }
         }
         int tangles = 0;
-        for (StronglyConnectedComponent scc : whatIfModel.graph().sccs()) {
+        for (StronglyConnectedComponent scc : graph.sccs()) {
             if (scc.isTangle()) {
                 tangles++;
             }
         }
-        return String.format("What-If: %s → %s — %d upward class edge%s, %d tangle%s",
+        return String.format("What-If: %s → %s — %d upward, %d cycle, %d tangle%s",
                 simple(movedFqcn), newVirtualParent,
-                upwardClassEdges, upwardClassEdges == 1 ? "" : "s",
-                tangles, tangles == 1 ? "" : "s");
+                upwardClassEdges, cycleClassEdges, tangles, tangles == 1 ? "" : "s");
     }
 
     /** Read-only handle to the current What-If model, or {@code null} when no analysis is loaded. */

@@ -79,9 +79,7 @@ public final class WhatIfUpwardEdgeRenderer {
         Map<EndpointKey, MutableCount> rollups = new HashMap<>();
 
         for (PackageAggregate aggregate : model.aggregator().aggregates().values()) {
-            int srcLevel = graph.levelOf(aggregate.source());
-            int tgtLevel = graph.levelOf(aggregate.target());
-            if (srcLevel < 0 || tgtLevel < 0 || srcLevel >= tgtLevel) {
+            if (!isWrongDirection(graph, aggregate)) {
                 continue;
             }
             for (ClassEdge edge : aggregate.classEdges()) {
@@ -105,6 +103,25 @@ public final class WhatIfUpwardEdgeRenderer {
             EndpointKey key = entry.getKey();
             drawArrow(key.source(), key.target(), "↑ " + entry.getValue().count);
         }
+    }
+
+    /**
+     * An aggregated package edge is "wrong-direction" if its source virtual
+     * level lies below the target's (a classic level-violation), or if both
+     * endpoints sit inside the same virtual tangle. Cycle edges have equal
+     * SCC levels by construction, so the plain srcLevel &lt; tgtLevel check
+     * misses them — but they are exactly the edges the user wants to see
+     * after a move that introduces or preserves a cycle.
+     */
+    public static boolean isWrongDirection(VirtualPackageGraph graph, PackageAggregate aggregate) {
+        int srcLevel = graph.levelOf(aggregate.source());
+        int tgtLevel = graph.levelOf(aggregate.target());
+        if (srcLevel >= 0 && tgtLevel >= 0 && srcLevel < tgtLevel) {
+            return true;
+        }
+        int srcScc = graph.sccIdOf(aggregate.source());
+        int tgtScc = graph.sccIdOf(aggregate.target());
+        return srcScc >= 0 && srcScc == tgtScc && graph.isInTangle(aggregate.source());
     }
 
     private Node findVisibleEndpoint(String fqcn) {

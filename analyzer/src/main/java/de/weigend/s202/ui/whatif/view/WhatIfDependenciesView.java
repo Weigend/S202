@@ -2,6 +2,7 @@ package de.weigend.s202.ui.whatif.view;
 
 import de.weigend.s202.analysis.scc.StronglyConnectedComponent;
 import de.weigend.s202.reader.DependencyModel;
+import de.weigend.s202.ui.rendering.WhatIfUpwardEdgeRenderer;
 import de.weigend.s202.ui.whatif.ClassEdge;
 import de.weigend.s202.ui.whatif.PackageAggregate;
 import de.weigend.s202.ui.whatif.VirtualPackageGraph;
@@ -101,25 +102,23 @@ public final class WhatIfDependenciesView extends VBox {
     public void refresh() {
         TreeItem<String> root = buildUpwardTree();
         upwardTree.setRoot(root);
-        int upwardEdgeCount = countUpwardClassEdges();
-        upwardHeader.setText("Upward edges — " + upwardEdgeCount + " class edge"
-                + (upwardEdgeCount == 1 ? "" : "s"));
+        int wrongEdgeCount = countWrongDirectionClassEdges();
+        upwardHeader.setText("Wrong-direction edges — " + wrongEdgeCount + " class edge"
+                + (wrongEdgeCount == 1 ? "" : "s"));
 
         ObservableList<String> sccItems = buildSccDiffList();
         sccList.setItems(sccItems);
         sccHeader.setText("Package tangles — " + sccItems.size());
     }
 
-    private int countUpwardClassEdges() {
+    private int countWrongDirectionClassEdges() {
         if (model == null) {
             return 0;
         }
         VirtualPackageGraph graph = model.graph();
         int count = 0;
         for (PackageAggregate aggregate : model.aggregator().aggregates().values()) {
-            int srcLevel = graph.levelOf(aggregate.source());
-            int tgtLevel = graph.levelOf(aggregate.target());
-            if (srcLevel >= 0 && tgtLevel >= 0 && srcLevel < tgtLevel) {
+            if (WhatIfUpwardEdgeRenderer.isWrongDirection(graph, aggregate)) {
                 count += aggregate.classEdgeCount();
             }
         }
@@ -134,17 +133,16 @@ public final class WhatIfDependenciesView extends VBox {
         VirtualPackageGraph graph = model.graph();
         // Sort aggregates for stable display (source pkg asc, then target pkg asc).
         List<PackageAggregate> sorted = model.aggregator().aggregates().values().stream()
-                .filter(a -> {
-                    int sl = graph.levelOf(a.source());
-                    int tl = graph.levelOf(a.target());
-                    return sl >= 0 && tl >= 0 && sl < tl;
-                })
+                .filter(a -> WhatIfUpwardEdgeRenderer.isWrongDirection(graph, a))
                 .sorted(Comparator.<PackageAggregate, String>comparing(PackageAggregate::source)
                         .thenComparing(PackageAggregate::target))
                 .toList();
 
         for (PackageAggregate aggregate : sorted) {
-            String label = aggregate.source() + " ↑ " + aggregate.target()
+            boolean cycle = graph.sccIdOf(aggregate.source()) == graph.sccIdOf(aggregate.target())
+                    && graph.isInTangle(aggregate.source());
+            String arrow = cycle ? " ⟲ " : " ↑ ";
+            String label = aggregate.source() + arrow + aggregate.target()
                     + "  (" + aggregate.classEdgeCount() + ")";
             TreeItem<String> pkgItem = new TreeItem<>(label);
             for (ClassEdge edge : sortClassEdges(aggregate.classEdges())) {
