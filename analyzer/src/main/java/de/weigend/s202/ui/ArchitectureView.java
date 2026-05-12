@@ -13,6 +13,7 @@ import de.weigend.s202.ui.rendering.DependencyRenderer;
 import de.weigend.s202.ui.rendering.DependencyRendererStrategy;
 import de.weigend.s202.ui.rendering.SCCRenderer;
 import de.weigend.s202.ui.rendering.TangleEdgeRenderer;
+import de.weigend.s202.ui.rendering.WhatIfUpwardEdgeRenderer;
 import de.weigend.s202.ui.tree.ArchitectureTreeBuilder;
 import de.weigend.s202.ui.zoom.ZoomController;
 import javafx.beans.property.BooleanProperty;
@@ -53,8 +54,9 @@ public class ArchitectureView extends BorderPane {
     private ScrollPane scrollPane;
     private Pane dependencyPane;   // Container for dependency lines
     private Pane sccPane;          // Container for SCC lines
+    private Pane whatIfPane;       // Container for What-If upward-edge overlay
     private Pane tanglePane;       // Container for the dedicated tangle-edge overlay
-    private StackPane overlayPane; // Contains dependency, SCC and tangle panes
+    private StackPane overlayPane; // Contains dependency, SCC, What-If and tangle panes
     private StackPane contentPane;
     private ArchitectureNode currentRootNode;
     private final Map<String, javafx.scene.Node> elementRegistry = new HashMap<>();
@@ -64,6 +66,7 @@ public class ArchitectureView extends BorderPane {
     private DependencyRenderer classicRenderer;
     private CircuitBoardRenderer circuitRenderer;
     private SCCRenderer sccRenderer;
+    private WhatIfUpwardEdgeRenderer whatIfRenderer;
     private TangleEdgeRenderer tangleRenderer;
     private ArchitectureTreeBuilder treeBuilder;
     private ZoomController zoomController;
@@ -157,6 +160,12 @@ public class ArchitectureView extends BorderPane {
         sccPane.setPickOnBounds(false);
         sccPane.setVisible(false);
         sccPane.setManaged(false);
+
+        whatIfPane = new Pane();
+        whatIfPane.setMouseTransparent(true);
+        whatIfPane.setPickOnBounds(false);
+        whatIfPane.setVisible(true);
+        whatIfPane.setManaged(false);
 
         tanglePane = new Pane();
         tanglePane.setMouseTransparent(false);
@@ -319,7 +328,7 @@ public class ArchitectureView extends BorderPane {
         overlayPane = new StackPane();
         overlayPane.setMouseTransparent(false);
         overlayPane.setPickOnBounds(false);
-        overlayPane.getChildren().addAll(dependencyPane, sccPane, tanglePane);
+        overlayPane.getChildren().addAll(dependencyPane, sccPane, whatIfPane, tanglePane);
 
         StackPane contentWithOverlay = new StackPane();
         contentWithOverlay.getChildren().addAll(topLevelContainer, overlayPane);
@@ -358,6 +367,9 @@ public class ArchitectureView extends BorderPane {
 
         sccRenderer = new SCCRenderer(sccPane, elementRegistry, this::setStatus);
         sccRenderer.setCoordinateContext(zoomableContent, overlayPane, scrollPane);
+
+        whatIfRenderer = new WhatIfUpwardEdgeRenderer(whatIfPane, elementRegistry);
+        whatIfRenderer.setCoordinateContext(zoomableContent, overlayPane);
 
         tangleRenderer = new TangleEdgeRenderer(tanglePane, elementRegistry, this::setStatus);
         tangleRenderer.setCoordinateContext(zoomableContent, overlayPane);
@@ -460,7 +472,11 @@ public class ArchitectureView extends BorderPane {
 
     private void rebuildWhatIfModel(DependencyModel model) {
         whatIfModel = model == null ? null : new WhatIfModel(ClassEdges.fromDependencyModel(model));
+        if (whatIfModel != null) {
+            whatIfModel.addChangeListener(arrowsCoalescer::markDirty);
+        }
         ensureWhatIfDropListenerRegistered();
+        arrowsCoalescer.markDirty();
     }
 
     private void ensureWhatIfDropListenerRegistered() {
@@ -643,6 +659,9 @@ public class ArchitectureView extends BorderPane {
         }
         if (showScc.get()) {
             sccRenderer.drawSccLines(currentRootNode);
+        }
+        if (whatIfRenderer != null) {
+            whatIfRenderer.redraw(whatIfModel);
         }
     }
 
