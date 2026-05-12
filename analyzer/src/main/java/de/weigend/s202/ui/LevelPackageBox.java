@@ -195,7 +195,11 @@ public class LevelPackageBox extends VBox implements GraphSelection.Selectable {
         }
 
         if (onExpandChangeCallback != null) {
-            onExpandChangeCallback.run();
+            // Defer until after the current pulse so listeners observe stable
+            // bounds — running synchronously inside the pulse that just queued
+            // the layout invalidation makes bounds-readers see stale values.
+            Runnable callback = onExpandChangeCallback;
+            javafx.application.Platform.runLater(callback);
         }
     }
 

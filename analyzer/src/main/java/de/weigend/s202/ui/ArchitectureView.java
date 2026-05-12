@@ -76,6 +76,12 @@ public class ArchitectureView extends BorderPane {
     // Lines need redraw after zoom/scroll changes (perf optimization).
     private boolean linesNeedUpdate = false;
 
+    // Coalesces redraw triggers (expand/collapse, bounds changes, future DnD
+    // drops) into one flush per JavaFX pulse. See §2.2 of the
+    // ADR_PULSE_COALESCING_AND_DND.
+    private final PulseCoalescer arrowsCoalescer =
+            new PulseCoalescer(javafx.application.Platform::runLater, this::flushArrowsRedraw);
+
     private javafx.scene.layout.Pane zoomableContent;
     private Consumer<String> statusSink = msg -> { /* no-op default */ };
     private Consumer<String> nodeDoubleClickSink = fqn -> { /* no-op default */ };
@@ -272,15 +278,7 @@ public class ArchitectureView extends BorderPane {
         this.currentRootNode = rootNode;
         this.elementRegistry.clear();
 
-        LevelPackageBox.setOnExpandChangeCallback(() -> {
-            if (getScene() != null && getScene().getRoot() != null) {
-                if (zoomableContent != null) {
-                    zoomableContent.requestLayout();
-                }
-                getScene().getRoot().layout();
-                redrawVisibleArrows();
-            }
-        });
+        LevelPackageBox.setOnExpandChangeCallback(arrowsCoalescer::markDirty);
 
         // Selection (class OR package) is owned by GraphSelection. Mirror it
         // onto our selectedFullName property and trigger overlay redraws.
@@ -318,6 +316,15 @@ public class ArchitectureView extends BorderPane {
         contentWithOverlay.getChildren().addAll(topLevelContainer, overlayPane);
 
         this.zoomableContent = contentWithOverlay;
+
+        // Any layout change inside the architecture tree (expand/collapse,
+        // resize, future DnD drop) shows up as a bounds-in-parent change of
+        // the wrapping content node. Route every such change through the
+        // coalescer so we get exactly one arrow redraw per pulse — the
+        // listener on the old zoomableContent dies with the node on the next
+        // refreshLayout, since nothing else holds a reference.
+        contentWithOverlay.boundsInParentProperty()
+                .addListener((obs, oldBounds, newBounds) -> arrowsCoalescer.markDirty());
 
         javafx.scene.Group scaledGroup = new javafx.scene.Group(contentWithOverlay);
         StackPane centeringWrapper = new StackPane(scaledGroup);
@@ -543,6 +550,25 @@ public class ArchitectureView extends BorderPane {
         if (showScc.get()) {
             sccRenderer.drawSccLines(currentRootNode);
         }
+    }
+
+    /**
+     * Flush handler for {@link #arrowsCoalescer}: runs at most once per pulse
+     * once any source (expand/collapse, bounds change, future DnD drop) has
+     * marked the arrows dirty. Forcing layout before reading bounds is a cheap
+     * defensive guard — by the time the coalescer fires, the FX queue has
+     * already advanced one pulse, so layout is normally settled, but a node
+     * whose ancestor was hidden may still have invalid bounds.
+     */
+    private void flushArrowsRedraw() {
+        if (getScene() == null || getScene().getRoot() == null) {
+            return;
+        }
+        if (zoomableContent != null) {
+            zoomableContent.requestLayout();
+        }
+        getScene().getRoot().layout();
+        redrawVisibleArrows();
     }
 
     /**
