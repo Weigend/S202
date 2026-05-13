@@ -89,9 +89,16 @@ public final class ArchitectureDragController {
         row.getProperties().put(ROW_TAG, Boolean.TRUE);
     }
 
-    /** Tag a VBox as a row stack — gaps between its rows become drop targets. */
+    /**
+     * Tag a VBox as a row stack — gaps between its rows become drop targets.
+     * Picking is forced onto the stack's full bounds so the empty space
+     * between row HBoxes still hits the stack (a Pane without a background
+     * doesn't pick its gaps by default, which used to fall through to the
+     * enclosing top-level row and misroute the drop).
+     */
     public static void markAsRowStack(VBox stack) {
         stack.getProperties().put(STACK_TAG, Boolean.TRUE);
+        stack.setPickOnBounds(true);
     }
 
     /**
