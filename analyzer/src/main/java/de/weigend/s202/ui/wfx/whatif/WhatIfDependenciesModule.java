@@ -24,7 +24,6 @@ import javafx.beans.value.ChangeListener;
 public class WhatIfDependenciesModule implements Module {
 
     private WhatIfDependenciesView view;
-    private boolean registered;
 
     private ArchitectureView boundView;
     private ChangeListener<Object> rootListener;
@@ -64,16 +63,21 @@ public class WhatIfDependenciesModule implements Module {
 
     /**
      * Dock the Dependencies panel directly under the given architecture
-     * view, splitting the CENTER editor area vertically. Idempotent:
-     * subsequent architecture views share the same panel via focus
-     * tracking, so a second call is a no-op.
+     * view, splitting the CENTER editor area vertically. No-op when the
+     * panel is already registered with the WindowManager — subsequent
+     * architecture views share the same panel via focus tracking. After
+     * "Close Project" tears the panel out of the WindowManager, the next
+     * dockUnder re-registers it.
      */
     public void dockUnder(ArchitectureWfxView anchor) {
-        if (registered || anchor == null) {
+        if (anchor == null) {
             return;
         }
-        Lookup.lookup(WindowManager.class).register(view, anchor);
-        registered = true;
+        WindowManager wm = Lookup.lookup(WindowManager.class);
+        if (wm.hasRegisteredView(view)) {
+            return;
+        }
+        wm.register(view, anchor);
     }
 
     @Override
