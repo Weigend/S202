@@ -321,6 +321,18 @@ public class S202Module implements Module {
 
     private void newArchitectureWindow() {
         ArchitectureWfxView wrapper = createArchitectureView();
+        registerArchitectureView(wrapper);
+    }
+
+    /**
+     * Register an architecture wrapper with the {@link WindowManager} and,
+     * on first call, dock the What-If Dependencies panel under it. Every
+     * code path that creates an architecture view (Open JAR, New Window,
+     * Open Scope, Open Tangle, Load Project) routes through here so the
+     * Dependencies panel reliably attaches to the first chart that
+     * appears.
+     */
+    private void registerArchitectureView(ArchitectureWfxView wrapper) {
         Lookup.lookup(WindowManager.class).register(wrapper);
         Lookup.lookup(de.weigend.s202.ui.wfx.whatif.WhatIfDependenciesModule.class)
                 .dockUnder(wrapper);
@@ -360,7 +372,7 @@ public class S202Module implements Module {
         viewSources.put(scopeView, viewSources.get(sourceView));
         viewInvariantReports.put(scopeView, viewInvariantReports.get(sourceView));
 
-        wm.register(wrapper);
+        registerArchitectureView(wrapper);
         wm.showView(wrapper);
 
         scopeView.setArchitectureRootAsync(
@@ -882,7 +894,7 @@ public class S202Module implements Module {
             return;
         }
         ArchitectureWfxView target = createArchitectureView();
-        Lookup.lookup(WindowManager.class).register(target);
+        registerArchitectureView(target);
         final ArchitectureView view = target.getArchitectureView();
         final String fileNames = jarFiles.stream().map(File::getName).collect(Collectors.joining(", "));
         final List<String> jarPaths = jarFiles.stream().map(File::getAbsolutePath).toList();
@@ -1101,7 +1113,7 @@ public class S202Module implements Module {
         resetProjectUi();
 
         ArchitectureWfxView target = createArchitectureView();
-        Lookup.lookup(WindowManager.class).register(target);
+        registerArchitectureView(target);
         ArchitectureView view = target.getArchitectureView();
         view.setDomainModel(loaded.domainModel());
         view.setRawDependencyModel(loaded.rawModel());
@@ -1307,7 +1319,7 @@ public class S202Module implements Module {
                 ArchitectureWfxView.VIEW_ID_PREFIX + viewCounter,
                 viewTitle,
                 tangleView);
-        wm.register(wrapper);
+        registerArchitectureView(wrapper);
         tangleViews.put(key, wrapper);
         return wrapper;
     }
