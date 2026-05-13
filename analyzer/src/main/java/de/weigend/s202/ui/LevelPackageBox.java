@@ -5,7 +5,6 @@ import javafx.geometry.Pos;
 import javafx.scene.Cursor;
 import javafx.scene.Node;
 import javafx.scene.control.Label;
-import javafx.scene.effect.DropShadow;
 import javafx.scene.input.MouseButton;
 import javafx.scene.layout.HBox;
 import javafx.scene.layout.Priority;
@@ -30,6 +29,10 @@ public class LevelPackageBox extends VBox implements GraphSelection.Selectable {
             "-fx-background-color: #fffacd; -fx-border-color: #999999; -fx-border-width: 1;";
     private static final String STYLE_SELECTED =
             "-fx-background-color: #fff3a0; -fx-border-color: #ff6600; -fx-border-width: 2;";
+    private static final String STYLE_MOVED =
+            "-fx-background-color: #fffacd; -fx-border-color: #1d4ed8; -fx-border-width: 2;";
+    private static final String STYLE_MOVED_SELECTED =
+            "-fx-background-color: #fff3a0; -fx-border-color: #1d4ed8; -fx-border-width: 3;";
     private static final String STYLE_TRANSPARENT =
             "-fx-background-color: transparent; -fx-border-width: 0;";
     private static final Color PACKAGE_COLOR = Color.web("#e6c46a");
@@ -45,6 +48,7 @@ public class LevelPackageBox extends VBox implements GraphSelection.Selectable {
     private final Map<Integer, HBox> levelRows;
     private final boolean transparent;
     private boolean selected;
+    private boolean virtuallyMoved;
 
     // Static callback for notifying when expand/collapse changes
     private static Runnable onExpandChangeCallback = null;
@@ -123,6 +127,10 @@ public class LevelPackageBox extends VBox implements GraphSelection.Selectable {
     private void applyBaseStyle() {
         if (transparent) {
             this.setStyle(STYLE_TRANSPARENT);
+            return;
+        }
+        if (virtuallyMoved) {
+            this.setStyle(selected ? STYLE_MOVED_SELECTED : STYLE_MOVED);
         } else {
             this.setStyle(selected ? STYLE_SELECTED : STYLE_NORMAL);
         }
@@ -274,14 +282,17 @@ public class LevelPackageBox extends VBox implements GraphSelection.Selectable {
     }
 
     /**
-     * Toggle the "this box has been virtually moved" decoration: an orange
-     * drop-shadow glow on the package frame, mirroring {@link LevelClassBox}.
+     * Toggle the "this box has been virtually moved" decoration. Switches to
+     * a blue 2px border (3px when also selected). Blue rather than red
+     * keeps the colour space reserved for actual architecture violations.
+     * A previous DropShadow version of this indicator visually obscured the
+     * 6px VBox-spacing gap between rows, making the drop-target gap
+     * unaimable; a border stays inside the box bounds.
      */
     public void setVirtuallyMoved(boolean moved) {
-        if (moved) {
-            setEffect(new DropShadow(10, Color.rgb(217, 70, 30, 0.85)));
-        } else {
-            setEffect(null);
+        if (this.virtuallyMoved != moved) {
+            this.virtuallyMoved = moved;
+            applyBaseStyle();
         }
     }
 

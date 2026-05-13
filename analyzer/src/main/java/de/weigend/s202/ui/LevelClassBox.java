@@ -3,7 +3,6 @@ package de.weigend.s202.ui;
 import javafx.geometry.Pos;
 import javafx.scene.Cursor;
 import javafx.scene.control.Label;
-import javafx.scene.effect.DropShadow;
 import javafx.scene.input.MouseButton;
 import javafx.scene.layout.HBox;
 import javafx.scene.layout.Region;
@@ -118,15 +117,24 @@ public class LevelClassBox extends HBox implements GraphSelection.Selectable {
         }
     }
 
+    private static final String STYLE_MOVED_BORDER =
+            "-fx-border-color: #1d4ed8; -fx-border-width: 2;";
+
     /**
-     * Toggle the "this box has been virtually moved" decoration: an orange
-     * drop-shadow glow that survives selection and theming.
+     * Toggle the "this box has been virtually moved" decoration. A blue
+     * 2px border (distinct from the default blue class border by being
+     * deeper / wider) replaces whatever border the CSS class set. Blue
+     * because red is reserved for architecture violations. The previous
+     * DropShadow variant visually leaked ~10px into the surrounding 6px
+     * VBox-spacing gap, hiding the drop target. The inline style override
+     * beats the CSS class colour at runtime; clearing it lets the CSS
+     * class take over again.
      */
     public void setVirtuallyMoved(boolean moved) {
         if (moved) {
-            setEffect(new DropShadow(10, Color.rgb(217, 70, 30, 0.85)));
+            setStyle(STYLE_MOVED_BORDER);
         } else {
-            setEffect(null);
+            setStyle("");
         }
     }
 }

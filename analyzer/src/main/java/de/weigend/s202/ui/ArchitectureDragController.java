@@ -150,7 +150,8 @@ public final class ArchitectureDragController {
         DropMode finishedMode = currentDropMode;
         HBox droppedInto = null;
         if (currentDropContainer != null && currentDropIndex >= 0
-                && isValidDrop(currentDropContainer, currentDropIndex)) {
+                && isValidDropTarget(currentDropContainer, currentDropIndex)
+                && isCommittingDrop(currentDropContainer, currentDropIndex)) {
             droppedInto = performDrop();
         }
         if (dragSource != null) {
@@ -198,7 +199,7 @@ public final class ArchitectureDragController {
             currentDropContainer = container;
             currentDropMode = mode;
             currentDropIndex = index;
-            if (container != null && index >= 0 && isValidDrop(container, index)) {
+            if (container != null && index >= 0 && isValidDropTarget(container, index)) {
                 installInsertMarker();
             }
         }
@@ -283,7 +284,7 @@ public final class ArchitectureDragController {
         return midpoints.size();
     }
 
-    private static boolean isValidDrop(Pane container, int index) {
+    private static boolean isValidDropTarget(Pane container, int index) {
         if (dragSource == null || container == null || index < 0) {
             return false;
         }
@@ -295,14 +296,49 @@ public final class ArchitectureDragController {
             }
             n = n.getParent();
         }
-        // Row mode: no-op if dropping back at source's current adjacent slot.
-        if (currentDropMode == DropMode.ROW && dragSource.getParent() == container) {
-            int srcIdx = container.getChildren().indexOf(dragSource);
-            if (index == srcIdx || index == srcIdx + 1) {
-                return false;
-            }
-        }
         return true;
+    }
+
+    private static boolean isCommittingDrop(Pane container, int index) {
+        return !isCurrentPositionDrop(container, index);
+    }
+
+    private static boolean isCurrentPositionDrop(Pane container, int index) {
+        if (dragSource == null) {
+            return false;
+        }
+        // Only ROW-mode same-row adjacent slots are true no-ops (the row's
+        // children list would be reordered into the identical sequence).
+        // STACK-mode "adjacent slot to the source's row" looks like a no-op
+        // on paper, but stops being one as soon as other (empty) rows sit
+        // between the source row and the marker — the move then shifts the
+        // source relative to those, which is a real change. We let the
+        // drop through and trust the prune step in performStackDrop to
+        // collapse the truly-degenerate empty-row cascade afterwards.
+        if (currentDropMode == DropMode.ROW && dragSource.getParent() == container) {
+            return isCurrentAdjacentDrop(container, dragSource, index);
+        }
+        return false;
+    }
+
+    private static boolean isCurrentAdjacentDrop(Pane container, Node sourceNode, int targetIndex) {
+        int sourceIndex = container.getChildren().indexOf(sourceNode);
+        if (sourceIndex < 0) {
+            return false;
+        }
+        if (insertMarker != null && insertMarker.getParent() == container) {
+            int markerIndex = container.getChildren().indexOf(insertMarker);
+            return areAdjacentChildIndices(sourceIndex, markerIndex);
+        }
+        return isCurrentAdjacentSlot(sourceIndex, targetIndex);
+    }
+
+    static boolean isCurrentAdjacentSlot(int sourceIndex, int targetIndex) {
+        return sourceIndex >= 0 && (targetIndex == sourceIndex || targetIndex == sourceIndex + 1);
+    }
+
+    static boolean areAdjacentChildIndices(int firstIndex, int secondIndex) {
+        return firstIndex >= 0 && secondIndex >= 0 && Math.abs(firstIndex - secondIndex) == 1;
     }
 
     private static void installInsertMarker() {
@@ -353,6 +389,7 @@ public final class ArchitectureDragController {
         if (!(dragSource.getParent() instanceof HBox srcRow)) {
             return null;
         }
+        pruneAllEmptyRows(dropRow, srcRow, dropRow);
         int srcIdx = srcRow.getChildren().indexOf(dragSource);
         int targetIdx = currentDropIndex;
         srcRow.getChildren().remove(dragSource);
@@ -364,13 +401,13 @@ public final class ArchitectureDragController {
         }
         targetIdx = Math.min(targetIdx, dropRow.getChildren().size());
         dropRow.getChildren().add(targetIdx, dragSource);
-        cleanupEmptySourceRow(srcRow);
         return dropRow;
     }
 
     private static HBox performStackDrop() {
         VBox stack = (VBox) currentDropContainer;
         HBox srcRow = dragSource.getParent() instanceof HBox h ? h : null;
+        pruneAllEmptyRows(stack, srcRow, null);
         int targetIdx = currentDropIndex;
         if (insertMarker != null && insertMarker.getParent() == stack) {
             targetIdx = stack.getChildren().indexOf(insertMarker);
@@ -383,8 +420,45 @@ public final class ArchitectureDragController {
         targetIdx = Math.min(targetIdx, stack.getChildren().size());
         stack.getChildren().add(targetIdx, newRow);
         newRow.getChildren().add(dragSource);
-        cleanupEmptySourceRow(srcRow);
         return newRow;
+    }
+
+    /**
+     * Walk every reachable {@code STACK_TAG} VBox from the scene root and
+     * prune empty drop-target rows out of each one. Only {@code keep1} and
+     * {@code keep2} survive being empty — they're the in-flight source row
+     * (about to become the new placeholder) and, for row drops, the
+     * destination row. The scene-wide sweep stops the second-empty-row
+     * anomaly where a nested stack from an earlier move keeps its leftover
+     * placeholder forever because subsequent drops never touch that stack
+     * directly.
+     */
+    private static void pruneAllEmptyRows(Node anchor, HBox keep1, HBox keep2) {
+        Node root = anchor;
+        while (root != null && root.getParent() != null) {
+            root = root.getParent();
+        }
+        pruneEmptyRowsRecursive(root, keep1, keep2);
+    }
+
+    private static void pruneEmptyRowsRecursive(Node node, HBox keep1, HBox keep2) {
+        if (node == null) {
+            return;
+        }
+        if (node instanceof VBox v
+                && Boolean.TRUE.equals(v.getProperties().get(STACK_TAG))) {
+            v.getChildren().removeIf(child ->
+                    child instanceof HBox h
+                            && Boolean.TRUE.equals(h.getProperties().get(ROW_TAG))
+                            && h.getChildren().isEmpty()
+                            && h != keep1
+                            && h != keep2);
+        }
+        if (node instanceof javafx.scene.Parent p) {
+            for (Node child : p.getChildrenUnmodifiable()) {
+                pruneEmptyRowsRecursive(child, keep1, keep2);
+            }
+        }
     }
 
     /** Build an HBox styled like the existing layout rows and tag it as a drop row. */
@@ -397,27 +471,6 @@ public final class ArchitectureDragController {
         VBox.setVgrow(row, Priority.ALWAYS);
         markAsRow(row);
         return row;
-    }
-
-    /**
-     * Remove a row from its stack if it ended up empty after the source was
-     * extracted. Only removes rows that we tagged as drop rows and that sit
-     * in a tagged stack, so it cannot strip layout scaffolding by accident.
-     */
-    private static void cleanupEmptySourceRow(HBox srcRow) {
-        if (srcRow == null || srcRow == currentDropContainer) {
-            return;
-        }
-        if (!srcRow.getChildren().isEmpty()) {
-            return;
-        }
-        if (!Boolean.TRUE.equals(srcRow.getProperties().get(ROW_TAG))) {
-            return;
-        }
-        if (srcRow.getParent() instanceof VBox parentStack
-                && Boolean.TRUE.equals(parentStack.getProperties().get(STACK_TAG))) {
-            parentStack.getChildren().remove(srcRow);
-        }
     }
 
     private static void reset() {

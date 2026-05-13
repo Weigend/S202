@@ -5,6 +5,8 @@ import org.junit.jupiter.api.Test;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * Pure-logic tests for the drag controller's slot-picking arithmetic.
@@ -48,5 +50,13 @@ class ArchitectureDragControllerTest {
     @Test
     void emptyRowAlwaysPicksSlotZero() {
         assertEquals(0, ArchitectureDragController.slotIndexForMidpoints(List.of(), 42.0));
+    }
+
+    @Test
+    void sourceAdjacentSlotsAreNoOpPositionsButStillTargetable() {
+        assertTrue(ArchitectureDragController.isCurrentAdjacentSlot(1, 1));
+        assertTrue(ArchitectureDragController.isCurrentAdjacentSlot(1, 2));
+        assertFalse(ArchitectureDragController.isCurrentAdjacentSlot(1, 0));
+        assertFalse(ArchitectureDragController.isCurrentAdjacentSlot(1, 3));
     }
 }
