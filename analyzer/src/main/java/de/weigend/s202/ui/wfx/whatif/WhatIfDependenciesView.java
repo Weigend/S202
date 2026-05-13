@@ -60,17 +60,30 @@ public final class WhatIfDependenciesView implements View {
     private WhatIfUpwardEdgeRenderer renderer;
 
     private static final String PANEL_BG = "#f5f5f0";
+    private static final String PANEL_STYLE =
+            "-fx-background-color: " + PANEL_BG + ";"
+                    + "-fx-control-inner-background: " + PANEL_BG + ";"
+                    + "-fx-background: " + PANEL_BG + ";";
+    private static final String HEADER_STYLE =
+            "-fx-font-weight: bold;"
+                    + "-fx-font-size: 12;"
+                    + "-fx-padding: 4 8 4 8;"
+                    + "-fx-background-color: " + PANEL_BG + ";";
 
     public WhatIfDependenciesView() {
-        upwardHeader.setStyle("-fx-font-weight: bold; -fx-font-size: 12; -fx-padding: 4 8 4 8;");
-        sccHeader.setStyle("-fx-font-weight: bold; -fx-font-size: 12; -fx-padding: 4 8 4 8;");
+        upwardHeader.setStyle(HEADER_STYLE);
+        sccHeader.setStyle(HEADER_STYLE);
 
         upwardTree.setShowRoot(false);
+        upwardTree.setStyle(PANEL_STYLE);
+        sccList.setStyle(PANEL_STYLE);
 
         VBox upwardSection = new VBox(upwardHeader, upwardTree);
+        upwardSection.setStyle(PANEL_STYLE);
         VBox.setVgrow(upwardTree, Priority.ALWAYS);
 
         VBox sccSection = new VBox(sccHeader, sccList);
+        sccSection.setStyle(PANEL_STYLE);
         VBox.setVgrow(sccList, Priority.ALWAYS);
 
         SplitPane split = new SplitPane(upwardSection, sccSection);
@@ -79,7 +92,7 @@ public final class WhatIfDependenciesView implements View {
         SplitPane.setResizableWithParent(sccSection, true);
 
         root.setCenter(split);
-        root.setStyle("-fx-background-color: " + PANEL_BG + ";");
+        root.setStyle(PANEL_STYLE);
         root.setPadding(new Insets(0));
         refresh();
     }
