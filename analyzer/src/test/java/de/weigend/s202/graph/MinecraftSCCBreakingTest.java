@@ -1,11 +1,11 @@
 package de.weigend.s202.graph;
 
-import de.weigend.s202.analysis.strategy.impl.BasicClassLevelCalculationStrategy;
-import de.weigend.s202.analysis.strategy.impl.HeuristicSCCBreakingStrategy;
-import de.weigend.s202.analysis.strategy.aggregation.SimpleMaxAggregationStrategy;
+import de.weigend.s202.domain.strategy.impl.BasicClassLevelCalculationStrategy;
+import de.weigend.s202.domain.strategy.impl.HeuristicSCCBreakingStrategy;
+import de.weigend.s202.domain.strategy.aggregation.SimpleMaxAggregationStrategy;
 import de.weigend.s202.domain.DomainModel;
-import de.weigend.s202.analysis.strategy.LevelCalculator;
-import de.weigend.s202.analysis.strategy.LevelCalculationStrategyFactory;
+import de.weigend.s202.domain.architecture.LevelCalculator;
+import de.weigend.s202.domain.architecture.LevelCalculationStrategyFactory;
 import de.weigend.s202.reader.DependencyModel;
 import de.weigend.s202.reader.InputAnalyzer;
 import org.junit.jupiter.api.Test;

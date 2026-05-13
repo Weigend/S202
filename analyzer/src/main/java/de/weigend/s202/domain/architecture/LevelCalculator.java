@@ -1,7 +1,8 @@
-package de.weigend.s202.analysis.strategy;
+package de.weigend.s202.domain.architecture;
 
-import de.weigend.s202.analysis.strategy.impl.HeuristicSCCBreakingStrategy;
 import de.weigend.s202.domain.DomainModel;
+import de.weigend.s202.domain.strategy.LevelCalculationStrategyContext;
+import de.weigend.s202.domain.strategy.impl.HeuristicSCCBreakingStrategy;
 import de.weigend.s202.graph.SCCBreaker;
 import de.weigend.s202.graph.StronglyConnectedComponent;
 import de.weigend.s202.graph.TarjanSCCFinder;

@@ -1,12 +1,17 @@
-package de.weigend.s202.analysis.strategy;
+package de.weigend.s202.domain.architecture;
 
-import de.weigend.s202.analysis.strategy.aggregation.SimpleMaxAggregationStrategy;
-import de.weigend.s202.analysis.strategy.impl.BasicClassLevelCalculationStrategy;
-import de.weigend.s202.analysis.strategy.impl.HeuristicSCCBreakingStrategy;
+import de.weigend.s202.domain.strategy.ClassAggregationStrategy;
+import de.weigend.s202.domain.strategy.ClassLevelCalculationStrategy;
+import de.weigend.s202.domain.strategy.LevelCalculationStrategyContext;
+import de.weigend.s202.domain.strategy.aggregation.SimpleMaxAggregationStrategy;
+import de.weigend.s202.domain.strategy.impl.BasicClassLevelCalculationStrategy;
+import de.weigend.s202.domain.strategy.impl.HeuristicSCCBreakingStrategy;
 
 /**
- * Factory for creating LevelCalculationStrategyContext instances.
- * Located in domain package to avoid cyclic dependencies between strategy and strategy.impl packages.
+ * Factory for creating LevelCalculationStrategyContext instances. Lives
+ * in {@code domain.architecture} next to the {@link LevelCalculator}
+ * that consumes it — the strategies in {@code domain.strategy} are pure
+ * policy types, the factory plus calculator are their natural callers.
  */
 public final class LevelCalculationStrategyFactory {
     

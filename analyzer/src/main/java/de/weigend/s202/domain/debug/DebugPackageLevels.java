@@ -2,7 +2,7 @@ package de.weigend.s202.domain.debug;
 
 import de.weigend.s202.reader.InputAnalyzer;
 import de.weigend.s202.reader.DependencyModel;
-import de.weigend.s202.analysis.strategy.LevelCalculator;
+import de.weigend.s202.domain.architecture.LevelCalculator;
 import de.weigend.s202.domain.DomainModel;
 import de.weigend.s202.graph.TarjanSCCFinder;
 import de.weigend.s202.graph.StronglyConnectedComponent;

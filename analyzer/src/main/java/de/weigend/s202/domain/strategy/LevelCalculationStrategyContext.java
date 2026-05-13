@@ -1,4 +1,4 @@
-package de.weigend.s202.analysis.strategy;
+package de.weigend.s202.domain.strategy;
 
 import java.util.Objects;
 

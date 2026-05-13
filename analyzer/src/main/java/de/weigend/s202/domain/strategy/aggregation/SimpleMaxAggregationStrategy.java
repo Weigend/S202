@@ -1,6 +1,6 @@
-package de.weigend.s202.analysis.strategy.aggregation;
+package de.weigend.s202.domain.strategy.aggregation;
 
-import de.weigend.s202.analysis.strategy.ClassAggregationStrategy;
+import de.weigend.s202.domain.strategy.ClassAggregationStrategy;
 
 import java.util.Set;
 import java.util.Objects;

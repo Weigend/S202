@@ -1,4 +1,4 @@
-package de.weigend.s202.analysis.strategy.impl;
+package de.weigend.s202.domain.strategy.impl;
 
 import de.weigend.s202.graph.SCCBreaker;
 import org.junit.jupiter.api.Test;
@@ -165,9 +165,9 @@ class HeuristicSCCBreakingStrategyTest {
         Map<String, Integer> heuristicLevels = heuristicStrategy.calculateClassLevels(graph);
         
         // Basic strategy (all same level)
-        de.weigend.s202.analysis.strategy.impl.BasicClassLevelCalculationStrategy basicStrategy = 
-            new de.weigend.s202.analysis.strategy.impl.BasicClassLevelCalculationStrategy(
-                new de.weigend.s202.analysis.strategy.aggregation.SimpleMaxAggregationStrategy()
+        de.weigend.s202.domain.strategy.impl.BasicClassLevelCalculationStrategy basicStrategy = 
+            new de.weigend.s202.domain.strategy.impl.BasicClassLevelCalculationStrategy(
+                new de.weigend.s202.domain.strategy.aggregation.SimpleMaxAggregationStrategy()
             );
         Map<String, Integer> basicLevels = basicStrategy.calculateClassLevels(graph);
         
