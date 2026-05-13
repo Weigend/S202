@@ -1,6 +1,6 @@
 package de.weigend.s202.analysis.strategy;
 
-import de.weigend.s202.domain.LevelCalculationStrategyFactory;
+import de.weigend.s202.analysis.strategy.LevelCalculationStrategyFactory;
 import de.weigend.s202.analysis.strategy.aggregation.SimpleMaxAggregationStrategy;
 import de.weigend.s202.analysis.strategy.impl.BasicClassLevelCalculationStrategy;
 import org.junit.jupiter.api.Test;

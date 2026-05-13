@@ -6,7 +6,7 @@ import de.weigend.s202.analysis.quality.QualityMetrics;
 import de.weigend.s202.graph.SCCBreaker;
 import de.weigend.s202.analysis.strategy.impl.HeuristicSCCBreakingStrategy;
 import de.weigend.s202.domain.DomainModel;
-import de.weigend.s202.domain.LevelCalculator;
+import de.weigend.s202.analysis.strategy.LevelCalculator;
 import de.weigend.s202.project.S202Project;
 import de.weigend.s202.project.S202ProjectMapper;
 import de.weigend.s202.project.S202ProjectStore;

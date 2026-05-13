@@ -1,10 +1,10 @@
-package de.weigend.s202.domain;
+package de.weigend.s202.analysis.strategy;
 
+import de.weigend.s202.analysis.strategy.impl.HeuristicSCCBreakingStrategy;
+import de.weigend.s202.domain.DomainModel;
 import de.weigend.s202.graph.SCCBreaker;
 import de.weigend.s202.graph.StronglyConnectedComponent;
 import de.weigend.s202.graph.TarjanSCCFinder;
-import de.weigend.s202.analysis.strategy.LevelCalculationStrategyContext;
-import de.weigend.s202.analysis.strategy.impl.HeuristicSCCBreakingStrategy;
 import de.weigend.s202.reader.DependencyModel;
 
 import java.util.*;

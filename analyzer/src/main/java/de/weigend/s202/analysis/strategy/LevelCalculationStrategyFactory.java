@@ -1,8 +1,5 @@
-package de.weigend.s202.domain;
+package de.weigend.s202.analysis.strategy;
 
-import de.weigend.s202.analysis.strategy.ClassAggregationStrategy;
-import de.weigend.s202.analysis.strategy.ClassLevelCalculationStrategy;
-import de.weigend.s202.analysis.strategy.LevelCalculationStrategyContext;
 import de.weigend.s202.analysis.strategy.aggregation.SimpleMaxAggregationStrategy;
 import de.weigend.s202.analysis.strategy.impl.BasicClassLevelCalculationStrategy;
 import de.weigend.s202.analysis.strategy.impl.HeuristicSCCBreakingStrategy;
