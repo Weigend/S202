@@ -84,7 +84,7 @@ public class TopTanglesModule implements Module {
 
     private void waitForDemoPreloader() throws PlatformException {
         try {
-            Thread.sleep(2_000);
+            Thread.sleep(1_000);
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
             throw new PlatformException("Interrupted while delaying Top Tangles preload", e);

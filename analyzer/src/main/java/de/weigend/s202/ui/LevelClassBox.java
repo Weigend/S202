@@ -3,6 +3,7 @@ package de.weigend.s202.ui;
 import javafx.geometry.Pos;
 import javafx.scene.Cursor;
 import javafx.scene.control.Label;
+import javafx.scene.effect.DropShadow;
 import javafx.scene.input.MouseButton;
 import javafx.scene.layout.HBox;
 import javafx.scene.layout.Region;
@@ -62,6 +63,8 @@ public class LevelClassBox extends HBox implements GraphSelection.Selectable {
 
         this.getChildren().addAll(icon, nameLabel);
 
+        ArchitectureDragController.makeDraggable(this);
+
         // Single click toggles selection. Double click ensures the class stays
         // selected (no toggle off) and notifies the double-click listener so
         // external panels — e.g. the outline explorer — can reveal the class.
@@ -112,6 +115,18 @@ public class LevelClassBox extends HBox implements GraphSelection.Selectable {
         this.getStyleClass().remove("class-box-selected");
         if (!this.getStyleClass().contains("class-box")) {
             this.getStyleClass().add("class-box");
+        }
+    }
+
+    /**
+     * Toggle the "this box has been virtually moved" decoration: an orange
+     * drop-shadow glow that survives selection and theming.
+     */
+    public void setVirtuallyMoved(boolean moved) {
+        if (moved) {
+            setEffect(new DropShadow(10, Color.rgb(217, 70, 30, 0.85)));
+        } else {
+            setEffect(null);
         }
     }
 }

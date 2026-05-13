@@ -4,11 +4,14 @@ import de.weigend.s202.analysis.quality.QualityMetrics;
 import de.weigend.s202.domain.DomainModel;
 import de.weigend.s202.reader.DependencyModel;
 import de.weigend.s202.ui.model.ArchitectureNode;
+import de.weigend.s202.ui.whatif.ClassEdges;
+import de.weigend.s202.ui.whatif.WhatIfModel;
 import de.weigend.s202.ui.rendering.CircuitBoardRenderer;
 import de.weigend.s202.ui.rendering.DependencyRenderer;
 import de.weigend.s202.ui.rendering.DependencyRendererStrategy;
 import de.weigend.s202.ui.rendering.SCCRenderer;
 import de.weigend.s202.ui.rendering.TangleEdgeRenderer;
+import de.weigend.s202.ui.rendering.WhatIfUpwardEdgeRenderer;
 import de.weigend.s202.ui.tree.ArchitectureTreeBuilder;
 import de.weigend.s202.ui.zoom.ZoomController;
 import javafx.beans.property.BooleanProperty;
@@ -49,8 +52,9 @@ public class ArchitectureView extends BorderPane {
     private ScrollPane scrollPane;
     private Pane dependencyPane;   // Container for dependency lines
     private Pane sccPane;          // Container for SCC lines
+    private Pane whatIfPane;       // Container for What-If upward-edge overlay
     private Pane tanglePane;       // Container for the dedicated tangle-edge overlay
-    private StackPane overlayPane; // Contains dependency, SCC and tangle panes
+    private StackPane overlayPane; // Contains dependency, SCC, What-If and tangle panes
     private StackPane contentPane;
     private ArchitectureNode currentRootNode;
     private final Map<String, javafx.scene.Node> elementRegistry = new HashMap<>();
@@ -60,6 +64,7 @@ public class ArchitectureView extends BorderPane {
     private DependencyRenderer classicRenderer;
     private CircuitBoardRenderer circuitRenderer;
     private SCCRenderer sccRenderer;
+    private WhatIfUpwardEdgeRenderer whatIfRenderer;
     private TangleEdgeRenderer tangleRenderer;
     private ArchitectureTreeBuilder treeBuilder;
     private ZoomController zoomController;
@@ -76,6 +81,22 @@ public class ArchitectureView extends BorderPane {
     // Lines need redraw after zoom/scroll changes (perf optimization).
     private boolean linesNeedUpdate = false;
 
+    // Coalesces redraw triggers (expand/collapse, bounds changes, future DnD
+    // drops) into one flush per JavaFX pulse. See §2.2 of the
+    // ADR_PULSE_COALESCING_AND_DND.
+    private final PulseCoalescer arrowsCoalescer =
+            new PulseCoalescer(javafx.application.Platform::runLater, this::flushArrowsRedraw);
+
+    // What-If layer: virtual identity + aggregated package graph. Built when
+    // a DependencyModel is pushed in; nulled on no-analysis state.
+    private WhatIfModel whatIfModel;
+    private ArchitectureDragController.DropListener whatIfDropListener;
+
+    // Pulses every time the arrow overlay finishes a redraw. WFX side panels
+    // (e.g. the Dependencies module) can subscribe to refresh themselves.
+    private final javafx.beans.property.LongProperty redrawTick =
+            new javafx.beans.property.SimpleLongProperty(0);
+
     private javafx.scene.layout.Pane zoomableContent;
     private Consumer<String> statusSink = msg -> { /* no-op default */ };
     private Consumer<String> nodeDoubleClickSink = fqn -> { /* no-op default */ };
@@ -88,6 +109,7 @@ public class ArchitectureView extends BorderPane {
     private final BooleanProperty showDependencies = new SimpleBooleanProperty(false);
     private final BooleanProperty circuitMode = new SimpleBooleanProperty(false);
     private final BooleanProperty showScc = new SimpleBooleanProperty(false);
+    private final BooleanProperty showWhatIfViolations = new SimpleBooleanProperty(false);
     private final BooleanProperty showTangleDebugLines = new SimpleBooleanProperty(false);
     // Icon visibility is shared across all open architecture views — boxes bind
     // their FontIcon visibility to this property so toggling refreshes every
@@ -143,6 +165,12 @@ public class ArchitectureView extends BorderPane {
         sccPane.setVisible(false);
         sccPane.setManaged(false);
 
+        whatIfPane = new Pane();
+        whatIfPane.setMouseTransparent(true);
+        whatIfPane.setPickOnBounds(false);
+        whatIfPane.setVisible(false);
+        whatIfPane.setManaged(false);
+
         tanglePane = new Pane();
         tanglePane.setMouseTransparent(false);
         tanglePane.setPickOnBounds(false);
@@ -166,6 +194,7 @@ public class ArchitectureView extends BorderPane {
     private void wirePropertyListeners() {
         showDependencies.addListener((obs, was, isNow) -> applyShowDependencies(isNow));
         showScc.addListener((obs, was, isNow) -> applyShowScc(isNow));
+        showWhatIfViolations.addListener((obs, was, isNow) -> applyShowWhatIfViolations(isNow));
         circuitMode.addListener((obs, was, isNow) -> applyCircuitMode());
         showTangleDebugLines.addListener((obs, was, isNow) -> applyShowTangleDebugLines(isNow));
     }
@@ -197,6 +226,18 @@ public class ArchitectureView extends BorderPane {
             sccPane.setVisible(true);
         } else {
             sccPane.setVisible(false);
+        }
+    }
+
+    private void applyShowWhatIfViolations(boolean visible) {
+        if (whatIfPane == null) {
+            return;
+        }
+        whatIfPane.setVisible(visible);
+        if (visible) {
+            arrowsCoalescer.markDirty();
+        } else if (whatIfRenderer != null) {
+            whatIfRenderer.clear();
         }
     }
 
@@ -272,15 +313,7 @@ public class ArchitectureView extends BorderPane {
         this.currentRootNode = rootNode;
         this.elementRegistry.clear();
 
-        LevelPackageBox.setOnExpandChangeCallback(() -> {
-            if (getScene() != null && getScene().getRoot() != null) {
-                if (zoomableContent != null) {
-                    zoomableContent.requestLayout();
-                }
-                getScene().getRoot().layout();
-                redrawVisibleArrows();
-            }
-        });
+        LevelPackageBox.setOnExpandChangeCallback(arrowsCoalescer::markDirty);
 
         // Selection (class OR package) is owned by GraphSelection. Mirror it
         // onto our selectedFullName property and trigger overlay redraws.
@@ -312,12 +345,21 @@ public class ArchitectureView extends BorderPane {
         overlayPane = new StackPane();
         overlayPane.setMouseTransparent(false);
         overlayPane.setPickOnBounds(false);
-        overlayPane.getChildren().addAll(dependencyPane, sccPane, tanglePane);
+        overlayPane.getChildren().addAll(dependencyPane, sccPane, whatIfPane, tanglePane);
 
         StackPane contentWithOverlay = new StackPane();
         contentWithOverlay.getChildren().addAll(topLevelContainer, overlayPane);
 
         this.zoomableContent = contentWithOverlay;
+
+        // Any layout change inside the architecture tree (expand/collapse,
+        // resize, future DnD drop) shows up as a bounds-in-parent change of
+        // the wrapping content node. Route every such change through the
+        // coalescer so we get exactly one arrow redraw per pulse — the
+        // listener on the old zoomableContent dies with the node on the next
+        // refreshLayout, since nothing else holds a reference.
+        contentWithOverlay.boundsInParentProperty()
+                .addListener((obs, oldBounds, newBounds) -> arrowsCoalescer.markDirty());
 
         javafx.scene.Group scaledGroup = new javafx.scene.Group(contentWithOverlay);
         StackPane centeringWrapper = new StackPane(scaledGroup);
@@ -343,6 +385,9 @@ public class ArchitectureView extends BorderPane {
         sccRenderer = new SCCRenderer(sccPane, elementRegistry, this::setStatus);
         sccRenderer.setCoordinateContext(zoomableContent, overlayPane, scrollPane);
 
+        whatIfRenderer = new WhatIfUpwardEdgeRenderer(whatIfPane, elementRegistry);
+        whatIfRenderer.setCoordinateContext(zoomableContent, overlayPane);
+
         tangleRenderer = new TangleEdgeRenderer(tanglePane, elementRegistry, this::setStatus);
         tangleRenderer.setCoordinateContext(zoomableContent, overlayPane);
         tangleRenderer.setOnEdgeClicked(this::handleTangleEdgeClicked);
@@ -360,6 +405,7 @@ public class ArchitectureView extends BorderPane {
         // Reset overlay toggles for the new architecture so the global toolbar resyncs.
         showDependencies.set(false);
         showScc.set(false);
+        showWhatIfViolations.set(false);
 
         // Re-apply any pending tangle visualisation now that the renderer
         // exists and the new tree is in place.
@@ -439,6 +485,121 @@ public class ArchitectureView extends BorderPane {
 
     public void setRawDependencyModel(DependencyModel model) {
         rawDependencyModel.set(model);
+        rebuildWhatIfModel(model);
+    }
+
+    private void rebuildWhatIfModel(DependencyModel model) {
+        whatIfModel = model == null ? null : new WhatIfModel(ClassEdges.fromDependencyModel(model));
+        if (whatIfModel != null) {
+            whatIfModel.addChangeListener(arrowsCoalescer::markDirty);
+        }
+        ensureWhatIfDropListenerRegistered();
+        arrowsCoalescer.markDirty();
+    }
+
+    private void ensureWhatIfDropListenerRegistered() {
+        if (whatIfDropListener != null) {
+            return;
+        }
+        whatIfDropListener = this::handleWhatIfDrop;
+        ArchitectureDragController.addDropListener(whatIfDropListener);
+    }
+
+    private void handleWhatIfDrop(javafx.scene.Node movedSource, javafx.scene.layout.HBox destinationRow) {
+        if (whatIfModel == null) {
+            return;
+        }
+        if (!isInsideThisView(movedSource)) {
+            return;
+        }
+        if (!(movedSource instanceof GraphSelection.Selectable selectable)) {
+            return;
+        }
+        String movedFqcn = selectable.getFullName();
+        if (movedFqcn == null || movedFqcn.isEmpty()) {
+            return;
+        }
+        String destinationContainerFqcn = resolveDestinationContainer(destinationRow);
+        if (destinationContainerFqcn == null) {
+            return;
+        }
+        String newVirtualParent = destinationContainerFqcn.isEmpty()
+                ? ""
+                : whatIfModel.identity().virtualFullName(destinationContainerFqcn);
+        String currentVirtualParent = whatIfModel.identity().virtualParent(movedFqcn);
+        if (currentVirtualParent.equals(newVirtualParent)) {
+            setStatus("What-If: " + simple(movedFqcn) + " — visual reorder only (same virtual parent)");
+            return;
+        }
+        whatIfModel.applyMove(movedFqcn, newVirtualParent);
+        setStatus(buildWhatIfStatusMessage(movedFqcn, newVirtualParent));
+    }
+
+    private boolean isInsideThisView(javafx.scene.Node node) {
+        javafx.scene.Node n = node;
+        while (n != null) {
+            if (n == this) {
+                return true;
+            }
+            n = n.getParent();
+        }
+        return false;
+    }
+
+    /**
+     * Resolve the static fqcn of the package container the drop landed in.
+     * Walks up the scene graph from the destination row: the first enclosing
+     * {@link LevelPackageBox} wins. If the drop lands at top level (no
+     * enclosing package box), the row stack is tagged with the effective
+     * root's fqcn by the tree builder and that value is returned — an empty
+     * string then means "drop at the architecture's effective root".
+     */
+    private static String resolveDestinationContainer(javafx.scene.Node row) {
+        javafx.scene.Node n = row == null ? null : row.getParent();
+        while (n != null) {
+            if (n instanceof LevelPackageBox lpb) {
+                String fqcn = lpb.getFullName();
+                return fqcn == null ? "" : fqcn;
+            }
+            Object rootTag = n.getProperties().get("s202.whatif.rootFqcn");
+            if (rootTag instanceof String s) {
+                return s;
+            }
+            n = n.getParent();
+        }
+        return null;
+    }
+
+    private String buildWhatIfStatusMessage(String movedFqcn, String newVirtualParent) {
+        int wrongDirectionClassEdges = 0;
+        if (whatIfRenderer != null && whatIfModel != null) {
+            for (var v : whatIfRenderer.findVisibleViolations(whatIfModel.staticEdges())) {
+                wrongDirectionClassEdges += v.classEdges().size();
+            }
+        }
+        return String.format("What-If: %s → %s — %d wrong-direction class edge%s",
+                simple(movedFqcn), newVirtualParent,
+                wrongDirectionClassEdges, wrongDirectionClassEdges == 1 ? "" : "s");
+    }
+
+    /** Read-only handle to the current What-If model, or {@code null} when no analysis is loaded. */
+    public WhatIfModel getWhatIfModel() {
+        return whatIfModel;
+    }
+
+    /** Renderer that paints wrong-direction edges — exposed so side panels can query violations. */
+    public WhatIfUpwardEdgeRenderer getWhatIfRenderer() {
+        return whatIfRenderer;
+    }
+
+    /**
+     * Long-typed pulse counter that increments after every successful
+     * arrow-overlay flush. Side panels that derive their content from the
+     * current scene positions (e.g. the What-If Dependencies module) bind
+     * to this to refresh in sync with the canvas.
+     */
+    public javafx.beans.value.ObservableValue<Number> redrawTickProperty() {
+        return redrawTick;
     }
 
     public String getPreferredTopTanglesScope() {
@@ -543,6 +704,50 @@ public class ArchitectureView extends BorderPane {
         if (showScc.get()) {
             sccRenderer.drawSccLines(currentRootNode);
         }
+        if (whatIfRenderer != null) {
+            if (showWhatIfViolations.get()) {
+                whatIfRenderer.redraw(whatIfModel);
+            } else {
+                whatIfRenderer.clear();
+            }
+        }
+        applyVirtuallyMovedDecorations();
+    }
+
+    private void applyVirtuallyMovedDecorations() {
+        if (whatIfModel == null) {
+            return;
+        }
+        for (Map.Entry<String, javafx.scene.Node> entry : elementRegistry.entrySet()) {
+            String fqcn = entry.getKey();
+            boolean moved = whatIfModel.identity().hasOverride(fqcn);
+            javafx.scene.Node node = entry.getValue();
+            if (node instanceof LevelClassBox cls) {
+                cls.setVirtuallyMoved(moved);
+            } else if (node instanceof LevelPackageBox pkg) {
+                pkg.setVirtuallyMoved(moved);
+            }
+        }
+    }
+
+    /**
+     * Flush handler for {@link #arrowsCoalescer}: runs at most once per pulse
+     * once any source (expand/collapse, bounds change, future DnD drop) has
+     * marked the arrows dirty. Forcing layout before reading bounds is a cheap
+     * defensive guard — by the time the coalescer fires, the FX queue has
+     * already advanced one pulse, so layout is normally settled, but a node
+     * whose ancestor was hidden may still have invalid bounds.
+     */
+    private void flushArrowsRedraw() {
+        if (getScene() == null || getScene().getRoot() == null) {
+            return;
+        }
+        if (zoomableContent != null) {
+            zoomableContent.requestLayout();
+        }
+        getScene().getRoot().layout();
+        redrawVisibleArrows();
+        redrawTick.set(redrawTick.get() + 1);
     }
 
     /**
@@ -645,6 +850,18 @@ public class ArchitectureView extends BorderPane {
 
     public void setShowScc(boolean show) {
         showScc.set(show);
+    }
+
+    public BooleanProperty showWhatIfViolationsProperty() {
+        return showWhatIfViolations;
+    }
+
+    public boolean isShowWhatIfViolations() {
+        return showWhatIfViolations.get();
+    }
+
+    public void setShowWhatIfViolations(boolean show) {
+        showWhatIfViolations.set(show);
     }
 
     public BooleanProperty showTangleDebugLinesProperty() {

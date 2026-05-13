@@ -112,6 +112,7 @@ public class S202Module implements Module {
     private CheckBox showDependenciesCheckbox;
     private CheckBox circuitToggle;
     private CheckBox showSccCheckbox;
+    private CheckBox showWhatIfViolationsCheckbox;
     private CheckBox debugLinesCheckbox;
     private CheckBox showIconsCheckbox;
     private Button zoomOutButton;
@@ -156,7 +157,7 @@ public class S202Module implements Module {
 
     private void waitForDemoPreloader() throws PlatformException {
         try {
-            Thread.sleep(2_000);
+            Thread.sleep(1_000);
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
             throw new PlatformException("Interrupted while delaying S202 preload", e);
@@ -309,6 +310,8 @@ public class S202Module implements Module {
             LOGGER.warn("No scene available; skipping scene-level stylesheet install");
             return;
         }
+        stage.setMinWidth(1024);
+        stage.setMinHeight(768);
         var url = getClass().getResource("/de/weigend/s202/ui/styles.css");
         if (url != null) {
             stage.getScene().getStylesheets().add(url.toExternalForm());
@@ -317,7 +320,22 @@ public class S202Module implements Module {
     }
 
     private void newArchitectureWindow() {
-        Lookup.lookup(WindowManager.class).register(createArchitectureView());
+        ArchitectureWfxView wrapper = createArchitectureView();
+        registerArchitectureView(wrapper);
+    }
+
+    /**
+     * Register an architecture wrapper with the {@link WindowManager} and,
+     * on first call, dock the What-If Dependencies panel under it. Every
+     * code path that creates an architecture view (Open JAR, New Window,
+     * Open Scope, Open Tangle, Load Project) routes through here so the
+     * Dependencies panel reliably attaches to the first chart that
+     * appears.
+     */
+    private void registerArchitectureView(ArchitectureWfxView wrapper) {
+        Lookup.lookup(WindowManager.class).register(wrapper);
+        Lookup.lookup(de.weigend.s202.ui.wfx.whatif.WhatIfDependenciesModule.class)
+                .dockUnder(wrapper);
     }
 
     private void openScopeView(String scope, ArchitectureView requestedSourceView) {
@@ -354,7 +372,7 @@ public class S202Module implements Module {
         viewSources.put(scopeView, viewSources.get(sourceView));
         viewInvariantReports.put(scopeView, viewInvariantReports.get(sourceView));
 
-        wm.register(wrapper);
+        registerArchitectureView(wrapper);
         wm.showView(wrapper);
 
         scopeView.setArchitectureRootAsync(
@@ -513,6 +531,15 @@ public class S202Module implements Module {
             }
         });
 
+        showWhatIfViolationsCheckbox = new CheckBox("Show Violations");
+        showWhatIfViolationsCheckbox.setTooltip(new Tooltip(
+                "Toggle dashed arrows for wrong-direction dependencies introduced by moves"));
+        showWhatIfViolationsCheckbox.selectedProperty().addListener((obs, was, isNow) -> {
+            if (boundView != null) {
+                boundView.setShowWhatIfViolations(isNow);
+            }
+        });
+
         debugLinesCheckbox = new CheckBox("Debug Lines");
         debugLinesCheckbox.setTooltip(new Tooltip("Toggle visible tangle routing debug lines"));
         debugLinesCheckbox.selectedProperty().addListener((obs, was, isNow) -> {
@@ -553,14 +580,16 @@ public class S202Module implements Module {
         // Everything except the Open JAR button is view-dependent.
         viewDependentToolbarNodes.addAll(List.of(
                 depthLabel, depthSpinner, refreshButton,
-                showDependenciesCheckbox, circuitToggle, showSccCheckbox, debugLinesCheckbox, showIconsCheckbox,
+                showDependenciesCheckbox, circuitToggle, showSccCheckbox, showWhatIfViolationsCheckbox,
+                debugLinesCheckbox, showIconsCheckbox,
                 zoomOutButton, zoomLabel, zoomInButton, zoomResetButton));
 
         applicationWindow.getToolbarItems().setAll(
                 openJarButton, new Separator(),
                 depthLabel, depthSpinner, refreshButton,
                 new Separator(),
-                showDependenciesCheckbox, circuitToggle, showSccCheckbox, debugLinesCheckbox, showIconsCheckbox,
+                showDependenciesCheckbox, circuitToggle, showSccCheckbox,
+                showWhatIfViolationsCheckbox, debugLinesCheckbox, showIconsCheckbox,
                 new Separator(),
                 zoomGroup, zoomResetButton);
 
@@ -599,6 +628,7 @@ public class S202Module implements Module {
         showDependenciesCheckbox.setSelected(view.isShowDependencies());
         circuitToggle.setSelected(view.isCircuitMode());
         showSccCheckbox.setSelected(view.isShowScc());
+        showWhatIfViolationsCheckbox.setSelected(view.isShowWhatIfViolations());
         debugLinesCheckbox.setSelected(view.isShowTangleDebugLines());
         showIconsCheckbox.setSelected(view.isShowIcons());
 
@@ -864,7 +894,7 @@ public class S202Module implements Module {
             return;
         }
         ArchitectureWfxView target = createArchitectureView();
-        Lookup.lookup(WindowManager.class).register(target);
+        registerArchitectureView(target);
         final ArchitectureView view = target.getArchitectureView();
         final String fileNames = jarFiles.stream().map(File::getName).collect(Collectors.joining(", "));
         final List<String> jarPaths = jarFiles.stream().map(File::getAbsolutePath).toList();
@@ -1083,7 +1113,7 @@ public class S202Module implements Module {
         resetProjectUi();
 
         ArchitectureWfxView target = createArchitectureView();
-        Lookup.lookup(WindowManager.class).register(target);
+        registerArchitectureView(target);
         ArchitectureView view = target.getArchitectureView();
         view.setDomainModel(loaded.domainModel());
         view.setRawDependencyModel(loaded.rawModel());
@@ -1289,7 +1319,7 @@ public class S202Module implements Module {
                 ArchitectureWfxView.VIEW_ID_PREFIX + viewCounter,
                 viewTitle,
                 tangleView);
-        wm.register(wrapper);
+        registerArchitectureView(wrapper);
         tangleViews.put(key, wrapper);
         return wrapper;
     }

@@ -1,5 +1,6 @@
 package de.weigend.s202.ui.tree;
 
+import de.weigend.s202.ui.ArchitectureDragController;
 import de.weigend.s202.ui.LevelClassBox;
 import de.weigend.s202.ui.LevelPackageBox;
 import de.weigend.s202.ui.layout.horizontal.HorizontalLayoutOrdering;
@@ -90,6 +91,7 @@ public class ArchitectureTreeBuilder {
                 TOP_LEVEL_VERTICAL_PADDING,
                 TOP_LEVEL_HORIZONTAL_PADDING));
         topLevelContainer.setStyle("-fx-background-color: #f5f5f0;");
+        ArchitectureDragController.markAsRowStack(topLevelContainer);
 
         // Skip transparent top-level packages (de, weigend, s202, etc.)
         // Follow the chain of single-child packages until we reach the first "real" package
@@ -103,6 +105,10 @@ public class ArchitectureTreeBuilder {
             elementRegistry.put(singleChild.getFullName(), topLevelContainer);
             effectiveRoot = singleChild;
         }
+        // Tag the top-level stack with the effective root's fqcn so the
+        // What-If drop handler can resolve a "dropped at top level" event.
+        topLevelContainer.getProperties().put("s202.whatif.rootFqcn",
+                effectiveRoot.getFullName() == null ? "" : effectiveRoot.getFullName());
 
         // Process children from a sorted layout view: level desc, then horizontal row order.
         List<ArchitectureNode> sortedChildren = HorizontalLayoutOrdering.childrenInLayoutOrder(effectiveRoot);
@@ -115,6 +121,7 @@ public class ArchitectureTreeBuilder {
                 HBox hbox = new HBox(8);
                 hbox.setMaxWidth(Double.MAX_VALUE);
                 VBox.setVgrow(hbox, Priority.ALWAYS);
+                ArchitectureDragController.markAsRow(hbox);
                 topLevelContainer.getChildren().add(hbox);
                 return hbox;
             });
@@ -351,6 +358,7 @@ public class ArchitectureTreeBuilder {
                 TOP_LEVEL_VERTICAL_PADDING,
                 TOP_LEVEL_HORIZONTAL_PADDING));
         topLevelContainer.setStyle("-fx-background-color: #f5f5f0;");
+        ArchitectureDragController.markAsRowStack(topLevelContainer);
         return topLevelContainer;
     }
 
@@ -364,6 +372,8 @@ public class ArchitectureTreeBuilder {
             elementRegistry.put(singleChild.getFullName(), topLevelContainer);
             effectiveRoot = singleChild;
         }
+        topLevelContainer.getProperties().put("s202.whatif.rootFqcn",
+                effectiveRoot.getFullName() == null ? "" : effectiveRoot.getFullName());
         return effectiveRoot;
     }
 
