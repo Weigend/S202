@@ -193,9 +193,8 @@ public final class HierarchicalLayeredArchitectureBuilder {
 
     /**
      * Group-level cycle detection. Runs Tarjan on the package adjacency
-     * derived from raw class-to-class dependencies — the same pipeline
-     * the UI's {@code PackageAggregator}/{@code VirtualPackageGraph} use —
-     * and emits one {@link Tangle} per SCC of size {@literal >} 1. This is
+     * derived from raw class-to-class dependencies and emits one
+     * {@link Tangle} per SCC of size {@literal >} 1. This is
      * intentionally <em>different</em> from the
      * {@link DomainModel#isPackageBackEdge} list: that one reports the
      * back-edges the {@code LevelCalculator} picked to break each SCC,

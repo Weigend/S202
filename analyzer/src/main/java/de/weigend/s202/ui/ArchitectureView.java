@@ -6,8 +6,7 @@ import de.weigend.s202.domain.architecture.Architecture;
 import de.weigend.s202.domain.architecture.HierarchicalLayeredArchitectureBuilder;
 import de.weigend.s202.reader.DependencyModel;
 import de.weigend.s202.ui.model.ArchitectureNode;
-import de.weigend.s202.ui.whatif.ClassEdges;
-import de.weigend.s202.ui.whatif.WhatIfModel;
+import de.weigend.s202.ui.whatif.VirtualIdentity;
 import de.weigend.s202.ui.rendering.CircuitBoardRenderer;
 import de.weigend.s202.ui.rendering.DependencyRenderer;
 import de.weigend.s202.ui.rendering.DependencyRendererStrategy;
@@ -89,9 +88,10 @@ public class ArchitectureView extends BorderPane {
     private final PulseCoalescer arrowsCoalescer =
             new PulseCoalescer(javafx.application.Platform::runLater, this::flushArrowsRedraw);
 
-    // What-If layer: virtual identity + aggregated package graph. Built when
-    // a DependencyModel is pushed in; nulled on no-analysis state.
-    private WhatIfModel whatIfModel;
+    // What-If layer: tracks which class/package boxes the user has moved.
+    // Drives the orange "moved" glow on the affected boxes. Cleared on
+    // every fresh analysis (setRawDependencyModel with a non-null model).
+    private final VirtualIdentity whatIfIdentity = new VirtualIdentity();
     private ArchitectureDragController.DropListener whatIfDropListener;
 
     // Pulses every time the arrow overlay finishes a redraw. WFX side panels
@@ -505,14 +505,7 @@ public class ArchitectureView extends BorderPane {
 
     public void setRawDependencyModel(DependencyModel model) {
         rawDependencyModel.set(model);
-        rebuildWhatIfModel(model);
-    }
-
-    private void rebuildWhatIfModel(DependencyModel model) {
-        whatIfModel = model == null ? null : new WhatIfModel(ClassEdges.fromDependencyModel(model));
-        if (whatIfModel != null) {
-            whatIfModel.addChangeListener(arrowsCoalescer::markDirty);
-        }
+        whatIfIdentity.clear();
         ensureWhatIfDropListenerRegistered();
         arrowsCoalescer.markDirty();
     }
@@ -526,9 +519,6 @@ public class ArchitectureView extends BorderPane {
     }
 
     private void handleWhatIfDrop(javafx.scene.Node movedSource, javafx.scene.layout.HBox destinationRow) {
-        if (whatIfModel == null) {
-            return;
-        }
         if (!isInsideThisView(movedSource)) {
             return;
         }
@@ -545,13 +535,14 @@ public class ArchitectureView extends BorderPane {
         }
         String newVirtualParent = destinationContainerFqcn.isEmpty()
                 ? ""
-                : whatIfModel.identity().virtualFullName(destinationContainerFqcn);
-        String currentVirtualParent = whatIfModel.identity().virtualParent(movedFqcn);
+                : whatIfIdentity.virtualFullName(destinationContainerFqcn);
+        String currentVirtualParent = whatIfIdentity.virtualParent(movedFqcn);
         if (currentVirtualParent.equals(newVirtualParent)) {
             setStatus("What-If: " + simple(movedFqcn) + " — visual reorder only (same virtual parent)");
             return;
         }
-        whatIfModel.applyMove(movedFqcn, newVirtualParent);
+        whatIfIdentity.setOverride(movedFqcn, newVirtualParent);
+        arrowsCoalescer.markDirty();
         setStatus(buildWhatIfStatusMessage(movedFqcn, newVirtualParent));
     }
 
@@ -591,20 +582,7 @@ public class ArchitectureView extends BorderPane {
     }
 
     private String buildWhatIfStatusMessage(String movedFqcn, String newVirtualParent) {
-        int wrongDirectionClassEdges = 0;
-        if (whatIfRenderer != null && whatIfModel != null) {
-            for (var v : whatIfRenderer.findVisibleViolations(architecture.get())) {
-                wrongDirectionClassEdges += v.classEdges().size();
-            }
-        }
-        return String.format("What-If: %s → %s — %d wrong-direction class edge%s",
-                simple(movedFqcn), newVirtualParent,
-                wrongDirectionClassEdges, wrongDirectionClassEdges == 1 ? "" : "s");
-    }
-
-    /** Read-only handle to the current What-If model, or {@code null} when no analysis is loaded. */
-    public WhatIfModel getWhatIfModel() {
-        return whatIfModel;
+        return String.format("What-If: %s → %s — marked as moved", simple(movedFqcn), newVirtualParent);
     }
 
     /** Renderer that paints wrong-direction edges — exposed so side panels can query violations. */
@@ -735,12 +713,9 @@ public class ArchitectureView extends BorderPane {
     }
 
     private void applyVirtuallyMovedDecorations() {
-        if (whatIfModel == null) {
-            return;
-        }
         for (Map.Entry<String, javafx.scene.Node> entry : elementRegistry.entrySet()) {
             String fqcn = entry.getKey();
-            boolean moved = whatIfModel.identity().hasOverride(fqcn);
+            boolean moved = whatIfIdentity.hasOverride(fqcn);
             javafx.scene.Node node = entry.getValue();
             if (node instanceof LevelClassBox cls) {
                 cls.setVirtuallyMoved(moved);
