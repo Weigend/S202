@@ -1,4 +1,4 @@
-package de.weigend.s202.analysis.scc;
+package de.weigend.s202.graph;
 
 import java.util.*;
 

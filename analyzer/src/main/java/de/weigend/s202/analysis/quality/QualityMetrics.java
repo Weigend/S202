@@ -1,7 +1,7 @@
 package de.weigend.s202.analysis.quality;
 
-import de.weigend.s202.analysis.scc.StronglyConnectedComponent;
-import de.weigend.s202.analysis.scc.TarjanSCCFinder;
+import de.weigend.s202.graph.StronglyConnectedComponent;
+import de.weigend.s202.graph.TarjanSCCFinder;
 import de.weigend.s202.domain.DomainModel;
 import de.weigend.s202.domain.DomainModel.CalculatedElementInfo;
 

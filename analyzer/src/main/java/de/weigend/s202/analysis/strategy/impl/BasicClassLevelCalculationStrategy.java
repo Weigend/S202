@@ -2,8 +2,8 @@ package de.weigend.s202.analysis.strategy.impl;
 
 import de.weigend.s202.analysis.strategy.ClassLevelCalculationStrategy;
 import de.weigend.s202.analysis.strategy.ClassAggregationStrategy;
-import de.weigend.s202.analysis.scc.TarjanSCCFinder;
-import de.weigend.s202.analysis.scc.StronglyConnectedComponent;
+import de.weigend.s202.graph.TarjanSCCFinder;
+import de.weigend.s202.graph.StronglyConnectedComponent;
 
 import java.util.*;
 

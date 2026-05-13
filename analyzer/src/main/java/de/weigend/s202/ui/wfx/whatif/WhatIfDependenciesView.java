@@ -1,6 +1,6 @@
 package de.weigend.s202.ui.wfx.whatif;
 
-import de.weigend.s202.analysis.scc.StronglyConnectedComponent;
+import de.weigend.s202.graph.StronglyConnectedComponent;
 import de.weigend.s202.reader.DependencyModel;
 import de.weigend.s202.ui.GraphSelection;
 import de.weigend.s202.ui.rendering.WhatIfUpwardEdgeRenderer;

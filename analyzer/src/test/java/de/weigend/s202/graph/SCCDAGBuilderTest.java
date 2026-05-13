@@ -1,4 +1,4 @@
-package de.weigend.s202.analysis.scc;
+package de.weigend.s202.graph;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;

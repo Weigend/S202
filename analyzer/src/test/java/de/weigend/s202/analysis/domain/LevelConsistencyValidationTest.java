@@ -8,8 +8,8 @@ import de.weigend.s202.domain.LevelCalculationStrategyFactory;
 import de.weigend.s202.ui.model.ArchitectureNode;
 import de.weigend.s202.ui.model.ArchitectureNode.NodeType;
 import de.weigend.s202.ui.model.ArchitectureNodeBuilder;
-import de.weigend.s202.analysis.scc.TarjanSCCFinder;
-import de.weigend.s202.analysis.scc.StronglyConnectedComponent;
+import de.weigend.s202.graph.TarjanSCCFinder;
+import de.weigend.s202.graph.StronglyConnectedComponent;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 

@@ -3,7 +3,7 @@ package de.weigend.s202.ui.wfx;
 import de.weigend.s202.analysis.invariants.LayoutInvariantChecker;
 import de.weigend.s202.analysis.invariants.LayoutInvariantReport;
 import de.weigend.s202.analysis.quality.QualityMetrics;
-import de.weigend.s202.analysis.scc.SCCBreaker;
+import de.weigend.s202.graph.SCCBreaker;
 import de.weigend.s202.analysis.strategy.impl.HeuristicSCCBreakingStrategy;
 import de.weigend.s202.domain.DomainModel;
 import de.weigend.s202.domain.LevelCalculator;
