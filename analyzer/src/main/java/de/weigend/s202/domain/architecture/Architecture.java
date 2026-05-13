@@ -17,9 +17,17 @@ import java.util.List;
 public sealed interface Architecture permits HierarchicalLayeredArchitecture {
 
     /**
-     * Architectural violations the chosen style detected on the
-     * underlying dependency graph. Empty when the model satisfies the
-     * style's expectations.
+     * Edge-level architectural violations the chosen style detected on
+     * the underlying dependency graph (e.g. an UPWARD class-to-class
+     * dep). Empty when the model satisfies the style's expectations.
      */
     List<Violation> violations();
+
+    /**
+     * Group-level architectural problems — strongly-connected
+     * components of size {@literal >} 1 in the package graph. Each
+     * tangle reports the member packages so consumers can render or
+     * inspect the cycle as a whole.
+     */
+    List<Tangle> tangles();
 }

@@ -110,7 +110,7 @@ class HierarchicalLayeredArchitectureBuilderTest {
     }
 
     @Test
-    void backEdgePackagePairProducesPackageTangleViolation() {
+    void mutuallyDependentPackagesProduceATangle() {
         DomainModel domain = new DomainModel();
         addPackage(domain, "a", 0);
         addPackage(domain, "b", 0);
@@ -119,20 +119,14 @@ class HierarchicalLayeredArchitectureBuilderTest {
         domain.setPackageEdgeWeights(Map.of(
                 "a", Map.of("b", 1),
                 "b", Map.of("a", 1)));
-        domain.setPackageBackEdges(Set.of("b\0a"));  // b → a marked as the cycle-breaker
+        domain.setPackageBackEdges(Set.of("b\0a"));
 
         HierarchicalLayeredArchitecture arch =
                 (HierarchicalLayeredArchitecture) new HierarchicalLayeredArchitectureBuilder().build(domain);
 
-        long tangles = arch.violations().stream()
-                .filter(v -> v.kind() == ViolationKind.PACKAGE_TANGLE)
-                .count();
-        assertEquals(1, tangles, "the marked back-edge produces one PACKAGE_TANGLE entry");
-        Violation tangle = arch.violations().stream()
-                .filter(v -> v.kind() == ViolationKind.PACKAGE_TANGLE)
-                .findFirst().orElseThrow();
-        assertEquals("b", tangle.sourceFqn());
-        assertEquals("a", tangle.targetFqn());
+        assertEquals(1, arch.tangles().size(), "one SCC of size 2 → one tangle");
+        Tangle tangle = arch.tangles().get(0);
+        assertEquals(Set.of("a", "b"), tangle.members());
     }
 
     @Test

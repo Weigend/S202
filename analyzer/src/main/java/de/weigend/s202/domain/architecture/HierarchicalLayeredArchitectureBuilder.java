@@ -2,6 +2,8 @@ package de.weigend.s202.domain.architecture;
 
 import de.weigend.s202.domain.DomainModel;
 import de.weigend.s202.domain.DomainModel.CalculatedElementInfo;
+import de.weigend.s202.graph.StronglyConnectedComponent;
+import de.weigend.s202.graph.TarjanSCCFinder;
 
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -46,8 +48,9 @@ public final class HierarchicalLayeredArchitectureBuilder {
         String effectiveRoot = skipTransparentPassthroughs(contentsByParent);
         List<List<Element>> rows = buildRowsForPackage(effectiveRoot, contentsByParent);
         List<Violation> violations = detectViolations(domain);
+        List<Tangle> tangles = detectTangles(domain);
 
-        return new HierarchicalLayeredArchitecture(rows, violations);
+        return new HierarchicalLayeredArchitecture(rows, violations, tangles);
     }
 
     // -------------------------------------------------- structure
@@ -185,24 +188,50 @@ public final class HierarchicalLayeredArchitectureBuilder {
             }
         }
 
-        for (Map.Entry<String, Map<String, Integer>> e : domain.getPackageEdgeWeights().entrySet()) {
-            String from = e.getKey();
-            for (String to : e.getValue().keySet()) {
-                if (!domain.isPackageBackEdge(from, to)) {
+        return violations;
+    }
+
+    /**
+     * Group-level cycle detection. Runs Tarjan on the package adjacency
+     * derived from raw class-to-class dependencies — the same pipeline
+     * the UI's {@code PackageAggregator}/{@code VirtualPackageGraph} use —
+     * and emits one {@link Tangle} per SCC of size {@literal >} 1. This is
+     * intentionally <em>different</em> from the
+     * {@link DomainModel#isPackageBackEdge} list: that one reports the
+     * back-edges the {@code LevelCalculator} picked to break each SCC,
+     * one per breakage, not one per cycle. The UI displays cycles, so the
+     * model speaks the same vocabulary.
+     */
+    private List<Tangle> detectTangles(DomainModel domain) {
+        Map<String, Set<String>> pkgAdjacency = new HashMap<>();
+        for (CalculatedElementInfo cls : domain.getAllClasses().values()) {
+            String srcPkg = parentOf(cls.fullName);
+            if (srcPkg.isEmpty()) {
+                continue;
+            }
+            pkgAdjacency.computeIfAbsent(srcPkg, k -> new HashSet<>());
+            for (String dep : cls.dependencies) {
+                CalculatedElementInfo tgt = domain.getClass(dep);
+                if (tgt == null) {
                     continue;
                 }
-                CalculatedElementInfo fromPkg = domain.getPackage(from);
-                CalculatedElementInfo toPkg = domain.getPackage(to);
-                if (fromPkg == null || toPkg == null) {
+                String tgtPkg = parentOf(tgt.fullName);
+                if (tgtPkg.isEmpty() || srcPkg.equals(tgtPkg)) {
                     continue;
                 }
-                violations.add(new Violation(
-                        from, to, ViolationKind.PACKAGE_TANGLE,
-                        fromPkg.level, toPkg.level));
+                pkgAdjacency.computeIfAbsent(srcPkg, k -> new HashSet<>()).add(tgtPkg);
+                pkgAdjacency.computeIfAbsent(tgtPkg, k -> new HashSet<>());
             }
         }
-
-        return violations;
+        TarjanSCCFinder finder = new TarjanSCCFinder(pkgAdjacency);
+        List<StronglyConnectedComponent> sccs = finder.findSCCs();
+        List<Tangle> tangles = new ArrayList<>();
+        for (StronglyConnectedComponent scc : sccs) {
+            if (scc.isTangle()) {
+                tangles.add(new Tangle(scc.getMembers()));
+            }
+        }
+        return tangles;
     }
 
     private static int[] computeVisualRank(CalculatedElementInfo cls, DomainModel domain) {

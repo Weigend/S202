@@ -4,6 +4,7 @@ import de.weigend.s202.domain.DomainModel;
 import de.weigend.s202.domain.architecture.Architecture;
 import de.weigend.s202.domain.architecture.HierarchicalLayeredArchitecture;
 import de.weigend.s202.domain.architecture.HierarchicalLayeredArchitectureBuilder;
+import de.weigend.s202.domain.architecture.Tangle;
 import de.weigend.s202.domain.architecture.Violation;
 import de.weigend.s202.ui.model.ArchitectureNode;
 import org.slf4j.Logger;
@@ -37,8 +38,11 @@ public final class ArchitectureConsistencyDevHook {
                 new ArchitectureConsistencyChecker().check(arch, uiRoot);
 
         if (diffs.isEmpty()) {
-            LOGGER.info("Architecture consistency check: PASS — {} violations detected by the model",
-                    arch.violations().size());
+            int violationCount = arch.violations().size();
+            int tangleCount = arch instanceof HierarchicalLayeredArchitecture hla
+                    ? hla.tangles().size() : 0;
+            LOGGER.info("Architecture consistency check: PASS — {} violations, {} tangles",
+                    violationCount, tangleCount);
             dumpModelViolations(arch);
             return;
         }
@@ -68,5 +72,12 @@ public final class ArchitectureConsistencyDevHook {
                     .append(v.targetFqn()).append("(L:").append(v.targetLevel()).append(")");
         }
         LOGGER.info(report.toString());
+
+        StringBuilder tangleReport = new StringBuilder(
+                "[DEBUG] Model Tangles — " + hla.tangles().size() + ":");
+        for (Tangle t : hla.tangles()) {
+            tangleReport.append("\n  { ").append(String.join(", ", t.members())).append(" }");
+        }
+        LOGGER.info(tangleReport.toString());
     }
 }

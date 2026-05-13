@@ -21,11 +21,13 @@ import java.util.List;
  */
 public record HierarchicalLayeredArchitecture(
         List<List<Element>> rows,
-        List<Violation> violations) implements Architecture {
+        List<Violation> violations,
+        List<Tangle> tangles) implements Architecture {
 
     public HierarchicalLayeredArchitecture {
         rows = copyDeepImmutable(rows);
         violations = List.copyOf(violations);
+        tangles = List.copyOf(tangles);
     }
 
     private static List<List<Element>> copyDeepImmutable(List<List<Element>> rows) {

@@ -56,27 +56,40 @@ class ArchitectureTypesTest {
     }
 
     @Test
-    void hierarchicalLayeredArchitectureSnapshotsRowsAndViolations() {
+    void hierarchicalLayeredArchitectureSnapshotsRowsViolationsAndTangles() {
         List<Element> row = new ArrayList<>();
         row.add(new Element.ClassElement("a.X", 0));
         List<List<Element>> rows = new ArrayList<>();
         rows.add(row);
         List<Violation> violations = new ArrayList<>();
         violations.add(new Violation("a.X", "b.Y", ViolationKind.UPWARD, 0, 1));
+        List<Tangle> tangles = new ArrayList<>();
+        tangles.add(new Tangle(java.util.Set.of("a", "b")));
 
-        HierarchicalLayeredArchitecture arch = new HierarchicalLayeredArchitecture(rows, violations);
+        HierarchicalLayeredArchitecture arch =
+                new HierarchicalLayeredArchitecture(rows, violations, tangles);
 
         rows.clear();
         violations.clear();
+        tangles.clear();
         assertEquals(1, arch.rows().size());
         assertEquals(1, arch.rows().get(0).size());
         assertEquals(1, arch.violations().size());
+        assertEquals(1, arch.tangles().size());
+        assertEquals(java.util.Set.of("a", "b"), arch.tangles().get(0).members());
+    }
+
+    @Test
+    void tangleRequiresAtLeastTwoMembers() {
+        assertThrows(IllegalArgumentException.class, () -> new Tangle(java.util.Set.of()));
+        assertThrows(IllegalArgumentException.class, () -> new Tangle(java.util.Set.of("only-one")));
     }
 
     @Test
     void architectureIsSealedToHierarchicalLayered() {
-        Architecture a = new HierarchicalLayeredArchitecture(List.of(), List.of());
+        Architecture a = new HierarchicalLayeredArchitecture(List.of(), List.of(), List.of());
         assertTrue(a instanceof HierarchicalLayeredArchitecture);
         assertSame(List.of(), a.violations());
+        assertSame(List.of(), a.tangles());
     }
 }
