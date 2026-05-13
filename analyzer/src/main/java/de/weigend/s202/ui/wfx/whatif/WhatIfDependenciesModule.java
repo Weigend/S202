@@ -28,6 +28,7 @@ public class WhatIfDependenciesModule implements Module {
     private ArchitectureView boundView;
     private ChangeListener<Object> rootListener;
     private ChangeListener<Object> rawModelListener;
+    private ChangeListener<Object> architectureListener;
     private ChangeListener<Number> redrawListener;
 
     @Override
@@ -104,9 +105,11 @@ public class WhatIfDependenciesModule implements Module {
 
         rootListener = (o, w, n) -> pushCurrent();
         rawModelListener = (o, w, n) -> pushCurrent();
+        architectureListener = (o, w, n) -> pushCurrent();
         redrawListener = (o, w, n) -> view.refresh();
         newBound.architectureRootProperty().addListener(rootListener);
         newBound.rawDependencyModelProperty().addListener(rawModelListener);
+        newBound.architectureProperty().addListener(architectureListener);
         newBound.redrawTickProperty().addListener(redrawListener);
     }
 
@@ -118,6 +121,9 @@ public class WhatIfDependenciesModule implements Module {
             if (rawModelListener != null) {
                 boundView.rawDependencyModelProperty().removeListener(rawModelListener);
             }
+            if (architectureListener != null) {
+                boundView.architectureProperty().removeListener(architectureListener);
+            }
             if (redrawListener != null) {
                 boundView.redrawTickProperty().removeListener(redrawListener);
             }
@@ -125,6 +131,7 @@ public class WhatIfDependenciesModule implements Module {
         boundView = null;
         rootListener = null;
         rawModelListener = null;
+        architectureListener = null;
         redrawListener = null;
     }
 
@@ -134,7 +141,7 @@ public class WhatIfDependenciesModule implements Module {
             return;
         }
         view.bind(
-                boundView.getWhatIfModel(),
+                boundView.getArchitecture(),
                 boundView.getRawDependencyModel(),
                 boundView.getWhatIfRenderer());
     }

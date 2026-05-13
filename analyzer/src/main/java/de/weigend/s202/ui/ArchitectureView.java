@@ -2,6 +2,8 @@ package de.weigend.s202.ui;
 
 import de.weigend.s202.analysis.quality.QualityMetrics;
 import de.weigend.s202.domain.DomainModel;
+import de.weigend.s202.domain.architecture.Architecture;
+import de.weigend.s202.domain.architecture.HierarchicalLayeredArchitectureBuilder;
 import de.weigend.s202.reader.DependencyModel;
 import de.weigend.s202.ui.model.ArchitectureNode;
 import de.weigend.s202.ui.whatif.ClassEdges;
@@ -118,6 +120,7 @@ public class ArchitectureView extends BorderPane {
     private final ReadOnlyObjectWrapper<ArchitectureNode> architectureRoot = new ReadOnlyObjectWrapper<>(null);
     private final ReadOnlyObjectWrapper<QualityMetrics> qualityMetrics = new ReadOnlyObjectWrapper<>(null);
     private final ReadOnlyObjectWrapper<DomainModel> domainModel = new ReadOnlyObjectWrapper<>(null);
+    private final ReadOnlyObjectWrapper<Architecture> architecture = new ReadOnlyObjectWrapper<>(null);
     private final ReadOnlyObjectWrapper<DependencyModel> rawDependencyModel = new ReadOnlyObjectWrapper<>(null);
     private final ReadOnlyStringWrapper selectedFullName = new ReadOnlyStringWrapper(null);
     private String preferredTopTanglesScope;
@@ -466,6 +469,23 @@ public class ArchitectureView extends BorderPane {
 
     public void setDomainModel(DomainModel model) {
         domainModel.set(model);
+        architecture.set(model == null ? null
+                : new HierarchicalLayeredArchitectureBuilder().build(model));
+    }
+
+    /**
+     * Read-only handle to the architecture derived from the current
+     * {@link DomainModel}. Built once per analysis (when
+     * {@link #setDomainModel} fires). The canonical source for
+     * structural information, violations, and tangles — UI panels
+     * consume from here.
+     */
+    public ReadOnlyObjectProperty<Architecture> architectureProperty() {
+        return architecture.getReadOnlyProperty();
+    }
+
+    public Architecture getArchitecture() {
+        return architecture.get();
     }
 
     /**
@@ -573,7 +593,7 @@ public class ArchitectureView extends BorderPane {
     private String buildWhatIfStatusMessage(String movedFqcn, String newVirtualParent) {
         int wrongDirectionClassEdges = 0;
         if (whatIfRenderer != null && whatIfModel != null) {
-            for (var v : whatIfRenderer.findVisibleViolations(whatIfModel.staticEdges())) {
+            for (var v : whatIfRenderer.findVisibleViolations(architecture.get())) {
                 wrongDirectionClassEdges += v.classEdges().size();
             }
         }
@@ -706,7 +726,7 @@ public class ArchitectureView extends BorderPane {
         }
         if (whatIfRenderer != null) {
             if (showWhatIfViolations.get()) {
-                whatIfRenderer.redraw(whatIfModel);
+                whatIfRenderer.redraw(architecture.get());
             } else {
                 whatIfRenderer.clear();
             }

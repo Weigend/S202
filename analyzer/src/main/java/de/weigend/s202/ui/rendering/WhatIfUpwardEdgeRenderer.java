@@ -1,8 +1,9 @@
 package de.weigend.s202.ui.rendering;
 
+import de.weigend.s202.domain.architecture.Architecture;
+import de.weigend.s202.domain.architecture.ViolationKind;
 import de.weigend.s202.ui.LevelClassBox;
 import de.weigend.s202.ui.whatif.ClassEdge;
-import de.weigend.s202.ui.whatif.WhatIfModel;
 import javafx.geometry.Bounds;
 import javafx.scene.Node;
 import javafx.scene.Parent;
@@ -78,12 +79,12 @@ public final class WhatIfUpwardEdgeRenderer {
         pane.getChildren().clear();
     }
 
-    public void redraw(WhatIfModel model) {
+    public void redraw(Architecture arch) {
         clear();
-        if (model == null || zoomableContent == null || overlayPane == null) {
+        if (arch == null || zoomableContent == null || overlayPane == null) {
             return;
         }
-        for (Violation violation : findVisibleViolations(model.staticEdges())) {
+        for (Violation violation : findVisibleViolations(arch)) {
             boolean bothClasses = violation.source() instanceof LevelClassBox
                     && violation.target() instanceof LevelClassBox;
             String badge = bothClasses ? null : Integer.toString(violation.classEdges().size());
@@ -92,30 +93,30 @@ public final class WhatIfUpwardEdgeRenderer {
     }
 
     /**
-     * Group all upward (source-Y &gt; target-Y) class-to-class edges by the
-     * currently-visible source/target box pair. Edges whose endpoints roll
-     * up to the same visible box are filtered out (degenerate self-loop).
+     * Group the architecture's UPWARD violations by their currently-visible
+     * source/target box pair. Endpoints are resolved through the element
+     * registry — if a class isn't visible (its enclosing package is
+     * collapsed), the closest visible ancestor box stands in. Edges whose
+     * rollups coincide are filtered out (degenerate self-loop). The model
+     * is the single source of truth — the renderer no longer second-
+     * guesses it with a scene-Y comparison.
      */
-    public List<Violation> findVisibleViolations(Iterable<ClassEdge> edges) {
-        if (edges == null || zoomableContent == null) {
+    public List<Violation> findVisibleViolations(Architecture arch) {
+        if (arch == null || zoomableContent == null) {
             return List.of();
         }
         Map<EndpointKey, List<ClassEdge>> grouped = new LinkedHashMap<>();
-        for (ClassEdge edge : edges) {
-            Node src = findVisibleEndpoint(edge.source());
-            Node tgt = findVisibleEndpoint(edge.target());
+        for (de.weigend.s202.domain.architecture.Violation v : arch.violations()) {
+            if (v.kind() != ViolationKind.UPWARD) {
+                continue;
+            }
+            Node src = findVisibleEndpoint(v.sourceFqn());
+            Node tgt = findVisibleEndpoint(v.targetFqn());
             if (src == null || tgt == null || src == tgt) {
                 continue;
             }
-            double[] sc = centerInPane(src);
-            double[] tc = centerInPane(tgt);
-            if (sc == null || tc == null) {
-                continue;
-            }
-            if (sc[1] <= tc[1]) {
-                continue;
-            }
-            grouped.computeIfAbsent(new EndpointKey(src, tgt), k -> new ArrayList<>()).add(edge);
+            grouped.computeIfAbsent(new EndpointKey(src, tgt), k -> new ArrayList<>())
+                    .add(new ClassEdge(v.sourceFqn(), v.targetFqn(), 1));
         }
         List<Violation> result = new ArrayList<>(grouped.size());
         for (Map.Entry<EndpointKey, List<ClassEdge>> entry : grouped.entrySet()) {

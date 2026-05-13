@@ -1,12 +1,12 @@
 package de.weigend.s202.ui.wfx.whatif;
 
-import de.weigend.s202.graph.StronglyConnectedComponent;
+import de.weigend.s202.domain.architecture.Architecture;
+import de.weigend.s202.domain.architecture.HierarchicalLayeredArchitecture;
+import de.weigend.s202.domain.architecture.Tangle;
 import de.weigend.s202.reader.DependencyModel;
 import de.weigend.s202.ui.GraphSelection;
 import de.weigend.s202.ui.rendering.WhatIfUpwardEdgeRenderer;
 import de.weigend.s202.ui.whatif.ClassEdge;
-import de.weigend.s202.ui.whatif.VirtualPackageGraph;
-import de.weigend.s202.ui.whatif.WhatIfModel;
 import io.softwareecg.wfx.windowmtg.api.Position;
 import io.softwareecg.wfx.windowmtg.api.View;
 import javafx.collections.FXCollections;
@@ -55,7 +55,7 @@ public final class WhatIfDependenciesView implements View {
     private final Label sccHeader = new Label();
     private final ListView<String> sccList = new ListView<>();
 
-    private WhatIfModel model;
+    private Architecture architecture;
     private DependencyModel rawDepModel;
     private WhatIfUpwardEdgeRenderer renderer;
 
@@ -98,10 +98,10 @@ public final class WhatIfDependenciesView implements View {
     }
 
     /** Re-bind the view to a different architecture context. Pass nulls to clear. */
-    public void bind(WhatIfModel model,
+    public void bind(Architecture architecture,
                      DependencyModel rawDepModel,
                      WhatIfUpwardEdgeRenderer renderer) {
-        this.model = model;
+        this.architecture = architecture;
         this.rawDepModel = rawDepModel;
         this.renderer = renderer;
         refresh();
@@ -120,10 +120,10 @@ public final class WhatIfDependenciesView implements View {
     }
 
     private List<WhatIfUpwardEdgeRenderer.Violation> currentViolations() {
-        if (renderer == null || model == null) {
+        if (renderer == null || architecture == null) {
             return List.of();
         }
-        return renderer.findVisibleViolations(model.staticEdges());
+        return renderer.findVisibleViolations(architecture);
     }
 
     private TreeItem<String> buildUpwardTree(List<WhatIfUpwardEdgeRenderer.Violation> violations) {
@@ -182,14 +182,11 @@ public final class WhatIfDependenciesView implements View {
 
     private ObservableList<String> buildSccList() {
         ObservableList<String> items = FXCollections.observableArrayList();
-        if (model == null) {
+        if (!(architecture instanceof HierarchicalLayeredArchitecture hla)) {
             return items;
         }
-        VirtualPackageGraph staticGraph = model.staticGraph();
-        for (StronglyConnectedComponent scc : staticGraph.sccs()) {
-            if (scc.isTangle()) {
-                items.add(formatTangle(scc.getMembers().stream().sorted().toList()));
-            }
+        for (Tangle t : hla.tangles()) {
+            items.add(formatTangle(t.members().stream().sorted().toList()));
         }
         return items;
     }
