@@ -53,30 +53,26 @@ public class WhatIfDependenciesModule implements Module {
 
     @Override
     public void start() {
+        // Don't auto-register. The view is docked manually by S202Module
+        // after the first architecture view is opened, via dockUnder(...)
+        // — that's the only point where we know which CENTER editor area
+        // to split. Focus tracking still drives the bind/refresh wiring.
         WindowManager wm = Lookup.lookup(WindowManager.class);
-
-        // Register lazily anchored on the first ArchitectureWfxView that
-        // appears. With an anchor in the CENTER editor area and the view's
-        // default Position.BOTTOM, WFX splits the editor area vertically so
-        // the panel sits directly under the chart and shares its column —
-        // not the full-window-width BOTTOM dock.
-        wm.focusedViewProperty().addListener((obs, was, isNow) -> {
-            tryRegisterIfNeeded(wm);
-            rebindToFocusedView();
-        });
-        tryRegisterIfNeeded(wm);
+        wm.focusedViewProperty().addListener((obs, was, isNow) -> rebindToFocusedView());
         rebindToFocusedView();
     }
 
-    private void tryRegisterIfNeeded(WindowManager wm) {
-        if (registered) {
+    /**
+     * Dock the Dependencies panel directly under the given architecture
+     * view, splitting the CENTER editor area vertically. Idempotent:
+     * subsequent architecture views share the same panel via focus
+     * tracking, so a second call is a no-op.
+     */
+    public void dockUnder(ArchitectureWfxView anchor) {
+        if (registered || anchor == null) {
             return;
         }
-        ArchitectureWfxView anchor = focusedArchitectureView();
-        if (anchor == null) {
-            return;
-        }
-        wm.register(view, anchor);
+        Lookup.lookup(WindowManager.class).register(view, anchor);
         registered = true;
     }
 

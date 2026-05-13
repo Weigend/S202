@@ -320,7 +320,10 @@ public class S202Module implements Module {
     }
 
     private void newArchitectureWindow() {
-        Lookup.lookup(WindowManager.class).register(createArchitectureView());
+        ArchitectureWfxView wrapper = createArchitectureView();
+        Lookup.lookup(WindowManager.class).register(wrapper);
+        Lookup.lookup(de.weigend.s202.ui.wfx.whatif.WhatIfDependenciesModule.class)
+                .dockUnder(wrapper);
     }
 
     private void openScopeView(String scope, ArchitectureView requestedSourceView) {
