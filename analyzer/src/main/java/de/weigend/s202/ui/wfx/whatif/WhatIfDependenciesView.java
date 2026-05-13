@@ -125,6 +125,27 @@ public final class WhatIfDependenciesView implements View {
         ObservableList<String> sccItems = buildSccList();
         sccList.setItems(sccItems);
         sccHeader.setText("Package tangles (static) — " + sccItems.size());
+        dumpScCsOnChange(sccItems);
+    }
+
+    private String lastLoggedSccSignature = "";
+
+    /**
+     * Temporary diagnostic — logs the SCC list the UI's static graph
+     * builder reports, so the model side can be reconciled against it.
+     */
+    private void dumpScCsOnChange(List<String> items) {
+        String sig = String.join("|", items);
+        if (sig.equals(lastLoggedSccSignature)) {
+            return;
+        }
+        lastLoggedSccSignature = sig;
+        StringBuilder report = new StringBuilder(
+                "[DEBUG] UI Package tangles — " + items.size() + ":");
+        for (String s : items) {
+            report.append("\n  ").append(s);
+        }
+        LOGGER.info(report.toString());
     }
 
     /**
