@@ -10,36 +10,22 @@ import org.slf4j.LoggerFactory;
 import java.util.List;
 
 /**
- * Optional dev-build hook that runs the
- * {@link ArchitectureConsistencyChecker} on every freshly-built
- * architecture and reports the result. Gated by the system property
- * {@code s202.dev.architectureCheck}:
+ * Dev hook that runs the {@link ArchitectureConsistencyChecker} on
+ * every freshly-built architecture and logs the result. Currently
+ * always-on while we migrate the UI off its private violation logic —
+ * once the legacy path is removed and consistency stops being a
+ * possibility worth checking, this whole class goes away.
  *
- * <ul>
- *   <li>unset or empty → no-op (default for shipped builds);</li>
- *   <li>{@code true} or {@code warn} → run the check, log a WARN with
- *       the full discrepancy list when something doesn't match;</li>
- *   <li>{@code throw} → log the WARN and additionally throw an
- *       {@link IllegalStateException}, useful for failing CI when the
- *       budget regresses.</li>
- * </ul>
- *
- * <p>Enable from the command line:
- * {@code mvn javafx:run -Ds202.dev.architectureCheck=true}
- * — or set the JVM arg in the IDE run configuration.
+ * <p>On a match the result is logged at INFO. On a mismatch a WARN
+ * with the full discrepancy list is emitted; the app keeps running.
  */
 public final class ArchitectureConsistencyDevHook {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(ArchitectureConsistencyDevHook.class);
-    private static final String FLAG = "s202.dev.architectureCheck";
 
     private ArchitectureConsistencyDevHook() {}
 
     public static void runIfEnabled(DomainModel domain, ArchitectureNode uiRoot) {
-        String setting = System.getProperty(FLAG, "");
-        if (setting.isBlank()) {
-            return;
-        }
         if (domain == null || uiRoot == null) {
             return;
         }
@@ -60,10 +46,5 @@ public final class ArchitectureConsistencyDevHook {
             report.append("\n  ").append(d.path()).append(" — ").append(d.message());
         }
         LOGGER.warn(report.toString());
-
-        if ("throw".equalsIgnoreCase(setting)) {
-            throw new IllegalStateException(
-                    "Architecture consistency mismatch: " + diffs.size() + " discrepancies");
-        }
     }
 }
