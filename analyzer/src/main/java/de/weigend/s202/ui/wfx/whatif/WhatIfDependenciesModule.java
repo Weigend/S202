@@ -24,6 +24,7 @@ import javafx.beans.value.ChangeListener;
 public class WhatIfDependenciesModule implements Module {
 
     private WhatIfDependenciesView view;
+    private boolean registered;
 
     private ArchitectureView boundView;
     private ChangeListener<Object> rootListener;
@@ -54,14 +55,29 @@ public class WhatIfDependenciesModule implements Module {
     public void start() {
         WindowManager wm = Lookup.lookup(WindowManager.class);
 
-        // Dock under the architecture view in the BOTTOM region. No anchor —
-        // TopTangles is itself stacked with the Outline in the LEFT region,
-        // so anchoring on it would drag us back there. Plain register honours
-        // the view's getDefaultPosition() == BOTTOM.
-        wm.register(view);
-
-        wm.focusedViewProperty().addListener((obs, was, isNow) -> rebindToFocusedView());
+        // Register lazily anchored on the first ArchitectureWfxView that
+        // appears. With an anchor in the CENTER editor area and the view's
+        // default Position.BOTTOM, WFX splits the editor area vertically so
+        // the panel sits directly under the chart and shares its column —
+        // not the full-window-width BOTTOM dock.
+        wm.focusedViewProperty().addListener((obs, was, isNow) -> {
+            tryRegisterIfNeeded(wm);
+            rebindToFocusedView();
+        });
+        tryRegisterIfNeeded(wm);
         rebindToFocusedView();
+    }
+
+    private void tryRegisterIfNeeded(WindowManager wm) {
+        if (registered) {
+            return;
+        }
+        ArchitectureWfxView anchor = focusedArchitectureView();
+        if (anchor == null) {
+            return;
+        }
+        wm.register(view, anchor);
+        registered = true;
     }
 
     @Override

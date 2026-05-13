@@ -59,24 +59,38 @@ public final class WhatIfDependenciesView implements View {
     private DependencyModel rawDepModel;
     private WhatIfUpwardEdgeRenderer renderer;
 
+    private static final String PANEL_BG = "#f5f5f0";
+    private static final String SECTION_STYLE = "-fx-background-color: " + PANEL_BG + ";";
+    private static final String HEADER_STYLE =
+            "-fx-font-weight: bold;"
+                    + "-fx-font-size: 12;"
+                    + "-fx-padding: 4 8 4 8;"
+                    + "-fx-background-color: " + PANEL_BG + ";";
+
     public WhatIfDependenciesView() {
-        upwardHeader.setStyle("-fx-font-weight: bold; -fx-font-size: 12; -fx-padding: 4 8 4 8;");
-        sccHeader.setStyle("-fx-font-weight: bold; -fx-font-size: 12; -fx-padding: 4 8 4 8;");
+        upwardHeader.setStyle(HEADER_STYLE);
+        sccHeader.setStyle(HEADER_STYLE);
 
         upwardTree.setShowRoot(false);
+        upwardTree.setStyle(SECTION_STYLE);
+        sccList.setStyle(SECTION_STYLE);
 
         VBox upwardSection = new VBox(upwardHeader, upwardTree);
+        upwardSection.setStyle(SECTION_STYLE);
         VBox.setVgrow(upwardTree, Priority.ALWAYS);
 
         VBox sccSection = new VBox(sccHeader, sccList);
+        sccSection.setStyle(SECTION_STYLE);
         VBox.setVgrow(sccList, Priority.ALWAYS);
 
         SplitPane split = new SplitPane(upwardSection, sccSection);
         split.setOrientation(Orientation.VERTICAL);
         split.setDividerPositions(0.65);
+        split.setStyle(SECTION_STYLE);
         SplitPane.setResizableWithParent(sccSection, true);
 
         root.setCenter(split);
+        root.setStyle(SECTION_STYLE);
         root.setPadding(new Insets(0));
         refresh();
     }
