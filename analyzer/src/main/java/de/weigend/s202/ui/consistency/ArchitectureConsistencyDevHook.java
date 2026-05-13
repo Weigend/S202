@@ -2,7 +2,9 @@ package de.weigend.s202.ui.consistency;
 
 import de.weigend.s202.domain.DomainModel;
 import de.weigend.s202.domain.architecture.Architecture;
+import de.weigend.s202.domain.architecture.HierarchicalLayeredArchitecture;
 import de.weigend.s202.domain.architecture.HierarchicalLayeredArchitectureBuilder;
+import de.weigend.s202.domain.architecture.Violation;
 import de.weigend.s202.ui.model.ArchitectureNode;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -37,6 +39,7 @@ public final class ArchitectureConsistencyDevHook {
         if (diffs.isEmpty()) {
             LOGGER.info("Architecture consistency check: PASS — {} violations detected by the model",
                     arch.violations().size());
+            dumpModelViolations(arch);
             return;
         }
 
@@ -46,5 +49,24 @@ public final class ArchitectureConsistencyDevHook {
             report.append("\n  ").append(d.path()).append(" — ").append(d.message());
         }
         LOGGER.warn(report.toString());
+    }
+
+    /**
+     * Temporary diagnostic — logs the violations the new domain model
+     * detects, so they can be compared side-by-side against the UI's
+     * Y-based list dumped by the dependencies view.
+     */
+    private static void dumpModelViolations(Architecture arch) {
+        if (!(arch instanceof HierarchicalLayeredArchitecture hla)) {
+            return;
+        }
+        StringBuilder report = new StringBuilder(
+                "[DEBUG] Model Violations — " + hla.violations().size() + ":");
+        for (Violation v : hla.violations()) {
+            report.append("\n  ").append(v.kind()).append(" ")
+                    .append(v.sourceFqn()).append("(L:").append(v.sourceLevel()).append(") -> ")
+                    .append(v.targetFqn()).append("(L:").append(v.targetLevel()).append(")");
+        }
+        LOGGER.info(report.toString());
     }
 }
