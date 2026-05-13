@@ -109,6 +109,7 @@ public class ArchitectureView extends BorderPane {
     private final BooleanProperty showDependencies = new SimpleBooleanProperty(false);
     private final BooleanProperty circuitMode = new SimpleBooleanProperty(false);
     private final BooleanProperty showScc = new SimpleBooleanProperty(false);
+    private final BooleanProperty showWhatIfViolations = new SimpleBooleanProperty(false);
     private final BooleanProperty showTangleDebugLines = new SimpleBooleanProperty(false);
     // Icon visibility is shared across all open architecture views — boxes bind
     // their FontIcon visibility to this property so toggling refreshes every
@@ -167,7 +168,7 @@ public class ArchitectureView extends BorderPane {
         whatIfPane = new Pane();
         whatIfPane.setMouseTransparent(true);
         whatIfPane.setPickOnBounds(false);
-        whatIfPane.setVisible(true);
+        whatIfPane.setVisible(false);
         whatIfPane.setManaged(false);
 
         tanglePane = new Pane();
@@ -193,6 +194,7 @@ public class ArchitectureView extends BorderPane {
     private void wirePropertyListeners() {
         showDependencies.addListener((obs, was, isNow) -> applyShowDependencies(isNow));
         showScc.addListener((obs, was, isNow) -> applyShowScc(isNow));
+        showWhatIfViolations.addListener((obs, was, isNow) -> applyShowWhatIfViolations(isNow));
         circuitMode.addListener((obs, was, isNow) -> applyCircuitMode());
         showTangleDebugLines.addListener((obs, was, isNow) -> applyShowTangleDebugLines(isNow));
     }
@@ -224,6 +226,18 @@ public class ArchitectureView extends BorderPane {
             sccPane.setVisible(true);
         } else {
             sccPane.setVisible(false);
+        }
+    }
+
+    private void applyShowWhatIfViolations(boolean visible) {
+        if (whatIfPane == null) {
+            return;
+        }
+        whatIfPane.setVisible(visible);
+        if (visible) {
+            arrowsCoalescer.markDirty();
+        } else if (whatIfRenderer != null) {
+            whatIfRenderer.clear();
         }
     }
 
@@ -391,6 +405,7 @@ public class ArchitectureView extends BorderPane {
         // Reset overlay toggles for the new architecture so the global toolbar resyncs.
         showDependencies.set(false);
         showScc.set(false);
+        showWhatIfViolations.set(false);
 
         // Re-apply any pending tangle visualisation now that the renderer
         // exists and the new tree is in place.
@@ -690,7 +705,11 @@ public class ArchitectureView extends BorderPane {
             sccRenderer.drawSccLines(currentRootNode);
         }
         if (whatIfRenderer != null) {
-            whatIfRenderer.redraw(whatIfModel);
+            if (showWhatIfViolations.get()) {
+                whatIfRenderer.redraw(whatIfModel);
+            } else {
+                whatIfRenderer.clear();
+            }
         }
         applyVirtuallyMovedDecorations();
     }
@@ -831,6 +850,18 @@ public class ArchitectureView extends BorderPane {
 
     public void setShowScc(boolean show) {
         showScc.set(show);
+    }
+
+    public BooleanProperty showWhatIfViolationsProperty() {
+        return showWhatIfViolations;
+    }
+
+    public boolean isShowWhatIfViolations() {
+        return showWhatIfViolations.get();
+    }
+
+    public void setShowWhatIfViolations(boolean show) {
+        showWhatIfViolations.set(show);
     }
 
     public BooleanProperty showTangleDebugLinesProperty() {

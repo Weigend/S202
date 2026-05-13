@@ -9,6 +9,7 @@ import javafx.scene.Parent;
 import javafx.scene.layout.Pane;
 import javafx.scene.paint.Color;
 import javafx.scene.shape.Line;
+import javafx.scene.shape.QuadCurve;
 import javafx.scene.text.Font;
 import javafx.scene.text.Text;
 
@@ -39,9 +40,13 @@ import java.util.Objects;
  */
 public final class WhatIfUpwardEdgeRenderer {
 
-    private static final Color UPWARD_COLOR = Color.rgb(217, 70, 30);
-    private static final double LINE_WIDTH = 1.5;
+    private static final Color UPWARD_COLOR = Color.BLACK;
+    private static final double LINE_WIDTH = 1.2;
     private static final double ARROW_SIZE = 8.0;
+    private static final double DASH_ON = 6.0;
+    private static final double DASH_OFF = 4.0;
+    /** Horizontal control-point offset as a fraction of the vertical span. */
+    private static final double CURVE_BOW = 0.18;
     private static final Font BADGE_FONT = Font.font(11.0);
 
     private final Pane pane;
@@ -73,7 +78,7 @@ public final class WhatIfUpwardEdgeRenderer {
             boolean bothClasses = violation.source() instanceof LevelClassBox
                     && violation.target() instanceof LevelClassBox;
             String badge = bothClasses ? null : "↑ " + violation.classEdges().size();
-            drawArrow(violation.source(), violation.target(), badge);
+            drawCurvedArrow(violation.source(), violation.target(), badge);
         }
     }
 
@@ -143,23 +148,38 @@ public final class WhatIfUpwardEdgeRenderer {
         return true;
     }
 
-    private void drawArrow(Node source, Node target, String badge) {
-        double[] sc = centerInPane(source);
-        double[] tc = centerInPane(target);
-        if (sc == null || tc == null) {
+    private void drawCurvedArrow(Node source, Node target, String badge) {
+        double[] srcBounds = boundsInPane(source);
+        double[] tgtBounds = boundsInPane(target);
+        if (srcBounds == null || tgtBounds == null) {
             return;
         }
-        double startX = sc[0];
-        double startY = sc[1];
-        double endX = tc[0];
-        double endY = tc[1];
+        // Source: centre-X at top edge (smaller Y). Target: centre-X at bottom edge.
+        double startX = (srcBounds[0] + srcBounds[2]) / 2.0;
+        double startY = srcBounds[1];
+        double endX = (tgtBounds[0] + tgtBounds[2]) / 2.0;
+        double endY = tgtBounds[3];
 
-        Line line = new Line(startX, startY, endX, endY);
-        line.setStroke(UPWARD_COLOR);
-        line.setStrokeWidth(LINE_WIDTH);
-        line.setMouseTransparent(true);
+        // Quadratic control point: midway vertically, bowed slightly to the
+        // right so multiple arrows between the same lane stay distinguishable.
+        double midX = (startX + endX) / 2.0;
+        double midY = (startY + endY) / 2.0;
+        double verticalSpan = Math.abs(startY - endY);
+        double controlX = midX + CURVE_BOW * verticalSpan;
+        double controlY = midY;
 
-        double angle = Math.atan2(endY - startY, endX - startX);
+        QuadCurve curve = new QuadCurve(startX, startY, controlX, controlY, endX, endY);
+        curve.setStroke(UPWARD_COLOR);
+        curve.setStrokeWidth(LINE_WIDTH);
+        curve.setFill(null);
+        curve.getStrokeDashArray().setAll(DASH_ON, DASH_OFF);
+        curve.setMouseTransparent(true);
+
+        // Arrowhead tangent at the end of the curve (towards target). For a
+        // quadratic Bezier the end tangent is endpoint - control.
+        double tangentX = endX - controlX;
+        double tangentY = endY - controlY;
+        double angle = Math.atan2(tangentY, tangentX);
         double ax1 = endX - ARROW_SIZE * Math.cos(angle - Math.PI / 6);
         double ay1 = endY - ARROW_SIZE * Math.sin(angle - Math.PI / 6);
         double ax2 = endX - ARROW_SIZE * Math.cos(angle + Math.PI / 6);
@@ -172,12 +192,10 @@ public final class WhatIfUpwardEdgeRenderer {
             a.setMouseTransparent(true);
         }
 
-        pane.getChildren().addAll(line, arrow1, arrow2);
+        pane.getChildren().addAll(curve, arrow1, arrow2);
 
         if (badge != null) {
-            double midX = (startX + endX) / 2.0;
-            double midY = (startY + endY) / 2.0;
-            Text label = new Text(midX + 4, midY - 4, badge);
+            Text label = new Text(controlX + 4, controlY - 4, badge);
             label.setFont(BADGE_FONT);
             label.setFill(UPWARD_COLOR);
             label.setMouseTransparent(true);
@@ -186,19 +204,40 @@ public final class WhatIfUpwardEdgeRenderer {
     }
 
     private double[] centerInPane(Node node) {
+        double[] b = boundsInPane(node);
+        if (b == null) {
+            return null;
+        }
+        return new double[]{(b[0] + b[2]) / 2.0, (b[1] + b[3]) / 2.0};
+    }
+
+    /**
+     * Returns {@code [minX, minY, maxX, maxY]} of {@code node}'s bounding
+     * box in the zoomable-content coordinate space, or {@code null} if the
+     * transform can't be computed. Walks the parent chain accumulating
+     * per-node {@code boundsInParent} offsets so the result reflects any
+     * zoom/scale applied above the node.
+     */
+    private double[] boundsInPane(Node node) {
         try {
             Bounds localBounds = node.getBoundsInLocal();
+            double minX = localBounds.getMinX();
+            double minY = localBounds.getMinY();
+            double maxX = localBounds.getMaxX();
+            double maxY = localBounds.getMaxY();
             Node current = node;
-            double centerX = localBounds.getMinX() + localBounds.getWidth() / 2;
-            double centerY = localBounds.getMinY() + localBounds.getHeight() / 2;
             while (current != null && current != zoomableContent) {
                 Bounds boundsInParent = current.getBoundsInParent();
                 Bounds localB = current.getBoundsInLocal();
-                centerX = centerX - localB.getMinX() + boundsInParent.getMinX();
-                centerY = centerY - localB.getMinY() + boundsInParent.getMinY();
+                double dx = boundsInParent.getMinX() - localB.getMinX();
+                double dy = boundsInParent.getMinY() - localB.getMinY();
+                minX += dx;
+                maxX += dx;
+                minY += dy;
+                maxY += dy;
                 current = current.getParent();
             }
-            return new double[]{centerX, centerY};
+            return new double[]{minX, minY, maxX, maxY};
         } catch (Exception ex) {
             return null;
         }

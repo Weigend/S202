@@ -112,6 +112,7 @@ public class S202Module implements Module {
     private CheckBox showDependenciesCheckbox;
     private CheckBox circuitToggle;
     private CheckBox showSccCheckbox;
+    private CheckBox showWhatIfViolationsCheckbox;
     private CheckBox debugLinesCheckbox;
     private CheckBox showIconsCheckbox;
     private Button zoomOutButton;
@@ -513,6 +514,15 @@ public class S202Module implements Module {
             }
         });
 
+        showWhatIfViolationsCheckbox = new CheckBox("Show Violations");
+        showWhatIfViolationsCheckbox.setTooltip(new Tooltip(
+                "Toggle dashed arrows for wrong-direction dependencies introduced by moves"));
+        showWhatIfViolationsCheckbox.selectedProperty().addListener((obs, was, isNow) -> {
+            if (boundView != null) {
+                boundView.setShowWhatIfViolations(isNow);
+            }
+        });
+
         debugLinesCheckbox = new CheckBox("Debug Lines");
         debugLinesCheckbox.setTooltip(new Tooltip("Toggle visible tangle routing debug lines"));
         debugLinesCheckbox.selectedProperty().addListener((obs, was, isNow) -> {
@@ -553,14 +563,16 @@ public class S202Module implements Module {
         // Everything except the Open JAR button is view-dependent.
         viewDependentToolbarNodes.addAll(List.of(
                 depthLabel, depthSpinner, refreshButton,
-                showDependenciesCheckbox, circuitToggle, showSccCheckbox, debugLinesCheckbox, showIconsCheckbox,
+                showDependenciesCheckbox, circuitToggle, showSccCheckbox, showWhatIfViolationsCheckbox,
+                debugLinesCheckbox, showIconsCheckbox,
                 zoomOutButton, zoomLabel, zoomInButton, zoomResetButton));
 
         applicationWindow.getToolbarItems().setAll(
                 openJarButton, new Separator(),
                 depthLabel, depthSpinner, refreshButton,
                 new Separator(),
-                showDependenciesCheckbox, circuitToggle, showSccCheckbox, debugLinesCheckbox, showIconsCheckbox,
+                showDependenciesCheckbox, circuitToggle, showSccCheckbox,
+                showWhatIfViolationsCheckbox, debugLinesCheckbox, showIconsCheckbox,
                 new Separator(),
                 zoomGroup, zoomResetButton);
 
@@ -599,6 +611,7 @@ public class S202Module implements Module {
         showDependenciesCheckbox.setSelected(view.isShowDependencies());
         circuitToggle.setSelected(view.isCircuitMode());
         showSccCheckbox.setSelected(view.isShowScc());
+        showWhatIfViolationsCheckbox.setSelected(view.isShowWhatIfViolations());
         debugLinesCheckbox.setSelected(view.isShowTangleDebugLines());
         showIconsCheckbox.setSelected(view.isShowIcons());
 
