@@ -157,16 +157,30 @@ public final class HierarchicalLayeredArchitectureBuilder {
     private List<Violation> detectViolations(DomainModel domain) {
         List<Violation> violations = new ArrayList<>();
 
+        // Pre-compute the visual rank of every class: a list of levels from
+        // the outermost ancestor package down to the class itself. Two
+        // classes' ranks compare lexicographically — the larger value at the
+        // first divergence sits visually higher (closer to the top). An
+        // edge whose source rank is strictly less than its target rank
+        // therefore runs upward.
+        Map<String, int[]> visualRank = new HashMap<>();
         for (CalculatedElementInfo cls : domain.getAllClasses().values()) {
+            visualRank.put(cls.fullName, computeVisualRank(cls, domain));
+        }
+
+        for (CalculatedElementInfo cls : domain.getAllClasses().values()) {
+            int[] srcRank = visualRank.get(cls.fullName);
             for (String dep : cls.dependencies) {
-                CalculatedElementInfo target = domain.getClass(dep);
-                if (target == null) {
+                int[] tgtRank = visualRank.get(dep);
+                if (tgtRank == null) {
                     continue;
                 }
-                if (cls.level < target.level) {
+                if (compareVisualRank(srcRank, tgtRank) < 0) {
+                    CalculatedElementInfo target = domain.getClass(dep);
+                    int tgtClassLevel = target == null ? -1 : target.level;
                     violations.add(new Violation(
-                            cls.fullName, target.fullName, ViolationKind.UPWARD,
-                            cls.level, target.level));
+                            cls.fullName, dep, ViolationKind.UPWARD,
+                            cls.level, tgtClassLevel));
                 }
             }
         }
@@ -189,6 +203,45 @@ public final class HierarchicalLayeredArchitectureBuilder {
         }
 
         return violations;
+    }
+
+    private static int[] computeVisualRank(CalculatedElementInfo cls, DomainModel domain) {
+        List<Integer> ancestorLevels = new ArrayList<>();
+        String parent = parentOf(cls.fullName);
+        while (!parent.isEmpty()) {
+            CalculatedElementInfo pkg = domain.getPackage(parent);
+            if (pkg != null) {
+                ancestorLevels.add(pkg.level);
+            }
+            parent = parentOf(parent);
+        }
+        // ancestorLevels is currently innermost-first; reverse to outermost-first.
+        java.util.Collections.reverse(ancestorLevels);
+        int[] rank = new int[ancestorLevels.size() + 1];
+        for (int i = 0; i < ancestorLevels.size(); i++) {
+            rank[i] = ancestorLevels.get(i);
+        }
+        rank[rank.length - 1] = cls.level;
+        return rank;
+    }
+
+    /**
+     * Lexicographic compare on visual-rank tuples. Larger entries sit
+     * higher visually, so the standard {@code Integer.compare} per element
+     * already gives the right answer (negative = source below target).
+     * When one rank is a strict prefix of the other (e.g. a flat class
+     * and a class nested one level deeper at the same row), the entries
+     * are treated as tied — neither is unambiguously above the other
+     * without per-row layout info.
+     */
+    private static int compareVisualRank(int[] a, int[] b) {
+        int n = Math.min(a.length, b.length);
+        for (int i = 0; i < n; i++) {
+            if (a[i] != b[i]) {
+                return Integer.compare(a[i], b[i]);
+            }
+        }
+        return 0;
     }
 
     // -------------------------------------------------- helpers
