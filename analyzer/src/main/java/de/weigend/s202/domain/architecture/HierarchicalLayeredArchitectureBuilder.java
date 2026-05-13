@@ -93,19 +93,20 @@ public final class HierarchicalLayeredArchitectureBuilder {
     /**
      * Descend from the root namespace through single-child package
      * chains — these are visually transparent (no own box) and the UI
-     * starts rendering only at the deepest such ancestor. Stops as
-     * soon as a package has classes or more than one direct child
-     * package.
+     * starts rendering only at the deepest such ancestor. Matches the
+     * UI's {@code ArchitectureTreeBuilder.shouldChildrenBeTransparent}
+     * rule, which counts <em>packages</em> only — sibling classes at a
+     * skipped level are ignored by the UI as well, so the consistency
+     * checker won't flag them either.
      */
     private String skipTransparentPassthroughs(Map<String, List<CalculatedElementInfo>> contents) {
         String current = "";
         while (true) {
             List<CalculatedElementInfo> children = contents.getOrDefault(current, List.of());
-            long classCount = children.stream().filter(c -> "CLASS".equals(c.type)).count();
             List<CalculatedElementInfo> subPackages = children.stream()
                     .filter(c -> "PACKAGE".equals(c.type))
                     .toList();
-            if (classCount > 0 || subPackages.size() != 1) {
+            if (subPackages.size() != 1) {
                 return current;
             }
             current = subPackages.get(0).fullName;
