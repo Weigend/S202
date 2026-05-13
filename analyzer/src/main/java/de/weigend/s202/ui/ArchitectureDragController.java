@@ -67,11 +67,11 @@ public final class ArchitectureDragController {
      * Callback invoked when a drag finishes with a successful visual drop.
      * Receives the original drag source plus the HBox row it now sits in —
      * for row-slot drops that's the existing target row, for stack-gap
-     * drops it's the freshly created row.
+     * drops it's the freshly created row (signaled by {@code wasNewRow}).
      */
     @FunctionalInterface
     public interface DropListener {
-        void onDrop(Node movedSource, HBox destinationRow);
+        void onDrop(Node movedSource, HBox destinationRow, boolean wasNewRow);
     }
 
     public static void addDropListener(DropListener listener) {
@@ -147,6 +147,7 @@ public final class ArchitectureDragController {
             return;
         }
         Node movedSource = dragSource;
+        DropMode finishedMode = currentDropMode;
         HBox droppedInto = null;
         if (currentDropContainer != null && currentDropIndex >= 0
                 && isValidDrop(currentDropContainer, currentDropIndex)) {
@@ -158,13 +159,13 @@ public final class ArchitectureDragController {
         reset();
         e.consume();
         if (droppedInto != null) {
-            fireDrop(movedSource, droppedInto);
+            fireDrop(movedSource, droppedInto, finishedMode == DropMode.STACK);
         }
     }
 
-    private static void fireDrop(Node movedSource, HBox destinationRow) {
+    private static void fireDrop(Node movedSource, HBox destinationRow, boolean wasNewRow) {
         for (DropListener listener : dropListeners) {
-            listener.onDrop(movedSource, destinationRow);
+            listener.onDrop(movedSource, destinationRow, wasNewRow);
         }
     }
 

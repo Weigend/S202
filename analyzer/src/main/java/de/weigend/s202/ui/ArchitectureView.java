@@ -3,10 +3,11 @@ package de.weigend.s202.ui;
 import de.weigend.s202.analysis.quality.QualityMetrics;
 import de.weigend.s202.domain.DomainModel;
 import de.weigend.s202.domain.architecture.Architecture;
+import de.weigend.s202.domain.architecture.HierarchicalLayeredArchitecture;
 import de.weigend.s202.domain.architecture.HierarchicalLayeredArchitectureBuilder;
+import de.weigend.s202.domain.architecture.WhatIfArchitecture;
 import de.weigend.s202.reader.DependencyModel;
 import de.weigend.s202.ui.model.ArchitectureNode;
-import de.weigend.s202.ui.whatif.VirtualIdentity;
 import de.weigend.s202.ui.rendering.CircuitBoardRenderer;
 import de.weigend.s202.ui.rendering.DependencyRenderer;
 import de.weigend.s202.ui.rendering.DependencyRendererStrategy;
@@ -88,10 +89,12 @@ public class ArchitectureView extends BorderPane {
     private final PulseCoalescer arrowsCoalescer =
             new PulseCoalescer(javafx.application.Platform::runLater, this::flushArrowsRedraw);
 
-    // What-If layer: tracks which class/package boxes the user has moved.
-    // Drives the orange "moved" glow on the affected boxes. Cleared on
-    // every fresh analysis (setRawDependencyModel with a non-null model).
-    private final VirtualIdentity whatIfIdentity = new VirtualIdentity();
+    // What-If layer: drives the orange "moved" glow on the affected boxes.
+    // Cleared on every fresh analysis (setRawDependencyModel with a non-null
+    // model). The structural truth of where each box currently sits lives in
+    // {@link #whatIfArchitecture}; this set only tracks "user touched it" for
+    // the cosmetic decoration.
+    private final Set<String> movedFqns = new HashSet<>();
     private ArchitectureDragController.DropListener whatIfDropListener;
 
     // Pulses every time the arrow overlay finishes a redraw. WFX side panels
@@ -121,6 +124,7 @@ public class ArchitectureView extends BorderPane {
     private final ReadOnlyObjectWrapper<QualityMetrics> qualityMetrics = new ReadOnlyObjectWrapper<>(null);
     private final ReadOnlyObjectWrapper<DomainModel> domainModel = new ReadOnlyObjectWrapper<>(null);
     private final ReadOnlyObjectWrapper<Architecture> architecture = new ReadOnlyObjectWrapper<>(null);
+    private final ReadOnlyObjectWrapper<WhatIfArchitecture> whatIfArchitecture = new ReadOnlyObjectWrapper<>(null);
     private final ReadOnlyObjectWrapper<DependencyModel> rawDependencyModel = new ReadOnlyObjectWrapper<>(null);
     private final ReadOnlyStringWrapper selectedFullName = new ReadOnlyStringWrapper(null);
     private String preferredTopTanglesScope;
@@ -469,8 +473,16 @@ public class ArchitectureView extends BorderPane {
 
     public void setDomainModel(DomainModel model) {
         domainModel.set(model);
-        architecture.set(model == null ? null
-                : new HierarchicalLayeredArchitectureBuilder().build(model));
+        if (model == null) {
+            architecture.set(null);
+            whatIfArchitecture.set(null);
+            return;
+        }
+        Architecture original = new HierarchicalLayeredArchitectureBuilder().build(model);
+        architecture.set(original);
+        whatIfArchitecture.set(original instanceof HierarchicalLayeredArchitecture hla
+                ? new WhatIfArchitecture(hla, model)
+                : null);
     }
 
     /**
@@ -486,6 +498,21 @@ public class ArchitectureView extends BorderPane {
 
     public Architecture getArchitecture() {
         return architecture.get();
+    }
+
+    /**
+     * Read-only handle to the mutable What-If counterpart of
+     * {@link #architectureProperty()}. Starts as a deep copy of the
+     * original; the DnD drop handler mutates it via {@code moveElement}
+     * so {@link WhatIfArchitecture#violations()} reflects the user's
+     * current rearrangement. Rebuilt on each {@link #setDomainModel}.
+     */
+    public ReadOnlyObjectProperty<WhatIfArchitecture> whatIfArchitectureProperty() {
+        return whatIfArchitecture.getReadOnlyProperty();
+    }
+
+    public WhatIfArchitecture getWhatIfArchitecture() {
+        return whatIfArchitecture.get();
     }
 
     /**
@@ -505,7 +532,7 @@ public class ArchitectureView extends BorderPane {
 
     public void setRawDependencyModel(DependencyModel model) {
         rawDependencyModel.set(model);
-        whatIfIdentity.clear();
+        movedFqns.clear();
         ensureWhatIfDropListenerRegistered();
         arrowsCoalescer.markDirty();
     }
@@ -518,7 +545,9 @@ public class ArchitectureView extends BorderPane {
         ArchitectureDragController.addDropListener(whatIfDropListener);
     }
 
-    private void handleWhatIfDrop(javafx.scene.Node movedSource, javafx.scene.layout.HBox destinationRow) {
+    private void handleWhatIfDrop(javafx.scene.Node movedSource,
+                                  javafx.scene.layout.HBox destinationRow,
+                                  boolean wasNewRow) {
         if (!isInsideThisView(movedSource)) {
             return;
         }
@@ -533,17 +562,29 @@ public class ArchitectureView extends BorderPane {
         if (destinationContainerFqcn == null) {
             return;
         }
-        String newVirtualParent = destinationContainerFqcn.isEmpty()
-                ? ""
-                : whatIfIdentity.virtualFullName(destinationContainerFqcn);
-        String currentVirtualParent = whatIfIdentity.virtualParent(movedFqcn);
-        if (currentVirtualParent.equals(newVirtualParent)) {
-            setStatus("What-If: " + simple(movedFqcn) + " — visual reorder only (same virtual parent)");
+        WhatIfArchitecture wif = whatIfArchitecture.get();
+        if (wif == null) {
             return;
         }
-        whatIfIdentity.setOverride(movedFqcn, newVirtualParent);
+        if (!(destinationRow.getParent() instanceof javafx.scene.layout.VBox stack)) {
+            return;
+        }
+        int rowIndex = stack.getChildren().indexOf(destinationRow);
+        if (rowIndex < 0) {
+            return;
+        }
+        if (wasNewRow) {
+            wif.moveElementAsNewRow(movedFqcn, destinationContainerFqcn, rowIndex);
+        } else {
+            int colIndex = destinationRow.getChildren().indexOf(movedSource);
+            if (colIndex < 0) {
+                return;
+            }
+            wif.moveElement(movedFqcn, destinationContainerFqcn, rowIndex, colIndex);
+        }
+        movedFqns.add(movedFqcn);
         arrowsCoalescer.markDirty();
-        setStatus(buildWhatIfStatusMessage(movedFqcn, newVirtualParent));
+        setStatus(buildWhatIfStatusMessage(movedFqcn, destinationContainerFqcn));
     }
 
     private boolean isInsideThisView(javafx.scene.Node node) {
@@ -562,8 +603,9 @@ public class ArchitectureView extends BorderPane {
      * Walks up the scene graph from the destination row: the first enclosing
      * {@link LevelPackageBox} wins. If the drop lands at top level (no
      * enclosing package box), the row stack is tagged with the effective
-     * root's fqcn by the tree builder and that value is returned — an empty
-     * string then means "drop at the architecture's effective root".
+     * root's fqcn by the tree builder, but the {@link WhatIfArchitecture}
+     * uses {@code ""} for its root regardless of any transparent passthroughs
+     * the builder skipped, so the empty string is what we return here.
      */
     private static String resolveDestinationContainer(javafx.scene.Node row) {
         javafx.scene.Node n = row == null ? null : row.getParent();
@@ -572,17 +614,17 @@ public class ArchitectureView extends BorderPane {
                 String fqcn = lpb.getFullName();
                 return fqcn == null ? "" : fqcn;
             }
-            Object rootTag = n.getProperties().get("s202.whatif.rootFqcn");
-            if (rootTag instanceof String s) {
-                return s;
+            if (n.getProperties().get("s202.whatif.rootFqcn") instanceof String) {
+                return "";
             }
             n = n.getParent();
         }
         return null;
     }
 
-    private String buildWhatIfStatusMessage(String movedFqcn, String newVirtualParent) {
-        return String.format("What-If: %s → %s — marked as moved", simple(movedFqcn), newVirtualParent);
+    private String buildWhatIfStatusMessage(String movedFqcn, String destinationContainerFqcn) {
+        String parentLabel = destinationContainerFqcn.isEmpty() ? "<root>" : destinationContainerFqcn;
+        return String.format("What-If: %s → %s — marked as moved", simple(movedFqcn), parentLabel);
     }
 
     /** Renderer that paints wrong-direction edges — exposed so side panels can query violations. */
@@ -703,8 +745,9 @@ public class ArchitectureView extends BorderPane {
             sccRenderer.drawSccLines(currentRootNode);
         }
         if (whatIfRenderer != null) {
-            if (showWhatIfViolations.get()) {
-                whatIfRenderer.redraw(architecture.get());
+            Architecture source = whatIfArchitecture.get() != null ? whatIfArchitecture.get() : architecture.get();
+            if (showWhatIfViolations.get() && source != null) {
+                whatIfRenderer.redraw(source);
             } else {
                 whatIfRenderer.clear();
             }
@@ -715,7 +758,7 @@ public class ArchitectureView extends BorderPane {
     private void applyVirtuallyMovedDecorations() {
         for (Map.Entry<String, javafx.scene.Node> entry : elementRegistry.entrySet()) {
             String fqcn = entry.getKey();
-            boolean moved = whatIfIdentity.hasOverride(fqcn);
+            boolean moved = movedFqns.contains(fqcn);
             javafx.scene.Node node = entry.getValue();
             if (node instanceof LevelClassBox cls) {
                 cls.setVirtuallyMoved(moved);
@@ -750,9 +793,20 @@ public class ArchitectureView extends BorderPane {
      * package-depth change).
      */
     public void refreshLayout() {
-        if (currentRootNode != null) {
-            setArchitectureRoot(currentRootNode);
+        if (currentRootNode == null) {
+            return;
         }
+        // The rebuild is driven by the original ArchitectureNode tree, so
+        // any What-If moves the user made get visually undone. Reset the
+        // model state too — otherwise the side panel keeps reporting
+        // violations for an arrangement that no longer exists on screen,
+        // and the orange "moved" glow sticks to freshly-built boxes.
+        WhatIfArchitecture wif = whatIfArchitecture.get();
+        if (wif != null) {
+            wif.reset();
+        }
+        movedFqns.clear();
+        setArchitectureRoot(currentRootNode);
     }
 
     public boolean hasRoot() {
