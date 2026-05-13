@@ -4,8 +4,8 @@ import de.weigend.s202.reader.InputAnalyzer;
 import de.weigend.s202.reader.DependencyModel;
 import de.weigend.s202.domain.LevelCalculator;
 import de.weigend.s202.domain.DomainModel;
-import de.weigend.s202.analysis.scc.TarjanSCCFinder;
-import de.weigend.s202.analysis.scc.StronglyConnectedComponent;
+import de.weigend.s202.graph.TarjanSCCFinder;
+import de.weigend.s202.graph.StronglyConnectedComponent;
 
 import java.util.*;
 

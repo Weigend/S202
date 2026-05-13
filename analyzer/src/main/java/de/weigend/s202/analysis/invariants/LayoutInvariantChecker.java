@@ -1,10 +1,10 @@
 package de.weigend.s202.analysis.invariants;
 
-import de.weigend.s202.analysis.scc.EdgeClassification;
-import de.weigend.s202.analysis.scc.EdgeClassification.EdgeType;
-import de.weigend.s202.analysis.scc.SCCBreaker;
-import de.weigend.s202.analysis.scc.StronglyConnectedComponent;
-import de.weigend.s202.analysis.scc.TarjanSCCFinder;
+import de.weigend.s202.graph.EdgeClassification;
+import de.weigend.s202.graph.EdgeClassification.EdgeType;
+import de.weigend.s202.graph.SCCBreaker;
+import de.weigend.s202.graph.StronglyConnectedComponent;
+import de.weigend.s202.graph.TarjanSCCFinder;
 import de.weigend.s202.domain.DomainModel;
 import de.weigend.s202.domain.DomainModel.CalculatedElementInfo;
 import de.weigend.s202.reader.DependencyModel;

@@ -1,7 +1,7 @@
 package de.weigend.s202.ui.rendering;
 
-import de.weigend.s202.analysis.scc.StronglyConnectedComponent;
-import de.weigend.s202.analysis.scc.TarjanSCCFinder;
+import de.weigend.s202.graph.StronglyConnectedComponent;
+import de.weigend.s202.graph.TarjanSCCFinder;
 import de.weigend.s202.ui.model.ArchitectureNode;
 import javafx.geometry.Bounds;
 import javafx.scene.Node;

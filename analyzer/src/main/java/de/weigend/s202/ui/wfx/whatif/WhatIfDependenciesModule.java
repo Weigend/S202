@@ -1,5 +1,6 @@
 package de.weigend.s202.ui.wfx.whatif;
 
+import de.weigend.s202.domain.architecture.Architecture;
 import de.weigend.s202.ui.ArchitectureView;
 import de.weigend.s202.ui.wfx.ArchitectureWfxView;
 import io.softwareecg.wfx.lookup.Lookup;
@@ -28,6 +29,8 @@ public class WhatIfDependenciesModule implements Module {
     private ArchitectureView boundView;
     private ChangeListener<Object> rootListener;
     private ChangeListener<Object> rawModelListener;
+    private ChangeListener<Object> architectureListener;
+    private ChangeListener<Object> whatIfArchitectureListener;
     private ChangeListener<Number> redrawListener;
 
     @Override
@@ -95,7 +98,7 @@ public class WhatIfDependenciesModule implements Module {
         unbind();
 
         if (newBound == null) {
-            view.bind(null, null, null);
+            view.bind(null, null);
             return;
         }
 
@@ -104,9 +107,13 @@ public class WhatIfDependenciesModule implements Module {
 
         rootListener = (o, w, n) -> pushCurrent();
         rawModelListener = (o, w, n) -> pushCurrent();
+        architectureListener = (o, w, n) -> pushCurrent();
+        whatIfArchitectureListener = (o, w, n) -> pushCurrent();
         redrawListener = (o, w, n) -> view.refresh();
         newBound.architectureRootProperty().addListener(rootListener);
         newBound.rawDependencyModelProperty().addListener(rawModelListener);
+        newBound.architectureProperty().addListener(architectureListener);
+        newBound.whatIfArchitectureProperty().addListener(whatIfArchitectureListener);
         newBound.redrawTickProperty().addListener(redrawListener);
     }
 
@@ -118,6 +125,12 @@ public class WhatIfDependenciesModule implements Module {
             if (rawModelListener != null) {
                 boundView.rawDependencyModelProperty().removeListener(rawModelListener);
             }
+            if (architectureListener != null) {
+                boundView.architectureProperty().removeListener(architectureListener);
+            }
+            if (whatIfArchitectureListener != null) {
+                boundView.whatIfArchitectureProperty().removeListener(whatIfArchitectureListener);
+            }
             if (redrawListener != null) {
                 boundView.redrawTickProperty().removeListener(redrawListener);
             }
@@ -125,18 +138,19 @@ public class WhatIfDependenciesModule implements Module {
         boundView = null;
         rootListener = null;
         rawModelListener = null;
+        architectureListener = null;
+        whatIfArchitectureListener = null;
         redrawListener = null;
     }
 
     private void pushCurrent() {
         if (boundView == null) {
-            view.bind(null, null, null);
+            view.bind(null, null);
             return;
         }
-        view.bind(
-                boundView.getWhatIfModel(),
-                boundView.getRawDependencyModel(),
-                boundView.getWhatIfRenderer());
+        Architecture wif = boundView.getWhatIfArchitecture();
+        Architecture displayed = wif != null ? wif : boundView.getArchitecture();
+        view.bind(displayed, boundView.getRawDependencyModel());
     }
 
     private ArchitectureWfxView focusedArchitectureView() {

@@ -1,6 +1,6 @@
 package de.weigend.s202.analysis.strategy.impl;
 
-import de.weigend.s202.analysis.scc.SCCBreaker;
+import de.weigend.s202.graph.SCCBreaker;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.DisplayName;
 

@@ -1,8 +1,9 @@
 package de.weigend.s202.ui.rendering;
 
+import de.weigend.s202.domain.architecture.Architecture;
+import de.weigend.s202.domain.architecture.EndpointPair;
 import de.weigend.s202.ui.LevelClassBox;
 import de.weigend.s202.ui.whatif.ClassEdge;
-import de.weigend.s202.ui.whatif.WhatIfModel;
 import javafx.geometry.Bounds;
 import javafx.scene.Node;
 import javafx.scene.Parent;
@@ -20,7 +21,6 @@ import javafx.scene.text.TextAlignment;
 
 import java.util.ArrayList;
 import java.util.Collections;
-import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -39,9 +39,9 @@ import java.util.Objects;
  * lines. Edges that roll up to a package on either side aggregate into a
  * single line per (source-box, target-box) pair with an "↑ N" count badge.
  *
- * <p>The same rollup-and-Y-compare logic is exposed via
- * {@link #findVisibleViolations} so the Dependencies-View side panel
- * displays exactly the same violations it sees on the canvas.
+ * <p>The rollup grouping is exposed via {@link #groupByVisibleEndpoint}
+ * so the redraw can paint one arrow per visible endpoint pair, with a
+ * badge counting the class-level violations the pair rolls up.
  */
 public final class WhatIfUpwardEdgeRenderer {
 
@@ -78,65 +78,75 @@ public final class WhatIfUpwardEdgeRenderer {
         pane.getChildren().clear();
     }
 
-    public void redraw(WhatIfModel model) {
+    public void redraw(Architecture arch) {
         clear();
-        if (model == null || zoomableContent == null || overlayPane == null) {
+        if (arch == null || zoomableContent == null || overlayPane == null) {
             return;
         }
-        for (Violation violation : findVisibleViolations(model.staticEdges())) {
+        for (Violation violation : groupByVisibleEndpoint(arch)) {
             boolean bothClasses = violation.source() instanceof LevelClassBox
                     && violation.target() instanceof LevelClassBox;
             String badge = bothClasses ? null : Integer.toString(violation.classEdges().size());
-            drawCurvedArrow(violation.source(), violation.target(), badge);
+            if (violation.source() == violation.target()) {
+                drawSelfLoop(violation.source(), badge == null
+                        ? Integer.toString(violation.classEdges().size())
+                        : badge);
+            } else {
+                drawCurvedArrow(violation.source(), violation.target(), badge);
+            }
         }
     }
 
     /**
-     * Group all upward (source-Y &gt; target-Y) class-to-class edges by the
-     * currently-visible source/target box pair. Edges whose endpoints roll
-     * up to the same visible box are filtered out (degenerate self-loop).
+     * Resolve every UPWARD violation in {@code arch} to a pair of
+     * currently-visible scene-graph nodes and group the violations by
+     * that pair. The aggregation itself runs in the domain via
+     * {@link Architecture#groupUpwardViolations(java.util.function.Function)};
+     * this method only contributes the UI-specific rollup function
+     * (class FQN → currently-visible box FQN) and the FQN→Node lookup.
      */
-    public List<Violation> findVisibleViolations(Iterable<ClassEdge> edges) {
-        if (edges == null || zoomableContent == null) {
+    public List<Violation> groupByVisibleEndpoint(Architecture arch) {
+        if (arch == null || zoomableContent == null) {
             return List.of();
         }
-        Map<EndpointKey, List<ClassEdge>> grouped = new LinkedHashMap<>();
-        for (ClassEdge edge : edges) {
-            Node src = findVisibleEndpoint(edge.source());
-            Node tgt = findVisibleEndpoint(edge.target());
-            if (src == null || tgt == null || src == tgt) {
-                continue;
-            }
-            double[] sc = centerInPane(src);
-            double[] tc = centerInPane(tgt);
-            if (sc == null || tc == null) {
-                continue;
-            }
-            if (sc[1] <= tc[1]) {
-                continue;
-            }
-            grouped.computeIfAbsent(new EndpointKey(src, tgt), k -> new ArrayList<>()).add(edge);
-        }
+        Map<EndpointPair, List<de.weigend.s202.domain.architecture.Violation>> grouped =
+                arch.groupUpwardViolations(this::visibleEndpointFqn);
         List<Violation> result = new ArrayList<>(grouped.size());
-        for (Map.Entry<EndpointKey, List<ClassEdge>> entry : grouped.entrySet()) {
-            result.add(new Violation(entry.getKey().source(), entry.getKey().target(),
-                    Collections.unmodifiableList(entry.getValue())));
+        for (Map.Entry<EndpointPair, List<de.weigend.s202.domain.architecture.Violation>> entry
+                : grouped.entrySet()) {
+            Node src = elementRegistry.get(entry.getKey().source());
+            Node tgt = elementRegistry.get(entry.getKey().target());
+            if (src == null || tgt == null) {
+                continue;
+            }
+            List<ClassEdge> edges = new ArrayList<>(entry.getValue().size());
+            for (de.weigend.s202.domain.architecture.Violation v : entry.getValue()) {
+                edges.add(new ClassEdge(v.sourceFqn(), v.targetFqn(), 1));
+            }
+            result.add(new Violation(src, tgt, Collections.unmodifiableList(edges)));
         }
         return result;
     }
 
-    private Node findVisibleEndpoint(String fqcn) {
+    /**
+     * Class FQN → FQN of the closest currently-visible
+     * {@link de.weigend.s202.ui.LevelPackageBox} (or the class itself if
+     * visible). Returns {@code null} when the class isn't reachable
+     * through a visible ancestor — the architecture drops those
+     * violations from the aggregation.
+     */
+    private String visibleEndpointFqn(String fqcn) {
         Node node = elementRegistry.get(fqcn);
         if (node == null) {
             return null;
         }
         if (isActuallyVisible(node)) {
-            return node;
+            return fqcn;
         }
         Node n = node.getParent();
         while (n != null) {
-            if (n instanceof de.weigend.s202.ui.LevelPackageBox && isActuallyVisible(n)) {
-                return n;
+            if (n instanceof de.weigend.s202.ui.LevelPackageBox lpb && isActuallyVisible(n)) {
+                return lpb.getFullName();
             }
             n = n.getParent();
         }
@@ -155,6 +165,55 @@ public final class WhatIfUpwardEdgeRenderer {
             parent = parent.getParent();
         }
         return true;
+    }
+
+    /**
+     * Render an upward-violation self-loop above {@code box} with a badge
+     * showing how many internal class edges roll up to this single visible
+     * endpoint. Drawn as an arc that exits the top of the box on the left,
+     * curves up and over, and re-enters from the right with an arrowhead
+     * pointing down into the box.
+     */
+    private void drawSelfLoop(Node box, String badge) {
+        double[] b = boundsInPane(box);
+        if (b == null) {
+            return;
+        }
+        double width = b[2] - b[0];
+        double height = b[3] - b[1];
+        double loopHeight = Math.max(20.0, Math.min(width, height) * 0.4);
+        double startX = b[0] + width * 0.30;
+        double endX = b[0] + width * 0.70;
+        double topY = b[1];
+        double controlX = (startX + endX) / 2.0;
+        double controlY = topY - loopHeight;
+
+        QuadCurve curve = new QuadCurve(startX, topY, controlX, controlY, endX, topY);
+        curve.setStroke(UPWARD_COLOR);
+        curve.setStrokeWidth(LINE_WIDTH);
+        curve.setFill(null);
+        curve.getStrokeDashArray().setAll(DASH_ON, DASH_OFF);
+        curve.setMouseTransparent(true);
+
+        double tangentX = endX - controlX;
+        double tangentY = topY - controlY;
+        double angle = Math.atan2(tangentY, tangentX);
+        double ax1 = endX - ARROW_SIZE * Math.cos(angle - Math.PI / 6);
+        double ay1 = topY - ARROW_SIZE * Math.sin(angle - Math.PI / 6);
+        double ax2 = endX - ARROW_SIZE * Math.cos(angle + Math.PI / 6);
+        double ay2 = topY - ARROW_SIZE * Math.sin(angle + Math.PI / 6);
+        Line arrow1 = new Line(endX, topY, ax1, ay1);
+        Line arrow2 = new Line(endX, topY, ax2, ay2);
+        for (Line a : new Line[]{arrow1, arrow2}) {
+            a.setStroke(UPWARD_COLOR);
+            a.setStrokeWidth(LINE_WIDTH);
+            a.setMouseTransparent(true);
+        }
+
+        pane.getChildren().addAll(curve, arrow1, arrow2);
+        if (badge != null) {
+            pane.getChildren().add(buildBadge(badge, controlX, controlY));
+        }
     }
 
     private void drawCurvedArrow(Node source, Node target, String badge) {
@@ -281,6 +340,4 @@ public final class WhatIfUpwardEdgeRenderer {
 
     /** A class edge pair after rollup to currently-visible boxes. */
     public record Violation(Node source, Node target, List<ClassEdge> classEdges) {}
-
-    private record EndpointKey(Node source, Node target) {}
 }

@@ -3,7 +3,7 @@ package de.weigend.s202.ui.wfx;
 import de.weigend.s202.analysis.invariants.LayoutInvariantChecker;
 import de.weigend.s202.analysis.invariants.LayoutInvariantReport;
 import de.weigend.s202.analysis.quality.QualityMetrics;
-import de.weigend.s202.analysis.scc.SCCBreaker;
+import de.weigend.s202.graph.SCCBreaker;
 import de.weigend.s202.analysis.strategy.impl.HeuristicSCCBreakingStrategy;
 import de.weigend.s202.domain.DomainModel;
 import de.weigend.s202.domain.LevelCalculator;
@@ -929,6 +929,8 @@ public class S202Module implements Module {
                 publishProgress("Building architecture tree...", 0.85);
                 ArchitectureNode root = architectureNodeBuilder.build(calculated);
                 new HorizontalRowLayoutOptimizer().assignHorizontalLayoutOrders(root);
+                de.weigend.s202.ui.consistency.ArchitectureConsistencyDevHook
+                        .runIfEnabled(calculated, root);
 
                 publishProgress("Preparing quality metrics...", 0.90);
                 QualityMetrics metrics = QualityMetrics.compute(calculated);
@@ -1088,6 +1090,8 @@ public class S202Module implements Module {
                 DomainModel domainModel = projectMapper.toDomainModel(project.domainModel());
                 ArchitectureNode root = architectureNodeBuilder.build(domainModel);
                 new HorizontalRowLayoutOptimizer().assignHorizontalLayoutOrders(root);
+                de.weigend.s202.ui.consistency.ArchitectureConsistencyDevHook
+                        .runIfEnabled(domainModel, root);
                 QualityMetrics metrics = QualityMetrics.compute(domainModel);
                 LayoutInvariantReport invariants = projectMapper.toLayoutInvariantReport(project.layoutInvariantReport());
                 Set<TangleEdgeRenderer.Edge> cycleBreakEdges =

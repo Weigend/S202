@@ -1,19 +1,16 @@
 package de.weigend.s202.ui.wfx.whatif;
 
-import de.weigend.s202.analysis.scc.StronglyConnectedComponent;
+import de.weigend.s202.domain.architecture.Architecture;
+import de.weigend.s202.domain.architecture.EndpointPair;
+import de.weigend.s202.domain.architecture.Tangle;
+import de.weigend.s202.domain.architecture.Violation;
 import de.weigend.s202.reader.DependencyModel;
-import de.weigend.s202.ui.GraphSelection;
-import de.weigend.s202.ui.rendering.WhatIfUpwardEdgeRenderer;
-import de.weigend.s202.ui.whatif.ClassEdge;
-import de.weigend.s202.ui.whatif.VirtualPackageGraph;
-import de.weigend.s202.ui.whatif.WhatIfModel;
 import io.softwareecg.wfx.windowmtg.api.Position;
 import io.softwareecg.wfx.windowmtg.api.View;
 import javafx.collections.FXCollections;
 import javafx.collections.ObservableList;
 import javafx.geometry.Insets;
 import javafx.geometry.Orientation;
-import javafx.scene.Node;
 import javafx.scene.Parent;
 import javafx.scene.control.Label;
 import javafx.scene.control.ListView;
@@ -26,20 +23,21 @@ import javafx.scene.layout.VBox;
 
 import java.net.URL;
 import java.util.Comparator;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.TreeMap;
 
 /**
  * WFX side-panel view that lists the current What-If consequences for the
  * focused {@link de.weigend.s202.ui.ArchitectureView ArchitectureView}.
- * Decoupled from the chart — wired in by {@link WhatIfDependenciesModule},
- * fed by a renderer + model triple.
+ * Decoupled from the chart — wired in by {@link WhatIfDependenciesModule}
+ * and fed from the architecture model directly.
  *
  * <ul>
- *   <li><b>Wrong-direction edges</b> — same data the
- *       {@link WhatIfUpwardEdgeRenderer} paints on the canvas, rolled up to
- *       the currently-visible source/target box and grouped per pair.
+ *   <li><b>Wrong-direction edges</b> — every UPWARD class edge the model
+ *       reports, grouped by the source-class's and target-class's parent
+ *       package. Independent of the chart's package-depth setting so the
+ *       count is stable across expand/collapse operations.
  *       Drilldown: aggregate → class-to-class edges → method calls.</li>
  *   <li><b>Package tangles</b> — static package SCCs from the analyzer.
  *       Independent of any visual rearrangement.</li>
@@ -55,9 +53,8 @@ public final class WhatIfDependenciesView implements View {
     private final Label sccHeader = new Label();
     private final ListView<String> sccList = new ListView<>();
 
-    private WhatIfModel model;
+    private Architecture architecture;
     private DependencyModel rawDepModel;
-    private WhatIfUpwardEdgeRenderer renderer;
 
     private static final String PANEL_BG = "#f5f5f0";
     private static final String PANEL_STYLE =
@@ -98,19 +95,16 @@ public final class WhatIfDependenciesView implements View {
     }
 
     /** Re-bind the view to a different architecture context. Pass nulls to clear. */
-    public void bind(WhatIfModel model,
-                     DependencyModel rawDepModel,
-                     WhatIfUpwardEdgeRenderer renderer) {
-        this.model = model;
+    public void bind(Architecture architecture, DependencyModel rawDepModel) {
+        this.architecture = architecture;
         this.rawDepModel = rawDepModel;
-        this.renderer = renderer;
         refresh();
     }
 
     public void refresh() {
-        List<WhatIfUpwardEdgeRenderer.Violation> violations = currentViolations();
-        upwardTree.setRoot(buildUpwardTree(violations));
-        int totalClassEdges = violations.stream().mapToInt(v -> v.classEdges().size()).sum();
+        Map<EndpointPair, List<Violation>> grouped = aggregatedUpwardViolations();
+        upwardTree.setRoot(buildUpwardTree(grouped));
+        int totalClassEdges = grouped.values().stream().mapToInt(List::size).sum();
         upwardHeader.setText("Wrong-direction edges — " + totalClassEdges + " class edge"
                 + (totalClassEdges == 1 ? "" : "s"));
 
@@ -119,34 +113,39 @@ public final class WhatIfDependenciesView implements View {
         sccHeader.setText("Package tangles (static) — " + sccItems.size());
     }
 
-    private List<WhatIfUpwardEdgeRenderer.Violation> currentViolations() {
-        if (renderer == null || model == null) {
-            return List.of();
+    /**
+     * Architecture aggregates the UPWARD violations using the side panel's
+     * UI context — which is "always roll up class-FQN to its parent package
+     * FQN" so the count and grouping are stable across chart depth changes.
+     */
+    private Map<EndpointPair, List<Violation>> aggregatedUpwardViolations() {
+        if (architecture == null) {
+            return Map.of();
         }
-        return renderer.findVisibleViolations(model.staticEdges());
+        return architecture.groupUpwardViolations(WhatIfDependenciesView::parentOf);
     }
 
-    private TreeItem<String> buildUpwardTree(List<WhatIfUpwardEdgeRenderer.Violation> violations) {
+    private TreeItem<String> buildUpwardTree(Map<EndpointPair, List<Violation>> grouped) {
         TreeItem<String> rootItem = new TreeItem<>("");
-        if (violations.isEmpty()) {
+        if (grouped.isEmpty()) {
             return rootItem;
         }
-        List<WhatIfUpwardEdgeRenderer.Violation> sorted = violations.stream()
+        List<Map.Entry<EndpointPair, List<Violation>>> sortedGroups = grouped.entrySet().stream()
                 .sorted(Comparator
-                        .comparing((WhatIfUpwardEdgeRenderer.Violation v) -> endpointLabel(v.source()))
-                        .thenComparing(v -> endpointLabel(v.target())))
+                        .<Map.Entry<EndpointPair, List<Violation>>, String>comparing(e -> e.getKey().source())
+                        .thenComparing(e -> e.getKey().target()))
                 .toList();
-
-        for (WhatIfUpwardEdgeRenderer.Violation v : sorted) {
-            String label = endpointLabel(v.source()) + " ↑ " + endpointLabel(v.target())
-                    + "  (" + v.classEdges().size() + ")";
+        for (Map.Entry<EndpointPair, List<Violation>> entry : sortedGroups) {
+            EndpointPair pair = entry.getKey();
+            List<Violation> edges = entry.getValue();
+            String label = pair.source() + " ↑ " + pair.target() + "  (" + edges.size() + ")";
             TreeItem<String> top = new TreeItem<>(label);
-            List<ClassEdge> sortedEdges = v.classEdges().stream()
-                    .sorted(Comparator.comparing(ClassEdge::source).thenComparing(ClassEdge::target))
+            List<Violation> sortedEdges = edges.stream()
+                    .sorted(Comparator.comparing(Violation::sourceFqn).thenComparing(Violation::targetFqn))
                     .toList();
-            for (ClassEdge edge : sortedEdges) {
-                TreeItem<String> classItem = new TreeItem<>(simple(edge.source()) + " → " + simple(edge.target()));
-                attachMethodCallChildren(classItem, edge);
+            for (Violation v : sortedEdges) {
+                TreeItem<String> classItem = new TreeItem<>(simple(v.sourceFqn()) + " → " + simple(v.targetFqn()));
+                attachMethodCallChildren(classItem, v.sourceFqn(), v.targetFqn());
                 top.getChildren().add(classItem);
             }
             rootItem.getChildren().add(top);
@@ -154,16 +153,16 @@ public final class WhatIfDependenciesView implements View {
         return rootItem;
     }
 
-    private void attachMethodCallChildren(TreeItem<String> classItem, ClassEdge edge) {
+    private void attachMethodCallChildren(TreeItem<String> classItem, String sourceFqn, String targetFqn) {
         if (rawDepModel == null) {
             return;
         }
-        DependencyModel.ClassInfo srcInfo = rawDepModel.getClass(edge.source());
+        DependencyModel.ClassInfo srcInfo = rawDepModel.getClass(sourceFqn);
         if (srcInfo == null) {
             return;
         }
-        String prefix = edge.target() + ".";
-        Map<String, Integer> totals = new TreeMap<>();
+        String prefix = targetFqn + ".";
+        Map<String, Integer> totals = new LinkedHashMap<>();
         for (DependencyModel.MethodInfo srcMethod : srcInfo.methods.values()) {
             for (Map.Entry<String, Integer> call : srcMethod.methodCalls.entrySet()) {
                 String key = call.getKey();
@@ -182,23 +181,13 @@ public final class WhatIfDependenciesView implements View {
 
     private ObservableList<String> buildSccList() {
         ObservableList<String> items = FXCollections.observableArrayList();
-        if (model == null) {
+        if (architecture == null) {
             return items;
         }
-        VirtualPackageGraph staticGraph = model.staticGraph();
-        for (StronglyConnectedComponent scc : staticGraph.sccs()) {
-            if (scc.isTangle()) {
-                items.add(formatTangle(scc.getMembers().stream().sorted().toList()));
-            }
+        for (Tangle t : architecture.tangles()) {
+            items.add(formatTangle(t.members().stream().sorted().toList()));
         }
         return items;
-    }
-
-    private static String endpointLabel(Node node) {
-        if (node instanceof GraphSelection.Selectable s && s.getFullName() != null) {
-            return s.getFullName();
-        }
-        return node.getClass().getSimpleName();
     }
 
     private static String formatTangle(List<String> members) {
@@ -208,6 +197,14 @@ public final class WhatIfDependenciesView implements View {
     private static String simple(String fqcn) {
         int dot = fqcn.lastIndexOf('.');
         return dot < 0 ? fqcn : fqcn.substring(dot + 1);
+    }
+
+    private static String parentOf(String fqcn) {
+        if (fqcn == null) {
+            return "";
+        }
+        int dot = fqcn.lastIndexOf('.');
+        return dot < 0 ? "" : fqcn.substring(0, dot);
     }
 
     // ===== View interface =====
