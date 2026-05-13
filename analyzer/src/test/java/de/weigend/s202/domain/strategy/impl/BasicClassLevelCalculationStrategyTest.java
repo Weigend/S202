@@ -1,6 +1,6 @@
-package de.weigend.s202.analysis.strategy.impl;
+package de.weigend.s202.domain.strategy.impl;
 
-import de.weigend.s202.analysis.strategy.aggregation.SimpleMaxAggregationStrategy;
+import de.weigend.s202.domain.strategy.aggregation.SimpleMaxAggregationStrategy;
 import org.junit.jupiter.api.Test;
 
 import java.util.HashMap;

@@ -1,7 +1,7 @@
 package de.weigend.s202.ui.consistency;
 
 import de.weigend.s202.domain.DomainModel;
-import de.weigend.s202.domain.LevelCalculator;
+import de.weigend.s202.domain.architecture.LevelCalculator;
 import de.weigend.s202.domain.architecture.Architecture;
 import de.weigend.s202.domain.architecture.HierarchicalLayeredArchitectureBuilder;
 import de.weigend.s202.reader.DependencyModel;

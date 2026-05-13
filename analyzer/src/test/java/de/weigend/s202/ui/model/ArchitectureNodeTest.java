@@ -3,7 +3,7 @@ package de.weigend.s202.ui.model;
 import de.weigend.s202.domain.DomainModel;
 import de.weigend.s202.reader.DependencyModel;
 import de.weigend.s202.reader.InputAnalyzer;
-import de.weigend.s202.domain.LevelCalculator;
+import de.weigend.s202.domain.architecture.LevelCalculator;
 import de.weigend.s202.ui.model.ArchitectureNode.NodeType;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;

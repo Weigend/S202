@@ -1,4 +1,4 @@
-package de.weigend.s202.analysis.strategy.aggregation;
+package de.weigend.s202.domain.strategy.aggregation;
 
 import org.junit.jupiter.api.Test;
 

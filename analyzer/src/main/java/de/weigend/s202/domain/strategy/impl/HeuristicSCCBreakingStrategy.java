@@ -1,6 +1,6 @@
-package de.weigend.s202.analysis.strategy.impl;
+package de.weigend.s202.domain.strategy.impl;
 
-import de.weigend.s202.analysis.strategy.ClassLevelCalculationStrategy;
+import de.weigend.s202.domain.strategy.ClassLevelCalculationStrategy;
 import de.weigend.s202.graph.SCCBreaker;
 import de.weigend.s202.graph.TarjanSCCFinder;
 import de.weigend.s202.graph.StronglyConnectedComponent;
