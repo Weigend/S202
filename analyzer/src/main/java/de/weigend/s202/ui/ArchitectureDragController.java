@@ -213,6 +213,13 @@ public final class ArchitectureDragController {
             if (n instanceof HBox h && Boolean.TRUE.equals(h.getProperties().get(ROW_TAG))) {
                 return h;
             }
+            // A pick that lands inside a stack before reaching any row means
+            // the pointer is in the stack's gap area, not over a row — let
+            // STACK mode take over instead of misrouting to an outer row
+            // (e.g. the top-level row enclosing the whole package box).
+            if (n instanceof VBox v && Boolean.TRUE.equals(v.getProperties().get(STACK_TAG))) {
+                return null;
+            }
             n = n.getParent();
         }
         return null;
