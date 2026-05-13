@@ -12,11 +12,12 @@ import io.softwareecg.wfx.windowmtg.api.View;
 import javafx.collections.FXCollections;
 import javafx.collections.ObservableList;
 import javafx.geometry.Insets;
+import javafx.geometry.Orientation;
 import javafx.scene.Node;
 import javafx.scene.Parent;
 import javafx.scene.control.Label;
 import javafx.scene.control.ListView;
-import javafx.scene.control.Separator;
+import javafx.scene.control.SplitPane;
 import javafx.scene.control.TreeItem;
 import javafx.scene.control.TreeView;
 import javafx.scene.layout.BorderPane;
@@ -49,7 +50,6 @@ public final class WhatIfDependenciesView implements View {
     public static final String VIEW_ID = "s202-whatif-dependencies";
 
     private final BorderPane root = new BorderPane();
-    private final VBox content = new VBox(6);
     private final Label upwardHeader = new Label();
     private final TreeView<String> upwardTree = new TreeView<>();
     private final Label sccHeader = new Label();
@@ -60,24 +60,24 @@ public final class WhatIfDependenciesView implements View {
     private WhatIfUpwardEdgeRenderer renderer;
 
     public WhatIfDependenciesView() {
-        content.setPadding(new Insets(8));
-
-        upwardHeader.setStyle("-fx-font-weight: bold; -fx-font-size: 12;");
-        sccHeader.setStyle("-fx-font-weight: bold; -fx-font-size: 12;");
+        upwardHeader.setStyle("-fx-font-weight: bold; -fx-font-size: 12; -fx-padding: 4 8 4 8;");
+        sccHeader.setStyle("-fx-font-weight: bold; -fx-font-size: 12; -fx-padding: 4 8 4 8;");
 
         upwardTree.setShowRoot(false);
+
+        VBox upwardSection = new VBox(upwardHeader, upwardTree);
         VBox.setVgrow(upwardTree, Priority.ALWAYS);
 
-        sccList.setPrefHeight(160);
+        VBox sccSection = new VBox(sccHeader, sccList);
+        VBox.setVgrow(sccList, Priority.ALWAYS);
 
-        content.getChildren().addAll(
-                upwardHeader,
-                upwardTree,
-                new Separator(),
-                sccHeader,
-                sccList);
+        SplitPane split = new SplitPane(upwardSection, sccSection);
+        split.setOrientation(Orientation.VERTICAL);
+        split.setDividerPositions(0.65);
+        SplitPane.setResizableWithParent(sccSection, true);
 
-        root.setCenter(content);
+        root.setCenter(split);
+        root.setPadding(new Insets(0));
         refresh();
     }
 
@@ -213,7 +213,7 @@ public final class WhatIfDependenciesView implements View {
 
     @Override
     public Position getDefaultPosition() {
-        return Position.LEFT;
+        return Position.BOTTOM;
     }
 
     @Override

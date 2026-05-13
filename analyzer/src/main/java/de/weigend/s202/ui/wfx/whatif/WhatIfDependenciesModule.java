@@ -2,7 +2,7 @@ package de.weigend.s202.ui.wfx.whatif;
 
 import de.weigend.s202.ui.ArchitectureView;
 import de.weigend.s202.ui.wfx.ArchitectureWfxView;
-import de.weigend.s202.ui.wfx.outline.OutlineExplorerView;
+import de.weigend.s202.ui.wfx.tangles.TopTanglesView;
 import io.softwareecg.wfx.lookup.Lookup;
 import io.softwareecg.wfx.platform.api.Module;
 import io.softwareecg.wfx.platform.api.exceptions.PlatformException;
@@ -13,16 +13,17 @@ import jakarta.inject.Singleton;
 import javafx.beans.value.ChangeListener;
 
 /**
- * WFX module providing the What-If Dependencies side panel. Auto-discovered
- * by Avaje, registered LEFT of the central docking area (stacked under the
- * Outline Explorer when present). Loosely coupled to the chart: it observes
- * {@link WindowManager#focusedViewProperty()}, rebinds the view to whichever
- * architecture is focused, and listens to that view's
- * {@link ArchitectureView#redrawTickProperty()} so the panel refreshes
- * after every layout pulse — same trigger the orange-edge renderer uses.
+ * WFX module providing the What-If Dependencies panel. Auto-discovered by
+ * Avaje, registered in the BOTTOM dock area under the architecture view
+ * (stacked next to TopTangles when that's already there). Loosely coupled
+ * to the chart: observes {@link WindowManager#focusedViewProperty()},
+ * rebinds the view to whichever architecture is focused, and listens to
+ * that view's {@link ArchitectureView#redrawTickProperty()} so the panel
+ * refreshes after every layout pulse — same trigger the orange-edge
+ * renderer uses.
  */
 @Singleton
-@Priority(22)
+@Priority(28)
 public class WhatIfDependenciesModule implements Module {
 
     private WhatIfDependenciesView view;
@@ -45,7 +46,7 @@ public class WhatIfDependenciesModule implements Module {
 
     private void waitForDemoPreloader() throws PlatformException {
         try {
-            Thread.sleep(2_000);
+            Thread.sleep(1_000);
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
             throw new PlatformException("Interrupted while delaying What-If Dependencies preload", e);
@@ -56,11 +57,12 @@ public class WhatIfDependenciesModule implements Module {
     public void start() {
         WindowManager wm = Lookup.lookup(WindowManager.class);
 
-        // Stack next to the outline (vertical split inside the LEFT region)
-        // when it's available; fall back to a plain LEFT registration.
-        View outline = wm.findView(OutlineExplorerView.VIEW_ID);
-        if (outline != null) {
-            wm.register(view, outline);
+        // Dock under the architecture view in the BOTTOM region. Stack
+        // with TopTangles if it's already there; otherwise rely on the
+        // view's default Position.BOTTOM.
+        View topTangles = wm.findView(TopTanglesView.VIEW_ID);
+        if (topTangles != null) {
+            wm.register(view, topTangles);
         } else {
             wm.register(view);
         }

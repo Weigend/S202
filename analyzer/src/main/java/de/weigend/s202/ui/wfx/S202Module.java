@@ -157,7 +157,7 @@ public class S202Module implements Module {
 
     private void waitForDemoPreloader() throws PlatformException {
         try {
-            Thread.sleep(2_000);
+            Thread.sleep(1_000);
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
             throw new PlatformException("Interrupted while delaying S202 preload", e);
@@ -310,6 +310,8 @@ public class S202Module implements Module {
             LOGGER.warn("No scene available; skipping scene-level stylesheet install");
             return;
         }
+        stage.setMinWidth(1024);
+        stage.setMinHeight(768);
         var url = getClass().getResource("/de/weigend/s202/ui/styles.css");
         if (url != null) {
             stage.getScene().getStylesheets().add(url.toExternalForm());
