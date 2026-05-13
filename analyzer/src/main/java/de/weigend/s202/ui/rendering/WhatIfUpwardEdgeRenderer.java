@@ -7,11 +7,16 @@ import javafx.geometry.Bounds;
 import javafx.scene.Node;
 import javafx.scene.Parent;
 import javafx.scene.layout.Pane;
+import javafx.geometry.VPos;
+import javafx.scene.Group;
 import javafx.scene.paint.Color;
+import javafx.scene.shape.Circle;
 import javafx.scene.shape.Line;
 import javafx.scene.shape.QuadCurve;
 import javafx.scene.text.Font;
+import javafx.scene.text.FontWeight;
 import javafx.scene.text.Text;
+import javafx.scene.text.TextAlignment;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -41,13 +46,17 @@ import java.util.Objects;
 public final class WhatIfUpwardEdgeRenderer {
 
     private static final Color UPWARD_COLOR = Color.BLACK;
+    private static final Color BADGE_BG = Color.rgb(30, 60, 120);
+    private static final Color BADGE_FG = Color.WHITE;
     private static final double LINE_WIDTH = 1.2;
     private static final double ARROW_SIZE = 8.0;
     private static final double DASH_ON = 6.0;
     private static final double DASH_OFF = 4.0;
     /** Horizontal control-point offset as a fraction of the vertical span. */
     private static final double CURVE_BOW = 0.18;
-    private static final Font BADGE_FONT = Font.font(11.0);
+    private static final Font BADGE_FONT = Font.font(null, FontWeight.BOLD, 10.0);
+    private static final double BADGE_PADDING = 3.0;
+    private static final double BADGE_MIN_RADIUS = 8.0;
 
     private final Pane pane;
     private final Map<String, Node> elementRegistry;
@@ -77,7 +86,7 @@ public final class WhatIfUpwardEdgeRenderer {
         for (Violation violation : findVisibleViolations(model.staticEdges())) {
             boolean bothClasses = violation.source() instanceof LevelClassBox
                     && violation.target() instanceof LevelClassBox;
-            String badge = bothClasses ? null : "↑ " + violation.classEdges().size();
+            String badge = bothClasses ? null : Integer.toString(violation.classEdges().size());
             drawCurvedArrow(violation.source(), violation.target(), badge);
         }
     }
@@ -195,12 +204,39 @@ public final class WhatIfUpwardEdgeRenderer {
         pane.getChildren().addAll(curve, arrow1, arrow2);
 
         if (badge != null) {
-            Text label = new Text(controlX + 4, controlY - 4, badge);
-            label.setFont(BADGE_FONT);
-            label.setFill(UPWARD_COLOR);
-            label.setMouseTransparent(true);
-            pane.getChildren().add(label);
+            pane.getChildren().add(buildBadge(badge, controlX, controlY));
         }
+    }
+
+    /**
+     * Build a small dark-blue filled circle with the count rendered in
+     * white at its centre. The circle's radius scales with the text so
+     * two- or three-digit counts still fit, and the constant fill ensures
+     * the number stays readable even when the badge ends up over another
+     * arrow.
+     */
+    private static Group buildBadge(String text, double cx, double cy) {
+        Text label = new Text(text);
+        label.setFont(BADGE_FONT);
+        label.setFill(BADGE_FG);
+        label.setTextAlignment(TextAlignment.CENTER);
+        label.setTextOrigin(VPos.CENTER);
+        double textW = label.getLayoutBounds().getWidth();
+        double textH = label.getLayoutBounds().getHeight();
+        double radius = Math.max(BADGE_MIN_RADIUS, Math.max(textW, textH) / 2.0 + BADGE_PADDING);
+
+        Circle circle = new Circle(0, 0, radius);
+        circle.setFill(BADGE_BG);
+        circle.setStroke(null);
+
+        label.setX(-textW / 2.0);
+        label.setY(0);
+
+        Group group = new Group(circle, label);
+        group.setLayoutX(cx);
+        group.setLayoutY(cy);
+        group.setMouseTransparent(true);
+        return group;
     }
 
     private double[] centerInPane(Node node) {
