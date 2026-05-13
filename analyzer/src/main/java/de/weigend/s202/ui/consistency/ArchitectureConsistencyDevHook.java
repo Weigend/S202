@@ -4,8 +4,6 @@ import de.weigend.s202.domain.DomainModel;
 import de.weigend.s202.domain.architecture.Architecture;
 import de.weigend.s202.domain.architecture.HierarchicalLayeredArchitecture;
 import de.weigend.s202.domain.architecture.HierarchicalLayeredArchitectureBuilder;
-import de.weigend.s202.domain.architecture.Tangle;
-import de.weigend.s202.domain.architecture.Violation;
 import de.weigend.s202.ui.model.ArchitectureNode;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -43,7 +41,6 @@ public final class ArchitectureConsistencyDevHook {
                     ? hla.tangles().size() : 0;
             LOGGER.info("Architecture consistency check: PASS — {} violations, {} tangles",
                     violationCount, tangleCount);
-            dumpModelViolations(arch);
             return;
         }
 
@@ -53,31 +50,5 @@ public final class ArchitectureConsistencyDevHook {
             report.append("\n  ").append(d.path()).append(" — ").append(d.message());
         }
         LOGGER.warn(report.toString());
-    }
-
-    /**
-     * Temporary diagnostic — logs the violations the new domain model
-     * detects, so they can be compared side-by-side against the UI's
-     * Y-based list dumped by the dependencies view.
-     */
-    private static void dumpModelViolations(Architecture arch) {
-        if (!(arch instanceof HierarchicalLayeredArchitecture hla)) {
-            return;
-        }
-        StringBuilder report = new StringBuilder(
-                "[DEBUG] Model Violations — " + hla.violations().size() + ":");
-        for (Violation v : hla.violations()) {
-            report.append("\n  ").append(v.kind()).append(" ")
-                    .append(v.sourceFqn()).append("(L:").append(v.sourceLevel()).append(") -> ")
-                    .append(v.targetFqn()).append("(L:").append(v.targetLevel()).append(")");
-        }
-        LOGGER.info(report.toString());
-
-        StringBuilder tangleReport = new StringBuilder(
-                "[DEBUG] Model Tangles — " + hla.tangles().size() + ":");
-        for (Tangle t : hla.tangles()) {
-            tangleReport.append("\n  { ").append(String.join(", ", t.members())).append(" }");
-        }
-        LOGGER.info(tangleReport.toString());
     }
 }

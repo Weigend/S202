@@ -23,8 +23,6 @@ import javafx.scene.control.TreeView;
 import javafx.scene.layout.BorderPane;
 import javafx.scene.layout.Priority;
 import javafx.scene.layout.VBox;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 import java.net.URL;
 import java.util.Comparator;
@@ -49,8 +47,6 @@ import java.util.TreeMap;
  */
 public final class WhatIfDependenciesView implements View {
 
-    private static final Logger LOGGER = LoggerFactory.getLogger(WhatIfDependenciesView.class);
-
     public static final String VIEW_ID = "s202-whatif-dependencies";
 
     private final BorderPane root = new BorderPane();
@@ -62,8 +58,6 @@ public final class WhatIfDependenciesView implements View {
     private WhatIfModel model;
     private DependencyModel rawDepModel;
     private WhatIfUpwardEdgeRenderer renderer;
-    /** Last logged signature of the violations list so we only dump on change. */
-    private String lastLoggedSignature = "";
 
     private static final String PANEL_BG = "#f5f5f0";
     private static final String PANEL_STYLE =
@@ -120,62 +114,9 @@ public final class WhatIfDependenciesView implements View {
         upwardHeader.setText("Wrong-direction edges — " + totalClassEdges + " class edge"
                 + (totalClassEdges == 1 ? "" : "s"));
 
-        dumpViolationsOnChange(violations, totalClassEdges);
-
         ObservableList<String> sccItems = buildSccList();
         sccList.setItems(sccItems);
         sccHeader.setText("Package tangles (static) — " + sccItems.size());
-        dumpScCsOnChange(sccItems);
-    }
-
-    private String lastLoggedSccSignature = "";
-
-    /**
-     * Temporary diagnostic — logs the SCC list the UI's static graph
-     * builder reports, so the model side can be reconciled against it.
-     */
-    private void dumpScCsOnChange(List<String> items) {
-        String sig = String.join("|", items);
-        if (sig.equals(lastLoggedSccSignature)) {
-            return;
-        }
-        lastLoggedSccSignature = sig;
-        StringBuilder report = new StringBuilder(
-                "[DEBUG] UI Package tangles — " + items.size() + ":");
-        for (String s : items) {
-            report.append("\n  ").append(s);
-        }
-        LOGGER.info(report.toString());
-    }
-
-    /**
-     * Temporary diagnostic — logs the class-level edges the UI's Y-based
-     * detector currently flags. Used to compare against the model's
-     * Violation list so the two definitions can be reconciled. Removed
-     * once the UI consumes {@code Architecture.violations()} directly.
-     */
-    private void dumpViolationsOnChange(List<WhatIfUpwardEdgeRenderer.Violation> violations,
-                                        int totalClassEdges) {
-        StringBuilder sig = new StringBuilder();
-        for (WhatIfUpwardEdgeRenderer.Violation v : violations) {
-            for (ClassEdge edge : v.classEdges()) {
-                sig.append(edge.source()).append(" -> ").append(edge.target()).append('|');
-            }
-        }
-        String signature = sig.toString();
-        if (signature.equals(lastLoggedSignature)) {
-            return;
-        }
-        lastLoggedSignature = signature;
-
-        StringBuilder report = new StringBuilder(
-                "[DEBUG] UI Wrong-direction class edges — " + totalClassEdges + ":");
-        for (WhatIfUpwardEdgeRenderer.Violation v : violations) {
-            for (ClassEdge edge : v.classEdges()) {
-                report.append("\n  ").append(edge.source()).append(" -> ").append(edge.target());
-            }
-        }
-        LOGGER.info(report.toString());
     }
 
     private List<WhatIfUpwardEdgeRenderer.Violation> currentViolations() {
