@@ -152,10 +152,10 @@ public final class HierarchicalLayeredArchitectureBuilder {
     private Element toElement(CalculatedElementInfo info,
                               Map<String, List<CalculatedElementInfo>> contents) {
         if ("CLASS".equals(info.type)) {
-            return new Element.ClassElement(info.fullName, info.architectureLevel);
+            return new Element.ClassElement(info.fullName, info.architectureLevel, info.localLayerIndex);
         }
         List<List<Element>> innerRows = buildRowsForPackage(info.fullName, contents);
-        return new Element.PackageElement(info.fullName, info.architectureLevel, innerRows);
+        return new Element.PackageElement(info.fullName, info.architectureLevel, info.localLayerIndex, innerRows);
     }
 
     // -------------------------------------------------- violations

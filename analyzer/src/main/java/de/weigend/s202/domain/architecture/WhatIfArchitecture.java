@@ -303,9 +303,9 @@ public final class WhatIfArchitecture implements Architecture {
 
     private Element toElement(Node node, int depth) {
         if (!node.isPackage) {
-            return new Element.ClassElement(node.fqn, depth);
+            return new Element.ClassElement(node.fqn, depth, 0);
         }
-        return new Element.PackageElement(node.fqn, depth, toElementRows(node.rows));
+        return new Element.PackageElement(node.fqn, depth, 0, toElementRows(node.rows));
     }
 
     /** Internal mutable tree node. */

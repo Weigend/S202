@@ -39,6 +39,13 @@ public class DomainModel {
          * for why this is separate from any layout / rendering position.
          */
         public int architectureLevel;
+        /**
+         * Layout schicht index within the parent container. Filled in a
+         * subsequent step by the LocalLayerCalculator on the basis of
+         * sibling-only dependencies. Defaults to 0; not yet used for
+         * sorting/rendering.
+         */
+        public int localLayerIndex;
         public final Set<String> dependencies;
         public final Set<String> dependents = new HashSet<>();
 
@@ -58,6 +65,10 @@ public class DomainModel {
 
         public void setArchitectureLevel(int newLevel) {
             this.architectureLevel = newLevel;
+        }
+
+        public void setLocalLayerIndex(int newIndex) {
+            this.localLayerIndex = newIndex;
         }
 
         public void addDependency(String dependency) {
