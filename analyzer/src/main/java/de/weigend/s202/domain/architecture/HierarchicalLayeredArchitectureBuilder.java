@@ -125,21 +125,25 @@ public final class HierarchicalLayeredArchitectureBuilder {
         if (children.isEmpty()) {
             return List.of();
         }
+        // Within each parent's box, sort siblings by their local-layer
+        // position (set by LocalLayerCalculator) — purely a sibling-graph
+        // decision, NOT the global architectureLevel. This is the change
+        // that fixes the "ArchitectureView sits below ui.rendering" bug.
         List<CalculatedElementInfo> sorted = new ArrayList<>(children);
         sorted.sort(Comparator
-                .comparingInt((CalculatedElementInfo c) -> c.architectureLevel).reversed()
+                .comparingInt((CalculatedElementInfo c) -> c.localLayerIndex).reversed()
                 .thenComparing(c -> c.fullName));
 
         List<List<Element>> rows = new ArrayList<>();
         List<Element> currentRow = new ArrayList<>();
-        int currentLevel = Integer.MIN_VALUE;
+        int currentLayer = Integer.MIN_VALUE;
         for (CalculatedElementInfo child : sorted) {
-            if (child.architectureLevel != currentLevel) {
+            if (child.localLayerIndex != currentLayer) {
                 if (!currentRow.isEmpty()) {
                     rows.add(currentRow);
                     currentRow = new ArrayList<>();
                 }
-                currentLevel = child.architectureLevel;
+                currentLayer = child.localLayerIndex;
             }
             currentRow.add(toElement(child, contents));
         }
