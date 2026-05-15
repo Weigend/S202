@@ -176,6 +176,87 @@ class HierarchicalLayeredArchitectureBuilderTest {
         assertEquals(0, arch.rows().get(2).get(0).level());
     }
 
+    @Test
+    void parentToChildClassRefSurfacesAsContainmentEdge() {
+        // Mirrors the real-world pattern: ui.wfx.S202Module touching
+        // ui.wfx.whatif.WhatIfDependenciesModule. Source package strictly
+        // contains the target package, so the level calculator filters this
+        // edge out — the builder must still surface it as a containment
+        // edge so the renderer can show it.
+        DomainModel domain = new DomainModel();
+        addPackage(domain, "wfx", 0);
+        addPackage(domain, "wfx.whatif", 1);
+        addClass(domain, "wfx.S202Module", 0, Set.of("wfx.whatif.WhatIfDependenciesModule"));
+        addClass(domain, "wfx.whatif.WhatIfDependenciesModule", 1, Set.of());
+        domain.setPackageEdgeWeights(Map.of());
+        domain.setPackageBackEdges(Set.of());
+
+        HierarchicalLayeredArchitecture arch =
+                (HierarchicalLayeredArchitecture) new HierarchicalLayeredArchitectureBuilder().build(domain);
+
+        List<ContainmentEdge> classEdges = arch.containmentEdges().stream()
+                .filter(e -> e.scope() == EdgeScope.CLASS).toList();
+        List<ContainmentEdge> pkgEdges = arch.containmentEdges().stream()
+                .filter(e -> e.scope() == EdgeScope.PACKAGE).toList();
+
+        assertEquals(1, classEdges.size());
+        assertEquals("wfx.S202Module", classEdges.get(0).sourceFqn());
+        assertEquals("wfx.whatif.WhatIfDependenciesModule", classEdges.get(0).targetFqn());
+
+        assertEquals(1, pkgEdges.size());
+        assertEquals("wfx", pkgEdges.get(0).sourceFqn());
+        assertEquals("wfx.whatif", pkgEdges.get(0).targetFqn());
+
+        // The reverse edge (whatif -> wfx, i.e. child importing parent) is
+        // NOT a containment edge — it's the normal child-to-parent case the
+        // level calculator keeps in its graph.
+        assertTrue(arch.containmentEdges().stream().noneMatch(
+                e -> e.sourceFqn().equals("wfx.whatif.WhatIfDependenciesModule")));
+    }
+
+    @Test
+    void childToParentClassRefIsNotAContainmentEdge() {
+        DomainModel domain = new DomainModel();
+        addPackage(domain, "wfx", 0);
+        addPackage(domain, "wfx.whatif", 1);
+        addClass(domain, "wfx.ArchitectureWfxView", 0, Set.of());
+        addClass(domain, "wfx.whatif.WhatIfDependenciesModule", 1, Set.of("wfx.ArchitectureWfxView"));
+        domain.setPackageEdgeWeights(Map.of());
+        domain.setPackageBackEdges(Set.of());
+
+        HierarchicalLayeredArchitecture arch =
+                (HierarchicalLayeredArchitecture) new HierarchicalLayeredArchitectureBuilder().build(domain);
+
+        assertTrue(arch.containmentEdges().isEmpty(),
+                "child -> parent edges flow upward, not into a containment relationship");
+    }
+
+    @Test
+    void deepContainmentAggregatesAtBothScopes() {
+        // Two distinct class-level refs from the same source package into
+        // two different sub-packages produce two class edges and two
+        // package edges. Reverse refs are ignored.
+        DomainModel domain = new DomainModel();
+        addPackage(domain, "app", 0);
+        addPackage(domain, "app.outline", 1);
+        addPackage(domain, "app.tangles", 1);
+        addClass(domain, "app.Wiring", 0, Set.of("app.outline.View", "app.tangles.Filter"));
+        addClass(domain, "app.outline.View", 1, Set.of());
+        addClass(domain, "app.tangles.Filter", 1, Set.of());
+        domain.setPackageEdgeWeights(Map.of());
+        domain.setPackageBackEdges(Set.of());
+
+        HierarchicalLayeredArchitecture arch =
+                (HierarchicalLayeredArchitecture) new HierarchicalLayeredArchitectureBuilder().build(domain);
+
+        long classCount = arch.containmentEdges().stream()
+                .filter(e -> e.scope() == EdgeScope.CLASS).count();
+        long pkgCount = arch.containmentEdges().stream()
+                .filter(e -> e.scope() == EdgeScope.PACKAGE).count();
+        assertEquals(2, classCount);
+        assertEquals(2, pkgCount);
+    }
+
     // ----------------------------------------------- fixture helpers
 
     private static void addPackage(DomainModel domain, String fqn, int level) {

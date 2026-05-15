@@ -22,12 +22,14 @@ import java.util.List;
 public record HierarchicalLayeredArchitecture(
         List<List<Element>> rows,
         List<Violation> violations,
-        List<Tangle> tangles) implements Architecture {
+        List<Tangle> tangles,
+        List<ContainmentEdge> containmentEdges) implements Architecture {
 
     public HierarchicalLayeredArchitecture {
         rows = copyDeepImmutable(rows);
         violations = List.copyOf(violations);
         tangles = List.copyOf(tangles);
+        containmentEdges = List.copyOf(containmentEdges);
     }
 
     private static List<List<Element>> copyDeepImmutable(List<List<Element>> rows) {

@@ -66,16 +66,21 @@ class ArchitectureTypesTest {
         List<Tangle> tangles = new ArrayList<>();
         tangles.add(new Tangle(java.util.Set.of("a", "b")));
 
+        List<ContainmentEdge> containmentEdges = new ArrayList<>();
+        containmentEdges.add(new ContainmentEdge("a.X", "a.b.Y", EdgeScope.CLASS));
+
         HierarchicalLayeredArchitecture arch =
-                new HierarchicalLayeredArchitecture(rows, violations, tangles);
+                new HierarchicalLayeredArchitecture(rows, violations, tangles, containmentEdges);
 
         rows.clear();
         violations.clear();
         tangles.clear();
+        containmentEdges.clear();
         assertEquals(1, arch.rows().size());
         assertEquals(1, arch.rows().get(0).size());
         assertEquals(1, arch.violations().size());
         assertEquals(1, arch.tangles().size());
+        assertEquals(1, arch.containmentEdges().size());
         assertEquals(java.util.Set.of("a", "b"), arch.tangles().get(0).members());
     }
 
@@ -87,9 +92,20 @@ class ArchitectureTypesTest {
 
     @Test
     void architectureIsSealedToHierarchicalLayered() {
-        Architecture a = new HierarchicalLayeredArchitecture(List.of(), List.of(), List.of());
+        Architecture a = new HierarchicalLayeredArchitecture(List.of(), List.of(), List.of(), List.of());
         assertTrue(a instanceof HierarchicalLayeredArchitecture);
         assertSame(List.of(), a.violations());
         assertSame(List.of(), a.tangles());
+        assertSame(List.of(), a.containmentEdges());
+    }
+
+    @Test
+    void containmentEdgeRejectsNullsAndEmptyFqns() {
+        assertThrows(IllegalArgumentException.class,
+                () -> new ContainmentEdge("", "a.b.Y", EdgeScope.CLASS));
+        assertThrows(IllegalArgumentException.class,
+                () -> new ContainmentEdge("a.X", "", EdgeScope.CLASS));
+        assertThrows(IllegalArgumentException.class,
+                () -> new ContainmentEdge("a.X", "a.b.Y", null));
     }
 }

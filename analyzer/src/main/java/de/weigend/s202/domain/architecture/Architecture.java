@@ -39,6 +39,17 @@ public sealed interface Architecture
     List<Tangle> tangles();
 
     /**
+     * Dependency edges where the source's package strictly contains the
+     * target's package. The level-calculation algorithm suppresses these
+     * to avoid treating ordinary "parent module references its child
+     * module" relationships (Avaje/SPI wiring etc.) as architectural
+     * violations or tangles. The UI can render them as a separate edge
+     * category — typically dashed — so that the suppression is visible
+     * instead of silent.
+     */
+    List<ContainmentEdge> containmentEdges();
+
+    /**
      * Aggregate UPWARD violations into groups keyed by a caller-supplied
      * endpoint resolver. The {@code rollup} function maps a class FQN to
      * whatever string the caller considers the "endpoint" of an aggregate

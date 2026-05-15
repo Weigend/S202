@@ -151,6 +151,16 @@ public final class WhatIfArchitecture implements Architecture {
     }
 
     /**
+     * Containment edges are pulled verbatim from the original — they are
+     * a property of the static source code and don't change when boxes
+     * are dragged around.
+     */
+    @Override
+    public List<ContainmentEdge> containmentEdges() {
+        return original.containmentEdges();
+    }
+
+    /**
      * Same Rows-of-Cols shape {@link HierarchicalLayeredArchitecture}
      * exposes. Element levels are filled with the element's depth in the
      * Rows-of-Cols structure — useful for sorting, not for cross-element
