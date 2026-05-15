@@ -2,10 +2,10 @@ package de.weigend.s202.project;
 
 import de.weigend.s202.analysis.invariants.InvariantFinding;
 import de.weigend.s202.analysis.invariants.LayoutInvariantReport;
+import de.weigend.s202.domain.DependencyEdge;
 import de.weigend.s202.domain.DomainModel;
 import de.weigend.s202.reader.DependencyModel;
 import de.weigend.s202.reader.EdgeKind;
-import de.weigend.s202.ui.rendering.TangleEdgeRenderer;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
@@ -26,8 +26,8 @@ class S202ProjectStoreTest {
         DependencyModel rawModel = rawModel();
         DomainModel domainModel = domainModel();
         LayoutInvariantReport report = invariantReport();
-        Set<TangleEdgeRenderer.Edge> cycleBreakEdges = Set.of(
-                new TangleEdgeRenderer.Edge("com.example.A", "com.example.B"));
+        Set<DependencyEdge> cycleBreakEdges = Set.of(
+                new DependencyEdge("com.example.A", "com.example.B"));
         S202Project.Source source = new S202Project.Source(
                 "JAR", List.of("/tmp/example.jar"), null);
 
@@ -43,7 +43,7 @@ class S202ProjectStoreTest {
         DependencyModel loadedRaw = mapper.toDependencyModel(loaded.dependencyModel());
         DomainModel loadedDomain = mapper.toDomainModel(loaded.domainModel());
         LayoutInvariantReport loadedReport = mapper.toLayoutInvariantReport(loaded.layoutInvariantReport());
-        Set<TangleEdgeRenderer.Edge> loadedEdges = mapper.toCycleBreakEdges(loaded.cycleBreakEdges());
+        Set<DependencyEdge> loadedEdges = mapper.toCycleBreakEdges(loaded.cycleBreakEdges());
 
         assertEquals(S202Project.FORMAT, loaded.format());
         assertEquals(1, loadedRaw.getClassCount());

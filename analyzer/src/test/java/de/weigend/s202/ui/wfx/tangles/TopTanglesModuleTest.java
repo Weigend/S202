@@ -1,9 +1,9 @@
 package de.weigend.s202.ui.wfx.tangles;
 
+import de.weigend.s202.domain.DependencyEdge;
 import de.weigend.s202.domain.DomainModel;
 import de.weigend.s202.reader.DependencyModel;
 import de.weigend.s202.reader.EdgeKind;
-import de.weigend.s202.ui.rendering.TangleEdgeRenderer;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
@@ -25,7 +25,7 @@ class TopTanglesModuleTest {
                 "a.C", "C", "CLASS", 0, Set.of("a.A")));
 
         var tangles = TopTanglesModule.computeTopTangles(
-                model, null, Set.of(new TangleEdgeRenderer.Edge("a.C", "a.A")), null, 5);
+                model, null, Set.of(new DependencyEdge("a.C", "a.A")), null, 5);
 
         assertEquals(1, tangles.size());
         assertTrue(tangles.get(0).edges().stream()
@@ -44,7 +44,7 @@ class TopTanglesModuleTest {
         model.addClass("a.C", new DomainModel.CalculatedElementInfo(
                 "a.C", "C", "CLASS", 0, Set.of("a.A")));
 
-        var cutEdge = new TangleEdgeRenderer.Edge("a.C", "a.A");
+        var cutEdge = new DependencyEdge("a.C", "a.A");
         var tangles = TopTanglesModule.computeTopTangles(
                 model, null, Set.of(cutEdge), Set.of(cutEdge), null, 5);
 

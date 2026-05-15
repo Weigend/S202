@@ -1,5 +1,6 @@
 package de.weigend.s202.ui.rendering;
 
+import de.weigend.s202.domain.DependencyEdge;
 import de.weigend.s202.ui.LevelClassBox;
 import de.weigend.s202.ui.LevelPackageBox;
 import javafx.geometry.Bounds;
@@ -43,8 +44,6 @@ import java.util.function.Consumer;
  */
 public class TangleEdgeRenderer {
 
-    public record Edge(String from, String to) {}
-
     private static final Color NON_TANGLE_EDGE_COLOR = Color.web("#202020");
     private static final Color EDGE_COLOR     = Color.web("#ff5252");
     private static final Color EDGE_HOVER     = Color.web("#b71c1c");
@@ -77,12 +76,12 @@ public class TangleEdgeRenderer {
     private final Map<String, Node> elementRegistry;
     private final Consumer<String> statusCallback;
 
-    private List<Edge> edges = List.of();
+    private List<DependencyEdge> edges = List.of();
     private String selectedFrom;
     private String selectedTo;
-    private Set<Edge> cycleBreakEdges = Set.of();
-    private Set<Edge> appliedCutEdges = Set.of();
-    private Set<Edge> activeTangleEdges = Set.of();
+    private Set<DependencyEdge> cycleBreakEdges = Set.of();
+    private Set<DependencyEdge> appliedCutEdges = Set.of();
+    private Set<DependencyEdge> activeTangleEdges = Set.of();
     private Pane zoomableContent;
     private Pane overlayPane;
     private boolean showDebugLines = true;
@@ -130,7 +129,7 @@ public class TangleEdgeRenderer {
         this.onEdgeRestore = handler == null ? (a, b) -> {} : handler;
     }
 
-    public void setEdges(List<Edge> edges) {
+    public void setEdges(List<DependencyEdge> edges) {
         this.edges = edges == null ? List.of() : List.copyOf(edges);
         recomputeActiveTangleEdges();
         retriesLeft = INITIAL_RETRIES;
@@ -144,12 +143,12 @@ public class TangleEdgeRenderer {
         redraw();
     }
 
-    public void setCycleBreakEdges(Set<Edge> cycleBreakEdges) {
+    public void setCycleBreakEdges(Set<DependencyEdge> cycleBreakEdges) {
         this.cycleBreakEdges = cycleBreakEdges == null ? Set.of() : Set.copyOf(cycleBreakEdges);
         redraw();
     }
 
-    public void setAppliedCutEdges(Set<Edge> appliedCutEdges) {
+    public void setAppliedCutEdges(Set<DependencyEdge> appliedCutEdges) {
         this.appliedCutEdges = appliedCutEdges == null ? Set.of() : Set.copyOf(appliedCutEdges);
         recomputeActiveTangleEdges();
         redraw();
@@ -200,7 +199,7 @@ public class TangleEdgeRenderer {
             }
             anyRendered = routing.anyRendered;
         } else {
-            for (Edge edge : edges) {
+            for (DependencyEdge edge : edges) {
                 if (renderEdge(edge)) anyRendered = true;
             }
         }
@@ -311,7 +310,7 @@ public class TangleEdgeRenderer {
 
     private int countEdgesCrossing(double gapTop, double gapBottom, Map<String, Bounds> classBoundsByName) {
         int count = 0;
-        for (Edge edge : edges) {
+        for (DependencyEdge edge : edges) {
             Bounds s = classBoundsByName.get(edge.from());
             Bounds t = classBoundsByName.get(edge.to());
             if (s == null || t == null) continue;
@@ -333,7 +332,7 @@ public class TangleEdgeRenderer {
                                                                    double topLimit, double bottomLimit) {
         // Count how many edges touch each box (degree = in + out).
         Map<Bounds, Integer> degreeMap = new IdentityHashMap<>();
-        for (Edge edge : edges) {
+        for (DependencyEdge edge : edges) {
             Bounds s = classBoundsByName.get(edge.from());
             Bounds t = classBoundsByName.get(edge.to());
             if (s != null) degreeMap.merge(s, 1, Integer::sum);
@@ -393,7 +392,7 @@ public class TangleEdgeRenderer {
     private RoutingResult routeEdges(LaneLayout laneLayout) {
         List<RoutedTangleEdge> routed = new ArrayList<>();
         boolean anyRendered = false;
-        for (Edge edge : edges) {
+        for (DependencyEdge edge : edges) {
             Bounds source = laneLayout.classBoundsByName.get(edge.from());
             Bounds target = laneLayout.classBoundsByName.get(edge.to());
             if (source == null || target == null) {
@@ -418,7 +417,7 @@ public class TangleEdgeRenderer {
         return new RoutingResult(routed, anyRendered);
     }
 
-    private RoutedTangleEdge routeEdge(Edge edge, Bounds source, Bounds target, LaneLayout laneLayout) {
+    private RoutedTangleEdge routeEdge(DependencyEdge edge, Bounds source, Bounds target, LaneLayout laneLayout) {
         double idealY = (source.getCenterY() + target.getCenterY()) / 2.0;
         List<HorizontalTrack> horizontalCandidates = new ArrayList<>(laneLayout.horizontalTracks);
         horizontalCandidates.sort(Comparator.comparingDouble(h -> horizontalScore(h, idealY)));
@@ -515,7 +514,7 @@ public class TangleEdgeRenderer {
     }
 
     private void paintRoutedEdge(RoutedTangleEdge routed, List<VerticalSegment> verticalSegments) {
-        Edge edge = routed.edge;
+        DependencyEdge edge = routed.edge;
         Color color = edgeColor(edge);
         double width = edgeWidth(edge);
 
@@ -556,7 +555,7 @@ public class TangleEdgeRenderer {
         pane.getChildren().addAll(path, arrow);
     }
 
-    private boolean renderFallbackEdge(Edge edge, Bounds source, Bounds target, LaneLayout laneLayout) {
+    private boolean renderFallbackEdge(DependencyEdge edge, Bounds source, Bounds target, LaneLayout laneLayout) {
         FallbackPath fallback = findFallbackPath(source, target, laneLayout);
         if (fallback == null) {
             fallback = findFallbackPathForced(source, target, laneLayout);
@@ -870,14 +869,14 @@ public class TangleEdgeRenderer {
     }
 
     private static final class RoutedTangleEdge {
-        final Edge edge;
+        final DependencyEdge edge;
         final Bounds source;
         final Bounds target;
         final VerticalTrack sourceTrack;
         final HorizontalTrack horizontal;
         final VerticalTrack targetTrack;
 
-        RoutedTangleEdge(Edge edge, Bounds source, Bounds target,
+        RoutedTangleEdge(DependencyEdge edge, Bounds source, Bounds target,
                          VerticalTrack sourceTrack, HorizontalTrack horizontal,
                          VerticalTrack targetTrack) {
             this.edge = edge;
@@ -931,7 +930,7 @@ public class TangleEdgeRenderer {
      *
      * @return {@code true} when both nodes were found and drawn.
      */
-    private boolean renderEdge(Edge edge) {
+    private boolean renderEdge(DependencyEdge edge) {
         Node source = elementRegistry.get(edge.from());
         Node target = elementRegistry.get(edge.to());
         if (source == null || target == null) return false;
@@ -971,7 +970,7 @@ public class TangleEdgeRenderer {
         return true;
     }
 
-    private void installEdgeInteractions(javafx.scene.shape.Shape shape, Edge edge) {
+    private void installEdgeInteractions(javafx.scene.shape.Shape shape, DependencyEdge edge) {
         shape.setOnMouseClicked(e -> {
             handleEdgeClick(edge);
             e.consume();
@@ -999,7 +998,7 @@ public class TangleEdgeRenderer {
         }
     }
 
-    private void handleEdgeClick(Edge edge) {
+    private void handleEdgeClick(DependencyEdge edge) {
         if (isSelected(edge)) {
             statusCallback.accept("Tangle edge deselected");
             setSelectedEdge(null, null);
@@ -1016,7 +1015,7 @@ public class TangleEdgeRenderer {
         onEdgeClicked.accept(edge.from(), edge.to());
     }
 
-    private Color edgeColor(Edge edge) {
+    private Color edgeColor(DependencyEdge edge) {
         if (isSelected(edge)) {
             return SELECTED_COLOR;
         }
@@ -1029,7 +1028,7 @@ public class TangleEdgeRenderer {
         return isCycleBreakEdge(edge) ? CUT_EDGE_COLOR : EDGE_COLOR;
     }
 
-    private double edgeWidth(Edge edge) {
+    private double edgeWidth(DependencyEdge edge) {
         if (isSelected(edge)) {
             return SELECTED_WIDTH;
         }
@@ -1042,7 +1041,7 @@ public class TangleEdgeRenderer {
         return isCycleBreakEdge(edge) && isActiveTangleEdge(edge) ? CUT_EDGE_WIDTH : EDGE_WIDTH;
     }
 
-    private void applyEdgeDash(javafx.scene.shape.Shape shape, Edge edge) {
+    private void applyEdgeDash(javafx.scene.shape.Shape shape, DependencyEdge edge) {
         if (isAppliedCutEdge(edge) || (isCycleBreakEdge(edge) && isActiveTangleEdge(edge))) {
             shape.getStrokeDashArray().setAll(9.0, 5.0);
         } else {
@@ -1050,21 +1049,21 @@ public class TangleEdgeRenderer {
         }
     }
 
-    private boolean isCycleBreakEdge(Edge edge) {
+    private boolean isCycleBreakEdge(DependencyEdge edge) {
         return cycleBreakEdges.contains(edge);
     }
 
-    private boolean isAppliedCutEdge(Edge edge) {
+    private boolean isAppliedCutEdge(DependencyEdge edge) {
         return appliedCutEdges.contains(edge);
     }
 
-    private boolean isActiveTangleEdge(Edge edge) {
+    private boolean isActiveTangleEdge(DependencyEdge edge) {
         return activeTangleEdges.contains(edge);
     }
 
     private void recomputeActiveTangleEdges() {
         Map<String, Set<String>> graph = new HashMap<>();
-        for (Edge edge : edges) {
+        for (DependencyEdge edge : edges) {
             graph.computeIfAbsent(edge.from(), k -> new java.util.HashSet<>());
             graph.computeIfAbsent(edge.to(), k -> new java.util.HashSet<>());
             if (!appliedCutEdges.contains(edge)) {
@@ -1135,7 +1134,7 @@ public class TangleEdgeRenderer {
         components.add(component);
     }
 
-    private boolean hasVisibleEndpointWaitingForLayout(Edge edge) {
+    private boolean hasVisibleEndpointWaitingForLayout(DependencyEdge edge) {
         Node source = elementRegistry.get(edge.from());
         Node target = elementRegistry.get(edge.to());
         if (source == null || target == null) {
@@ -1187,7 +1186,7 @@ public class TangleEdgeRenderer {
         return new Point(cx + dx * scale, cy + dy * scale);
     }
 
-    private boolean isSelected(Edge edge) {
+    private boolean isSelected(DependencyEdge edge) {
         return selectedFrom != null && selectedTo != null
                 && selectedFrom.equals(edge.from()) && selectedTo.equals(edge.to());
     }

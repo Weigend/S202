@@ -1,6 +1,6 @@
 package de.weigend.s202.ui.wfx.events;
 
-import de.weigend.s202.ui.rendering.TangleEdgeRenderer;
+import de.weigend.s202.domain.DependencyEdge;
 
 import java.util.Collection;
 import java.util.EventObject;
@@ -11,14 +11,14 @@ import java.util.Set;
  */
 public class CutTangleEdgesEvent extends EventObject {
 
-    private final Set<TangleEdgeRenderer.Edge> edges;
+    private final Set<DependencyEdge> edges;
 
-    public CutTangleEdgesEvent(Collection<TangleEdgeRenderer.Edge> edges, Object source) {
+    public CutTangleEdgesEvent(Collection<DependencyEdge> edges, Object source) {
         super(source);
         this.edges = edges == null ? Set.of() : Set.copyOf(edges);
     }
 
-    public Set<TangleEdgeRenderer.Edge> getEdges() {
+    public Set<DependencyEdge> getEdges() {
         return edges;
     }
 }

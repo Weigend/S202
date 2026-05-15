@@ -1,6 +1,7 @@
 package de.weigend.s202.ui;
 
 import de.weigend.s202.analysis.quality.QualityMetrics;
+import de.weigend.s202.domain.DependencyEdge;
 import de.weigend.s202.domain.DomainModel;
 import de.weigend.s202.domain.architecture.Architecture;
 import de.weigend.s202.domain.architecture.HierarchicalLayeredArchitecture;
@@ -74,11 +75,11 @@ public class ArchitectureView extends BorderPane {
     // Pending tangle visualisation snapshot, applied once setArchitectureRoot
     // (re-)builds the renderer. Set by setTangleVisualization before the root
     // is assigned, or restored after a refreshLayout.
-    private List<TangleEdgeRenderer.Edge> pendingTangleEdges;
+    private List<DependencyEdge> pendingTangleEdges;
     private String pendingTangleSelFrom;
     private String pendingTangleSelTo;
-    private Set<TangleEdgeRenderer.Edge> cycleBreakEdges = Set.of();
-    private final Set<TangleEdgeRenderer.Edge> appliedCutEdges = new HashSet<>();
+    private Set<DependencyEdge> cycleBreakEdges = Set.of();
+    private final Set<DependencyEdge> appliedCutEdges = new HashSet<>();
 
     // Lines need redraw after zoom/scroll changes (perf optimization).
     private boolean linesNeedUpdate = false;
@@ -947,7 +948,7 @@ public class ArchitectureView extends BorderPane {
      * the caller's job — calling this method again with new data updates
      * the overlay in place. Survives {@link #refreshLayout()}.
      */
-    public void setTangleVisualization(List<TangleEdgeRenderer.Edge> edges,
+    public void setTangleVisualization(List<DependencyEdge> edges,
                                        String selectedFrom, String selectedTo) {
         if (edges == null || edges.isEmpty()) {
             pendingTangleEdges = null;
@@ -982,18 +983,18 @@ public class ArchitectureView extends BorderPane {
         }
     }
 
-    public Set<TangleEdgeRenderer.Edge> getCycleBreakEdges() {
+    public Set<DependencyEdge> getCycleBreakEdges() {
         return cycleBreakEdges;
     }
 
-    public void setCycleBreakEdges(Set<TangleEdgeRenderer.Edge> cycleBreakEdges) {
+    public void setCycleBreakEdges(Set<DependencyEdge> cycleBreakEdges) {
         this.cycleBreakEdges = cycleBreakEdges == null ? Set.of() : Set.copyOf(cycleBreakEdges);
         if (tangleRenderer != null) {
             tangleRenderer.setCycleBreakEdges(this.cycleBreakEdges);
         }
     }
 
-    public void setAppliedTangleCutEdges(Set<TangleEdgeRenderer.Edge> appliedCutEdges) {
+    public void setAppliedTangleCutEdges(Set<DependencyEdge> appliedCutEdges) {
         this.appliedCutEdges.clear();
         if (appliedCutEdges != null) {
             this.appliedCutEdges.addAll(appliedCutEdges);
@@ -1007,7 +1008,7 @@ public class ArchitectureView extends BorderPane {
         if (from == null || to == null) {
             return;
         }
-        TangleEdgeRenderer.Edge cut = new TangleEdgeRenderer.Edge(from, to);
+        DependencyEdge cut = new DependencyEdge(from, to);
         if (!appliedCutEdges.add(cut)) {
             return;
         }
@@ -1023,12 +1024,12 @@ public class ArchitectureView extends BorderPane {
         setStatus("Refactoring Preview: cut " + simple(from) + " -> " + simple(to));
     }
 
-    public void applyTangleEdgeCuts(Collection<TangleEdgeRenderer.Edge> cuts) {
+    public void applyTangleEdgeCuts(Collection<DependencyEdge> cuts) {
         if (cuts == null || cuts.isEmpty()) {
             return;
         }
         int added = 0;
-        for (TangleEdgeRenderer.Edge cut : cuts) {
+        for (DependencyEdge cut : cuts) {
             if (cut == null || cut.from() == null || cut.to() == null) {
                 continue;
             }
@@ -1055,7 +1056,7 @@ public class ArchitectureView extends BorderPane {
         if (from == null || to == null) {
             return;
         }
-        TangleEdgeRenderer.Edge cut = new TangleEdgeRenderer.Edge(from, to);
+        DependencyEdge cut = new DependencyEdge(from, to);
         if (!appliedCutEdges.remove(cut)) {
             return;
         }
@@ -1075,7 +1076,7 @@ public class ArchitectureView extends BorderPane {
         if (from == null || to == null || pendingTangleEdges == null) {
             return;
         }
-        TangleEdgeRenderer.Edge cut = new TangleEdgeRenderer.Edge(from, to);
+        DependencyEdge cut = new DependencyEdge(from, to);
         if (!pendingTangleEdges.contains(cut)) {
             return;
         }

@@ -1,5 +1,6 @@
 package de.weigend.s202.ui.wfx.tangles;
 
+import de.weigend.s202.domain.DependencyEdge;
 import de.weigend.s202.graph.StronglyConnectedComponent;
 import de.weigend.s202.graph.TarjanSCCFinder;
 import de.weigend.s202.domain.DomainModel;
@@ -7,7 +8,6 @@ import de.weigend.s202.reader.DependencyModel;
 import de.weigend.s202.reader.EdgeKind;
 import de.weigend.s202.ui.ArchitectureView;
 import de.weigend.s202.ui.model.ArchitectureNode;
-import de.weigend.s202.ui.rendering.TangleEdgeRenderer;
 import de.weigend.s202.ui.wfx.ArchitectureWfxView;
 import de.weigend.s202.ui.wfx.events.CutTangleEdgeEvent;
 import de.weigend.s202.ui.wfx.events.CutTangleEdgesEvent;
@@ -68,7 +68,7 @@ public class TopTanglesModule implements Module {
     private boolean currentScopeInitialized;
     private List<TopTanglesView.Tangle> lastTangles;
     private List<TopTanglesView.RefactoringPreviewEdge> lastPreviewEdges;
-    private final Set<TangleEdgeRenderer.Edge> appliedCutEdges = new HashSet<>();
+    private final Set<DependencyEdge> appliedCutEdges = new HashSet<>();
     private DomainModel lastCutDataset;
 
     @Override
@@ -117,9 +117,9 @@ public class TopTanglesModule implements Module {
         tanglesView.setOnRestoreEdge((from, to) ->
                 bus.publish(new RestoreTangleEdgeEvent(from, to, tanglesView)));
         tanglesView.setOnCutAll(tangle -> {
-            Set<TangleEdgeRenderer.Edge> candidates = tangle.edges().stream()
+            Set<DependencyEdge> candidates = tangle.edges().stream()
                     .filter(edge -> edge.cycleBreakEdge() && !edge.cutApplied())
-                    .map(edge -> new TangleEdgeRenderer.Edge(edge.from(), edge.to()))
+                    .map(edge -> new DependencyEdge(edge.from(), edge.to()))
                     .collect(Collectors.toCollection(java.util.LinkedHashSet::new));
             if (candidates.isEmpty()) {
                 return;
@@ -127,7 +127,7 @@ public class TopTanglesModule implements Module {
             bus.publish(new CutTangleEdgesEvent(candidates, tanglesView));
         });
         bus.subscribe(CutTangleEdgeEvent.class, ev -> {
-            TangleEdgeRenderer.Edge edge = new TangleEdgeRenderer.Edge(ev.getFrom(), ev.getTo());
+            DependencyEdge edge = new DependencyEdge(ev.getFrom(), ev.getTo());
             if (appliedCutEdges.add(edge)) {
                 requestScopeRefresh();
             }
@@ -140,7 +140,7 @@ public class TopTanglesModule implements Module {
             return true;
         });
         bus.subscribe(RestoreTangleEdgeEvent.class, ev -> {
-            TangleEdgeRenderer.Edge edge = new TangleEdgeRenderer.Edge(ev.getFrom(), ev.getTo());
+            DependencyEdge edge = new DependencyEdge(ev.getFrom(), ev.getTo());
             if (appliedCutEdges.remove(edge)) {
                 requestScopeRefresh();
             }
@@ -310,15 +310,15 @@ public class TopTanglesModule implements Module {
      */
     static List<TopTanglesView.Tangle> computeTopTangles(DomainModel model,
                                                         DependencyModel rawModel,
-                                                        Set<TangleEdgeRenderer.Edge> cycleBreakEdges,
+                                                        Set<DependencyEdge> cycleBreakEdges,
                                                         String scope, int topN) {
         return computeTopTangles(model, rawModel, cycleBreakEdges, Set.of(), scope, topN);
     }
 
     static List<TopTanglesView.Tangle> computeTopTangles(DomainModel model,
                                                         DependencyModel rawModel,
-                                                        Set<TangleEdgeRenderer.Edge> cycleBreakEdges,
-                                                        Set<TangleEdgeRenderer.Edge> appliedCutEdges,
+                                                        Set<DependencyEdge> cycleBreakEdges,
+                                                        Set<DependencyEdge> appliedCutEdges,
                                                         String scope, int topN) {
         Map<String, Set<String>> graph = new HashMap<>();
         for (var entry : model.getAllClasses().entrySet()) {
@@ -345,8 +345,8 @@ public class TopTanglesModule implements Module {
     private static TopTanglesView.Tangle toTangle(StronglyConnectedComponent scc,
                                                   Map<String, Set<String>> graph,
                                                   DependencyModel rawModel,
-                                                  Set<TangleEdgeRenderer.Edge> cycleBreakEdges,
-                                                  Set<TangleEdgeRenderer.Edge> appliedCutEdges) {
+                                                  Set<DependencyEdge> cycleBreakEdges,
+                                                  Set<DependencyEdge> appliedCutEdges) {
         Set<String> members = scc.getMembers();
         List<String> sortedMembers = members.stream().sorted().toList();
         List<TopTanglesView.TangleEdge> edges = new ArrayList<>();
@@ -370,21 +370,21 @@ public class TopTanglesModule implements Module {
                 edges);
     }
 
-    private static boolean isCycleBreakEdge(Set<TangleEdgeRenderer.Edge> cycleBreakEdges,
+    private static boolean isCycleBreakEdge(Set<DependencyEdge> cycleBreakEdges,
                                             String from,
                                             String to) {
-        return cycleBreakEdges != null && cycleBreakEdges.contains(new TangleEdgeRenderer.Edge(from, to));
+        return cycleBreakEdges != null && cycleBreakEdges.contains(new DependencyEdge(from, to));
     }
 
     private static List<TopTanglesView.RefactoringPreviewEdge> previewEdgesForScope(
-            Set<TangleEdgeRenderer.Edge> appliedCutEdges, String scope) {
+            Set<DependencyEdge> appliedCutEdges, String scope) {
         if (appliedCutEdges == null || appliedCutEdges.isEmpty()) {
             return List.of();
         }
         return appliedCutEdges.stream()
                 .filter(edge -> inScope(edge.from(), scope) && inScope(edge.to(), scope))
-                .sorted(Comparator.comparing(TangleEdgeRenderer.Edge::from)
-                        .thenComparing(TangleEdgeRenderer.Edge::to))
+                .sorted(Comparator.comparing(DependencyEdge::from)
+                        .thenComparing(DependencyEdge::to))
                 .map(edge -> new TopTanglesView.RefactoringPreviewEdge(edge.from(), edge.to()))
                 .toList();
     }

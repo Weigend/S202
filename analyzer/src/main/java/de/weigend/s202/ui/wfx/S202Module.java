@@ -3,6 +3,7 @@ package de.weigend.s202.ui.wfx;
 import de.weigend.s202.analysis.invariants.LayoutInvariantChecker;
 import de.weigend.s202.analysis.invariants.LayoutInvariantReport;
 import de.weigend.s202.analysis.quality.QualityMetrics;
+import de.weigend.s202.domain.DependencyEdge;
 import de.weigend.s202.graph.SCCBreaker;
 import de.weigend.s202.domain.strategy.impl.HeuristicSCCBreakingStrategy;
 import de.weigend.s202.domain.DomainModel;
@@ -131,7 +132,7 @@ public class S202Module implements Module {
     private final Map<String, ArchitectureWfxView> tangleViews = new HashMap<>();
     private final Map<ArchitectureView, S202Project.Source> viewSources = new HashMap<>();
     private final Map<ArchitectureView, LayoutInvariantReport> viewInvariantReports = new HashMap<>();
-    private final Set<TangleEdgeRenderer.Edge> refactoringPreviewCuts = new HashSet<>();
+    private final Set<DependencyEdge> refactoringPreviewCuts = new HashSet<>();
 
     public S202Module(ApplicationWindow applicationWindow) {
         this.applicationWindow = applicationWindow;
@@ -924,7 +925,7 @@ public class S202Module implements Module {
                 publishProgress("Calculating architectural levels...", 0.75);
                 LevelCalculator calculator = new LevelCalculator();
                 DomainModel calculated = calculator.calculate(rawModel);
-                Set<TangleEdgeRenderer.Edge> cycleBreakEdges = cycleBreakEdgesFromLastLevelCalculation(calculator);
+                Set<DependencyEdge> cycleBreakEdges = cycleBreakEdgesFromLastLevelCalculation(calculator);
 
                 publishProgress("Building architecture tree...", 0.85);
                 ArchitectureNode root = architectureNodeBuilder.build(calculated);
@@ -1094,7 +1095,7 @@ public class S202Module implements Module {
                         .runIfEnabled(domainModel, root);
                 QualityMetrics metrics = QualityMetrics.compute(domainModel);
                 LayoutInvariantReport invariants = projectMapper.toLayoutInvariantReport(project.layoutInvariantReport());
-                Set<TangleEdgeRenderer.Edge> cycleBreakEdges =
+                Set<DependencyEdge> cycleBreakEdges =
                         projectMapper.toCycleBreakEdges(project.cycleBreakEdges());
                 return new LoadedProject(project, rawModel, domainModel, root, metrics, invariants, cycleBreakEdges);
             }
@@ -1199,14 +1200,14 @@ public class S202Module implements Module {
     private record LoadedProject(S202Project project, DependencyModel rawModel,
                                  DomainModel domainModel, ArchitectureNode rootNode,
                                  QualityMetrics metrics, LayoutInvariantReport invariants,
-                                 Set<TangleEdgeRenderer.Edge> cycleBreakEdges) {}
+                                 Set<DependencyEdge> cycleBreakEdges) {}
 
     private record AnalysisResult(DependencyModel rawModel, ArchitectureNode rootNode,
                                   QualityMetrics metrics, DomainModel domainModel,
                                   LayoutInvariantReport invariants,
-                                  Set<TangleEdgeRenderer.Edge> cycleBreakEdges) {}
+                                  Set<DependencyEdge> cycleBreakEdges) {}
 
-    private static Set<TangleEdgeRenderer.Edge> cycleBreakEdgesFromLastLevelCalculation(LevelCalculator calculator) {
+    private static Set<DependencyEdge> cycleBreakEdgesFromLastLevelCalculation(LevelCalculator calculator) {
         var strategy = calculator.getStrategyContext().getClassLevelStrategy();
         if (!(strategy instanceof HeuristicSCCBreakingStrategy heuristic)) {
             return Set.of();
@@ -1216,8 +1217,8 @@ public class S202Module implements Module {
                 .collect(Collectors.toUnmodifiableSet());
     }
 
-    private static TangleEdgeRenderer.Edge toTangleEdge(SCCBreaker.Edge edge) {
-        return new TangleEdgeRenderer.Edge(edge.from, edge.to);
+    private static DependencyEdge toTangleEdge(SCCBreaker.Edge edge) {
+        return new DependencyEdge(edge.from, edge.to);
     }
 
     /**
@@ -1248,7 +1249,7 @@ public class S202Module implements Module {
             return;
         }
 
-        java.util.List<de.weigend.s202.ui.rendering.TangleEdgeRenderer.Edge> edges =
+        java.util.List<DependencyEdge> edges =
                 collectInternalEdges(filteredRoot, members);
 
         WindowManager wm = Lookup.lookup(WindowManager.class);
@@ -1329,13 +1330,13 @@ public class S202Module implements Module {
     }
 
     private void applyTanglePreviewCutToViews(String from, String to) {
-        refactoringPreviewCuts.add(new TangleEdgeRenderer.Edge(from, to));
+        refactoringPreviewCuts.add(new DependencyEdge(from, to));
         for (ArchitectureWfxView wrapper : registeredArchitectureViews()) {
             wrapper.getArchitectureView().applyTangleEdgeCut(from, to);
         }
     }
 
-    private void applyTanglePreviewCutsToViews(Set<TangleEdgeRenderer.Edge> edges) {
+    private void applyTanglePreviewCutsToViews(Set<DependencyEdge> edges) {
         if (edges == null || edges.isEmpty()) {
             return;
         }
@@ -1346,7 +1347,7 @@ public class S202Module implements Module {
     }
 
     private void restoreTanglePreviewCutInViews(String from, String to) {
-        refactoringPreviewCuts.remove(new TangleEdgeRenderer.Edge(from, to));
+        refactoringPreviewCuts.remove(new DependencyEdge(from, to));
         for (ArchitectureWfxView wrapper : registeredArchitectureViews()) {
             wrapper.getArchitectureView().restoreTangleEdgeCut(from, to);
         }
@@ -1485,11 +1486,11 @@ public class S202Module implements Module {
      * intra-tangle dependency. Edges are deduplicated by (from, to) and
      * sorted alphabetically for stable rendering.
      */
-    private static java.util.List<de.weigend.s202.ui.rendering.TangleEdgeRenderer.Edge>
+    private static java.util.List<DependencyEdge>
             collectInternalEdges(ArchitectureNode root, java.util.Set<String> members) {
-        java.util.Set<de.weigend.s202.ui.rendering.TangleEdgeRenderer.Edge> seen = new java.util.LinkedHashSet<>();
+        java.util.Set<DependencyEdge> seen = new java.util.LinkedHashSet<>();
         collectInternalEdgesRec(root, members, seen);
-        java.util.List<de.weigend.s202.ui.rendering.TangleEdgeRenderer.Edge> sorted = new ArrayList<>(seen);
+        java.util.List<DependencyEdge> sorted = new ArrayList<>(seen);
         sorted.sort((a, b) -> {
             int c = a.from().compareTo(b.from());
             return c != 0 ? c : a.to().compareTo(b.to());
@@ -1499,11 +1500,11 @@ public class S202Module implements Module {
 
     private static void collectInternalEdgesRec(ArchitectureNode node,
                                                 java.util.Set<String> members,
-                                                java.util.Set<de.weigend.s202.ui.rendering.TangleEdgeRenderer.Edge> out) {
+                                                java.util.Set<DependencyEdge> out) {
         if (node.getType() == ArchitectureNode.NodeType.CLASS && members.contains(node.getFullName())) {
             for (String dep : node.getDependencies()) {
                 if (members.contains(dep) && !dep.equals(node.getFullName())) {
-                    out.add(new de.weigend.s202.ui.rendering.TangleEdgeRenderer.Edge(node.getFullName(), dep));
+                    out.add(new DependencyEdge(node.getFullName(), dep));
                 }
             }
         }

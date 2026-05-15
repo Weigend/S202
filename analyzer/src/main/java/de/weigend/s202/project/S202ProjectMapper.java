@@ -2,10 +2,10 @@ package de.weigend.s202.project;
 
 import de.weigend.s202.analysis.invariants.InvariantFinding;
 import de.weigend.s202.analysis.invariants.LayoutInvariantReport;
+import de.weigend.s202.domain.DependencyEdge;
 import de.weigend.s202.domain.DomainModel;
 import de.weigend.s202.reader.DependencyModel;
 import de.weigend.s202.reader.EdgeKind;
-import de.weigend.s202.ui.rendering.TangleEdgeRenderer;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -29,7 +29,7 @@ public final class S202ProjectMapper {
                                  DependencyModel rawModel,
                                  DomainModel domainModel,
                                  LayoutInvariantReport invariantReport,
-                                 Set<TangleEdgeRenderer.Edge> cycleBreakEdges) {
+                                 Set<DependencyEdge> cycleBreakEdges) {
         return new S202Project(
                 S202Project.FORMAT,
                 S202Project.FORMAT_VERSION,
@@ -135,12 +135,12 @@ public final class S202ProjectMapper {
                 findings);
     }
 
-    public Set<TangleEdgeRenderer.Edge> toCycleBreakEdges(List<S202Project.CycleBreakEdgeDto> dtos) {
+    public Set<DependencyEdge> toCycleBreakEdges(List<S202Project.CycleBreakEdgeDto> dtos) {
         if (dtos == null) {
             return Set.of();
         }
         return dtos.stream()
-                .map(edge -> new TangleEdgeRenderer.Edge(edge.from(), edge.to()))
+                .map(edge -> new DependencyEdge(edge.from(), edge.to()))
                 .collect(Collectors.toUnmodifiableSet());
     }
 
@@ -253,13 +253,13 @@ public final class S202ProjectMapper {
         return info;
     }
 
-    private List<S202Project.CycleBreakEdgeDto> toCycleBreakEdgeDtos(Set<TangleEdgeRenderer.Edge> edges) {
+    private List<S202Project.CycleBreakEdgeDto> toCycleBreakEdgeDtos(Set<DependencyEdge> edges) {
         if (edges == null) {
             return List.of();
         }
         return edges.stream()
-                .sorted(Comparator.comparing(TangleEdgeRenderer.Edge::from)
-                        .thenComparing(TangleEdgeRenderer.Edge::to))
+                .sorted(Comparator.comparing(DependencyEdge::from)
+                        .thenComparing(DependencyEdge::to))
                 .map(edge -> new S202Project.CycleBreakEdgeDto(edge.from(), edge.to()))
                 .toList();
     }
