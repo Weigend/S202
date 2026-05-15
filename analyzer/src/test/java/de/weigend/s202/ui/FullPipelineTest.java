@@ -28,7 +28,7 @@ public class FullPipelineTest {
         System.out.println("[TEST] After calculate:");
         System.out.println("  Packages in model: " + calculatedModel.getAllPackages().size());
         for (DomainModel.CalculatedElementInfo pkg : calculatedModel.getAllPackages().values()) {
-            System.out.println("    " + pkg.fullName + " -> L" + pkg.level);
+            System.out.println("    " + pkg.fullName + " -> L" + pkg.architectureLevel);
         }
         
         // 4 com.* packages + 7 sccs.* packages (adversarial SCC example)
@@ -37,7 +37,7 @@ public class FullPipelineTest {
         // com.example2 depends on com.example(0) and com.example1(0) → package level 1
         DomainModel.CalculatedElementInfo example2 = calculatedModel.getPackage("com.example2");
         assertNotNull(example2, "com.example2 should exist");
-        assertEquals(1, example2.level, "com.example2 uses com.example.B (class L1) → package L2");
+        assertEquals(1, example2.architectureLevel, "com.example2 uses com.example.B (class L1) → package L2");
         
         // Step 3: Build architecture node tree
         ArchitectureNodeBuilder builder = new ArchitectureNodeBuilder();

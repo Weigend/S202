@@ -30,11 +30,11 @@ public class UIModelBuilder {
                 classInfo.fullName,
                 classInfo.simpleName,
                 classInfo.type,
-                classInfo.level,
+                classInfo.architectureLevel,
                 new HashSet<>(classInfo.dependencies),
                 new HashSet<>(classInfo.dependents)
             );
-            allLevels.get(classInfo.level).add(uiElement);
+            allLevels.get(classInfo.architectureLevel).add(uiElement);
         }
 
         // Add packages to their levels
@@ -43,11 +43,11 @@ public class UIModelBuilder {
                 pkgInfo.fullName,
                 pkgInfo.simpleName,
                 pkgInfo.type,
-                pkgInfo.level,
+                pkgInfo.architectureLevel,
                 new HashSet<>(pkgInfo.dependencies),
                 new HashSet<>(pkgInfo.dependents)
             );
-            allLevels.get(pkgInfo.level).add(uiElement);
+            allLevels.get(pkgInfo.architectureLevel).add(uiElement);
         }
 
         // Sort each level alphabetically

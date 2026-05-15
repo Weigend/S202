@@ -23,7 +23,7 @@ public class TestLevelCalculatorDebug {
         System.out.println("\n=== FINAL RESULT ===");
         System.out.println("DomainModel packages: " + domainModel.getAllPackages().size());
         for (DomainModel.CalculatedElementInfo pkg : domainModel.getAllPackages().values()) {
-            System.out.println("  " + pkg.fullName + " -> L" + pkg.level);
+            System.out.println("  " + pkg.fullName + " -> L" + pkg.architectureLevel);
         }
     }
 }

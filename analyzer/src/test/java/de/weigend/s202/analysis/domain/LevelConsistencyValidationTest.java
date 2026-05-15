@@ -216,13 +216,13 @@ class LevelConsistencyValidationTest {
         // Try to find as class first
         DomainModel.CalculatedElementInfo classInfo = domainModel.getClass(elementName);
         if (classInfo != null) {
-            return classInfo.level;
+            return classInfo.architectureLevel;
         }
         
         // Try to find as package
         DomainModel.CalculatedElementInfo pkgInfo = domainModel.getPackage(elementName);
         if (pkgInfo != null) {
-            return pkgInfo.level;
+            return pkgInfo.architectureLevel;
         }
         
         return null; // External element
@@ -252,14 +252,14 @@ class LevelConsistencyValidationTest {
         
         System.out.println("\n--- Package Levels ---");
         domainModel.getAllPackages().values().stream()
-            .sorted((a, b) -> Integer.compare(b.level, a.level))
-            .forEach(pkg -> System.out.println("  " + pkg.fullName + " -> L" + pkg.level));
+            .sorted((a, b) -> Integer.compare(b.architectureLevel, a.architectureLevel))
+            .forEach(pkg -> System.out.println("  " + pkg.fullName + " -> L" + pkg.architectureLevel));
         
         System.out.println("\n--- Class Level Distribution ---");
         for (int level = domainModel.getMaxLevel(); level >= 0; level--) {
             final int l = level;
             long count = domainModel.getAllClasses().values().stream()
-                .filter(c -> c.level == l)
+                .filter(c -> c.architectureLevel == l)
                 .count();
             if (count > 0) {
                 System.out.println("  Level " + level + ": " + count + " classes");

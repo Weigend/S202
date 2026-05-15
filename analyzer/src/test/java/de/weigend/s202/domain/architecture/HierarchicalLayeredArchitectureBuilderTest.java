@@ -53,9 +53,9 @@ class HierarchicalLayeredArchitectureBuilderTest {
         // the classes grouped by level.
         assertEquals(2, arch.rows().size(), "two rows — one per class level");
         assertEquals(2, arch.rows().get(0).size(), "row 0 holds the two level-1 classes");
-        assertEquals(1, arch.rows().get(0).get(0).level(), "row 0 is the higher level");
+        assertEquals(1, arch.rows().get(0).get(0).architectureLevel(), "row 0 is the higher level");
         assertEquals(1, arch.rows().get(1).size(), "row 1 holds the single level-0 class");
-        assertEquals(0, arch.rows().get(1).get(0).level(), "row 1 is the lower level");
+        assertEquals(0, arch.rows().get(1).get(0).architectureLevel(), "row 1 is the lower level");
         assertInstanceOf(Element.ClassElement.class, arch.rows().get(0).get(0));
         assertTrue(arch.violations().isEmpty(),
                 "all class deps point downward — no violations expected");
@@ -79,13 +79,13 @@ class HierarchicalLayeredArchitectureBuilderTest {
         assertEquals(2, arch.rows().size());
         Element.PackageElement uiPkg = (Element.PackageElement) arch.rows().get(0).get(0);
         assertEquals("ui", uiPkg.fqn());
-        assertEquals(2, uiPkg.level());
+        assertEquals(2, uiPkg.architectureLevel());
         assertEquals(1, uiPkg.rows().size());
         assertEquals("ui.View", uiPkg.rows().get(0).get(0).fqn());
 
         Element.PackageElement domainPkg = (Element.PackageElement) arch.rows().get(1).get(0);
         assertEquals("domain", domainPkg.fqn());
-        assertEquals(0, domainPkg.level());
+        assertEquals(0, domainPkg.architectureLevel());
     }
 
     @Test
@@ -171,9 +171,9 @@ class HierarchicalLayeredArchitectureBuilderTest {
         // "app" is again a single-child wrapper → transparent. Three classes
         // sit at the visible top-level, one row per level, descending.
         assertEquals(3, arch.rows().size());
-        assertEquals(2, arch.rows().get(0).get(0).level());
-        assertEquals(1, arch.rows().get(1).get(0).level());
-        assertEquals(0, arch.rows().get(2).get(0).level());
+        assertEquals(2, arch.rows().get(0).get(0).architectureLevel());
+        assertEquals(1, arch.rows().get(1).get(0).architectureLevel());
+        assertEquals(0, arch.rows().get(2).get(0).architectureLevel());
     }
 
     @Test

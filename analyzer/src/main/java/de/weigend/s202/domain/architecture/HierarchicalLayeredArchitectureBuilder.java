@@ -127,19 +127,19 @@ public final class HierarchicalLayeredArchitectureBuilder {
         }
         List<CalculatedElementInfo> sorted = new ArrayList<>(children);
         sorted.sort(Comparator
-                .comparingInt((CalculatedElementInfo c) -> c.level).reversed()
+                .comparingInt((CalculatedElementInfo c) -> c.architectureLevel).reversed()
                 .thenComparing(c -> c.fullName));
 
         List<List<Element>> rows = new ArrayList<>();
         List<Element> currentRow = new ArrayList<>();
         int currentLevel = Integer.MIN_VALUE;
         for (CalculatedElementInfo child : sorted) {
-            if (child.level != currentLevel) {
+            if (child.architectureLevel != currentLevel) {
                 if (!currentRow.isEmpty()) {
                     rows.add(currentRow);
                     currentRow = new ArrayList<>();
                 }
-                currentLevel = child.level;
+                currentLevel = child.architectureLevel;
             }
             currentRow.add(toElement(child, contents));
         }
@@ -152,10 +152,10 @@ public final class HierarchicalLayeredArchitectureBuilder {
     private Element toElement(CalculatedElementInfo info,
                               Map<String, List<CalculatedElementInfo>> contents) {
         if ("CLASS".equals(info.type)) {
-            return new Element.ClassElement(info.fullName, info.level);
+            return new Element.ClassElement(info.fullName, info.architectureLevel);
         }
         List<List<Element>> innerRows = buildRowsForPackage(info.fullName, contents);
-        return new Element.PackageElement(info.fullName, info.level, innerRows);
+        return new Element.PackageElement(info.fullName, info.architectureLevel, innerRows);
     }
 
     // -------------------------------------------------- violations
@@ -183,10 +183,10 @@ public final class HierarchicalLayeredArchitectureBuilder {
                 }
                 if (compareVisualRank(srcRank, tgtRank) < 0) {
                     CalculatedElementInfo target = domain.getClass(dep);
-                    int tgtClassLevel = target == null ? -1 : target.level;
+                    int tgtClassLevel = target == null ? -1 : target.architectureLevel;
                     violations.add(new Violation(
                             cls.fullName, dep, ViolationKind.UPWARD,
-                            cls.level, tgtClassLevel));
+                            cls.architectureLevel, tgtClassLevel));
                 }
             }
         }
@@ -293,7 +293,7 @@ public final class HierarchicalLayeredArchitectureBuilder {
         while (!parent.isEmpty()) {
             CalculatedElementInfo pkg = domain.getPackage(parent);
             if (pkg != null) {
-                ancestorLevels.add(pkg.level);
+                ancestorLevels.add(pkg.architectureLevel);
             }
             parent = parentOf(parent);
         }
@@ -303,7 +303,7 @@ public final class HierarchicalLayeredArchitectureBuilder {
         for (int i = 0; i < ancestorLevels.size(); i++) {
             rank[i] = ancestorLevels.get(i);
         }
-        rank[rank.length - 1] = cls.level;
+        rank[rank.length - 1] = cls.architectureLevel;
         return rank;
     }
 

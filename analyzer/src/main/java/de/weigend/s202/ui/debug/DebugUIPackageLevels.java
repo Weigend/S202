@@ -27,7 +27,7 @@ public class DebugUIPackageLevels {
         
         System.out.println("DomainModel packages:");
         for (DomainModel.CalculatedElementInfo pkg : domainModel.getAllPackages().values()) {
-            System.out.println("  " + pkg.fullName + " -> L" + pkg.level);
+            System.out.println("  " + pkg.fullName + " -> L" + pkg.architectureLevel);
         }
         
         // Step 3: Build architecture node tree

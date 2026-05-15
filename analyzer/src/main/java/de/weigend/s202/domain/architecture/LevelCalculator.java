@@ -109,7 +109,7 @@ public class LevelCalculator {
             strategyContext.getClassLevelStrategy().calculateClassLevels(classDeps);
         for (Map.Entry<String, Integer> e : levels.entrySet()) {
             DomainModel.CalculatedElementInfo info = model.getClass(e.getKey());
-            if (info != null) info.setLevel(e.getValue());
+            if (info != null) info.setArchitectureLevel(e.getValue());
         }
     }
 
@@ -210,7 +210,7 @@ public class LevelCalculator {
                 if (classBackEdges.contains(new SCCBreaker.Edge(cls.fullName, dep))) continue;
                 DomainModel.CalculatedElementInfo depCls = model.getAllClasses().get(dep);
                 if (depCls == null) continue;
-                childPkgUsedLevel.merge(toPkg, depCls.level, Math::max);
+                childPkgUsedLevel.merge(toPkg, depCls.architectureLevel, Math::max);
             }
         }
 
@@ -255,7 +255,7 @@ public class LevelCalculator {
             int level = sccLevels.get(scc.getId());
             for (String member : scc.getMembers()) {
                 DomainModel.CalculatedElementInfo pkg = pkgInfos.get(member);
-                if (pkg != null) pkg.setLevel(level);
+                if (pkg != null) pkg.setArchitectureLevel(level);
             }
         }
 

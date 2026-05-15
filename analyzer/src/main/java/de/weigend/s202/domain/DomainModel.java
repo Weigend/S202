@@ -33,26 +33,31 @@ public class DomainModel {
         public final String simpleName;
         public final String type; // "CLASS" or "PACKAGE"
         public final boolean interfaceType;
-        public int level;
+        /**
+         * Global architectural depth — longest dependency-chain path. Filled
+         * by {@code LevelCalculator}. See ADR_ARCHITECTURE_LEVEL_VS_LOCAL_LAYER_INDEX
+         * for why this is separate from any layout / rendering position.
+         */
+        public int architectureLevel;
         public final Set<String> dependencies;
         public final Set<String> dependents = new HashSet<>();
 
-        public CalculatedElementInfo(String fullName, String simpleName, String type, int level, Set<String> dependencies) {
-            this(fullName, simpleName, type, level, dependencies, false);
+        public CalculatedElementInfo(String fullName, String simpleName, String type, int architectureLevel, Set<String> dependencies) {
+            this(fullName, simpleName, type, architectureLevel, dependencies, false);
         }
 
-        public CalculatedElementInfo(String fullName, String simpleName, String type, int level, Set<String> dependencies,
+        public CalculatedElementInfo(String fullName, String simpleName, String type, int architectureLevel, Set<String> dependencies,
                                      boolean interfaceType) {
             this.fullName = fullName;
             this.simpleName = simpleName;
             this.type = type;
             this.interfaceType = interfaceType;
-            this.level = level;
+            this.architectureLevel = architectureLevel;
             this.dependencies = dependencies;
         }
 
-        public void setLevel(int newLevel) {
-            this.level = newLevel;
+        public void setArchitectureLevel(int newLevel) {
+            this.architectureLevel = newLevel;
         }
 
         public void addDependency(String dependency) {
@@ -121,11 +126,11 @@ public class DomainModel {
         Map<Integer, List<CalculatedElementInfo>> result = new TreeMap<>();
 
         for (CalculatedElementInfo classInfo : classes.values()) {
-            result.computeIfAbsent(classInfo.level, k -> new ArrayList<>()).add(classInfo);
+            result.computeIfAbsent(classInfo.architectureLevel, k -> new ArrayList<>()).add(classInfo);
         }
 
         for (CalculatedElementInfo pkgInfo : packages.values()) {
-            result.computeIfAbsent(pkgInfo.level, k -> new ArrayList<>()).add(pkgInfo);
+            result.computeIfAbsent(pkgInfo.architectureLevel, k -> new ArrayList<>()).add(pkgInfo);
         }
 
         return result;
@@ -134,10 +139,10 @@ public class DomainModel {
     public int getMaxLevel() {
         int max = 0;
         for (CalculatedElementInfo classInfo : classes.values()) {
-            max = Math.max(max, classInfo.level);
+            max = Math.max(max, classInfo.architectureLevel);
         }
         for (CalculatedElementInfo pkgInfo : packages.values()) {
-            max = Math.max(max, pkgInfo.level);
+            max = Math.max(max, pkgInfo.architectureLevel);
         }
         return max;
     }

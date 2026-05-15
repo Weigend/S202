@@ -106,7 +106,7 @@ public class ArchitectureNodeBuilder {
                         element.simpleName,
                         NodeType.CLASS,
                         false,
-                        element.level,
+                        element.architectureLevel,
                         element.interfaceType
                     );
                     classNode.setDependencies(element.dependencies);
@@ -148,7 +148,7 @@ public class ArchitectureNodeBuilder {
             int pkgLevel = 0;
             DomainModel.CalculatedElementInfo pkgInfo = domainModel.getPackage(subpkg);
             if (pkgInfo != null) {
-                pkgLevel = pkgInfo.level;
+                pkgLevel = pkgInfo.architectureLevel;
             }
             
             ArchitectureNode subpkgNode = new ArchitectureNode(
