@@ -1,6 +1,17 @@
-# Excluded Class Prefixes
-# Classes starting with these prefixes will be excluded from dependency analysis.
-# One prefix per line. Lines starting with # are comments.
+# Excluded Class Prefixes (and Patterns)
+# Classes matched by an entry below are excluded from dependency analysis.
+# One entry per line. Lines starting with # are comments.
+#
+# Two entry forms:
+#   - Plain prefix (no wildcards): matches if the class FQN starts with it.
+#       Example: `java.`  matches every class under java.*
+#   - Glob pattern (contains `*` or `?`): matches against the full class FQN.
+#       `*` matches zero or more chars, `?` matches exactly one.
+#       Example: `*.WfxModule`  matches any class named WfxModule in any pkg.
+#       Example: `*$DI`         matches Avaje-generated *$DI inner classes
+#                              (note: inner classes are already filtered by the
+#                              outer-class strip, so this only matters for full
+#                              FQN patterns).
 #
 # Java Standard Library
 java.
@@ -30,3 +41,9 @@ org.mockito.
 kotlin.
 scala.
 groovy.
+#
+# Framework-generated wiring code (Avaje DI auto-generates a *Module class
+# per package containing @Singleton beans). Comment out if you analyze a
+# project where the pattern conflicts with hand-written classes of the same
+# name.
+*.WfxModule

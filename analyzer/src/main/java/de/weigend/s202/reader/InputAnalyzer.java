@@ -12,8 +12,10 @@ import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.*;
 import java.util.function.Consumer;
+import java.util.function.Predicate;
 import java.util.jar.JarEntry;
 import java.util.jar.JarFile;
+import java.util.regex.Pattern;
 
 /**
  * Analyzes Java bytecode from JAR files and extracts dependency information.
@@ -39,28 +41,90 @@ public class InputAnalyzer {
     );
     
     private static List<String> excludedPrefixes;
+    private static List<Predicate<String>> exclusionMatchers;
 
     public record AnalysisProgress(String jarPath, String classEntryName, int processedClasses, int totalClasses) {}
-    
+
     /**
      * Returns the list of excluded class prefixes.
      * Loads from excluded-prefixes.txt if available, otherwise uses defaults.
+     *
+     * <p>Entries containing {@code *} or {@code ?} are treated as glob
+     * patterns (matched against the full class FQN); entries without
+     * wildcards keep the historical prefix-match semantics.
      */
     public static List<String> getExcludedPrefixes() {
         if (excludedPrefixes == null) {
             excludedPrefixes = loadExcludedPrefixes();
+            exclusionMatchers = compileMatchers(excludedPrefixes);
         }
         return excludedPrefixes;
     }
+
+    /**
+     * Returns true if {@code className} is matched by any configured
+     * exclusion entry. Wildcards ({@code *}, {@code ?}) match the full
+     * class FQN; non-wildcard entries match as prefixes — same semantics
+     * the analyzer has always used for {@code java.}, {@code javafx.},
+     * etc.
+     */
+    public static boolean isExcludedClass(String className) {
+        if (className == null || className.isEmpty()) {
+            return false;
+        }
+        if (exclusionMatchers == null) {
+            getExcludedPrefixes();
+        }
+        for (Predicate<String> matcher : exclusionMatchers) {
+            if (matcher.test(className)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private static List<Predicate<String>> compileMatchers(List<String> entries) {
+        List<Predicate<String>> compiled = new ArrayList<>(entries.size());
+        for (String entry : entries) {
+            compiled.add(compileMatcher(entry));
+        }
+        return compiled;
+    }
+
+    private static Predicate<String> compileMatcher(String entry) {
+        if (entry.indexOf('*') < 0 && entry.indexOf('?') < 0) {
+            return className -> className.startsWith(entry);
+        }
+        Pattern regex = Pattern.compile(globToRegex(entry));
+        return className -> regex.matcher(className).matches();
+    }
+
+    private static String globToRegex(String glob) {
+        StringBuilder regex = new StringBuilder(glob.length() + 8);
+        for (int i = 0; i < glob.length(); i++) {
+            char c = glob.charAt(i);
+            switch (c) {
+                case '*' -> regex.append(".*");
+                case '?' -> regex.append('.');
+                case '.', '\\', '+', '(', ')', '[', ']', '{', '}', '^', '$', '|' ->
+                        regex.append('\\').append(c);
+                default -> regex.append(c);
+            }
+        }
+        return regex.toString();
+    }
     
     /**
-     * Loads excluded prefixes from the configuration file.
+     * Loads excluded prefixes from the configuration file. Searches the
+     * current working directory first, then walks up its parent chain —
+     * lets users launch the analyzer from any sub-directory (e.g. a
+     * Maven module dir) and still pick up a project-root config.
      */
     private static List<String> loadExcludedPrefixes() {
-        Path configPath = Paths.get(EXCLUDED_PREFIXES_FILE);
-        
-        if (!Files.exists(configPath)) {
-            System.out.println("No " + EXCLUDED_PREFIXES_FILE + " found, using default excluded prefixes.");
+        Path configPath = findConfigFile();
+
+        if (configPath == null) {
+            System.out.println("No " + EXCLUDED_PREFIXES_FILE + " found in CWD or any parent, using default excluded prefixes.");
             return new ArrayList<>(DEFAULT_EXCLUDED_PREFIXES);
         }
         
@@ -74,7 +138,7 @@ public class InputAnalyzer {
                     prefixes.add(line);
                 }
             }
-            System.out.println("Loaded " + prefixes.size() + " excluded prefixes from " + EXCLUDED_PREFIXES_FILE);
+            System.out.println("Loaded " + prefixes.size() + " excluded prefixes from " + configPath);
         } catch (IOException e) {
             System.err.println("Warning: Could not read " + EXCLUDED_PREFIXES_FILE + ": " + e.getMessage());
             System.out.println("Using default excluded prefixes.");
@@ -83,13 +147,27 @@ public class InputAnalyzer {
         
         return prefixes;
     }
-    
+
+    private static Path findConfigFile() {
+        Path candidate = Paths.get(EXCLUDED_PREFIXES_FILE).toAbsolutePath();
+        Path dir = candidate.getParent();
+        while (dir != null) {
+            Path here = dir.resolve(EXCLUDED_PREFIXES_FILE);
+            if (Files.exists(here)) {
+                return here;
+            }
+            dir = dir.getParent();
+        }
+        return null;
+    }
+
     /**
      * Reloads the excluded prefixes from the configuration file.
      * Call this method after modifying excluded-prefixes.txt to apply changes.
      */
     public static void reloadExcludedPrefixes() {
         excludedPrefixes = null;
+        exclusionMatchers = null;
         getExcludedPrefixes();
     }
 
@@ -249,13 +327,20 @@ public class InputAnalyzer {
                           String superName, String[] interfaces) {
             // Convert bytecode name (com/example/Class) to source name (com.example.Class)
             this.currentClassName = convertClassName(name);
-            
+
             // Skip inner classes (contain $)
             // OPEN POINT: Inner classes are currently ignored. This means that dependencies
             // from/to inner classes are not tracked separately. Inner class dependencies are
             // implicitly attributed to the outer class.
             // TODO: Consider whether inner class analysis should be supported as a separate feature
             if (currentClassName.contains("$")) {
+                return;
+            }
+
+            // Skip classes the user excluded via excluded-prefixes.txt — keeps
+            // framework-generated wiring (Avaje DI modules, Lombok stubs, etc.)
+            // out of the model entirely instead of just out of dep targets.
+            if (isExcludedClass(currentClassName)) {
                 return;
             }
             
@@ -324,26 +409,18 @@ public class InputAnalyzer {
 
         /**
          * Checks if a class is from external libraries (JDK, JavaFX, frameworks, etc.)
-         * Prefixes are loaded from excluded-prefixes.txt in the working directory.
+         * or matches a user-supplied glob pattern. Entries are loaded from
+         * {@code excluded-prefixes.txt}; wildcards ({@code *}, {@code ?}) are
+         * matched against the full class FQN, plain entries as prefixes.
          */
         private boolean isExternalLibraryClass(String className) {
-            // Skip array types (e.g., "[Lcom.example.Foo;")
             if (className.startsWith("[")) {
                 return true;
             }
-            
-            // Handle inner classes - get the outer class name
-            String outerClassName = className.contains("$") 
-                ? className.substring(0, className.indexOf('$')) 
+            String outerClassName = className.contains("$")
+                ? className.substring(0, className.indexOf('$'))
                 : className;
-            
-            // Check against loaded prefixes
-            for (String prefix : getExcludedPrefixes()) {
-                if (outerClassName.startsWith(prefix)) {
-                    return true;
-                }
-            }
-            return false;
+            return isExcludedClass(outerClassName);
         }
     }
 
@@ -398,26 +475,18 @@ public class InputAnalyzer {
         
         /**
          * Checks if a class is from external libraries (JDK, JavaFX, frameworks, etc.)
-         * Prefixes are loaded from excluded-prefixes.txt in the working directory.
+         * or matches a user-supplied glob pattern. Entries are loaded from
+         * {@code excluded-prefixes.txt}; wildcards ({@code *}, {@code ?}) are
+         * matched against the full class FQN, plain entries as prefixes.
          */
         private boolean isExternalLibraryClass(String className) {
-            // Skip array types (e.g., "[Lcom.example.Foo;")
             if (className.startsWith("[")) {
                 return true;
             }
-            
-            // Handle inner classes - get the outer class name
-            String outerClassName = className.contains("$") 
-                ? className.substring(0, className.indexOf('$')) 
+            String outerClassName = className.contains("$")
+                ? className.substring(0, className.indexOf('$'))
                 : className;
-            
-            // Check against loaded prefixes
-            for (String prefix : getExcludedPrefixes()) {
-                if (outerClassName.startsWith(prefix)) {
-                    return true;
-                }
-            }
-            return false;
+            return isExcludedClass(outerClassName);
         }
     }
 }
