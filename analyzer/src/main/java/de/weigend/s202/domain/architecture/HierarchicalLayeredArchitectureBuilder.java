@@ -9,8 +9,6 @@ import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashMap;
 import java.util.HashSet;
-import java.util.LinkedHashMap;
-import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -51,9 +49,8 @@ public final class HierarchicalLayeredArchitectureBuilder {
         List<List<Element>> rows = buildRowsForPackage(effectiveRoot, contentsByParent);
         List<Violation> violations = detectViolations(domain);
         List<Tangle> tangles = detectTangles(domain);
-        List<ContainmentEdge> containmentEdges = detectContainmentEdges(domain);
 
-        return new HierarchicalLayeredArchitecture(rows, violations, tangles, containmentEdges);
+        return new HierarchicalLayeredArchitecture(rows, violations, tangles);
     }
 
     // -------------------------------------------------- structure
@@ -238,57 +235,6 @@ public final class HierarchicalLayeredArchitectureBuilder {
             }
         }
         return tangles;
-    }
-
-    // -------------------------------------------------- containment edges
-
-    /**
-     * Class-to-class dependencies the level calculator suppresses because
-     * the source's package is a strict ancestor of the target's. Emitted
-     * both at {@link EdgeScope#CLASS} (the actual pair) and at
-     * {@link EdgeScope#PACKAGE} (one entry per distinct
-     * source-package/target-package pair), so the renderer can pick the
-     * granularity it needs and roll up to whichever level is currently
-     * visible.
-     */
-    private List<ContainmentEdge> detectContainmentEdges(DomainModel domain) {
-        List<ContainmentEdge> classEdges = new ArrayList<>();
-        Map<String, Set<String>> pkgAggregate = new LinkedHashMap<>();
-
-        for (CalculatedElementInfo cls : domain.getAllClasses().values()) {
-            String srcPkg = parentOf(cls.fullName);
-            if (srcPkg.isEmpty()) {
-                continue;
-            }
-            for (String dep : cls.dependencies) {
-                CalculatedElementInfo target = domain.getClass(dep);
-                if (target == null) {
-                    continue;
-                }
-                String tgtPkg = parentOf(target.fullName);
-                if (tgtPkg.isEmpty() || !tgtPkg.startsWith(srcPkg + ".")) {
-                    continue;
-                }
-                classEdges.add(new ContainmentEdge(cls.fullName, target.fullName, EdgeScope.CLASS));
-                pkgAggregate.computeIfAbsent(srcPkg, k -> new LinkedHashSet<>()).add(tgtPkg);
-            }
-        }
-
-        classEdges.sort(Comparator
-                .comparing(ContainmentEdge::sourceFqn)
-                .thenComparing(ContainmentEdge::targetFqn));
-
-        List<ContainmentEdge> all = new ArrayList<>(classEdges);
-        List<String> sortedSrc = new ArrayList<>(pkgAggregate.keySet());
-        sortedSrc.sort(Comparator.naturalOrder());
-        for (String src : sortedSrc) {
-            List<String> targets = new ArrayList<>(pkgAggregate.get(src));
-            targets.sort(Comparator.naturalOrder());
-            for (String tgt : targets) {
-                all.add(new ContainmentEdge(src, tgt, EdgeScope.PACKAGE));
-            }
-        }
-        return all;
     }
 
     /**
