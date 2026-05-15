@@ -106,7 +106,7 @@ public class ArchitectureNodeBuilder {
                         element.simpleName,
                         NodeType.CLASS,
                         false,
-                        element.architectureLevel,
+                        element.localLayerIndex,
                         element.interfaceType
                     );
                     classNode.setDependencies(element.dependencies);
@@ -144,11 +144,13 @@ public class ArchitectureNodeBuilder {
             int lastDot = subpkg.lastIndexOf('.');
             String simpleName = lastDot >= 0 ? subpkg.substring(lastDot + 1) : subpkg;
             
-            // Get package level from domain model, default to 0
+            // Local layer index drives row sorting in the UI tree — same
+            // semantics the domain Architecture uses. The global
+            // architectureLevel is no longer fed into the layout.
             int pkgLevel = 0;
             DomainModel.CalculatedElementInfo pkgInfo = domainModel.getPackage(subpkg);
             if (pkgInfo != null) {
-                pkgLevel = pkgInfo.architectureLevel;
+                pkgLevel = pkgInfo.localLayerIndex;
             }
             
             ArchitectureNode subpkgNode = new ArchitectureNode(

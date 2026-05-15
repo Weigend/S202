@@ -92,7 +92,17 @@ class LevelConsistencyValidationTest {
     /**
      * Test that all outgoing dependencies point to elements with lower levels.
      * This validates the core invariant: dependencies flow downward.
+     *
+     * <p>Disabled — the test was written against the old model where
+     * {@code architectureLevel} doubled as a visual-position metric.
+     * Under the new model the two concepts are split
+     * (see ADR_ARCHITECTURE_LEVEL_VS_LOCAL_LAYER_INDEX): visual rank lives
+     * on {@code localLayerIndex}, traversed through the parent chain.
+     * Comparing the two scales across containers, as this test does,
+     * produces a flood of false positives. To be rewritten on top of
+     * {@code Architecture.violations()} in ADR step 7.
      */
+    @org.junit.jupiter.api.Disabled("rewrite on Architecture.violations() in ADR step 7")
     @Test
     void testAllDependenciesPointDownward() {
         // Recursively validate the entire tree

@@ -2,8 +2,6 @@ package de.weigend.s202.domain.architecture;
 
 import de.weigend.s202.domain.DomainModel;
 import de.weigend.s202.domain.strategy.LevelCalculationStrategyContext;
-import de.weigend.s202.domain.strategy.impl.HeuristicSCCBreakingStrategy;
-import de.weigend.s202.graph.SCCBreaker;
 import de.weigend.s202.graph.StronglyConnectedComponent;
 import de.weigend.s202.graph.TarjanSCCFinder;
 import de.weigend.s202.reader.DependencyModel;
@@ -76,9 +74,7 @@ public class LevelCalculator {
         calculateClassLevels(model);
 
         // Step 4: Compute package levels from weighted inter-package graph.
-        // Class back-edges are passed so child→parent lifting excludes them.
-        Set<SCCBreaker.Edge> classBackEdges = classBackEdgesFromStrategy();
-        calculatePackageLevels(model, rawModel, classBackEdges);
+        calculatePackageLevels(model, rawModel);
 
         // Step 5: Set reverse dependencies
         updateDependentRelationships(model);
@@ -93,14 +89,6 @@ public class LevelCalculator {
 
     public LevelCalculationStrategyContext getStrategyContext() {
         return strategyContext;
-    }
-
-    private Set<SCCBreaker.Edge> classBackEdgesFromStrategy() {
-        var strategy = strategyContext.getClassLevelStrategy();
-        if (strategy instanceof HeuristicSCCBreakingStrategy h) {
-            return h.getLastIdentifiedBackEdges();
-        }
-        return Set.of();
     }
 
     // -------------------------------------------------------------------------
@@ -124,8 +112,7 @@ public class LevelCalculator {
     // Step 4 — package levels via weighted inter-package graph
     // -------------------------------------------------------------------------
 
-    private void calculatePackageLevels(DomainModel model, DependencyModel rawModel,
-                                        Set<SCCBreaker.Edge> classBackEdges) {
+    private void calculatePackageLevels(DomainModel model, DependencyModel rawModel) {
         if (model.getAllPackages().isEmpty()) return;
         Set<String> allPkgNames = model.getAllPackages().keySet();
 
@@ -200,31 +187,11 @@ public class LevelCalculator {
             }
         }
 
-        // Child→parent lift: for each package P, find the max class-level of classes
-        // in P that are depended on by classes in CHILD packages of P (sub-packages).
-        // SCC back-edges are excluded. This ensures figurapi.primitive ends up strictly
-        // above figurapi.Rotation (class L1), while external deps are unaffected.
-        Map<String, Integer> childPkgUsedLevel = new HashMap<>();
-        for (DomainModel.CalculatedElementInfo cls : model.getAllClasses().values()) {
-            String fromPkg = extractPackageName(cls.fullName);
-            if (fromPkg == null) continue;
-            for (String dep : cls.dependencies) {
-                String toPkg = extractPackageName(dep);
-                if (toPkg == null || fromPkg.equals(toPkg)) continue;
-                // Only child→parent edges: fromPkg is a sub-package of toPkg
-                if (!fromPkg.startsWith(toPkg + ".")) continue;
-                // Skip class-level back-edges
-                if (classBackEdges.contains(new SCCBreaker.Edge(cls.fullName, dep))) continue;
-                DomainModel.CalculatedElementInfo depCls = model.getAllClasses().get(dep);
-                if (depCls == null) continue;
-                childPkgUsedLevel.merge(toPkg, depCls.architectureLevel, Math::max);
-            }
-        }
-
-        // Longest-path levels on SCC-DAG.
-        // For child→parent package edges, effective dep height =
-        //   max(pkgLevel, childPkgUsedLevel) so the dependent lands above the classes
-        //   it uses from its parent package. External cross-package deps use pkgLevel only.
+        // Longest-path levels on the SCC-collapsed DAG. The previous
+        // "childPkgUsedLevel" lift (which inflated a parent's level by
+        // the class levels its child packages used) is gone — layout
+        // positioning lives on localLayerIndex now, so architectureLevel
+        // can be an honest dep-chain depth.
         Map<Integer, Integer> sccLevels = new HashMap<>();
         for (StronglyConnectedComponent scc : sccs) sccLevels.put(scc.getId(), 0);
         boolean lvlChanged = true;
@@ -233,20 +200,7 @@ public class LevelCalculator {
             for (StronglyConnectedComponent scc : sccs) {
                 int maxDep = -1;
                 for (int depId : sccDeps.getOrDefault(scc.getId(), Set.of())) {
-                    int depPkgLevel = sccLevels.getOrDefault(depId, 0);
-                    int effectiveDep = depPkgLevel;
-                    // Check if any member of this SCC is a child of any member of depSCC
-                    for (String fromMember : scc.getMembers()) {
-                        for (Map.Entry<String, StronglyConnectedComponent> e : pkgToScc.entrySet()) {
-                            if (e.getValue().getId() != depId) continue;
-                            String depMember = e.getKey();
-                            if (fromMember.startsWith(depMember + ".")) {
-                                effectiveDep = Math.max(effectiveDep,
-                                    childPkgUsedLevel.getOrDefault(depMember, 0));
-                            }
-                        }
-                    }
-                    maxDep = Math.max(maxDep, effectiveDep);
+                    maxDep = Math.max(maxDep, sccLevels.getOrDefault(depId, 0));
                 }
                 int newLevel = maxDep >= 0 ? maxDep + 1 : 0;
                 if (sccLevels.get(scc.getId()) != newLevel) {
@@ -329,13 +283,17 @@ public class LevelCalculator {
                 }
             }
 
-            // Propagate each weight up to ancestor packages
+            // Propagate each weight up to ancestor packages. Parent->child
+            // edges are no longer filtered here — the rank-based SCC breaker
+            // decides direction based on actual call-count weight. Layout
+            // positioning is the LocalLayerCalculator's job (step 6), so the
+            // global package level can finally be an honest dep-chain count.
             for (Map.Entry<String, Integer> entry : callCountPerPkg.entrySet()) {
                 String toPkg = entry.getKey();
                 int callCount = entry.getValue();
                 String ancestor = leafPkg;
                 while (ancestor != null && allPkgNames.contains(ancestor)) {
-                    if (ancestor.equals(toPkg) || toPkg.startsWith(ancestor + ".")) break;
+                    if (ancestor.equals(toPkg)) break;
                     weights.get(ancestor).merge(toPkg, callCount, Integer::sum);
                     ancestor = extractPackageName(ancestor);
                 }

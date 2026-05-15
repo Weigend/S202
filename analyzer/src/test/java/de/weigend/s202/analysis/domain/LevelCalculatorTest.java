@@ -367,11 +367,12 @@ class LevelCalculatorTest {
     void testDomainPackageComInheritsMaxChildLevel() {
         DomainModel.CalculatedElementInfo pkgCom = calculatedModel.getPackage("com");
         assertNotNull(pkgCom, "Package com should exist");
-        // Parent packages inherit max(child package levels).
-        // com has no cross-package dependencies of its own → L0.
-        // Parent packages are not lifted by children; containment ≠ dependency.
-        assertEquals(0, pkgCom.architectureLevel,
-            "Package com has no own cross-package dependencies → L0");
+        // Parent->child edges contribute to the weighted package graph
+        // now, so com aggregates the outgoing deps of its descendants:
+        // com.example2.E depends on com.example.B, which propagates as
+        // com -> com.example. com therefore ends up at L1.
+        assertEquals(1, pkgCom.architectureLevel,
+            "Package com aggregates its descendants' outgoing deps → L1");
     }
 
     @Test

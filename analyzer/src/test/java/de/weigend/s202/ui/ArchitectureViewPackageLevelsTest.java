@@ -28,25 +28,28 @@ public class ArchitectureViewPackageLevelsTest {
         LevelCalculator calculator = new LevelCalculator();
         DomainModel domainModel = calculator.calculate(rawModel);
         
-        // Package levels reflect inter-package dependency position, not class levels.
-        // com.example: no cross-pkg deps → L0
-        // com.example1: no cross-pkg deps → L0
-        // com.example2: depends on com.example and com.example1 → package L1
-        // com: no own cross-pkg deps → L0 (containment ≠ dependency)
-        assertEquals(0, domainModel.getPackage("com").architectureLevel, "com has no own cross-pkg deps → L0");
+        // architectureLevel = honest dependency-chain depth, parent->child
+        // edges included. com aggregates its descendants' outgoing deps, so
+        // it's no longer artificially at L0 — it sits at L1 because
+        // com.example2 carries deps into com.example/com.example1 which
+        // propagate up to the com node as well.
+        assertEquals(1, domainModel.getPackage("com").architectureLevel,
+                "com aggregates outgoing deps from its descendants → L1");
         assertEquals(0, domainModel.getPackage("com.example").architectureLevel, "com.example has no cross-pkg deps → L0");
         assertEquals(0, domainModel.getPackage("com.example1").architectureLevel);
         assertEquals(1, domainModel.getPackage("com.example2").architectureLevel, "com.example2 depends on com.example → package L1");
 
-        // Step 3: Build architecture node tree
+        // ArchitectureNode tree uses localLayerIndex now: it's the layout
+        // position within the parent box, not the global dep-chain depth.
         ArchitectureNodeBuilder builder = new ArchitectureNodeBuilder();
         ArchitectureNode rootNode = builder.build(domainModel);
 
-        // Verify ArchitectureNode has correct levels
         ArchitectureNode example2Node = findNodeByName(rootNode, "com.example2");
         assertNotNull(example2Node, "com.example2 should be found");
         assertEquals(NodeType.PACKAGE, example2Node.getType(), "com.example2 should be a PACKAGE");
-        assertEquals(1, example2Node.getLevel(), "com.example2 package level 1");
+        // Within com's box, example2 sits one layer above example/example1
+        // (which it depends on) — local layer index 1.
+        assertEquals(1, example2Node.getLevel(), "com.example2 local layer 1");
         
         System.out.println("Found com.example2 at level " + example2Node.getLevel());
     }
