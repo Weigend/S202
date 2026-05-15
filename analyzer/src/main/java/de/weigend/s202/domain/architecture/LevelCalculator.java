@@ -21,6 +21,8 @@ import java.util.logging.Logger;
  *   Step 4  Compute package levels     weighted inter-package graph → SCC-break → DAG → longest-path
  *                                      + child→parent lift for class-level alignment
  *   Step 5  Set reverse dependencies
+ *   Step 6  Assign local layer index   per-parent sibling graph → SCC-break → DAG → longest-path
+ *                                      (rendering position within each parent box, no global meaning)
  *
  * Package levels are computed independently from class levels using a weighted
  * inter-package dependency graph. The weight of an edge P_A → P_B is the number
@@ -80,6 +82,11 @@ public class LevelCalculator {
 
         // Step 5: Set reverse dependencies
         updateDependentRelationships(model);
+
+        // Step 6: Assign per-parent local layer index — independent of the
+        // global architectureLevel, used by the renderer to position
+        // siblings within each parent's box.
+        new LocalLayerCalculator().assign(model, rawModel);
 
         return model;
     }
