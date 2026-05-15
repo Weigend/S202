@@ -1,5 +1,7 @@
 package de.weigend.s202.ui.rendering;
 
+import de.weigend.s202.domain.architecture.ContainmentEdge;
+import de.weigend.s202.domain.architecture.EdgeScope;
 import de.weigend.s202.ui.LevelClassBox;
 import de.weigend.s202.ui.model.ArchitectureNode;
 import de.weigend.s202.ui.zoom.ZoomController;
@@ -12,9 +14,12 @@ import javafx.scene.paint.Color;
 import javafx.scene.shape.Line;
 
 import java.util.ArrayList;
+import java.util.Collection;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Set;
 import java.util.function.Consumer;
 
 /**
@@ -45,6 +50,14 @@ public class DependencyRenderer implements DependencyRendererStrategy {
     private Line selectedLine = null;
     private boolean dependencyLinesDrawn = false;
 
+    /**
+     * Class-level containment edges keyed as {@code "source\0target"}.
+     * Looked up while drawing so the renderer can dash the lines the
+     * level calculator suppressed (parent-package → child-package class
+     * references). Empty until {@link #setContainmentEdges} is called.
+     */
+    private Set<String> containmentEdgeKeys = Set.of();
+
     // Dynamic references set by ArchitectureView
     private Pane zoomableContent;
     private Pane overlayPane;
@@ -74,6 +87,24 @@ public class DependencyRenderer implements DependencyRendererStrategy {
         this.zoomableContent = zoomableContent;
         this.overlayPane = overlayPane;
         this.scrollPane = scrollPane;
+    }
+
+    /**
+     * Register the set of containment edges from the current
+     * {@link de.weigend.s202.domain.architecture.Architecture}. Only
+     * {@link EdgeScope#CLASS} entries are used here, since the renderer
+     * draws class-to-class arrows; package-scope entries are ignored.
+     */
+    public void setContainmentEdges(Collection<ContainmentEdge> edges) {
+        Set<String> keys = new HashSet<>();
+        if (edges != null) {
+            for (ContainmentEdge edge : edges) {
+                if (edge.scope() == EdgeScope.CLASS) {
+                    keys.add(edge.sourceFqn() + "\0" + edge.targetFqn());
+                }
+            }
+        }
+        this.containmentEdgeKeys = keys;
     }
 
     /**
@@ -142,7 +173,10 @@ public class DependencyRenderer implements DependencyRendererStrategy {
                         if (targetElement != null && isNodeActuallyVisible(targetElement)) {
                             // Determine arrow direction relative to selected class
                             boolean isIncoming = isTargetSelected && !isSourceSelected;
-                            createDependencyLine(sourceElement, targetElement, child.getFullName(), depName, isIncoming);
+                            boolean isContainment = containmentEdgeKeys.contains(
+                                    child.getFullName() + "\0" + depName);
+                            createDependencyLine(sourceElement, targetElement,
+                                    child.getFullName(), depName, isIncoming, isContainment);
                         }
                     }
                 }
@@ -187,8 +221,12 @@ public class DependencyRenderer implements DependencyRendererStrategy {
 
     /**
      * Creates a selectable dependency line between source and target.
+     * Containment edges (parent-package class referencing a child-package
+     * class) get a dashed stroke so they're visually distinct from regular
+     * deps — those are the edges the level calculator suppresses.
      */
-    private void createDependencyLine(Node source, Node target, String sourceName, String targetName, boolean isIncoming) {
+    private void createDependencyLine(Node source, Node target, String sourceName, String targetName,
+                                       boolean isIncoming, boolean isContainment) {
         try {
             // Get coordinates
             double[] sourceCenter = getNodeCenterInPane(source);
@@ -211,6 +249,11 @@ public class DependencyRenderer implements DependencyRendererStrategy {
             Line line = new Line(startX, startY, endX, endY);
             line.setStroke(lineColor);
             line.setStrokeWidth(scaledWidth);
+            if (isContainment) {
+                double dash = Math.max(2.0, scaledWidth * 6.0);
+                double gap = Math.max(2.0, scaledWidth * 4.0);
+                line.getStrokeDashArray().setAll(dash, gap);
+            }
 
             // Store original color for hover restore
             final Color originalColor = lineColor;

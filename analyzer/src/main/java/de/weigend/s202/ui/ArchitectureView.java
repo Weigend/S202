@@ -385,6 +385,10 @@ public class ArchitectureView extends BorderPane {
 
         classicRenderer = new DependencyRenderer(dependencyPane, elementRegistry, zoomController, this::setStatus);
         classicRenderer.setCoordinateContext(zoomableContent, overlayPane, scrollPane);
+        Architecture currentArch = architecture.get();
+        if (currentArch != null) {
+            classicRenderer.setContainmentEdges(currentArch.containmentEdges());
+        }
         circuitRenderer = new CircuitBoardRenderer(dependencyPane, elementRegistry, this::setStatus);
         circuitRenderer.setCoordinateContext(zoomableContent, overlayPane, scrollPane);
         dependencyRenderer = circuitMode.get() ? circuitRenderer : classicRenderer;
@@ -483,6 +487,9 @@ public class ArchitectureView extends BorderPane {
         whatIfArchitecture.set(original instanceof HierarchicalLayeredArchitecture hla
                 ? new WhatIfArchitecture(hla, model)
                 : null);
+        if (classicRenderer != null) {
+            classicRenderer.setContainmentEdges(original.containmentEdges());
+        }
     }
 
     /**
