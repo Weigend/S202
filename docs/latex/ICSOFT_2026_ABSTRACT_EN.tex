@@ -52,7 +52,7 @@
 %% ---------------------------------------------------------------
 \title{Verifiable Layered Architecture Visualizations
        \subtitle{Invariants for Correct Level Computation
-       \\ \normalsize\textit{[Draft Version 2 -- for co-author review]}}}
+       \\ \normalsize\textit{[Draft Version 3 -- for co-author review]}}}
 
 \author{
   \authorname{Johannes Weigend}
@@ -74,8 +74,9 @@
 through vertical position: elements that depend on others are placed higher. If the
 level-assignment pipeline is wrong, the picture can still look plausible while
 misleading the viewer: cyclic peer packages may be placed on different levels,
-or a regular dependency may point against the intended layer direction. Layout
-correctness should be the tool's responsibility, not the reader's---this
+a regular dependency may point against the intended layer direction, or a
+top-level wiring class may visually sink below the sub-package it orchestrates.
+Layout correctness should be the tool's responsibility, not the reader's---this
 paper documents why correct level computation is harder than it looks.
 \par\smallskip
 Our 2021 IVAPP paper, \emph{A Layered Software City for Dependency
@@ -86,36 +87,41 @@ of code. S202 reimplements and validates the dependency-level pipeline of that
 layout as an open-source Java tool under Apache~2.0, together with a Layout
 Invariant Checker that verifies the layout after every analysis run.
 \par\smallskip
-Correct level computation requires coordinating three interdependent constraint
-systems: class ordering, package dependency ordering, and level equality within
-cyclic groups. S202 separates two semantically distinct level concepts computed
-on different dependency graphs. Class levels are the longest path in the
-SCC-collapsed class dependency DAG; they represent global architectural depth
-independent of package structure. Package levels are derived from a weighted
-inter-package dependency graph whose edges carry method-call counts as weights;
-they represent the position of each package in the module dependency order. The
-two coordinate systems are independent: both classes and packages are assigned
-levels starting at zero, and a package's level is not constrained by the class
-levels of its contents. A horizontal row-ordering pass improves the legibility
-of dependency overlays without modifying either coordinate.
-Highly cyclic code bases are handled by a heuristic SCC breaker at the class
-level; its cut edges are not hidden but marked as violations.
+Correct level computation requires two separations. First, the architectural
+analysis must distinguish class-level dependency depth from package-level
+dependency depth: both are computed as the longest path in the respective
+SCC-collapsed dependency graph (unweighted for classes, weighted by method-call
+counts for packages), and neither is derived from the other. Second, and
+independently of both, the visual position of an element inside its parent
+container is governed by a per-parent local layer index, computed on the
+sibling-only dependency graph closed within that parent's subtree. The local
+layer index is what places \emph{ArchitectureView} above the \emph{rendering}
+sub-package it calls into, without disturbing the global dependency depths.
+Highly cyclic code bases are handled by a weight-based rank heuristic that
+classifies back edges explicitly rather than hiding them.
 \par\smallskip
-The Layout Invariant Checker verifies four postconditions: non-heuristic class
-dependencies must point downward (R1); packages forming a cyclic group in the
-filtered package dependency graph must share a level (R2); in the weighted
-package graph, the dominant dependency direction must be reflected in the level
-order (R3); and edge classifications must match the current level and SCC state
-(R5). The checker distinguishes implementation bugs from tolerated heuristic
-violations and emits a copy-paste-ready reproducer block for every finding.
+The Layout Invariant Checker verifies five postconditions. Two are
+implementation sanity checks on the global architecture levels: non-heuristic
+class dependencies must respect class-level direction (R1-algo), and the
+dominant direction in the weighted package graph must be reflected in package
+levels (R3). Two are layout-level statements that the rendered picture is
+honest: every class dependency must point downward in the visual rank derived
+from the local layer index along the parent chain (R1-visual), and packages
+forming a cyclic group in the filtered package dependency graph must share an
+architecture level (R2). Finally, R5 keeps cached edge classifications in sync
+with the current level and SCC state. The checker distinguishes implementation
+bugs from tolerated heuristic violations and emits a copy-paste-ready
+reproducer block for every finding.
 \par\smallskip
 We will demonstrate the checker on real code bases, tracing the path from a
 marked layout element to a failing reproducer test. In the 92-module
 \emph{software-ekg-7} system, an R2 finding exposed a missing package-SCC
-equalization step and directly triggered a pipeline fix. All four invariants
-were ported to an independent Unity/.NET 3D software city and produced
-identical findings on shared inputs. No previous layered architecture visualization known to us has provided this
-degree of machine-checkable self-validation.}
+equalization step and directly triggered a pipeline fix. On Minecraft
+Forge~1.19.2, separating analysis depth from local layout drops the visual
+upward-edge count from roughly~6\,000 to~3\,600 by eliminating the artefacts
+of a previous parent-filtered weight pipeline; the remaining edges are real
+architectural debt. No previous layered architecture visualization known to
+us has provided this degree of machine-checkable self-validation.}
 %% ---------------------------------------------------------------
 
 \begin{document}
@@ -123,7 +129,7 @@ degree of machine-checkable self-validation.}
 \maketitle
 
 \begin{center}
-  \fbox{\textbf{\large Draft Version 2 \quad|\quad \today}}
+  \fbox{\textbf{\large Draft Version 3 \quad|\quad \today}}
 \end{center}
 
 \vfill
@@ -138,24 +144,53 @@ degree of machine-checkable self-validation.}
 
 \section*{Appendix A -- Why Naive Single-Pass Does Not Work: Failure Modes}
 
-\subsection*{The Core Problem: Three Interacting Constraint Systems}
+\subsection*{The Core Problem: Two Coordinate Worlds, Four Constraints}
 
-A correct layered layout must satisfy three constraints simultaneously:
+A correct layered layout has to satisfy two coordinate concerns at once that
+are easy to conflate but answer different questions:
+
+\begin{itemize}
+  \item \emph{Analysis (global)} -- where does this element sit in the
+        dependency stack of the analysed system? This is the longest-path depth
+        in the dependency graph and is best understood per element type:
+        classes are levelled on the class graph, packages on the weighted
+        inter-package graph. Both are global numbers.
+  \item \emph{Layout (local)} -- where should the box for this element sit
+        inside its parent container? This is decided by the dependency
+        relationships among the parent's direct children only; refs that leave
+        the parent are irrelevant to local position because the parent itself
+        is positioned by the same logic one level up.
+\end{itemize}
+
+The two worlds are independent in principle and need to be kept independent in
+the implementation. Mixing them is the root cause of every failure mode below.
+Four invariants follow from the two-world separation:
 
 \begin{enumerate}
-  \item \textbf{Class constraint (R1):} If $A \rightarrow B$ denotes a dependency
-        of $A$ on $B$, then $\text{level}(A) > \text{level}(B)$.
-  \item \textbf{SCC constraint (R2):} All classes in a cyclic dependency group
-        receive the same level; packages that form a cyclic group in the filtered
-        package dependency graph must also share a level.
+  \item \textbf{Class-level analysis constraint (R1-algo):} If
+        $A \rightarrow B$ denotes a class dependency, then
+        $\text{archLvl}(A) > \text{archLvl}(B)$ after heuristic back-edges are
+        removed. This is a sanity check on the longest-path assignment in the
+        class-dependency SCC-DAG.
+  \item \textbf{SCC constraint (R2):} Classes in a cyclic dependency group
+        receive the same class architecture level; packages that form a cyclic
+        group in the filtered package dependency graph share the same package
+        architecture level.
   \item \textbf{Package-order constraint (R3):} In the weighted inter-package
-        dependency graph, the package with the highest aggregate method-call count
-        must be placed at a strictly higher level than the package it calls into.
+        dependency graph, when the call traffic from package $P_A$ to $P_B$
+        dominates the reverse, $P_A$ ends up at a strictly higher package
+        architecture level than $P_B$.
+  \item \textbf{Visual-rank constraint (R1-visual):} For every class
+        dependency $A \rightarrow B$ that is not a heuristic back-edge, the
+        rendered position of $A$ in its parent box chain sits above $B$. The
+        comparison is lexicographic on the tuple of local layer indices along
+        the parent path, ending with the class's own local index. This is the
+        statement the reader actually checks against the drawing.
 \end{enumerate}
 
-Each constraint is individually manageable. Together they create a circular
-dependency system between the levels of computation themselves, not merely
-between classes.
+R1-algo and R3 guard the algorithm; R1-visual and R2 guard the picture. The
+failure modes that follow show why each obvious shortcut collapses one of these
+into the other and loses information.
 
 \subsection*{Failure Mode 1: Cascading Level Updates}
 
@@ -327,40 +362,52 @@ but S202 classifies heuristic cut edges explicitly. They are marked as
 \texttt{VIOLATION}, rendered in red, and known to the invariant checker. This
 makes algorithmic defects separable from tolerated heuristic artifacts.
 
-\subsection*{The Solution: Two Semantically Distinct Level Concepts on Independent Graphs}
+\subsection*{The Solution: Three Coordinate Concepts on Independent Graphs}
 
-Failure modes 1 to 3 share a root cause: conflating level concepts that belong
-to different semantic domains. S202 resolves this by computing two independent
-level coordinate systems.
+Failure modes 1 to 3 share a root cause: conflating coordinate concepts that
+belong to different semantic domains. S202 resolves this by computing three
+independent coordinate values, two of them for analysis and one for layout.
 
 \begin{itemize}
-  \item \textbf{Class levels} are the longest path in the SCC-collapsed class
-        dependency DAG. They represent global architectural depth: how many
-        layers of dependencies separate a class from the foundation of the
-        analyzed system.
-  \item \textbf{Package levels} are the longest path in the SCC-collapsed
-        weighted inter-package dependency graph. They represent the position
-        of each package module relative to the packages it calls into,
-        independently of the class-level coordinate.
+  \item \textbf{Class architecture level} is the longest path in the
+        SCC-collapsed class dependency DAG. It represents global architectural
+        depth: how many layers of dependencies separate a class from the
+        foundation of the analysed system.
+  \item \textbf{Package architecture level} is the longest path in the
+        SCC-collapsed weighted inter-package dependency graph. Edge weights are
+        method-call counts aggregated from class-level references. The result
+        represents the module's position in the system's overall dependency
+        order, independently of the class-level coordinate.
+  \item \textbf{Local layer index} is the longest path in the SCC-collapsed
+        sibling-only dependency graph of a single parent container. The graph
+        contains only edges whose source and target both lie in some direct
+        child of that parent; refs leaving the parent's subtree are excluded
+        because they are the business of the enclosing container. Every
+        element (class and package) gets a local layer index that is only
+        meaningful within its own parent box. The renderer sorts each parent's
+        children by this index, so the visible Y position of a box is the
+        local-layer-index world, not the global one.
 \end{itemize}
 
-Both concepts use the same algorithmic shape---Tarjan SCC detection, back-edge
-identification, DAG condensation, longest-path propagation---but on different
-graphs with different edge weights. Because the two coordinate systems are
-independent, packages with no cross-package dependencies correctly land at
-level~0 regardless of the class levels inside them. Two disconnected package
-trees processed from the same JAR are each levelled from zero in their own
-connected component; no false ordering between them is induced.
+All three concepts use the same algorithmic shape---Tarjan SCC detection,
+weight-based back-edge identification, DAG condensation, longest-path
+propagation---but on three different graphs with three different scopes.
+Because the systems are independent, packages with no cross-package
+dependencies correctly land at architecture level~0 regardless of the class
+levels inside them, and a top-level class like \emph{ArchitectureView} that
+orchestrates a sub-package such as \emph{ui.rendering} sits visually above the
+sub-package box without distorting either of their architecture levels.
 
-The separation of class levels and package levels is an engineering choice
-driven by semantic clarity. A unified single-graph approach is theoretically
-possible, but it conflates two semantically distinct concerns---global
-architectural depth and module dependency order---into a single coordinate
-system, making the pipeline hard to reason about, test, and maintain. More
-concretely, every obvious simplification of such a unified approach leads to
-one of the failure modes above.
+The separation is an engineering choice driven by semantic clarity. A unified
+single-coordinate approach is theoretically possible, but it conflates three
+semantically distinct concerns---global architectural depth, module dependency
+order, and per-container visual position---into one number, making the pipeline
+hard to reason about, test, and maintain. Every obvious simplification of such
+a unified approach turns into one of the failure modes above.
 
-The two phases have the following algorithmic structure:
+The three concepts have the following algorithmic structure. Phases~1 and~2
+compute the global architecture levels; Phase~3 derives the local layer
+index per parent container from the architecture-level output.
 
 \begin{algorithm}[H]
 \DontPrintSemicolon
@@ -377,14 +424,14 @@ $\rightarrow$ Assign SCC level to all member classes (equalization implicit)\;\I
 
 \begin{algorithm}[H]
 \DontPrintSemicolon
-\caption{Phase~2 -- Package Levels (\texttt{LevelCalculator}, Step~4)}
+\caption{Phase~2 -- Package Architecture Levels (\texttt{LevelCalculator}, Step~4)}
 \textbf{Build weighted inter-package dependency graph} $G_P=(V_P,E_P,w)$:\;
 \Indp
-  For each class $C$ in package $P_\text{leaf}$ with method calls to class $D$ in $P_\text{target}$\;
-  \hspace{0.5em} ($P_\text{leaf} \ne P_\text{target}$, and $P_\text{target}$ not a descendant of $P_\text{leaf}$):\;
+  For each class $C$ in package $P_\text{leaf}$ with method calls to class $D$ in $P_\text{target}$ ($P_\text{leaf} \ne P_\text{target}$):\;
   \hspace{1em} $w(P_\text{ancestor},\, P_\text{target})\ \mathrel{+}=\ \text{callCount}(C \to D)$\;
-  \hspace{1em} for every ancestor $P_\text{ancestor}$ of $P_\text{leaf}$ that is not a subtree ancestor of $P_\text{target}$\;
+  \hspace{1em} for every ancestor $P_\text{ancestor}$ of $P_\text{leaf}$ with $P_\text{ancestor} \ne P_\text{target}$\;
   Fallback weight $= 1$ for structural references with no method-call data\;
+  No directional filtering: both parent$\to$child and child$\to$ancestor edges enter $G_P$. The SCC breaker decides direction by weight.\;
 \Indm
 \BlankLine
 \textbf{Iterative SCC-breaking} (repeat until stable):\;
@@ -399,64 +446,104 @@ $\rightarrow$ Assign SCC level to all member classes (equalization implicit)\;\I
 \textbf{Level assignment}:\;
 \Indp
   Condense remaining graph into SCC-DAG\;
-  \textbf{Child--parent lift:} for each package $P_c \subset P_p$ (containment),\\
-  \hspace{1em} effective dep height of $P_p\ \gets\ \max\bigl(P_p.\text{pkgLevel},\;
-    \max\{l_\text{class}(D) \mid C \in P_c,\; C \xrightarrow{\text{non-back}} D \in P_p\}\bigr)$\;
   Longest-path propagation on SCC-DAG\;
   Assign SCC level to all member packages\;
 \Indm
 \end{algorithm}
 
-Phase~1 produces classpath-independent results because SCCs are collapsed before levels are assigned.
-Phase~2 treats class levels and package levels as independent coordinate systems:
-a package with no outgoing cross-package calls lands at level~0, even if its
-contained classes are at high class levels. The child--parent lift in Phase~2
-is the only point where class levels influence package levels, and even then
-only for the specific classes that a child package calls in its parent---not for
-all classes in the parent package. A separate horizontal row-ordering pass
-(Phase~3, described in the Implementation section) improves legibility of
-dependency overlays without modifying either coordinate.
+Phase~1 produces classpath-independent class architecture levels because SCCs
+are collapsed before levels are assigned. Phase~2 produces package architecture
+levels honestly: every class reference contributes to the weighted graph regardless of
+the containment relation between source and target package, and a per-SCC
+rank score decides which direction of a cyclic group dominates. The two
+architecture coordinate systems do not constrain each other -- a package with
+no outgoing cross-package calls lands at level~0 regardless of the class
+levels inside it, and conversely the class levels of a package's contents
+do not lift the package itself.
+
+\begin{algorithm}[H]
+\DontPrintSemicolon
+\caption{Phase~3 -- Local Layer Index per Parent Container (\texttt{LocalLayerCalculator}, Step~6)}
+\textbf{for each} parent package $P$ with at least two direct children:\;
+\Indp
+  Let $S(P)$ be the direct children (classes and sub-packages).\;
+  Build sibling-only weighted graph $G_P^{\,\text{loc}}$ on $S(P)$:\;
+  \hspace{1em} edge $X \to Y$ with weight $\textstyle\sum \text{callCount}(c \to d)$\;
+  \hspace{1em} over all class refs $c \to d$ where $c$ lies in the subtree of sibling $X$\;
+  \hspace{1em} and $d$ lies in the subtree of sibling $Y$;\;
+  \hspace{1em} refs leaving the parent's subtree are excluded.\;
+  Tarjan on $G_P^{\,\text{loc}}$ $\rightarrow$ SCCs.\;
+  Within each SCC of size $\ge 2$: weight-based rank break (same formula as Phase~2).\;
+  Condense to SCC-DAG, longest-path pass, assign \textbf{localLayerIndex} per sibling.\;
+\Indm
+\end{algorithm}
+
+Phase~3 is a pure layout phase. It never modifies architecture levels. Each
+parent container is a self-contained world: a class's local layer index inside
+\emph{ui} carries no relationship to a class's local layer index inside
+\emph{ui.rendering}. The renderer sorts each parent's children by their local
+layer index, descending. Cross-container ordering is the business of the
+enclosing parent's local layer index, applied recursively. Local cycles---two
+sibling sub-packages with mutual class references---are resolved silently by
+the rank break; they are not surfaced as a separate Tangle category because
+the user-visible tangle list remains a global architecture statement.
 
 \begin{table}[h]
 \centering
 \small
-\begin{tabular}{lll}
+\begin{tabular}{llll}
 \hline
- & \textbf{Phase 1 -- Class Levels} & \textbf{Phase 2 -- Package Levels} \\
+ & \textbf{Phase 1 -- Class} & \textbf{Phase 2 -- Package} & \textbf{Phase 3 -- Local Layer} \\
 \hline
-\textbf{Graph}        & Class dependency graph               & Weighted inter-package graph \\
-\textbf{Edge weight}  & Unweighted (structural dep)          & Aggregated method-call counts \\
-\textbf{Meaning}      & Architectural depth in class DAG     & Module dependency position \\
-\textbf{Zero point}   & Leaf classes (no dependencies) $=0$  & Packages with no outgoing calls $=0$ \\
-\textbf{Cycles}       & SCCBreaker (degree heuristic)        & Weight-based rank heuristic \\
-\textbf{Independence} & Does not use package levels          & Does not derive from class levels \\
+\textbf{Graph}        & Class dependency             & Weighted inter-package        & Sibling-only weighted (per parent) \\
+\textbf{Edge weight}  & Unweighted                   & Method-call counts            & Method-call counts \\
+\textbf{Scope}        & Global                       & Global                        & Per parent container \\
+\textbf{Meaning}      & Class arch. depth            & Module dep. position          & Visual Y in parent box \\
+\textbf{Zero point}   & Class with no deps           & Package with no outgoing calls & Bottom sibling in box \\
+\textbf{Cycles}       & SCCBreaker (degree)          & Weight-rank, all edges        & Weight-rank within siblings \\
+\textbf{Used by}      & R1-algo, Tangles, R2 (class) & R3, R2 (package)              & R1-visual, renderer sort \\
 \hline
 \end{tabular}
-\caption{The two level concepts computed by S202.}
+\caption{The three coordinate concepts computed by S202.}
 \end{table}
 
 \subsection*{Layout Invariants for Level Correctness}
 
-The two level phases define four machine-checkable postconditions verified by
-the Layout Invariant Checker after every analysis run:
+The three level phases define five machine-checkable postconditions verified
+after every analysis run. R1-algo, R2, R3, R5 are checked by the
+\texttt{LayoutInvariantChecker} as algorithm sanity guards;
+R1-visual is checked by the architecture-builder's violation detection on the
+visual-rank tuple.
 
 \begin{table}[h]
 \centering\small
-\begin{tabular}{lp{10cm}}
+\begin{tabular}{lp{10.5cm}}
 \hline
 \textbf{Rule} & \textbf{Postcondition} \\
 \hline
-R1 & Non-heuristic class dependencies point strictly downward:
-     $A \rightarrow B \Rightarrow \text{level}(A) > \text{level}(B)$ \\
-R2 & All packages forming a cyclic group in the filtered package dependency graph
-     share the same level \\
-R3 & For every weighted package edge $(P_A, P_B)$ with $w(P_A,P_B) > w(P_B,P_A)$
-     that is not a package back-edge: $\text{level}(P_A) > \text{level}(P_B)$ \\
-R5 & Edge classifications (\texttt{NORMAL}, \texttt{VIOLATION}, \texttt{BACK\_EDGE})
-     are consistent with the current level assignment and SCC membership \\
+R1-algo    & Non-heuristic class dependencies respect class architecture levels:
+             $A \rightarrow B \Rightarrow \text{archLvl}(A) > \text{archLvl}(B)$.
+             Tests the longest-path assignment of Phase~1. \\
+R1-visual  & For every non-heuristic class dependency $A \rightarrow B$, the
+             rendered position of $A$ sits above $B$. Position is compared
+             lexicographically on
+             $\bigl[L(\text{ancestor}_1),\ldots,L(\text{ancestor}_n),\,L(A)\bigr]$
+             versus $\bigl[L(\text{ancestor}_1'),\ldots,L(\text{ancestor}_m'),\,L(B)\bigr]$
+             where $L$ denotes the local layer index. Covers same-parent,
+             same-grandparent, and cross-tree comparisons uniformly. \\
+R2         & Packages forming a cyclic group in the filtered package dependency
+             graph share the same package architecture level. \\
+R3         & For every weighted package edge $(P_A, P_B)$ with $w(P_A,P_B) > w(P_B,P_A)$
+             that is not a back-edge cut by the SCC breaker:
+             $\text{archLvl}(P_A) > \text{archLvl}(P_B)$. \\
+R5         & Cached edge classifications (\texttt{NORMAL}, \texttt{VIOLATION},
+             \texttt{BACK\_EDGE}) remain consistent with the current level
+             assignment and SCC membership. \\
 \hline
 \end{tabular}
-\caption{The four layout invariants verified after every analysis run.}
+\caption{Five layout invariants verified after every analysis run. R1-algo,
+R3 and R2 guard the algorithm; R1-visual guards the rendered picture; R5
+keeps the cached annotations honest.}
 \end{table}
 
 Throughout the iterative development of the level pipeline, R2 surfaced
@@ -485,20 +572,35 @@ R3 already applied the correct filter; once R2 was aligned, the Minecraft
 findings disappeared and all 155 invariant tests pass.
 The invariant checker connects the visual symptom to a reproducible algorithm defect.
 
-\subsection*{The Remaining Rules: R1, R3, and R5}
+\subsection*{The Remaining Rules: R1-algo, R1-visual, R3, and R5}
 
-\textbf{R1} ($A \rightarrow B \Rightarrow \text{level}(A) > \text{level}(B)$) is the most
-direct invariant: it is a corollary of longest-path computation on the SCC-DAG and holds
-trivially for any correctly implemented class-level assignment. Its value lies in providing
-an immediate sanity check---a failing R1 signals a fundamental breakdown in the class-level
-pipeline.
+\textbf{R1-algo} ($A \rightarrow B \Rightarrow \text{archLvl}(A) > \text{archLvl}(B)$ on
+the filtered class graph) is the most direct invariant on the analysis side: it is a
+corollary of longest-path computation on the SCC-DAG and holds trivially for any
+correctly implemented class-level assignment. Its value lies in providing an
+immediate sanity check---a failing R1-algo signals a fundamental breakdown in
+the class-level pipeline.
+
+\textbf{R1-visual} (lexicographic comparison of local-layer-index tuples along
+the parent chain) is the invariant the reader actually checks against the
+drawing. The two checks are intentionally separated: R1-algo asks ``did Phase~1
+compute consistent class architecture levels?'', R1-visual asks ``does the
+rendered Y position honestly reflect the class dependencies?'' Both pass on a
+correct implementation; only the second one is allowed to fail when the
+sibling-only graph of some parent exposes a genuine upward edge, because
+that is real architectural debt rather than an algorithm bug. The
+single visual-rank comparison covers every pair: siblings inside the same
+container compare on their final tuple element; cross-tree pairs diverge
+earlier; classes versus sub-package boxes in the same parent compare on the
+shared parent context. No special-case logic is needed for parent$\to$child
+versus sibling versus cross-package class references.
 
 \textbf{R3} verifies that the dominant direction in the weighted package dependency graph
-is reflected in the level assignment. For any package edge $(P_A, P_B)$ where
+is reflected in the architecture level assignment. For any package edge $(P_A, P_B)$ where
 $w(P_A,P_B) > w(P_B,P_A)$---meaning $P_A$ calls into $P_B$ significantly more than
-vice versa---the invariant requires $\text{level}(P_A) > \text{level}(P_B)$.
+vice versa---the invariant requires $\text{archLvl}(P_A) > \text{archLvl}(P_B)$.
 Package back-edges identified during SCC-breaking are excluded from this check,
-analogously to how R1 excludes class-level heuristic back-edges.
+analogously to how R1-algo excludes class-level heuristic back-edges.
 A failing R3 indicates that the weight-based SCC-breaking cut the wrong package
 edge, or that the package-level DAG propagation did not converge correctly.
 
@@ -562,7 +664,7 @@ implementation steps, which constitute the reference implementation
 \textbf{Step~1:} Create class objects \hfill (all levels $\gets 0$)\;
 \textbf{Step~2:} Create package objects \hfill (all levels $\gets 0$)\;
 \BlankLine
-\textbf{Step~3:} Compute class levels (Phase~1)\;
+\textbf{Step~3:} Compute class architecture levels (Phase~1)\;
 \Indp
   $\rightarrow$ Tarjan on class dependency graph\;
   $\rightarrow$ SCCBreaker: identify heuristic back-edges in large SCCs ($|S| \ge 3$):\;
@@ -574,12 +676,12 @@ implementation steps, which constitute the reference implementation
   $\rightarrow$ Assign SCC level to all member classes\;
 \Indm
 \BlankLine
-\textbf{Step~4:} Compute package levels (Phase~2)\;
+\textbf{Step~4:} Compute package architecture levels (Phase~2)\;
 \Indp
   \textbf{4a.} Build weighted inter-package dependency graph:\;
   \hspace{1.5em} $w(P_A, P_B)=\sum$ method-call counts from subtree$(P_A)$ to $P_B$;\;
-  \hspace{1.5em} propagate weights up to all ancestor packages;\;
-  \hspace{1.5em} child$\to$ancestor and sibling edges included; parent$\to$child excluded\;
+  \hspace{1.5em} propagate weights up to all ancestor packages (no directional filtering);\;
+  \hspace{1.5em} both parent$\to$child and child$\to$ancestor edges enter the graph\;
   \BlankLine
   \textbf{4b.} Iterative package SCC-breaking (repeat until stable):\;
   \hspace{1.5em} Tarjan on current graph $\to$ SCCs with $|S|\ge 2$;\;
@@ -588,51 +690,67 @@ implementation steps, which constitute the reference implementation
   \hspace{1.5em} equal-rank pairs remain in the same SCC $\to$ assigned the same level\;
   \BlankLine
   \textbf{4c.} Level assignment on condensed package SCC-DAG:\;
-  \hspace{1.5em} child--parent lift: effective dep height of $P_p$ from child $P_c$ is\;
-  \hspace{2.5em} $\max\bigl(P_p.\text{pkgLevel},\;\max\{l_\text{class}(D)\mid C\in P_c,\;C\!\xrightarrow{\text{non-back}}\!D\in P_p\}\bigr)$;\;
-  \hspace{1.5em} longest-path propagation; assign SCC level to all member packages\;
+  \hspace{1.5em} longest-path propagation; assign SCC level to all member packages.\;
+  \hspace{1.5em} No child--parent lift: layout positioning is the local-layer-index world.\;
 \Indm
 \BlankLine
 \textbf{Step~5:} Set reverse dependencies (dependents)\;
+\BlankLine
+\textbf{Step~6:} Compute local layer index per parent (Phase~3)\;
+\Indp
+  \textbf{for each} parent package $P$ with two or more direct children:\;
+  \hspace{1.5em} build sibling-only weighted graph $G_P^{\,\text{loc}}$ from class refs\;
+  \hspace{1.5em} whose source and target both live in some direct child of $P$;\;
+  \hspace{1.5em} Tarjan $\to$ rank-based SCC break $\to$ longest-path;\;
+  \hspace{1.5em} assign \texttt{localLayerIndex} to each direct child of $P$.\;
+\Indm
 \end{algorithm}
 
 \vspace{1em}
 
-After Step~3, a class's level is the level of the SCC node to which it belongs,
-measured as the longest path in the cycle-free quotient graph across all classes
-of the analyzed project. Cycles do not influence level assignment internally
-because they have been collapsed before longest-path computation begins.
+After Step~3, a class's architecture level is the level of the SCC node to
+which it belongs, measured as the longest path in the cycle-free quotient
+graph across all classes of the analysed project. Cycles do not influence
+level assignment internally because they have been collapsed before
+longest-path computation begins.
 
-Step~4 treats class levels and package levels as independent coordinate systems.
-A package with no outgoing cross-package calls receives level~0, regardless of
-the class levels inside it. Two package trees with no shared dependencies---even
-if analyzed from the same JAR---are each levelled from zero in their own
-connected component of the weighted package graph. The child--parent lift in
-Step~4c is the only place where class-level information influences package
-levels, and only for the specific classes that a child package directly calls
-in its parent.
+Step~4 treats class architecture levels and package architecture levels as
+independent coordinate systems. A package with no outgoing cross-package calls
+receives architecture level~0, regardless of the class levels inside it; two
+package trees with no shared dependencies are each levelled from zero in their
+own connected component of the weighted package graph. The earlier child--parent
+lift, which inflated parent package levels by the class levels their children
+called, is gone -- it was a workaround for the missing layout coordinate.
+
+Step~6 introduces the layout coordinate. Each parent container is treated as a
+self-contained universe: only class refs that stay within the parent's subtree
+contribute to the local sibling graph. The result is that the box for
+\emph{ArchitectureView} in the \emph{ui} package sorts above the box for the
+\emph{ui.rendering} sub-package, simply because \emph{ArchitectureView} has
+heavier outgoing call traffic into rendering than rendering has back into
+\emph{ui}. None of this disturbs Phase~1 or Phase~2.
 
 \vspace{1em}
 \begin{algorithm}[H]
 \DontPrintSemicolon
-\caption{Phase~3 -- Horizontal Row Ordering (\texttt{HorizontalRowLayoutOptimizer})}
+\caption{Phase~4 -- Horizontal Row Ordering (\texttt{HorizontalRowLayoutOptimizer})}
 \textbf{for each} package $P$:\;
 \Indp
-  \textbf{Step~1:} Group direct children by their level\;
+  \textbf{Step~1:} Group direct children by their \texttt{localLayerIndex} value\;
   \textbf{Step~2:} Collect subtree classes per row element\;
   \textbf{Step~3:} Build weighted undirected proximity links from inter-sibling class dependencies\;
   \textbf{Step~4:} Run bounded barycentric sweeps across rows\;
   \textbf{Step~5:} Store the result in \texttt{horizontalLayoutOrder}\;
 \Indm
-\textbf{rendering:} sort a copied child view by level, then \texttt{horizontalLayoutOrder}, then full name\;
+\textbf{rendering:} sort a copied child view by \texttt{localLayerIndex} (Phase~3), then \texttt{horizontalLayoutOrder} (Phase~4), then full name\;
 \end{algorithm}
 
-Phase~3 does not change any level assignment and is deliberately excluded from
-the layout invariants. Its only purpose is to improve legibility when dependency
-overlays are displayed: same-level elements with dependencies to adjacent levels
-are placed horizontally near each other. The implementation stores this as a
-separate \texttt{horizontalLayoutOrder} field and never mutates the semantic
-child list.
+Phase~4 does not change any level or layer assignment and is deliberately
+excluded from the layout invariants. Its only purpose is cosmetic: when an
+overlay of dependency arrows is displayed, same-row elements that share many
+inter-sibling calls are placed horizontally near each other so the arrows are
+shorter and less crossed. The implementation stores this as a separate
+\texttt{horizontalLayoutOrder} field and never mutates the semantic child list.
 
 \subsection*{R2 Fix in \emph{software-ekg-7}: Visual Evidence}
 
@@ -691,32 +809,42 @@ different input model.
 \section*{Summary}
 
 Correct level computation for layered architecture visualizations requires
-satisfying three interacting constraint systems simultaneously: class dependency
-ordering (R1), package dependency ordering (R3), and SCC level equality (R2).
-Every straightforward single-pass approach over a unified graph fails to
-satisfy all three correctly; the failure modes documented above show why
-each obvious simplification breaks down in practice.
+keeping two coordinate worlds separate: \emph{analysis} (where does this
+element sit in the global dependency stack?) and \emph{layout} (where should
+its box go inside its parent container?). Every straightforward single-pass
+approach over a unified graph collapses these two questions into one
+coordinate, and the failure modes documented above show why each obvious
+simplification breaks down in practice.
 
-S202 resolves this by computing two semantically distinct level coordinates on
-independent dependency graphs. Class levels are the longest path in the
+S202 resolves this by computing three coordinate values on three independent
+graphs. \emph{Class architecture levels} are the longest path in the
 SCC-collapsed class dependency DAG; they represent global architectural depth.
-Package levels are derived from a weighted inter-package dependency graph whose
-edges carry aggregated method-call counts; they represent the module dependency
-position independently of class levels. Both coordinate systems use the same
-algorithmic shape---Tarjan SCC detection, weight-based back-edge identification,
-DAG condensation, longest-path propagation---on their respective graphs.
+\emph{Package architecture levels} are derived from a weighted inter-package
+dependency graph whose edges carry aggregated method-call counts; they
+represent module dependency position independently of class levels.
+\emph{Local layer indices} are computed per parent container on the
+sibling-only graph closed within that parent's subtree; they decide visual Y
+position inside each box without disturbing either architecture coordinate.
+All three use the same algorithmic shape: Tarjan SCC detection, weight-based
+back-edge identification, DAG condensation, longest-path propagation.
 
-A horizontal row-ordering pass (Phase~3) improves the legibility of dependency
-overlays without modifying either coordinate or affecting any layout invariant.
-The Layout Invariant Checker verifies four machine-checkable postconditions (R1,
-R2, R3, R5) after every analysis run and emits copy-paste-ready reproducer
-blocks for each finding.
+A horizontal row-ordering pass (Phase~4) improves the legibility of dependency
+overlays without modifying any coordinate or affecting any layout invariant.
+The Layout Invariant Checker verifies five machine-checkable postconditions
+(R1-algo, R1-visual, R2, R3, R5) after every analysis run and emits
+copy-paste-ready reproducer blocks for each finding.
 
-The \emph{software-ekg-7} case demonstrates that the checker catches defects
-invisible to visual inspection: a plausible city layout reported 167 violations
-and a maximum architectural level of 160; after the package-level equalization
-was corrected, the same input produced zero violations and a maximum level of
-18, with no change to the analyzed source code.
+Two cases demonstrate the value of the separation. In \emph{software-ekg-7},
+a plausible city layout reported 167 dependency violations and a maximum
+architectural level of 160 before a package-level equalization fix; after the
+fix, the same input produced zero violations and a maximum level of 18 with
+no change to the analysed source code. On Minecraft Forge~1.19.2, introducing
+the local layer index as a distinct layout coordinate and lifting the parent
+filter from the weighted package graph reduced the visual upward-edge count
+from roughly~6\,000 to~3\,600; the eliminated edges were artefacts of forcing
+parent packages below their sub-packages to keep them out of the algorithm's
+tangle list, and the remaining edges expose real architectural debt that
+deserves a code-level fix.
 
 \clearpage
 
@@ -725,7 +853,12 @@ was corrected, the same input produced zero violations and a maximum level of
 The following source excerpt is the complete Java implementation of the level
 pipeline discussed above.
 
-\lstinputlisting[style=appendixjava]{../../analyzer/src/main/java/de/weigend/s202/domain/LevelCalculator.java}
+\lstinputlisting[style=appendixjava]{../../analyzer/src/main/java/de/weigend/s202/domain/architecture/LevelCalculator.java}
+
+\vspace{1em}
+The companion class \texttt{LocalLayerCalculator} implements Phase~3 (Step~6).
+
+\lstinputlisting[style=appendixjava]{../../analyzer/src/main/java/de/weigend/s202/domain/architecture/LocalLayerCalculator.java}
 
 \section*{Open Points Before Submission}
 
