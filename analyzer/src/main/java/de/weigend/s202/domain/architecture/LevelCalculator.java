@@ -17,17 +17,17 @@ import java.util.logging.Logger;
  *   Step 2  Create package objects     (all levels = 0)
  *   Step 3  Compute class levels       strategy (Tarjan → SCC-break → DAG → longest-path)
  *   Step 4  Compute package levels     weighted inter-package graph → SCC-break → DAG → longest-path
- *                                      + child→parent lift for class-level alignment
  *   Step 5  Set reverse dependencies
  *   Step 6  Assign local layer index   per-parent sibling graph → SCC-break → DAG → longest-path
  *                                      (rendering position within each parent box, no global meaning)
  *
  * Package levels are computed independently from class levels using a weighted
- * inter-package dependency graph. The weight of an edge P_A → P_B is the number
- * of distinct classes in P_A that depend on at least one class in P_B (intra-subtree
- * edges excluded). This separates the containment hierarchy from the dependency
- * hierarchy and correctly handles disconnected package trees (they are levelled
- * independently, both starting at 0).
+ * inter-package dependency graph. The weight of an edge P_A → P_B is the
+ * aggregated method-call count from classes in P_A's subtree to classes in P_B,
+ * with a fallback weight of 1 for structural references without method-call data.
+ * This separates the containment hierarchy from the dependency hierarchy and
+ * correctly handles disconnected package trees (they are levelled independently,
+ * both starting at 0).
  *
  * Package SCC-breaking uses a weight-based rank score:
  *   rank(P) = (Σ outgoing weights within SCC − Σ incoming weights within SCC)
@@ -116,8 +116,9 @@ public class LevelCalculator {
         if (model.getAllPackages().isEmpty()) return;
         Set<String> allPkgNames = model.getAllPackages().keySet();
 
-        // Build weighted graph: weight[from][to] = # distinct classes in 'from'
-        // with at least one dependency on a class in 'to' (subtree edges excluded).
+        // Build weighted graph: weight[from][to] = aggregated method-call
+        // count from classes in 'from' to classes in 'to', with fallback
+        // weight 1 for structural dependencies without method-call data.
         Map<String, Map<String, Integer>> weights = buildWeightedPackageGraph(model, rawModel);
 
         // Unweighted adjacency for Tarjan (direction matters, zero-weight edges excluded)
@@ -191,7 +192,7 @@ public class LevelCalculator {
         // "childPkgUsedLevel" lift (which inflated a parent's level by
         // the class levels its child packages used) is gone — layout
         // positioning lives on localLayerIndex now, so architectureLevel
-        // can be an honest dep-chain depth.
+        // can be a direct dependency-chain depth.
         Map<Integer, Integer> sccLevels = new HashMap<>();
         for (StronglyConnectedComponent scc : sccs) sccLevels.put(scc.getId(), 0);
         boolean lvlChanged = true;
@@ -237,8 +238,7 @@ public class LevelCalculator {
      * to classes in P_B. Method calls are a stronger signal than distinct-class
      * counts: a class called hundreds of times clearly dominates one called once,
      * making SCC-breaking direction unambiguous. Intra-subtree calls are excluded.
-     * Child-to-ancestor edges (e.g. sub-package calling into its parent package)
-     * are included; parent-to-child edges are excluded.
+     * Child-to-ancestor and parent-to-child edges are included.
      * Each call count is propagated to all ancestor packages up to the point where
      * the ancestor would enter the same subtree as the target.
      */
@@ -287,7 +287,7 @@ public class LevelCalculator {
             // edges are no longer filtered here — the rank-based SCC breaker
             // decides direction based on actual call-count weight. Layout
             // positioning is the LocalLayerCalculator's job (step 6), so the
-            // global package level can finally be an honest dep-chain count.
+            // global package level can be a direct dependency-chain count.
             for (Map.Entry<String, Integer> entry : callCountPerPkg.entrySet()) {
                 String toPkg = entry.getKey();
                 int callCount = entry.getValue();

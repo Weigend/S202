@@ -17,7 +17,7 @@ import java.util.Set;
 /**
  * Assigns a per-parent layer position ({@code localLayerIndex}) to every
  * element in a {@link DomainModel}. Each parent package is treated as a
- * self-contained universe: only class dependencies whose source <em>and</em>
+ * self-contained scope: only class dependencies whose source <em>and</em>
  * target both live in the parent's subtree contribute to the sibling-only
  * weighted graph. Refs that leave the parent are ignored — they belong to
  * the global {@code architectureLevel} via the package hierarchy.

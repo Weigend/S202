@@ -12,8 +12,9 @@ public class DomainModel {
 
     /**
      * Weighted inter-package dependency graph.
-     * weight(P_A → P_B) = number of distinct classes in P_A that depend on
-     * at least one class in P_B (intra-subtree edges excluded).
+     * weight(P_A → P_B) = aggregated method-call count from classes in P_A's
+     * subtree to classes in P_B, with a fallback weight of 1 for structural
+     * references without method-call data.
      * Populated by LevelCalculator after package-level computation.
      */
     private Map<String, Map<String, Integer>> packageEdgeWeights = new LinkedHashMap<>();
@@ -40,10 +41,9 @@ public class DomainModel {
          */
         public int architectureLevel;
         /**
-         * Layout schicht index within the parent container. Filled in a
+         * Layout layer index within the parent container. Filled in a
          * subsequent step by the LocalLayerCalculator on the basis of
-         * sibling-only dependencies. Defaults to 0; not yet used for
-         * sorting/rendering.
+         * sibling-only dependencies. Defaults to 0.
          */
         public int localLayerIndex;
         public final Set<String> dependencies;
