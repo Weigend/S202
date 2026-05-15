@@ -291,23 +291,32 @@ public final class HierarchicalLayeredArchitectureBuilder {
         return all;
     }
 
+    /**
+     * Build the visual rank of a class: the chain of localLayerIndex values
+     * along the parent-package path, ending with the class's own
+     * localLayerIndex. Comparing two ranks lexicographically is the same
+     * comparison the eye does — "whose outermost ancestor sits higher? if
+     * equal, look one level deeper; …; finally look at the class layer".
+     * Uses localLayerIndex consistently, since that's what positions the
+     * boxes within each parent's container.
+     */
     private static int[] computeVisualRank(CalculatedElementInfo cls, DomainModel domain) {
-        List<Integer> ancestorLevels = new ArrayList<>();
+        List<Integer> ancestorLayers = new ArrayList<>();
         String parent = parentOf(cls.fullName);
         while (!parent.isEmpty()) {
             CalculatedElementInfo pkg = domain.getPackage(parent);
             if (pkg != null) {
-                ancestorLevels.add(pkg.architectureLevel);
+                ancestorLayers.add(pkg.localLayerIndex);
             }
             parent = parentOf(parent);
         }
-        // ancestorLevels is currently innermost-first; reverse to outermost-first.
-        java.util.Collections.reverse(ancestorLevels);
-        int[] rank = new int[ancestorLevels.size() + 1];
-        for (int i = 0; i < ancestorLevels.size(); i++) {
-            rank[i] = ancestorLevels.get(i);
+        // ancestorLayers is currently innermost-first; reverse to outermost-first.
+        java.util.Collections.reverse(ancestorLayers);
+        int[] rank = new int[ancestorLayers.size() + 1];
+        for (int i = 0; i < ancestorLayers.size(); i++) {
+            rank[i] = ancestorLayers.get(i);
         }
-        rank[rank.length - 1] = cls.architectureLevel;
+        rank[rank.length - 1] = cls.localLayerIndex;
         return rank;
     }
 
