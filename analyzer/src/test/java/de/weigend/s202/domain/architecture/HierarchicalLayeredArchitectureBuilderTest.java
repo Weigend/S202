@@ -53,9 +53,9 @@ class HierarchicalLayeredArchitectureBuilderTest {
         // the classes grouped by level.
         assertEquals(2, arch.rows().size(), "two rows — one per class level");
         assertEquals(2, arch.rows().get(0).size(), "row 0 holds the two level-1 classes");
-        assertEquals(1, arch.rows().get(0).get(0).level(), "row 0 is the higher level");
+        assertEquals(1, arch.rows().get(0).get(0).architectureLevel(), "row 0 is the higher level");
         assertEquals(1, arch.rows().get(1).size(), "row 1 holds the single level-0 class");
-        assertEquals(0, arch.rows().get(1).get(0).level(), "row 1 is the lower level");
+        assertEquals(0, arch.rows().get(1).get(0).architectureLevel(), "row 1 is the lower level");
         assertInstanceOf(Element.ClassElement.class, arch.rows().get(0).get(0));
         assertTrue(arch.violations().isEmpty(),
                 "all class deps point downward — no violations expected");
@@ -79,13 +79,13 @@ class HierarchicalLayeredArchitectureBuilderTest {
         assertEquals(2, arch.rows().size());
         Element.PackageElement uiPkg = (Element.PackageElement) arch.rows().get(0).get(0);
         assertEquals("ui", uiPkg.fqn());
-        assertEquals(2, uiPkg.level());
+        assertEquals(2, uiPkg.architectureLevel());
         assertEquals(1, uiPkg.rows().size());
         assertEquals("ui.View", uiPkg.rows().get(0).get(0).fqn());
 
         Element.PackageElement domainPkg = (Element.PackageElement) arch.rows().get(1).get(0);
         assertEquals("domain", domainPkg.fqn());
-        assertEquals(0, domainPkg.level());
+        assertEquals(0, domainPkg.architectureLevel());
     }
 
     @Test
@@ -171,102 +171,30 @@ class HierarchicalLayeredArchitectureBuilderTest {
         // "app" is again a single-child wrapper → transparent. Three classes
         // sit at the visible top-level, one row per level, descending.
         assertEquals(3, arch.rows().size());
-        assertEquals(2, arch.rows().get(0).get(0).level());
-        assertEquals(1, arch.rows().get(1).get(0).level());
-        assertEquals(0, arch.rows().get(2).get(0).level());
-    }
-
-    @Test
-    void parentToChildClassRefSurfacesAsContainmentEdge() {
-        // Mirrors the real-world pattern: ui.wfx.S202Module touching
-        // ui.wfx.whatif.WhatIfDependenciesModule. Source package strictly
-        // contains the target package, so the level calculator filters this
-        // edge out — the builder must still surface it as a containment
-        // edge so the renderer can show it.
-        DomainModel domain = new DomainModel();
-        addPackage(domain, "wfx", 0);
-        addPackage(domain, "wfx.whatif", 1);
-        addClass(domain, "wfx.S202Module", 0, Set.of("wfx.whatif.WhatIfDependenciesModule"));
-        addClass(domain, "wfx.whatif.WhatIfDependenciesModule", 1, Set.of());
-        domain.setPackageEdgeWeights(Map.of());
-        domain.setPackageBackEdges(Set.of());
-
-        HierarchicalLayeredArchitecture arch =
-                (HierarchicalLayeredArchitecture) new HierarchicalLayeredArchitectureBuilder().build(domain);
-
-        List<ContainmentEdge> classEdges = arch.containmentEdges().stream()
-                .filter(e -> e.scope() == EdgeScope.CLASS).toList();
-        List<ContainmentEdge> pkgEdges = arch.containmentEdges().stream()
-                .filter(e -> e.scope() == EdgeScope.PACKAGE).toList();
-
-        assertEquals(1, classEdges.size());
-        assertEquals("wfx.S202Module", classEdges.get(0).sourceFqn());
-        assertEquals("wfx.whatif.WhatIfDependenciesModule", classEdges.get(0).targetFqn());
-
-        assertEquals(1, pkgEdges.size());
-        assertEquals("wfx", pkgEdges.get(0).sourceFqn());
-        assertEquals("wfx.whatif", pkgEdges.get(0).targetFqn());
-
-        // The reverse edge (whatif -> wfx, i.e. child importing parent) is
-        // NOT a containment edge — it's the normal child-to-parent case the
-        // level calculator keeps in its graph.
-        assertTrue(arch.containmentEdges().stream().noneMatch(
-                e -> e.sourceFqn().equals("wfx.whatif.WhatIfDependenciesModule")));
-    }
-
-    @Test
-    void childToParentClassRefIsNotAContainmentEdge() {
-        DomainModel domain = new DomainModel();
-        addPackage(domain, "wfx", 0);
-        addPackage(domain, "wfx.whatif", 1);
-        addClass(domain, "wfx.ArchitectureWfxView", 0, Set.of());
-        addClass(domain, "wfx.whatif.WhatIfDependenciesModule", 1, Set.of("wfx.ArchitectureWfxView"));
-        domain.setPackageEdgeWeights(Map.of());
-        domain.setPackageBackEdges(Set.of());
-
-        HierarchicalLayeredArchitecture arch =
-                (HierarchicalLayeredArchitecture) new HierarchicalLayeredArchitectureBuilder().build(domain);
-
-        assertTrue(arch.containmentEdges().isEmpty(),
-                "child -> parent edges flow upward, not into a containment relationship");
-    }
-
-    @Test
-    void deepContainmentAggregatesAtBothScopes() {
-        // Two distinct class-level refs from the same source package into
-        // two different sub-packages produce two class edges and two
-        // package edges. Reverse refs are ignored.
-        DomainModel domain = new DomainModel();
-        addPackage(domain, "app", 0);
-        addPackage(domain, "app.outline", 1);
-        addPackage(domain, "app.tangles", 1);
-        addClass(domain, "app.Wiring", 0, Set.of("app.outline.View", "app.tangles.Filter"));
-        addClass(domain, "app.outline.View", 1, Set.of());
-        addClass(domain, "app.tangles.Filter", 1, Set.of());
-        domain.setPackageEdgeWeights(Map.of());
-        domain.setPackageBackEdges(Set.of());
-
-        HierarchicalLayeredArchitecture arch =
-                (HierarchicalLayeredArchitecture) new HierarchicalLayeredArchitectureBuilder().build(domain);
-
-        long classCount = arch.containmentEdges().stream()
-                .filter(e -> e.scope() == EdgeScope.CLASS).count();
-        long pkgCount = arch.containmentEdges().stream()
-                .filter(e -> e.scope() == EdgeScope.PACKAGE).count();
-        assertEquals(2, classCount);
-        assertEquals(2, pkgCount);
+        assertEquals(2, arch.rows().get(0).get(0).architectureLevel());
+        assertEquals(1, arch.rows().get(1).get(0).architectureLevel());
+        assertEquals(0, arch.rows().get(2).get(0).architectureLevel());
     }
 
     // ----------------------------------------------- fixture helpers
 
+    /**
+     * Synthetic test entries set the same value into both architectureLevel
+     * and localLayerIndex — the builder sorts by the latter, the tests
+     * stay readable with a single per-row parameter.
+     */
     private static void addPackage(DomainModel domain, String fqn, int level) {
-        domain.addPackage(fqn, new CalculatedElementInfo(
-                fqn, simpleName(fqn), "PACKAGE", level, new HashSet<>()));
+        CalculatedElementInfo info = new CalculatedElementInfo(
+                fqn, simpleName(fqn), "PACKAGE", level, new HashSet<>());
+        info.setLocalLayerIndex(level);
+        domain.addPackage(fqn, info);
     }
 
     private static void addClass(DomainModel domain, String fqn, int level, Set<String> dependencies) {
-        domain.addClass(fqn, new CalculatedElementInfo(
-                fqn, simpleName(fqn), "CLASS", level, new HashSet<>(dependencies)));
+        CalculatedElementInfo info = new CalculatedElementInfo(
+                fqn, simpleName(fqn), "CLASS", level, new HashSet<>(dependencies));
+        info.setLocalLayerIndex(level);
+        domain.addClass(fqn, info);
     }
 
     private static String simpleName(String fqn) {

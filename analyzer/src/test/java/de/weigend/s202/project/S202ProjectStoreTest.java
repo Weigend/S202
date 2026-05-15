@@ -60,7 +60,7 @@ class S202ProjectStoreTest {
 
         DomainModel.CalculatedElementInfo loadedElement = loadedDomain.getClass("com.example.A");
         assertNotNull(loadedElement);
-        assertEquals(2, loadedElement.level);
+        assertEquals(2, loadedElement.architectureLevel);
         assertTrue(loadedElement.interfaceType);
         assertEquals(Set.of("com.example.B"), loadedElement.dependencies);
         assertEquals(Set.of("com.example.C"), loadedElement.dependents);

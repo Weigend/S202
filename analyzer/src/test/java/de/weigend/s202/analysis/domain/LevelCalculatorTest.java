@@ -65,7 +65,7 @@ class LevelCalculatorTest {
     void testCalculateAssignsClassLevels() {
         // All classes should have a level (>= 0)
         boolean allHaveLevels = calculatedModel.getAllClasses().values().stream()
-            .allMatch(classInfo -> classInfo.level >= 0);
+            .allMatch(classInfo -> classInfo.architectureLevel >= 0);
         
         assertTrue(allHaveLevels, "All classes should have a level >= 0");
     }
@@ -74,7 +74,7 @@ class LevelCalculatorTest {
     void testCalculateAssignsPackageLevels() {
         // All packages should have a level (>= 0)
         boolean allHaveLevels = calculatedModel.getAllPackages().values().stream()
-            .allMatch(pkgInfo -> pkgInfo.level >= 0);
+            .allMatch(pkgInfo -> pkgInfo.architectureLevel >= 0);
         
         assertTrue(allHaveLevels, "All packages should have a level >= 0");
     }
@@ -87,12 +87,12 @@ class LevelCalculatorTest {
         // containment hierarchy from the dependency hierarchy.
         DomainModel.CalculatedElementInfo comExample = calculatedModel.getPackage("com.example");
         assertNotNull(comExample);
-        assertEquals(0, comExample.level,
+        assertEquals(0, comExample.architectureLevel,
             "com.example has no cross-package dependencies → package level 0");
 
         DomainModel.CalculatedElementInfo comExample2 = calculatedModel.getPackage("com.example2");
         assertNotNull(comExample2);
-        assertTrue(comExample2.level > comExample.level,
+        assertTrue(comExample2.architectureLevel > comExample.architectureLevel,
             "com.example2 depends on com.example → com.example2 must be at a higher level");
     }
 
@@ -109,7 +109,7 @@ class LevelCalculatorTest {
                     DomainModel.CalculatedElementInfo dep = calculatedModel.getClass(depName);
                     if (dep == null) continue;
                     if (!dep.fullName.startsWith("com.")) continue;
-                    if (classInfo.level <= dep.level) return false;
+                    if (classInfo.architectureLevel <= dep.architectureLevel) return false;
                 }
                 return true;
             });
@@ -133,7 +133,7 @@ class LevelCalculatorTest {
                 DomainModel.CalculatedElementInfo toPkg = calculatedModel.getPackage(to);
                 if (toPkg == null) continue;
                 // Only enforce strict ordering for the dominant direction
-                if (wAB > wBA && fromPkg.level <= toPkg.level) return false;
+                if (wAB > wBA && fromPkg.architectureLevel <= toPkg.architectureLevel) return false;
             }
             return true;
         });
@@ -312,21 +312,21 @@ class LevelCalculatorTest {
     void testDomainClassAIsLevel0() {
         DomainModel.CalculatedElementInfo classA = calculatedModel.getClass("com.example.A");
         assertNotNull(classA, "Class com.example.A should exist");
-        assertEquals(0, classA.level, "Class A should be at level 0 (no dependencies)");
+        assertEquals(0, classA.architectureLevel, "Class A should be at level 0 (no dependencies)");
     }
 
     @Test
     void testDomainClassBIsLevel1() {
         DomainModel.CalculatedElementInfo classB = calculatedModel.getClass("com.example.B");
         assertNotNull(classB, "Class com.example.B should exist");
-        assertEquals(1, classB.level, "Class B should be at level 1 (depends on A)");
+        assertEquals(1, classB.architectureLevel, "Class B should be at level 1 (depends on A)");
     }
 
     @Test
     void testDomainClassCIsLevel2() {
         DomainModel.CalculatedElementInfo classC = calculatedModel.getClass("com.example.C");
         assertNotNull(classC, "Class com.example.C should exist");
-        assertEquals(2, classC.level, "Class C should be at level 2 (depends on B)");
+        assertEquals(2, classC.architectureLevel, "Class C should be at level 2 (depends on B)");
     }
 
     @Test
@@ -359,7 +359,7 @@ class LevelCalculatorTest {
         assertNotNull(pkgComExample, "Package com.example should exist");
         // Package level = position in inter-package dependency DAG.
         // com.example has no cross-package dependencies → level 0.
-        assertEquals(0, pkgComExample.level,
+        assertEquals(0, pkgComExample.architectureLevel,
             "Package com.example has no cross-package dependencies → level 0");
     }
 
@@ -367,11 +367,12 @@ class LevelCalculatorTest {
     void testDomainPackageComInheritsMaxChildLevel() {
         DomainModel.CalculatedElementInfo pkgCom = calculatedModel.getPackage("com");
         assertNotNull(pkgCom, "Package com should exist");
-        // Parent packages inherit max(child package levels).
-        // com has no cross-package dependencies of its own → L0.
-        // Parent packages are not lifted by children; containment ≠ dependency.
-        assertEquals(0, pkgCom.level,
-            "Package com has no own cross-package dependencies → L0");
+        // Parent->child edges contribute to the weighted package graph
+        // now, so com aggregates the outgoing deps of its descendants:
+        // com.example2.E depends on com.example.B, which propagates as
+        // com -> com.example. com therefore ends up at L1.
+        assertEquals(1, pkgCom.architectureLevel,
+            "Package com aggregates its descendants' outgoing deps → L1");
     }
 
     @Test
@@ -384,9 +385,9 @@ class LevelCalculatorTest {
         DomainModel.CalculatedElementInfo example2Pkg = calculatedModel.getPackage("com.example2");
         
         // Verify packages exist and have levels
-        assertTrue(examplePkg.level >= 0, "com.example package should have a level");
-        assertTrue(example1Pkg.level >= 0, "com.example1 package should have a level");
-        assertTrue(example2Pkg.level >= 0, "com.example2 package should have a level");
+        assertTrue(examplePkg.architectureLevel >= 0, "com.example package should have a level");
+        assertTrue(example1Pkg.architectureLevel >= 0, "com.example1 package should have a level");
+        assertTrue(example2Pkg.architectureLevel >= 0, "com.example2 package should have a level");
     }
 
     @Test
@@ -409,7 +410,7 @@ class LevelCalculatorTest {
         // Max overall level may be higher due to the sccs.* adversarial example.
         DomainModel.CalculatedElementInfo classE = calculatedModel.getClass("com.example2.E");
         assertNotNull(classE, "com.example2.E should exist");
-        assertEquals(3, classE.level, "com.example2.E should be at class level 3");
+        assertEquals(3, classE.architectureLevel, "com.example2.E should be at class level 3");
     }
 
     @Test

@@ -234,7 +234,7 @@ public final class S202ProjectMapper {
                 info.simpleName,
                 info.type,
                 info.interfaceType,
-                info.level,
+                info.architectureLevel,
                 sorted(info.dependencies),
                 sorted(info.dependents));
     }

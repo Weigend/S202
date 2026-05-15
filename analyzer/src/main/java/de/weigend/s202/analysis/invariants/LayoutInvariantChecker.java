@@ -185,7 +185,7 @@ public final class LayoutInvariantChecker {
                 if (to == null) continue;
                 depCount++;
 
-                if (from.level > to.level) continue;
+                if (from.architectureLevel > to.architectureLevel) continue;
                 if (backEdges.contains(new SCCBreaker.Edge(from.fullName, to.fullName))) continue;
 
                 StronglyConnectedComponent fromScc = classToScc.get(from.fullName);
@@ -200,7 +200,7 @@ public final class LayoutInvariantChecker {
                 // the same DAG level. Internal edges are then "flat" — not a
                 // bug. Only same-SCC inversions that actually drift apart
                 // (e.g. a hoist step ran without re-syncing) get reported.
-                if (sameScc && from.level == to.level) continue;
+                if (sameScc && from.architectureLevel == to.architectureLevel) continue;
 
                 // Same-SCC drift in a *broken* SCC is also by design: the
                 // heuristic deliberately spread members across DAG levels via
@@ -233,7 +233,7 @@ public final class LayoutInvariantChecker {
                         "R1",
                         "Level inversion across non-back-edge dependency: " + classification,
                         from.fullName, to.fullName,
-                        from.level, to.level,
+                        from.architectureLevel, to.architectureLevel,
                         // Class endpoints carry their package in fromContainer/
                         // toContainer to mirror the C# CityBuilding.NamespaceName field.
                         toContainerOrFqn(from), toContainerOrFqn(to)));
@@ -285,13 +285,13 @@ public final class LayoutInvariantChecker {
                 // analogous to class-level back-edges excluded from R1.
                 if (domainModel.isPackageBackEdge(fromPkg, toPkg)) continue;
 
-                if (fromInfo.level <= toInfo.level) {
+                if (fromInfo.architectureLevel <= toInfo.architectureLevel) {
                     findings.add(new InvariantFinding(
                             "R3",
                             String.format("Package edge direction violated: %s (w=%d) dominates %s (w=%d) but level(%d) <= level(%d).",
-                                    fromPkg, wAB, toPkg, wBA, fromInfo.level, toInfo.level),
+                                    fromPkg, wAB, toPkg, wBA, fromInfo.architectureLevel, toInfo.architectureLevel),
                             fromPkg, toPkg,
-                            fromInfo.level, toInfo.level,
+                            fromInfo.architectureLevel, toInfo.architectureLevel,
                             fromPkg, toPkg));
                 }
             }
@@ -357,8 +357,8 @@ public final class LayoutInvariantChecker {
             for (String m : members) {
                 CalculatedElementInfo p = packages.get(m);
                 if (p == null) continue;
-                if (reference == null) reference = p.level;
-                else if (p.level != reference) { drift = true; break; }
+                if (reference == null) reference = p.architectureLevel;
+                else if (p.architectureLevel != reference) { drift = true; break; }
             }
             if (!drift) continue;
 
@@ -368,8 +368,8 @@ public final class LayoutInvariantChecker {
             for (String m : members) {
                 CalculatedElementInfo p = packages.get(m);
                 if (p == null) continue;
-                if (p.level > maxLevel) { maxLevel = p.level; maxMember = m; }
-                if (p.level < minLevel) { minLevel = p.level; minMember = m; }
+                if (p.architectureLevel > maxLevel) { maxLevel = p.architectureLevel; maxMember = m; }
+                if (p.architectureLevel < minLevel) { minLevel = p.architectureLevel; minMember = m; }
             }
 
             findings.add(new InvariantFinding(
@@ -416,7 +416,7 @@ public final class LayoutInvariantChecker {
         Map<String, Integer> nodeToLevel = new HashMap<>(classes.size());
         Map<String, Integer> nodeToSccId = new HashMap<>();
         for (CalculatedElementInfo cls : classes.values()) {
-            nodeToLevel.put(cls.fullName, cls.level);
+            nodeToLevel.put(cls.fullName, cls.architectureLevel);
             StronglyConnectedComponent scc = classToScc.get(cls.fullName);
             if (scc != null && scc.getSize() > 1) {
                 nodeToSccId.put(cls.fullName, scc.getId());
@@ -441,7 +441,7 @@ public final class LayoutInvariantChecker {
 
                 EdgeType expected;
                 if (sameMultiScc) expected = EdgeType.INTRA_SCC;
-                else if (from.level <= to.level) expected = EdgeType.VIOLATION;
+                else if (from.architectureLevel <= to.architectureLevel) expected = EdgeType.VIOLATION;
                 else expected = EdgeType.NORMAL;
 
                 if (classified.type == expected) continue;
@@ -451,7 +451,7 @@ public final class LayoutInvariantChecker {
                         "EdgeClassification type=" + classified.type
                                 + " disagrees with current levels (expected " + expected + ").",
                         from.fullName, to.fullName,
-                        from.level, to.level,
+                        from.architectureLevel, to.architectureLevel,
                         toContainerOrFqn(from), toContainerOrFqn(to)));
             }
         }

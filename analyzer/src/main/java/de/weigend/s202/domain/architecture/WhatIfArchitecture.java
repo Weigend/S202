@@ -151,16 +151,6 @@ public final class WhatIfArchitecture implements Architecture {
     }
 
     /**
-     * Containment edges are pulled verbatim from the original — they are
-     * a property of the static source code and don't change when boxes
-     * are dragged around.
-     */
-    @Override
-    public List<ContainmentEdge> containmentEdges() {
-        return original.containmentEdges();
-    }
-
-    /**
      * Same Rows-of-Cols shape {@link HierarchicalLayeredArchitecture}
      * exposes. Element levels are filled with the element's depth in the
      * Rows-of-Cols structure — useful for sorting, not for cross-element
@@ -303,9 +293,9 @@ public final class WhatIfArchitecture implements Architecture {
 
     private Element toElement(Node node, int depth) {
         if (!node.isPackage) {
-            return new Element.ClassElement(node.fqn, depth);
+            return new Element.ClassElement(node.fqn, depth, 0);
         }
-        return new Element.PackageElement(node.fqn, depth, toElementRows(node.rows));
+        return new Element.PackageElement(node.fqn, depth, 0, toElementRows(node.rows));
     }
 
     /** Internal mutable tree node. */

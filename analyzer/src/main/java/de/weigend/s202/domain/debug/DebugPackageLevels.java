@@ -31,7 +31,7 @@ public class DebugPackageLevels {
         System.out.println("Package Levels:");
         for (Map.Entry<String, DomainModel.CalculatedElementInfo> entry : model.getAllPackages().entrySet()) {
             String packageName = entry.getKey();
-            int level = entry.getValue().level;
+            int level = entry.getValue().architectureLevel;
             Set<String> deps = entry.getValue().dependencies;
             System.out.println("  " + packageName + " -> L" + level + " (depends on: " + deps + ")");
         }
@@ -41,7 +41,7 @@ public class DebugPackageLevels {
             new TreeMap<>(model.getAllClasses());
         for (Map.Entry<String, DomainModel.CalculatedElementInfo> entry : sortedClasses.entrySet()) {
             String className = entry.getKey();
-            int level = entry.getValue().level;
+            int level = entry.getValue().architectureLevel;
             Set<String> deps = entry.getValue().dependencies;
             System.out.println("  " + className + " -> L" + level);
             // Show dependencies for key classes
@@ -83,12 +83,12 @@ public class DebugPackageLevels {
         for (String className : keyClasses) {
             DomainModel.CalculatedElementInfo info = model.getClass(className);
             if (info != null) {
-                System.out.println("\n" + className + " (L" + info.level + "):");
+                System.out.println("\n" + className + " (L" + info.architectureLevel + "):");
                 System.out.println("  Internal dependencies with levels:");
                 for (String dep : info.dependencies) {
                     DomainModel.CalculatedElementInfo depInfo = model.getClass(dep);
                     if (depInfo != null) {
-                        System.out.println("    -> " + dep + " (L" + depInfo.level + ")");
+                        System.out.println("    -> " + dep + " (L" + depInfo.architectureLevel + ")");
                     }
                 }
             }

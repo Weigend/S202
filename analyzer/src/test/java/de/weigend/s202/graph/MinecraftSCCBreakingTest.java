@@ -225,7 +225,7 @@ class MinecraftSCCBreakingTest {
     
     private Map<Integer, Long> analyzeLevelDistribution(DomainModel model) {
         return model.getAllClasses().values().stream()
-            .collect(Collectors.groupingBy(c -> c.level, Collectors.counting()));
+            .collect(Collectors.groupingBy(c -> c.architectureLevel, Collectors.counting()));
     }
     
     private Map<String, Set<String>> buildClassDependencyMap(DependencyModel rawModel) {

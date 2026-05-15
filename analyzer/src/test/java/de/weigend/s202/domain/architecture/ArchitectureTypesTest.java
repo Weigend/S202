@@ -19,22 +19,22 @@ class ArchitectureTypesTest {
 
     @Test
     void classElementRejectsEmptyFqnAndNegativeLevel() {
-        assertThrows(IllegalArgumentException.class, () -> new Element.ClassElement("", 0));
-        assertThrows(IllegalArgumentException.class, () -> new Element.ClassElement(null, 0));
-        assertThrows(IllegalArgumentException.class, () -> new Element.ClassElement("a.B", -1));
+        assertThrows(IllegalArgumentException.class, () -> new Element.ClassElement("", 0, 0));
+        assertThrows(IllegalArgumentException.class, () -> new Element.ClassElement(null, 0, 0));
+        assertThrows(IllegalArgumentException.class, () -> new Element.ClassElement("a.B", -1, 0));
     }
 
     @Test
     void packageElementCopiesRowsDeepAndIsImmutable() {
         List<Element> innerRow = new ArrayList<>();
-        innerRow.add(new Element.ClassElement("a.b.X", 0));
+        innerRow.add(new Element.ClassElement("a.b.X", 0, 0));
         List<List<Element>> rows = new ArrayList<>();
         rows.add(innerRow);
 
-        Element.PackageElement pkg = new Element.PackageElement("a.b", 1, rows);
+        Element.PackageElement pkg = new Element.PackageElement("a.b", 1, 0, rows);
 
         // Mutating the caller's lists must not affect the record's state.
-        innerRow.add(new Element.ClassElement("a.b.Y", 0));
+        innerRow.add(new Element.ClassElement("a.b.Y", 0, 0));
         rows.add(new ArrayList<>());
         assertEquals(1, pkg.rows().size(), "outer rows snapshot is immutable");
         assertEquals(1, pkg.rows().get(0).size(), "inner row snapshot is immutable");
@@ -42,7 +42,7 @@ class ArchitectureTypesTest {
         assertThrows(UnsupportedOperationException.class,
                 () -> pkg.rows().add(new ArrayList<>()));
         assertThrows(UnsupportedOperationException.class,
-                () -> pkg.rows().get(0).add(new Element.ClassElement("a.b.Z", 0)));
+                () -> pkg.rows().get(0).add(new Element.ClassElement("a.b.Z", 0, 0)));
     }
 
     @Test
@@ -58,7 +58,7 @@ class ArchitectureTypesTest {
     @Test
     void hierarchicalLayeredArchitectureSnapshotsRowsViolationsAndTangles() {
         List<Element> row = new ArrayList<>();
-        row.add(new Element.ClassElement("a.X", 0));
+        row.add(new Element.ClassElement("a.X", 0, 0));
         List<List<Element>> rows = new ArrayList<>();
         rows.add(row);
         List<Violation> violations = new ArrayList<>();
@@ -66,21 +66,16 @@ class ArchitectureTypesTest {
         List<Tangle> tangles = new ArrayList<>();
         tangles.add(new Tangle(java.util.Set.of("a", "b")));
 
-        List<ContainmentEdge> containmentEdges = new ArrayList<>();
-        containmentEdges.add(new ContainmentEdge("a.X", "a.b.Y", EdgeScope.CLASS));
-
         HierarchicalLayeredArchitecture arch =
-                new HierarchicalLayeredArchitecture(rows, violations, tangles, containmentEdges);
+                new HierarchicalLayeredArchitecture(rows, violations, tangles);
 
         rows.clear();
         violations.clear();
         tangles.clear();
-        containmentEdges.clear();
         assertEquals(1, arch.rows().size());
         assertEquals(1, arch.rows().get(0).size());
         assertEquals(1, arch.violations().size());
         assertEquals(1, arch.tangles().size());
-        assertEquals(1, arch.containmentEdges().size());
         assertEquals(java.util.Set.of("a", "b"), arch.tangles().get(0).members());
     }
 
@@ -92,20 +87,9 @@ class ArchitectureTypesTest {
 
     @Test
     void architectureIsSealedToHierarchicalLayered() {
-        Architecture a = new HierarchicalLayeredArchitecture(List.of(), List.of(), List.of(), List.of());
+        Architecture a = new HierarchicalLayeredArchitecture(List.of(), List.of(), List.of());
         assertTrue(a instanceof HierarchicalLayeredArchitecture);
         assertSame(List.of(), a.violations());
         assertSame(List.of(), a.tangles());
-        assertSame(List.of(), a.containmentEdges());
-    }
-
-    @Test
-    void containmentEdgeRejectsNullsAndEmptyFqns() {
-        assertThrows(IllegalArgumentException.class,
-                () -> new ContainmentEdge("", "a.b.Y", EdgeScope.CLASS));
-        assertThrows(IllegalArgumentException.class,
-                () -> new ContainmentEdge("a.X", "", EdgeScope.CLASS));
-        assertThrows(IllegalArgumentException.class,
-                () -> new ContainmentEdge("a.X", "a.b.Y", null));
     }
 }

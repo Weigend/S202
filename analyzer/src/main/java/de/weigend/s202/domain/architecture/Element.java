@@ -13,17 +13,33 @@ public sealed interface Element {
     /** Fully qualified name (class fqcn or package fqcn). */
     String fqn();
 
-    /** Architectural level assigned by the level calculator. */
-    int level();
+    /**
+     * Global architectural depth assigned by the level calculator —
+     * derived from the dependency-chain longest path. Separate from any
+     * layout/rendering position; see ADR_ARCHITECTURE_LEVEL_VS_LOCAL_LAYER_INDEX.
+     */
+    int architectureLevel();
+
+    /**
+     * Position of this element within its direct parent container's
+     * layered rows — populated by the layout step from a sibling-only
+     * dependency graph. Higher value sits visually higher within the
+     * parent's box. Currently always 0 until the LocalLayerCalculator
+     * is wired in.
+     */
+    int localLayerIndex();
 
     /** Leaf node in the architecture — a single class. */
-    record ClassElement(String fqn, int level) implements Element {
+    record ClassElement(String fqn, int architectureLevel, int localLayerIndex) implements Element {
         public ClassElement {
             if (fqn == null || fqn.isEmpty()) {
                 throw new IllegalArgumentException("fqn must be non-empty");
             }
-            if (level < 0) {
-                throw new IllegalArgumentException("level must be non-negative");
+            if (architectureLevel < 0) {
+                throw new IllegalArgumentException("architectureLevel must be non-negative");
+            }
+            if (localLayerIndex < 0) {
+                throw new IllegalArgumentException("localLayerIndex must be non-negative");
             }
         }
     }
@@ -33,13 +49,17 @@ public sealed interface Element {
      * layered structure. The {@code rows} field is the same Rows-of-Cols
      * shape as at top level, applied to the package's own contents.
      */
-    record PackageElement(String fqn, int level, List<List<Element>> rows) implements Element {
+    record PackageElement(String fqn, int architectureLevel, int localLayerIndex,
+                          List<List<Element>> rows) implements Element {
         public PackageElement {
             if (fqn == null || fqn.isEmpty()) {
                 throw new IllegalArgumentException("fqn must be non-empty");
             }
-            if (level < 0) {
-                throw new IllegalArgumentException("level must be non-negative");
+            if (architectureLevel < 0) {
+                throw new IllegalArgumentException("architectureLevel must be non-negative");
+            }
+            if (localLayerIndex < 0) {
+                throw new IllegalArgumentException("localLayerIndex must be non-negative");
             }
             rows = copyDeepImmutable(rows);
         }

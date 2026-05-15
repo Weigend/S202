@@ -36,15 +36,14 @@ public class ArchitectureViewLevelTest {
         DomainModel calculatedModel = levelCalculator.calculate(rawModel);
         assertEquals(11, calculatedModel.getAllPackages().size(), "Should have 11 packages after calculation");
 
-        // Package levels now reflect inter-package dependency position, not class levels.
-        // com.example: no cross-pkg deps → L0
-        // com.example1: no cross-pkg deps → L0
-        // com.example2: depends on com.example and com.example1 → package L1
-        // com: max(0, 0, 1) = L1
-        assertEquals(0, calculatedModel.getAllPackages().get("com").level, "com has no own cross-pkg deps → L0");
-        assertEquals(0, calculatedModel.getAllPackages().get("com.example").level, "com.example has no cross-pkg deps → L0");
-        assertEquals(0, calculatedModel.getAllPackages().get("com.example1").level, "com.example1 has no cross-pkg deps → L0");
-        assertEquals(1, calculatedModel.getAllPackages().get("com.example2").level, "com.example2 depends on com.example → package L1");
+        // architectureLevel reflects honest dep-chain depth — parent->child
+        // edges contribute, so com aggregates its descendants' outgoing
+        // deps and lands at L1.
+        assertEquals(1, calculatedModel.getAllPackages().get("com").architectureLevel,
+                "com aggregates descendants' deps → L1");
+        assertEquals(0, calculatedModel.getAllPackages().get("com.example").architectureLevel, "com.example has no cross-pkg deps → L0");
+        assertEquals(0, calculatedModel.getAllPackages().get("com.example1").architectureLevel, "com.example1 has no cross-pkg deps → L0");
+        assertEquals(1, calculatedModel.getAllPackages().get("com.example2").architectureLevel, "com.example2 depends on com.example → package L1");
 
         // Step 3: Build ArchitectureNode tree
         ArchitectureNodeBuilder builder = new ArchitectureNodeBuilder();

@@ -27,7 +27,7 @@ public class LevelCalculatorIntegrationTest {
         // Verify package levels
         System.out.println("\n=== Package Levels ===");
         for (var entry : model.getAllPackages().entrySet()) {
-            System.out.println(entry.getKey() + " = L" + entry.getValue().level);
+            System.out.println(entry.getKey() + " = L" + entry.getValue().architectureLevel);
         }
         
         // Assertions
@@ -41,10 +41,10 @@ public class LevelCalculatorIntegrationTest {
         
         // Package levels reflect inter-package dependency position, not class levels.
         // com.example: no cross-pkg deps → L0
-        assertEquals(0, examplePkg.level, "com.example should be L0 (no cross-pkg deps)");
+        assertEquals(0, examplePkg.architectureLevel, "com.example should be L0 (no cross-pkg deps)");
         // com.example1: no cross-pkg deps → L0
-        assertEquals(0, example1Pkg.level, "com.example1 should be L0 (no cross-pkg deps)");
+        assertEquals(0, example1Pkg.architectureLevel, "com.example1 should be L0 (no cross-pkg deps)");
         // com.example2: depends on com.example and com.example1 → package L1
-        assertEquals(1, example2Pkg.level, "com.example2 depends on com.example → package L1");
+        assertEquals(1, example2Pkg.architectureLevel, "com.example2 depends on com.example → package L1");
     }
 }

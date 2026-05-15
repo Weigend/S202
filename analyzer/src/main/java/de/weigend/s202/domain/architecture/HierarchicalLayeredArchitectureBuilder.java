@@ -9,8 +9,6 @@ import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashMap;
 import java.util.HashSet;
-import java.util.LinkedHashMap;
-import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -51,9 +49,8 @@ public final class HierarchicalLayeredArchitectureBuilder {
         List<List<Element>> rows = buildRowsForPackage(effectiveRoot, contentsByParent);
         List<Violation> violations = detectViolations(domain);
         List<Tangle> tangles = detectTangles(domain);
-        List<ContainmentEdge> containmentEdges = detectContainmentEdges(domain);
 
-        return new HierarchicalLayeredArchitecture(rows, violations, tangles, containmentEdges);
+        return new HierarchicalLayeredArchitecture(rows, violations, tangles);
     }
 
     // -------------------------------------------------- structure
@@ -125,21 +122,25 @@ public final class HierarchicalLayeredArchitectureBuilder {
         if (children.isEmpty()) {
             return List.of();
         }
+        // Within each parent's box, sort siblings by their local-layer
+        // position (set by LocalLayerCalculator) — purely a sibling-graph
+        // decision, NOT the global architectureLevel. This is the change
+        // that fixes the "ArchitectureView sits below ui.rendering" bug.
         List<CalculatedElementInfo> sorted = new ArrayList<>(children);
         sorted.sort(Comparator
-                .comparingInt((CalculatedElementInfo c) -> c.level).reversed()
+                .comparingInt((CalculatedElementInfo c) -> c.localLayerIndex).reversed()
                 .thenComparing(c -> c.fullName));
 
         List<List<Element>> rows = new ArrayList<>();
         List<Element> currentRow = new ArrayList<>();
-        int currentLevel = Integer.MIN_VALUE;
+        int currentLayer = Integer.MIN_VALUE;
         for (CalculatedElementInfo child : sorted) {
-            if (child.level != currentLevel) {
+            if (child.localLayerIndex != currentLayer) {
                 if (!currentRow.isEmpty()) {
                     rows.add(currentRow);
                     currentRow = new ArrayList<>();
                 }
-                currentLevel = child.level;
+                currentLayer = child.localLayerIndex;
             }
             currentRow.add(toElement(child, contents));
         }
@@ -152,10 +153,10 @@ public final class HierarchicalLayeredArchitectureBuilder {
     private Element toElement(CalculatedElementInfo info,
                               Map<String, List<CalculatedElementInfo>> contents) {
         if ("CLASS".equals(info.type)) {
-            return new Element.ClassElement(info.fullName, info.level);
+            return new Element.ClassElement(info.fullName, info.architectureLevel, info.localLayerIndex);
         }
         List<List<Element>> innerRows = buildRowsForPackage(info.fullName, contents);
-        return new Element.PackageElement(info.fullName, info.level, innerRows);
+        return new Element.PackageElement(info.fullName, info.architectureLevel, info.localLayerIndex, innerRows);
     }
 
     // -------------------------------------------------- violations
@@ -183,10 +184,10 @@ public final class HierarchicalLayeredArchitectureBuilder {
                 }
                 if (compareVisualRank(srcRank, tgtRank) < 0) {
                     CalculatedElementInfo target = domain.getClass(dep);
-                    int tgtClassLevel = target == null ? -1 : target.level;
+                    int tgtClassLevel = target == null ? -1 : target.architectureLevel;
                     violations.add(new Violation(
                             cls.fullName, dep, ViolationKind.UPWARD,
-                            cls.level, tgtClassLevel));
+                            cls.architectureLevel, tgtClassLevel));
                 }
             }
         }
@@ -236,74 +237,32 @@ public final class HierarchicalLayeredArchitectureBuilder {
         return tangles;
     }
 
-    // -------------------------------------------------- containment edges
-
     /**
-     * Class-to-class dependencies the level calculator suppresses because
-     * the source's package is a strict ancestor of the target's. Emitted
-     * both at {@link EdgeScope#CLASS} (the actual pair) and at
-     * {@link EdgeScope#PACKAGE} (one entry per distinct
-     * source-package/target-package pair), so the renderer can pick the
-     * granularity it needs and roll up to whichever level is currently
-     * visible.
+     * Build the visual rank of a class: the chain of localLayerIndex values
+     * along the parent-package path, ending with the class's own
+     * localLayerIndex. Comparing two ranks lexicographically is the same
+     * comparison the eye does — "whose outermost ancestor sits higher? if
+     * equal, look one level deeper; …; finally look at the class layer".
+     * Uses localLayerIndex consistently, since that's what positions the
+     * boxes within each parent's container.
      */
-    private List<ContainmentEdge> detectContainmentEdges(DomainModel domain) {
-        List<ContainmentEdge> classEdges = new ArrayList<>();
-        Map<String, Set<String>> pkgAggregate = new LinkedHashMap<>();
-
-        for (CalculatedElementInfo cls : domain.getAllClasses().values()) {
-            String srcPkg = parentOf(cls.fullName);
-            if (srcPkg.isEmpty()) {
-                continue;
-            }
-            for (String dep : cls.dependencies) {
-                CalculatedElementInfo target = domain.getClass(dep);
-                if (target == null) {
-                    continue;
-                }
-                String tgtPkg = parentOf(target.fullName);
-                if (tgtPkg.isEmpty() || !tgtPkg.startsWith(srcPkg + ".")) {
-                    continue;
-                }
-                classEdges.add(new ContainmentEdge(cls.fullName, target.fullName, EdgeScope.CLASS));
-                pkgAggregate.computeIfAbsent(srcPkg, k -> new LinkedHashSet<>()).add(tgtPkg);
-            }
-        }
-
-        classEdges.sort(Comparator
-                .comparing(ContainmentEdge::sourceFqn)
-                .thenComparing(ContainmentEdge::targetFqn));
-
-        List<ContainmentEdge> all = new ArrayList<>(classEdges);
-        List<String> sortedSrc = new ArrayList<>(pkgAggregate.keySet());
-        sortedSrc.sort(Comparator.naturalOrder());
-        for (String src : sortedSrc) {
-            List<String> targets = new ArrayList<>(pkgAggregate.get(src));
-            targets.sort(Comparator.naturalOrder());
-            for (String tgt : targets) {
-                all.add(new ContainmentEdge(src, tgt, EdgeScope.PACKAGE));
-            }
-        }
-        return all;
-    }
-
     private static int[] computeVisualRank(CalculatedElementInfo cls, DomainModel domain) {
-        List<Integer> ancestorLevels = new ArrayList<>();
+        List<Integer> ancestorLayers = new ArrayList<>();
         String parent = parentOf(cls.fullName);
         while (!parent.isEmpty()) {
             CalculatedElementInfo pkg = domain.getPackage(parent);
             if (pkg != null) {
-                ancestorLevels.add(pkg.level);
+                ancestorLayers.add(pkg.localLayerIndex);
             }
             parent = parentOf(parent);
         }
-        // ancestorLevels is currently innermost-first; reverse to outermost-first.
-        java.util.Collections.reverse(ancestorLevels);
-        int[] rank = new int[ancestorLevels.size() + 1];
-        for (int i = 0; i < ancestorLevels.size(); i++) {
-            rank[i] = ancestorLevels.get(i);
+        // ancestorLayers is currently innermost-first; reverse to outermost-first.
+        java.util.Collections.reverse(ancestorLayers);
+        int[] rank = new int[ancestorLayers.size() + 1];
+        for (int i = 0; i < ancestorLayers.size(); i++) {
+            rank[i] = ancestorLayers.get(i);
         }
-        rank[rank.length - 1] = cls.level;
+        rank[rank.length - 1] = cls.localLayerIndex;
         return rank;
     }
 
