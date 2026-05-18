@@ -382,18 +382,21 @@ public class LocalLevelCalculator {
             implements Comparable<EdgeCutCandidate> {
         /**
          * Higher is better. Order of preference:
-         * 1. decompose the local SCC as much as possible,
-         * 2. prefer cuts that preserve the package architecture hypothesis,
+         * 1. always cut an edge that contradicts the package architecture
+         *    hypothesis first — Phase 3 must never reorder packages relative
+         *    to what Phase 2 computed,
+         * 2. among architecture-equivalent candidates, decompose the local SCC
+         *    as much as possible,
          * 3. cut the weaker edge,
          * 4. fall back to the legacy rank signal.
          */
         @Override
         public int compareTo(EdgeCutCandidate other) {
-            int cmp = Integer.compare(cycleBreakScore, other.cycleBreakScore);
+            int cmp = Integer.compare(architectureContradiction, other.architectureContradiction);
             if (cmp != 0) {
                 return cmp;
             }
-            cmp = Integer.compare(architectureContradiction, other.architectureContradiction);
+            cmp = Integer.compare(cycleBreakScore, other.cycleBreakScore);
             if (cmp != 0) {
                 return cmp;
             }

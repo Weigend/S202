@@ -394,7 +394,7 @@ values, two of them for analysis and one for layout.
         method-call counts aggregated from class-level references. The result
         represents the module's position in the system's overall dependency
         order, independently of the class-level coordinate.
-  \item \textbf{Local layer index} is the longest path in the SCC-collapsed
+  \item \textbf{Local level} is the longest path in the SCC-collapsed
         sibling-only dependency graph of a single parent container. The graph
         contains only edges whose source and target both lie in some direct
         child of that parent; references leaving the parent's subtree are excluded
@@ -490,8 +490,8 @@ do not lift the package itself.
   \hspace{1em} refs leaving the parent's subtree are excluded.\;
   Tarjan on $G_P^{\,\text{loc}}$ $\rightarrow$ SCCs.\;
   Within each SCC of size $\ge 2$: evaluate every candidate edge cut.\;
-  Remove the edge whose removal maximally decomposes the SCC;\;
-  use package-architecture contradiction, edge weight, and rank only as tie-breakers.\;
+  First cut an edge that contradicts the package architecture; only then\;
+  prefer the cut that maximally decomposes the SCC; edge weight and rank as further tie-breakers.\;
   Condense to SCC-DAG, longest-path pass, assign \textbf{localLevel} per sibling.\;
 \Indm
 \end{algorithm}
@@ -500,12 +500,14 @@ Phase~3 is a pure layout phase. It never modifies architecture levels. Each
 parent container gets its own computation: a class's local level inside
 \emph{ui} carries no relationship to a class's local level inside
 \emph{ui.rendering}. The renderer sorts each parent's children by their local
-layer index, descending. The enclosing parent's local level handles
+level, descending. The enclosing parent's local level handles
 cross-container ordering recursively. The local SCC breaker resolves local
 cycles---for example, two sibling sub-packages with mutual class
-references---silently. It removes one edge at a time, preferring the cut that
-reduces the remaining cyclic structure the most; package architecture, edge
-weight and rank only decide among otherwise equivalent candidates. S202 does
+references---silently. It removes one edge at a time, always preferring an
+edge that contradicts the package architecture: Phase~3 may never reorder
+packages relative to the order computed in Phase~2. Only when no
+architecture-contradicting edge is available does the breaker fall back on
+cycle-decomposition score, edge weight, and rank. S202 does
 not surface these local cycles as a separate Tangle category because the
 user-visible tangle list remains a global architecture statement.
 
@@ -603,7 +605,7 @@ correctly implemented class-level assignment. Its value lies in providing an
 immediate check---a failing R1-algo signals a fundamental breakdown in
 the class-level pipeline.
 
-\textbf{R1-visual} (lexicographic comparison of local-layer-index tuples along
+\textbf{R1-visual} (lexicographic comparison of local-level tuples along
 the parent chain) is the invariant that the
 drawing represents. We separate the two checks intentionally: R1-algo asks ``did Phase~1
 compute consistent class architecture levels?'', R1-visual asks ``does the
@@ -723,7 +725,7 @@ implementation steps, which constitute the reference implementation
   \textbf{for each} parent package $P$ with two or more direct children:\;
   \hspace{1.5em} build sibling-only weighted graph $G_P^{\,\text{loc}}$ from class refs\;
   \hspace{1.5em} whose source and target both live in some direct child of $P$;\;
-  \hspace{1.5em} Tarjan $\to$ rank-based SCC break $\to$ longest-path;\;
+  \hspace{1.5em} Tarjan $\to$ architecture-respecting SCC break $\to$ longest-path;\;
   \hspace{1.5em} assign \texttt{localLevel} to each direct child of $P$.\;
 \Indm
 \end{algorithm}
@@ -767,7 +769,7 @@ heavier outgoing call traffic into rendering than rendering has back into
 \textbf{rendering:} sort a copied child view by \texttt{localLevel} (Phase~3), then \texttt{horizontalLayoutOrder} (Phase~4), then full name\;
 \end{algorithm}
 
-Phase~4 does not change any level or layer assignment and is deliberately
+Phase~4 does not change any level assignment and is deliberately
 excluded from the layout invariants. Its only purpose is cosmetic: when an
 overlay of dependency arrows is displayed, same-row elements that share many
 inter-sibling calls are placed horizontally near each other so the arrows are
@@ -844,7 +846,7 @@ SCC-collapsed class dependency DAG; they represent global architectural depth.
 \emph{Package architecture levels} derive from a weighted inter-package
 dependency graph whose edges carry aggregated method-call counts; they
 represent module dependency position independently of class levels.
-\emph{Local layer indices} come from the per-parent
+\emph{Local levels} come from the per-parent
 sibling-only graph closed within that parent's subtree; they decide visual Y
 position inside each box without disturbing either architecture coordinate.
 All three use the same algorithmic shape: Tarjan SCC detection, weight-based
