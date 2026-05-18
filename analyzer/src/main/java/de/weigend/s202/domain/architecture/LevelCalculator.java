@@ -82,7 +82,7 @@ public class LevelCalculator {
         // Step 6: Assign per-parent local layer index — independent of the
         // global architectureLevel, used by the renderer to position
         // siblings within each parent's box.
-        new LocalLayerCalculator().assign(model, rawModel);
+        new LocalLevelCalculator().assign(model, rawModel);
 
         return model;
     }
@@ -191,7 +191,7 @@ public class LevelCalculator {
         // Longest-path levels on the SCC-collapsed DAG. The previous
         // "childPkgUsedLevel" lift (which inflated a parent's level by
         // the class levels its child packages used) is gone — layout
-        // positioning lives on localLayerIndex now, so architectureLevel
+        // positioning lives on localLevel now, so architectureLevel
         // can be a direct dependency-chain depth.
         Map<Integer, Integer> sccLevels = new HashMap<>();
         for (StronglyConnectedComponent scc : sccs) sccLevels.put(scc.getId(), 0);
@@ -286,7 +286,7 @@ public class LevelCalculator {
             // Propagate each weight up to ancestor packages. Parent->child
             // edges are no longer filtered here — the rank-based SCC breaker
             // decides direction based on actual call-count weight. Layout
-            // positioning is the LocalLayerCalculator's job (step 6), so the
+            // positioning is the LocalLevelCalculator's job (step 6), so the
             // global package level can be a direct dependency-chain count.
             for (Map.Entry<String, Integer> entry : callCountPerPkg.entrySet()) {
                 String toPkg = entry.getKey();

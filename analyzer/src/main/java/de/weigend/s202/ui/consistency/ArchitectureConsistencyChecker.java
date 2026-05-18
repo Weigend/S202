@@ -107,9 +107,9 @@ public final class ArchitectureConsistencyChecker {
             Element e = archByFqn.get(fqn);
             String childPath = path + "/" + fqn;
 
-            if (e.localLayerIndex() != n.getLevel()) {
+            if (e.localLevel() != n.getLevel()) {
                 out.add(new Discrepancy(childPath,
-                        "level mismatch: model=" + e.localLayerIndex() + " ui=" + n.getLevel()));
+                        "level mismatch: model=" + e.localLevel() + " ui=" + n.getLevel()));
             }
             boolean isPkg = e instanceof Element.PackageElement;
             boolean uiIsPkg = n.getType() == NodeType.PACKAGE;

@@ -122,25 +122,25 @@ public final class HierarchicalLayeredArchitectureBuilder {
         if (children.isEmpty()) {
             return List.of();
         }
-        // Within each parent's box, sort siblings by their local-layer
-        // position (set by LocalLayerCalculator) — purely a sibling-graph
+        // Within each parent's box, sort siblings by their local-level
+        // position (set by LocalLevelCalculator) — purely a sibling-graph
         // decision, NOT the global architectureLevel. This is the change
         // that fixes the "ArchitectureView sits below ui.rendering" bug.
         List<CalculatedElementInfo> sorted = new ArrayList<>(children);
         sorted.sort(Comparator
-                .comparingInt((CalculatedElementInfo c) -> c.localLayerIndex).reversed()
+                .comparingInt((CalculatedElementInfo c) -> c.localLevel).reversed()
                 .thenComparing(c -> c.fullName));
 
         List<List<Element>> rows = new ArrayList<>();
         List<Element> currentRow = new ArrayList<>();
-        int currentLayer = Integer.MIN_VALUE;
+        int currentLevel = Integer.MIN_VALUE;
         for (CalculatedElementInfo child : sorted) {
-            if (child.localLayerIndex != currentLayer) {
+            if (child.localLevel != currentLevel) {
                 if (!currentRow.isEmpty()) {
                     rows.add(currentRow);
                     currentRow = new ArrayList<>();
                 }
-                currentLayer = child.localLayerIndex;
+                currentLevel = child.localLevel;
             }
             currentRow.add(toElement(child, contents));
         }
@@ -153,10 +153,10 @@ public final class HierarchicalLayeredArchitectureBuilder {
     private Element toElement(CalculatedElementInfo info,
                               Map<String, List<CalculatedElementInfo>> contents) {
         if ("CLASS".equals(info.type)) {
-            return new Element.ClassElement(info.fullName, info.architectureLevel, info.localLayerIndex);
+            return new Element.ClassElement(info.fullName, info.architectureLevel, info.localLevel);
         }
         List<List<Element>> innerRows = buildRowsForPackage(info.fullName, contents);
-        return new Element.PackageElement(info.fullName, info.architectureLevel, info.localLayerIndex, innerRows);
+        return new Element.PackageElement(info.fullName, info.architectureLevel, info.localLevel, innerRows);
     }
 
     // -------------------------------------------------- violations
@@ -238,12 +238,12 @@ public final class HierarchicalLayeredArchitectureBuilder {
     }
 
     /**
-     * Build the visual rank of a class: the chain of localLayerIndex values
+     * Build the visual rank of a class: the chain of localLevel values
      * along the parent-package path, ending with the class's own
-     * localLayerIndex. Comparing two ranks lexicographically is the same
+     * localLevel. Comparing two ranks lexicographically is the same
      * comparison the eye does — "whose outermost ancestor sits higher? if
      * equal, look one level deeper; …; finally look at the class layer".
-     * Uses localLayerIndex consistently, since that's what positions the
+     * Uses localLevel consistently, since that's what positions the
      * boxes within each parent's container.
      */
     private static int[] computeVisualRank(CalculatedElementInfo cls, DomainModel domain) {
@@ -252,7 +252,7 @@ public final class HierarchicalLayeredArchitectureBuilder {
         while (!parent.isEmpty()) {
             CalculatedElementInfo pkg = domain.getPackage(parent);
             if (pkg != null) {
-                ancestorLayers.add(pkg.localLayerIndex);
+                ancestorLayers.add(pkg.localLevel);
             }
             parent = parentOf(parent);
         }
@@ -262,7 +262,7 @@ public final class HierarchicalLayeredArchitectureBuilder {
         for (int i = 0; i < ancestorLayers.size(); i++) {
             rank[i] = ancestorLayers.get(i);
         }
-        rank[rank.length - 1] = cls.localLayerIndex;
+        rank[rank.length - 1] = cls.localLevel;
         return rank;
     }
 

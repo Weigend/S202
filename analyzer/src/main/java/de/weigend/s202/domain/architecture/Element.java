@@ -24,13 +24,13 @@ public sealed interface Element {
      * Position of this element within its direct parent container's
      * layered rows — populated by the layout step from a sibling-only
      * dependency graph. Higher value sits visually higher within the
-     * parent's box. Currently always 0 until the LocalLayerCalculator
+     * parent's box. Currently always 0 until the LocalLevelCalculator
      * is wired in.
      */
-    int localLayerIndex();
+    int localLevel();
 
     /** Leaf node in the architecture — a single class. */
-    record ClassElement(String fqn, int architectureLevel, int localLayerIndex) implements Element {
+    record ClassElement(String fqn, int architectureLevel, int localLevel) implements Element {
         public ClassElement {
             if (fqn == null || fqn.isEmpty()) {
                 throw new IllegalArgumentException("fqn must be non-empty");
@@ -38,8 +38,8 @@ public sealed interface Element {
             if (architectureLevel < 0) {
                 throw new IllegalArgumentException("architectureLevel must be non-negative");
             }
-            if (localLayerIndex < 0) {
-                throw new IllegalArgumentException("localLayerIndex must be non-negative");
+            if (localLevel < 0) {
+                throw new IllegalArgumentException("localLevel must be non-negative");
             }
         }
     }
@@ -49,7 +49,7 @@ public sealed interface Element {
      * layered structure. The {@code rows} field is the same Rows-of-Cols
      * shape as at top level, applied to the package's own contents.
      */
-    record PackageElement(String fqn, int architectureLevel, int localLayerIndex,
+    record PackageElement(String fqn, int architectureLevel, int localLevel,
                           List<List<Element>> rows) implements Element {
         public PackageElement {
             if (fqn == null || fqn.isEmpty()) {
@@ -58,8 +58,8 @@ public sealed interface Element {
             if (architectureLevel < 0) {
                 throw new IllegalArgumentException("architectureLevel must be non-negative");
             }
-            if (localLayerIndex < 0) {
-                throw new IllegalArgumentException("localLayerIndex must be non-negative");
+            if (localLevel < 0) {
+                throw new IllegalArgumentException("localLevel must be non-negative");
             }
             rows = copyDeepImmutable(rows);
         }

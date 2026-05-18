@@ -39,7 +39,7 @@ public class ArchitectureViewPackageLevelsTest {
         assertEquals(0, domainModel.getPackage("com.example1").architectureLevel);
         assertEquals(1, domainModel.getPackage("com.example2").architectureLevel, "com.example2 depends on com.example → package L1");
 
-        // ArchitectureNode tree uses localLayerIndex now: it's the layout
+        // ArchitectureNode tree uses localLevel now: it's the layout
         // position within the parent box, not the global dep-chain depth.
         ArchitectureNodeBuilder builder = new ArchitectureNodeBuilder();
         ArchitectureNode rootNode = builder.build(domainModel);

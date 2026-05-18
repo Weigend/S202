@@ -106,7 +106,7 @@ public class ArchitectureNodeBuilder {
                         element.simpleName,
                         NodeType.CLASS,
                         false,
-                        element.localLayerIndex,
+                        element.localLevel,
                         element.interfaceType
                     );
                     classNode.setDependencies(element.dependencies);
@@ -150,7 +150,7 @@ public class ArchitectureNodeBuilder {
             int pkgLevel = 0;
             DomainModel.CalculatedElementInfo pkgInfo = domainModel.getPackage(subpkg);
             if (pkgInfo != null) {
-                pkgLevel = pkgInfo.localLayerIndex;
+                pkgLevel = pkgInfo.localLevel;
             }
             
             ArchitectureNode subpkgNode = new ArchitectureNode(

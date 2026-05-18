@@ -180,7 +180,7 @@ class HierarchicalLayeredArchitectureBuilderTest {
 
     /**
      * Synthetic test entries set the same value into both architectureLevel
-     * and localLayerIndex — the builder sorts by the latter, the tests
+     * and localLevel — the builder sorts by the latter, the tests
      * stay readable with a single per-row parameter.
      */
     private static void addPackage(DomainModel domain, String fqn, int level) {

@@ -42,10 +42,10 @@ public class DomainModel {
         public int architectureLevel;
         /**
          * Layout layer index within the parent container. Filled in a
-         * subsequent step by the LocalLayerCalculator on the basis of
+         * subsequent step by the LocalLevelCalculator on the basis of
          * sibling-only dependencies. Defaults to 0.
          */
-        public int localLayerIndex;
+        public int localLevel;
         public final Set<String> dependencies;
         public final Set<String> dependents = new HashSet<>();
 
@@ -68,7 +68,7 @@ public class DomainModel {
         }
 
         public void setLocalLayerIndex(int newIndex) {
-            this.localLayerIndex = newIndex;
+            this.localLevel = newIndex;
         }
 
         public void addDependency(String dependency) {
