@@ -106,7 +106,7 @@ We demonstrate the pipeline on Minecraft Forge~1.19.2, a large and highly
 cyclic system that stresses every stage. Separating global architecture depth
 from local layout, and preserving the computed package order in the UI
 instead of reordering it to suppress cycles, reduces the visual upward-edge
-count from roughly~6\,000 to~4\,200; the remaining edges are real
+count from roughly~6\,000 to~4\,157; the remaining edges are real
 architecture violations or explicit heuristic cuts. The result is a corrected, reproducible
 level-computation algorithm whose visible anomalies can be explained and
 checked.}
@@ -867,9 +867,9 @@ no change to the analysed source code. On Minecraft Forge~1.19.2, introducing
 the local level as a distinct layout coordinate, lifting the parent
 filter from the weighted package graph, and preserving the computed package
 order in the UI instead of reordering it to suppress cycles, reduced the
-visual upward-edge count from roughly~6\,000 to~4\,200; the eliminated edges
+visual upward-edge count from roughly~6\,000 to~4\,157; the eliminated edges
 were artifacts of forcing parent packages below their sub-packages to keep
-them out of the algorithm's tangle list, and the 4\,200 remaining edges are
+them out of the algorithm's tangle list, and the 4\,157 remaining edges are
 real architecture violations or explicit heuristic cuts that deserve a
 code-level fix.
 
