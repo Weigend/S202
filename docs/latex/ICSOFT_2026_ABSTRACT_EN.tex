@@ -80,12 +80,15 @@ whether an upward edge is a finding, a tolerated cycle cut, or an
 implementation defect.
 \par\smallskip
 In this paper, we present the level pipeline implemented in S202, an
-open-source Java architecture-visualization tool under Apache~2.0. The pipeline has three stages
-on three independent graphs. First, S202 detects global SCCs in the class
-graph and heuristically cuts large cycles. Second, from weighted package
-dependencies it derives an architectural hypothesis: more heavily used packages
-sit lower, their users higher. Third, it computes a local level inside
-each parent container, which determines the vertical placement of siblings.
+open-source Java architecture-visualization tool under
+Apache~2.0.\protect\footnote{\protect\url{https://github.com/jweigend/S202}}
+The pipeline has four phases, executed in a single forward pass. First,
+S202 detects global SCCs in the class graph and heuristically cuts large
+cycles. Second, from weighted package dependencies it derives an
+architectural hypothesis: more heavily used packages sit lower, their
+users higher. Third, it computes a local level per parent container that
+determines vertical placement of siblings. Fourth, a horizontal-ordering
+pass shortens arrows without touching levels or invariants.
 \par\smallskip
 The algorithmic contribution is the strict separation of architectural
 hypothesis from layout position. Package analysis decides which package
@@ -130,19 +133,62 @@ checked.}
 \appendix
 \onecolumn
 
-\section*{Introduction}
+\section*{Appendix A -- Algorithm in Detail}
 
 This supplementary material expands the one-page abstract. The level
 pipeline in S202 computes three independent ordering values, each on its
 own graph: a \emph{class order} (SCC-collapsed class dependency DAG), a
 \emph{package order} (weighted inter-package dependency graph), and a
 \emph{local level} per parent container. Only the local level drives
-the rendered layout; class order feeds the tangle view and the R1-algo
-consistency check, package order feeds R2 and R3 and acts as a hard
-constraint on the local level computation. The algorithmic contribution
-is that no phase may rewrite the output of an earlier phase --- Phase 3
-may not reorder packages relative to the order Phase 2 has already
-computed.
+the rendered vertical layout; class order feeds the tangle view and
+the class-level consistency check, package order feeds the
+package-level consistency checks and acts as a hard constraint on
+the local level computation. The algorithmic
+contribution is that no phase may rewrite the output of an earlier
+phase --- Phase 3 may not reorder packages relative to the order
+Phase 2 has already computed.
+
+\subsection*{Bird's-eye view}
+
+The pipeline is a single forward pass through four deterministic
+phases. There is no iteration, no fixed-point loop, no search for a
+minimum-violation arrangement, and no resorting after the fact.
+
+\begin{itemize}\setlength{\itemsep}{2pt}
+  \item \textbf{Phase 1 --- Class order.}
+        Collapse the class dependency graph into SCCs, break large
+        SCCs by a degree-rank heuristic, then assign every class an
+        \emph{architecture level} by longest path on the SCC-DAG.
+        Feeds the tangle view and the class-level consistency check;
+        does not drive the layout.
+  \item \textbf{Phase 2 --- Package order.}
+        On the weighted inter-package graph, break SCCs by a weight-rank
+        heuristic, then assign every package an \emph{architecture
+        level}. Feeds the package-level consistency checks and is
+        consumed by Phase 3 as a hard constraint.
+  \item \textbf{Phase 3 --- Place classes into the package frame.}
+        Phase 2 has fixed the vertical order of packages; Phase 3
+        leaves that order intact and only places the classes within
+        each parent. For each parent container, it builds the
+        sibling-only graph from class-call counts, breaks any local
+        cycles by first cutting edges that contradict the package
+        architecture (so Phase 2's order is never touched), and
+        assigns each class a \emph{local level} by longest path on
+        the SCC-DAG. Sub-package siblings keep the order Phase 2
+        gave them; only classes are newly positioned.
+  \item \textbf{Phase 4 --- Horizontal arrangement.}
+        Within each row, place siblings horizontally so inter-sibling
+        arrows are short and rarely cross. Does not change any level
+        and is deliberately excluded from the layout invariants.
+\end{itemize}
+
+The five invariants run \emph{after} the pipeline as consistency
+checks; they are not a feedback signal that drives further iteration.
+Every visible upward edge in the resulting drawing is therefore one
+of three things: an architecture violation, an explicit heuristic
+cut, or a peer-level cycle that could not be broken without
+contradicting the package architecture --- never an accidental
+artifact of the layout algorithm.
 
 \begin{figure}[H]
   \centering
@@ -162,13 +208,12 @@ Right: a real-world cycle between \texttt{core}, \texttt{infra} and
 architecturally interesting findings that the invariants surface
 rather than hide.
 
-The appendix is organised in three parts:
-Appendix~A documents the failure modes that motivate the
-three-coordinate model;
-Appendix~B gives the complete reference implementation;
-Appendix~C collects answers to recurring co-author questions.
-
-\section*{Appendix A -- Why Naive Single-Pass Does Not Work: Failure Modes}
+The remainder of this appendix walks through the algorithm in detail:
+the core problem and four failure modes that motivate the
+three-coordinate model, the solution, the layout invariants, the
+complete pipeline, the \emph{software-ekg-7} fix that the invariant
+checker caught, a summary, and a Q\&A section.
+Appendix~B contains the reference implementation.
 
 \subsection*{The Core Problem: Architectural Hypothesis, Local Layout, Five Consistency Checks}
 
@@ -549,6 +594,14 @@ cycle-decomposition score, edge weight, and rank. S202 does
 not surface these local cycles as a separate Tangle category because the
 user-visible tangle list remains a global architecture statement.
 
+After Phase~3 the level pipeline is finished. A fourth phase, the
+horizontal-arrangement pass (\texttt{HorizontalRowLayoutOptimizer}),
+runs purely for the legibility of inter-sibling dependency arrows:
+it reorders same-row siblings so related elements sit horizontally
+close. It modifies no level, no SCC membership, and no invariant
+result, and is therefore mentioned here only for completeness; the
+detailed algorithm appears later in this appendix.
+
 \begin{table}[h]
 \centering
 \small
@@ -868,7 +921,7 @@ different input model.
   \label{fig:swekg7-metrics}
 \end{figure}
 
-\section*{Summary}
+\subsection*{Summary}
 
 Correct level computation for layered architecture visualizations requires
 keeping three questions separate: where does a class sit in the global class
@@ -911,23 +964,7 @@ them out of the algorithm's tangle list, and the 4\,157 remaining edges are
 real architecture violations or explicit heuristic cuts that deserve a
 code-level fix.
 
-\clearpage
-
-\section*{Appendix B -- LevelCalculator Reference Implementation}
-
-The following source excerpt is the complete Java implementation of the level
-pipeline discussed above.
-
-\lstinputlisting[style=appendixjava]{../../analyzer/src/main/java/de/weigend/s202/domain/architecture/LevelCalculator.java}
-
-\vspace{1em}
-The companion class \texttt{LocalLevelCalculator} implements Phase~3 (Step~6).
-
-\lstinputlisting[style=appendixjava]{../../analyzer/src/main/java/de/weigend/s202/domain/architecture/LocalLevelCalculator.java}
-
-\clearpage
-
-\section*{Appendix C -- Questions and Answers}
+\subsection*{Questions and Answers}
 
 \noindent\rule{\textwidth}{0.4pt}
 \vspace{0.75em}
@@ -991,5 +1028,20 @@ depth used for global checks and reports. The local level is recomputed
 inside each package from the sibling-only graph and is used for visual ordering
 inside that package. The renderer can then place elements correctly within a
 container without changing what their global architecture level means.
+
+
+\clearpage
+
+\section*{Appendix B -- LevelCalculator Reference Implementation}
+
+The following source excerpt is the complete Java implementation of the level
+pipeline discussed above.
+
+\lstinputlisting[style=appendixjava]{../../analyzer/src/main/java/de/weigend/s202/domain/architecture/LevelCalculator.java}
+
+\vspace{1em}
+The companion class \texttt{LocalLevelCalculator} implements Phase~3 (Step~6).
+
+\lstinputlisting[style=appendixjava]{../../analyzer/src/main/java/de/weigend/s202/domain/architecture/LocalLevelCalculator.java}
 
 \end{document}
