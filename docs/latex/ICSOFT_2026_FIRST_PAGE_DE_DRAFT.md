@@ -2,7 +2,7 @@
 
 ## Subtitle
 
-Separating Architectural Hypothesis, Package Tree, and Local Placement
+Separating Class Order, Package Order and Local Layout
 
 ## Authors
 

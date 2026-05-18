@@ -50,7 +50,7 @@
 
 %% ---------------------------------------------------------------
 \title{Computing Consistent Levels for Layered Software Architecture Visualizations
-       \subtitle{Separating Architectural Hypothesis, Package Tree and Local Layout}}
+       \subtitle{Separating Class Order, Package Order and Local Layout}}
 
 \author{
   \authorname{Johannes Weigend}
@@ -73,11 +73,11 @@ level computation is wrong, the drawing still looks plausible while misleading
 the viewer.
 \par\smallskip
 Levelized dependency maps are not new. Structure101's Levelized Structure Map
-arranges elements into rows and exposes feedback in cyclic
-regions~\cite{HeadwayLSM,Muccini2012,HeadwayMatrix}. Published descriptions
-specify the intended visual behaviour but not the concrete level-computation
-algorithm or its consistency conditions, leaving it unclear whether an upward
-edge is a finding, a tolerated cycle cut, or an implementation defect.
+arranges elements into rows and exposes feedback in cyclic regions. Published
+descriptions specify the intended visual behaviour but not the concrete
+level-computation algorithm or its consistency conditions, leaving it unclear
+whether an upward edge is a finding, a tolerated cycle cut, or an
+implementation defect.
 \par\smallskip
 In this paper, we present the level pipeline implemented in S202, an
 open-source Java architecture-visualization tool under Apache~2.0. The pipeline has three stages
@@ -129,6 +129,44 @@ checked.}
 %% ===================================================================
 \appendix
 \onecolumn
+
+\section*{Introduction}
+
+This supplementary material expands the one-page abstract. The level
+pipeline in S202 computes three independent ordering values, each on its
+own graph: a \emph{class order} (SCC-collapsed class dependency DAG), a
+\emph{package order} (weighted inter-package dependency graph), and a
+\emph{local level} per parent container. Only the local level drives
+the rendered layout; class order feeds the tangle view and the R1-algo
+consistency check, package order feeds R2 and R3 and acts as a hard
+constraint on the local level computation. The algorithmic contribution
+is that no phase may rewrite the output of an earlier phase --- Phase 3
+may not reorder packages relative to the order Phase 2 has already
+computed.
+
+\begin{figure}[H]
+  \centering
+  \includegraphics[width=0.95\textwidth]{figures/S202-Dependencies.png}
+  \caption{The S202 ArchitectureView with class and package boxes.
+    \textbf{Left:} an acyclic situation taken from the test JAR
+    (\texttt{com.example.\ldots}). \textbf{Right:} a real-world cycle
+    between \texttt{core}, \texttt{infra} and \texttt{service}.}
+  \label{fig:s202-deps-overview}
+\end{figure}
+
+Figure~\ref{fig:s202-deps-overview} shows the two layout regimes the
+pipeline has to handle. Left: an acyclic test project, where every
+dependency points downward and the architecture reads at a glance.
+Right: a real-world cycle between \texttt{core}, \texttt{infra} and
+\texttt{service}, where the remaining upward edges are exactly the
+architecturally interesting findings that the invariants surface
+rather than hide.
+
+The appendix is organised in three parts:
+Appendix~A documents the failure modes that motivate the
+three-coordinate model;
+Appendix~B gives the complete reference implementation;
+Appendix~C collects answers to recurring co-author questions.
 
 \section*{Appendix A -- Why Naive Single-Pass Does Not Work: Failure Modes}
 
