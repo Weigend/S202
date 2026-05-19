@@ -66,20 +66,20 @@
   dependency analysis, software engineering tools}
 
 \abstract{Layered architecture visualizations communicate dependency structure
-through vertical position: elements that depend on others sit higher,
-foundational elements sit lower. Their value rests on a simple promise---an
-upward edge should reveal an architectural anomaly, not a layout artifact. If
-level computation is wrong, the drawing still looks plausible while misleading
-the viewer.
+by means of vertical positioning: elements that depend on others sit higher,
+foundational elements sit lower. To be of practical value their upward edges
+should either give real architectural feedback or indicate exposed cuts.
+However, in many visualizations upward edges are layout artifacts rather than
+findings --- drawings that can look plausible but mislead the viewer.
 \par\smallskip
 Levelized dependency maps are not new. Structure101's Levelized Structure Map
-arranges elements into rows and exposes feedback in cyclic regions. Published
+arranges elements into rows. Published
 descriptions specify the intended visual behaviour but not the concrete
 level-computation algorithm or its consistency conditions, leaving it unclear
 whether an upward edge is a finding, a tolerated cycle cut, or an
 implementation defect.
 \par\smallskip
-In this paper, we present the level pipeline implemented in S202, an
+In this paper, we present the level computation pipeline implemented in S202, an
 open-source Java architecture-visualization tool under
 Apache~2.0.\protect\footnote{\protect\url{https://github.com/jweigend/S202}}
 The pipeline has four phases, executed in a single forward pass. First,
@@ -110,9 +110,10 @@ cyclic system that stresses every stage. Separating global architecture depth
 from local layout, and preserving the computed package order in the UI
 instead of reordering it to suppress cycles, reduces the visual upward-edge
 count from roughly~6\,000 to~4\,157; the remaining edges are real
-architecture violations or explicit heuristic cuts. The result is a corrected, reproducible
-level-computation algorithm whose visible anomalies can be explained and
-checked.}
+architecture violations or explicit heuristic cuts.
+\par\smallskip
+The result is a reproducible level-computation algorithm: every visible
+anomaly is a finding, not an artifact.}
 %% ---------------------------------------------------------------
 
 \begin{document}
@@ -159,8 +160,10 @@ minimum-violation arrangement, and no resorting after the fact.
         Collapse the class dependency graph into SCCs, break large
         SCCs by a degree-rank heuristic, then assign every class an
         \emph{architecture level} by longest path on the SCC-DAG.
-        Feeds the tangle view and the class-level consistency check;
-        does not drive the layout.
+        Feeds the tangle view, the SCC display, and the class-level
+        consistency check; does not drive the 2D ($x,y$) layout, but
+        the class architecture level can be mapped to $z$ in 3D views
+        as a complexity-height encoding.
   \item \textbf{Phase 2 --- Package order.}
         On the weighted inter-package graph, break SCCs by a weight-rank
         heuristic, then assign every package an \emph{architecture
@@ -182,7 +185,7 @@ minimum-violation arrangement, and no resorting after the fact.
         and is deliberately excluded from the layout invariants.
 \end{itemize}
 
-The five invariants run \emph{after} the pipeline as consistency
+Five invariants run \emph{after} the pipeline as consistency
 checks; they are not a feedback signal that drives further iteration.
 Every visible upward edge in the resulting drawing is therefore one
 of three things: an architecture violation, an explicit heuristic
@@ -594,7 +597,7 @@ cycle-decomposition score, edge weight, and rank. S202 does
 not surface these local cycles as a separate Tangle category because the
 user-visible tangle list remains a global architecture statement.
 
-After Phase~3 the level pipeline is finished. A fourth phase, the
+After Phase~3 the level computation pipeline is finished. A fourth phase, the
 horizontal-arrangement pass (\texttt{HorizontalRowLayoutOptimizer}),
 runs purely for the legibility of inter-sibling dependency arrows:
 it reorders same-row siblings so related elements sit horizontally
@@ -661,7 +664,7 @@ R3 and R2 check the algorithm; R1-visual checks the rendered picture; R5
 keeps the cached annotations consistent.}
 \end{table}
 
-Throughout the iterative development of the level pipeline, R2 surfaced
+Throughout the iterative development of the level computation pipeline, R2 surfaced
 implementation bugs after algorithm changes that the unit-test suite had not
 detected.
 Figure~\ref{fig:invariant-r2} shows a representative R2 report.
@@ -725,7 +728,7 @@ the current level assignment and SCC membership.
 The analysis computes edge labels and caches them in the model; after any algorithmic
 change they can silently become stale.
 R5 is therefore a cross-cutting consistency check: it ties the structural output of the
-level pipeline back to the semantic annotations visible to the user.
+level computation pipeline back to the semantic annotations visible to the user.
 
 \subsection*{R4: A Retired Rule and What It Teaches}
 
@@ -756,7 +759,7 @@ filtered graph. R2 removes class-level heuristic back-edges, package-level
 SCC-breaking back-edges, intra-subtree edges, and edges caused by shared class
 SCCs before running Tarjan on the remaining package graph.
 
-Specifying invariants for a three-value level pipeline turns out to be
+Specifying invariants for a three-value level computation pipeline turns out to be
 harder than it appears. The checker therefore provides a second safety
 net: it not only tests the implementation against the rules, but also exposes
 when the rules themselves are too broad or too coarse. False positives force the rule to
