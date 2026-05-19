@@ -17,11 +17,11 @@
 ### Fig 2 -- Minecraft Forge: Big Lake vs. aufgelöste Hierarchie
 - **Was:** Zwei Screenshots nebeneinander
   - Links: ohne SCC-Breaker — 4.038 Klassen auf einem flachen Level (der "See")
-  - Rechts: mit SCC-Breaker — nutzbare Schichtung, rote Violation-Kanten sichtbar
+  - Rechts: mit SCC-Breaker — nutzbare Schichtung, fett-gestrichelte Violation-Kanten sichtbar
 - **Wo in Structure202:** Minecraft Forge Projekt, SCC-Breaker ein-/ausschalten
 - **Caption-Entwurf:** "Minecraft Forge without the SCC breaker (left): over 40% of
   classes collapse onto a single level. With the breaker (right): a usable
-  hierarchy emerges; heuristic cut edges are rendered as violations (red)."
+  hierarchy emerges; heuristic cut edges are rendered as violations (bold dashed)."
 
 ---
 
@@ -60,5 +60,5 @@
 ## Technische Hinweise
 - Format: PNG, mind. 150 dpi für Print
 - Breite: bei zwei nebeneinander je ~0.48\textwidth
-- Rote Violation-Kanten bei Minecraft gut sichtbar machen (ggf. Zoom)
+- Fett-gestrichelte Violation-Kanten bei Minecraft gut sichtbar machen (ggf. Zoom)
 - Draft-Subtitle im Titel vor Einreichung entfernen

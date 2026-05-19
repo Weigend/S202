@@ -57,7 +57,7 @@ analyzer/src/main/java/de/weigend/s202/
 1. **Code laden**: Über `File → Open JAR…` einzelne JARs, `Open Maven Project…` oder `Open Gradle Project…` ganze Multi-Modul-Bauten
 2. **Analyse**: Pakete und Klassen werden automatisch analysiert; ein Layout-Invariant-Check meldet Plausibilitäts-Alerts an den Entwickler
 3. **Navigation**: Pakete auf-/zuklappen, Abhängigkeiten einsehen
-4. **Violations**: Rote gestrichelte Linien zeigen architektonische Probleme; bei Pipeline-Bugs öffnet sich ein Reproducer-Dialog mit Copy-Button
+4. **Violations**: Fette gestrichelte Pfeile zeigen architektonische Probleme (bei Paketen mit einem gefüllten Kreis, der die Anzahl der Aufrufe bündelt); bei Pipeline-Bugs öffnet sich ein Reproducer-Dialog mit Copy-Button
 
 ## VS Code Integration
 
