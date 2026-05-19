@@ -26,4 +26,8 @@ else
 fi
 
 cd "$PROJECT_ROOT/analyzer"
+# DEMO_ALERT_INJECTION (Philippsen review, 2026-05-19): activates a deliberate
+# R1-algo violation on com.example.A when test-example is loaded, so the
+# implausibility alert dialog pops up. Comment out the export to disable.
+export JAVA_TOOL_OPTIONS="-Ds202.demo.injectAlert=true"
 mvn org.openjfx:javafx-maven-plugin:0.0.8:run

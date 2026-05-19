@@ -97,13 +97,15 @@ decides where classes and visible containers appear inside one concrete parent.
 This prevents feedback loops in which class feedback, package order, and local
 positions redefine each other.
 \par\smallskip
-Five machine-checkable invariants verify that each run is internally
-consistent: class dependencies respect class levels after heuristic cuts, dominant
+Five machine-checkable invariants act as implausibility alerts to the
+developer: class dependencies respect class levels after heuristic cuts, dominant
 weighted package dependencies respect package levels, cyclic peer packages
 share a level after filtering, visual ranks follow local levels, and
-cached edge classifications match the current SCC and level state. The checks
-distinguish pipeline defects from deliberately tolerated heuristic cuts and
-from architecture violations that the visualization is meant to expose.
+cached edge classifications match the current SCC and level state. Four of these
+alerts are pipeline-defect detectors that never fire on a correct run; the
+fifth fires only on remaining upward edges from broken cycles and points to a
+concrete architecture violation. On an acyclic codebase, S202 therefore
+produces an alert-free layout in which every edge points downward.
 \par\smallskip
 We demonstrate the pipeline on Minecraft Forge~1.19.2, a large and highly
 cyclic system that stresses every stage. Separating global architecture depth
@@ -121,7 +123,7 @@ anomaly is a finding, not an artifact.}
 \maketitle
 
 \begin{center}
-  \fbox{\textbf{\large Draft Version 3 \quad|\quad \today}}
+  \fbox{\textbf{\large Draft Version 4 \quad|\quad \today}}
 \end{center}
 
 \vfill
@@ -136,18 +138,7 @@ anomaly is a finding, not an artifact.}
 
 \section*{Appendix A -- Algorithm in Detail}
 
-This supplementary material expands the one-page abstract. The level
-pipeline in S202 computes three independent ordering values, each on its
-own graph: a \emph{class order} (SCC-collapsed class dependency DAG), a
-\emph{package order} (weighted inter-package dependency graph), and a
-\emph{local level} per parent container. Only the local level drives
-the rendered vertical layout; class order feeds the tangle view and
-the class-level consistency check, package order feeds the
-package-level consistency checks and acts as a hard constraint on
-the local level computation. The algorithmic
-contribution is that no phase may rewrite the output of an earlier
-phase --- Phase 3 may not reorder packages relative to the order
-Phase 2 has already computed.
+This supplementary material expands the one-page abstract.
 
 \subsection*{Bird's-eye view}
 
@@ -185,21 +176,54 @@ minimum-violation arrangement, and no resorting after the fact.
         and is deliberately excluded from the layout invariants.
 \end{itemize}
 
-Five invariants run \emph{after} the pipeline as consistency
-checks; they are not a feedback signal that drives further iteration.
-Every visible upward edge in the resulting drawing is therefore one
-of three things: an architecture violation, an explicit heuristic
-cut, or a peer-level cycle that could not be broken without
-contradicting the package architecture --- never an accidental
-artifact of the layout algorithm.
+\paragraph{Where the arrows come from.} The arrows in the view are not
+produced by the four pipeline phases. They are the class-to-class
+dependencies extracted from the bytecode in the very first analysis
+step, long before any level is computed. Phases~1--3 decide \emph{where
+the boxes go}; the renderer then simply draws an arrow from each source
+box to each target box. Every arrow falls into one of four classes,
+assigned by the pipeline before rendering:
+\begin{itemize}\setlength{\itemsep}{1pt}
+  \item \texttt{NORMAL} -- source box ends up above target box (downward arrow);
+  \item \texttt{VIOLATION} -- source box ends up below target box even though
+        the edge was not cut (upward arrow, drawn red);
+  \item \texttt{INTRA\_SCC} -- both endpoints sit in the same cyclic group
+        (sideways arrow within a peer level);
+  \item \texttt{HEURISTIC\_CUT} -- the edge was explicitly removed by the
+        SCC-breaker to obtain a usable hierarchy (also drawn red, but as a
+        deliberate cut, not a finding).
+\end{itemize}
+The five invariants then \emph{read} the placed boxes and the classified
+arrows. They do not change either; they only check that the two agree
+with the architecture data and with each other. Concretely, R1-algo and
+R1-visual check the agreement between an arrow's direction and its
+endpoints' levels; R2 and R3 check the package-level placement; R5
+checks that the cached arrow classification still matches the current
+levels.
+
+\paragraph{Invariants act as implausibility alerts.} The invariants run
+\emph{after} the pipeline (R is short for \emph{rule}; the catalogue
+contains R1--R5, with R4 retired and absorbed into R2, see
+Section~``R4: A Retired Rule''). They are not a feedback signal that
+drives further iteration. Four of them (R1-algo, R2, R3, R5) are
+pipeline-defect alerts that never fire on a correct run; the fifth
+(R1-visual) fires when a remaining upward arrow points to a real
+architecture violation. Every visible upward arrow in the resulting
+drawing is therefore one of three things: an architecture violation
+(\texttt{VIOLATION}, raising an R1-visual alert), an explicit
+\texttt{HEURISTIC\_CUT}, or an \texttt{INTRA\_SCC} edge that could not be
+broken without contradicting the package architecture --- never an
+accidental artifact of the layout algorithm.
 
 \begin{figure}[H]
   \centering
   \includegraphics[width=0.95\textwidth]{figures/S202-Dependencies.png}
   \caption{The S202 ArchitectureView with class and package boxes.
     \textbf{Left:} an acyclic situation taken from the test JAR
-    (\texttt{com.example.\ldots}). \textbf{Right:} a real-world cycle
-    between \texttt{core}, \texttt{infra} and \texttt{service}.}
+    (\texttt{com.example.\ldots}) --- no upward edges, no alerts.
+    \textbf{Right:} a real-world cycle between \texttt{core}, \texttt{infra}
+    and \texttt{service}; the remaining upward edges trigger R1-visual
+    alerts that flag concrete architecture violations.}
   \label{fig:s202-deps-overview}
 \end{figure}
 
@@ -208,8 +232,63 @@ pipeline has to handle. Left: an acyclic test project, where every
 dependency points downward and the architecture reads at a glance.
 Right: a real-world cycle between \texttt{core}, \texttt{infra} and
 \texttt{service}, where the remaining upward edges are exactly the
-architecturally interesting findings that the invariants surface
-rather than hide.
+architecturally interesting findings that the R1-visual alert surfaces
+rather than hides.
+
+\begin{figure}[H]
+  \centering
+  \includegraphics[width=0.95\textwidth]{figures/Finding-R1-Wrong-Direction.png}
+  \caption{Implausibility alert in action. For this screenshot we deliberately
+    injected a level-pipeline defect into \texttt{LevelCalculator} that
+    misplaces class \texttt{com.example.A} on the wrong level (compare with
+    Figure~\ref{fig:s202-deps-overview}, left, which shows the correct
+    placement of the same test JAR). The post-pipeline invariant checker
+    catches the inconsistency immediately and pops up the
+    \emph{Layout Invariants} dialog: a single R1 finding with a copy-paste
+    reproducer block tells the developer that the dependency
+    \texttt{B}~$\rightarrow$~\texttt{A} now runs against the computed levels.
+    The status bar additionally reports the four wrong-direction class edges
+    induced by the bug. No human inspection of the picture was needed to
+    surface the defect; the alert is generated automatically by the
+    consistency checks that run after every analysis.}
+  \label{fig:r1-wrong-direction}
+\end{figure}
+
+The dialog text in Figure~\ref{fig:r1-wrong-direction} is small at print
+size, so the same report is reproduced verbatim below as it appears in the
+log and the dialog:
+
+\begin{lstlisting}[basicstyle=\scriptsize\ttfamily,frame=single,breaklines=true,columns=fullflexible,xleftmargin=0pt,xrightmargin=0pt]
+16:43:05.166 [JavaFX Application Thread] WARN de.weigend.s202.ui.wfx.S202Module
+-- Layout invariant report (1 finding(s)):
+=== Structure202 Layout Invariant Report ===
+Generated: 2026-05-19 19:43:05Z
+Scope: algorithm-bug detector (R1 non-back-edge level inversion,
+       R2 pkg-SCC equal level, R3 container, R5 type-flag drift)
+
+-- Inputs --
+  /home/johannes/Programieren/Structure202/test-example/target/test-example-1.0.0.jar
+
+-- City --
+  Districts:               11
+  Buildings:               19
+  Dependencies:            27
+  MaxLevel:                 4
+  Heuristic back edges:     4
+
+-- Findings: 1 --
+
+[R1] Level inversion across non-back-edge dependency: neither class is
+     in a multi-member SCC; pure topo-sort bug -- source not lifted.
+  1. com.example.B (L1, pkg=com.example)  ->  com.example.A (L2, pkg=com.example)
+       reason: neither class is in a multi-member SCC;
+               pure topo-sort bug -- source not lifted.
+
+-- Reproducer hint --
+Feed the input file(s) above into InputAnalyzer.analyzeMultiple() +
+LevelCalculator.calculate() + LayoutInvariantChecker.check();
+the listed (from -> to) pairs should re-trigger the same findings.
+\end{lstlisting}
 
 The remainder of this appendix walks through the algorithm in detail:
 the core problem and four failure modes that motivate the
@@ -293,6 +372,16 @@ levelized dependency layouts, not a claim that the visual idiom itself is new.
 The novelty lies in making the computation explicit, separating class
 architecture depth, package architecture order, and local layout position, and
 checking the resulting layout through executable invariants.
+
+S202 also continues a line of work the authors have published on layered
+dependency visualization. \cite{Dashuber2021} introduced a layered software-city
+metaphor that uses building height for architectural depth, and \cite{Dashuber2022}
+extended it with static and dynamic dependency overlays. Both papers describe
+the visual idiom and the supporting infrastructure but treat the underlying
+level computation as a single coordinate; they do not separate class
+architecture depth, package architecture order, and local layout position, and
+they do not introduce machine-checkable invariants. The present paper closes
+this algorithmic gap for the 2D layered view in S202.
 
 \subsection*{Failure Mode 1: Cascading Level Updates}
 
@@ -626,12 +715,17 @@ detailed algorithm appears later in this appendix.
 
 \subsection*{Layout Invariants for Level Correctness}
 
-The three level phases are guarded by five machine-checkable consistency
-checks. The \texttt{LayoutInvariantChecker} checks R1-algo, R2, R3, and R5 as
-algorithm consistency checks after every analysis run; the architecture builder
-checks R1-visual through violation detection on the visual-rank tuple. These
-checks are evidence that the computed model is internally consistent; they are
-not the primary algorithmic contribution.
+The three level phases are guarded by five machine-checkable invariants
+that act as the implausibility alerts introduced in the abstract. All five
+run after the pipeline as post-checks on the fully computed model and the
+rendered layout; none feeds back into level assignment. In the current code
+base R1-algo, R2, R3, and R5 are evaluated by the
+\texttt{LayoutInvariantChecker}, while R1-visual is checked by the
+architecture builder as part of its violation-detection pass over the
+visual-rank tuple --- a historical split with no semantic consequence; both
+halves act as identical post-checks. These checks are evidence that the
+computed model is internally consistent; they are not the primary
+algorithmic contribution.
 
 \begin{table}[h]
 \centering\small
@@ -673,7 +767,7 @@ package-SCC equalization step and directly triggered a pipeline fix.
 
 \begin{figure}[H]
   \centering
-  \includegraphics[width=0.7\linewidth]{\detokenize{figures/Invariant Finding R2.png}}
+  \includegraphics[width=0.95\linewidth]{\detokenize{figures/Invariant Finding R2.png}}
   \caption{R2 checker report: packages in a filtered package-SCC occupy
   different levels. The checker reports findings as algorithm-bug candidates with a
   reproducer block, which makes the visual failure traceable
@@ -948,10 +1042,13 @@ back-edge identification, DAG condensation, longest-path propagation.
 
 A horizontal row-ordering pass (Phase~4) improves the legibility of dependency
 overlays without modifying any computed value or affecting any layout invariant.
-Five machine-checkable consistency checks (R1-algo, R1-visual, R2, R3, R5) run
-after each analysis and emit reproducer blocks for each finding. They provide
-regression protection and diagnostic evidence; the algorithmic contribution is
-the separation of the three values themselves.
+Five machine-checkable invariants (R1-algo, R1-visual, R2, R3, R5) run after
+each analysis as implausibility alerts to the developer and emit reproducer
+blocks for each finding. Four of them are pipeline-defect alerts that never
+fire on a correct run; R1-visual fires only on remaining upward edges that
+point to real architecture violations. They provide regression protection and
+diagnostic evidence; the algorithmic contribution is the separation of the
+three values themselves.
 
 Two cases demonstrate the value of the separation. In \emph{software-ekg-7},
 a plausible layered layout reported 167 dependency violations and a maximum

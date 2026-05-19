@@ -37,7 +37,7 @@ mvn javafx:run
 | **Package Tree** | Hierarchische Paket-Ansicht |
 | **Level-Layout** | Pakete nach Abhängigkeitstiefe sortiert |
 | **Violations** | Rote Linien zeigen architektonische Probleme |
-| **Invariant Check** | Läuft nach jeder Analyse automatisch; meldet Algorithmus-Bugs in der Level-Pipeline |
+| **Invariant Check** | Fünf Invarianten als Plausibilitäts-Alerts; vier melden Algorithmus-Bugs in der Level-Pipeline, R1-visual zeigt echte Architekturverletzungen |
 
 ## Level-Bedeutung
 

@@ -32,7 +32,7 @@
   und dem copy-paste-fähigen Reproducer-Block
 - **Wo:** Checker-Ausgabe in der Konsole oder IDE nach Analyse von software-ekg-7
 - **Caption-Entwurf:** "The invariant checker emits a copy-paste-ready reproducer
-  block for every finding, linking the visual violation to a reproducible test input."
+  block for every implausibility alert, linking the visual violation to a reproducible test input."
 
 ### Fig 4 -- Top-Cut-Targets Panel
 - **Was:** Screenshot des Top-Cut-Targets-Panels in Structure202
@@ -51,8 +51,9 @@
 - **Was:** Screenshot der Unity-Implementierung mit denselben Eingaben
   wie software-ekg-7 oder Minecraft Forge
 - **Belegt:** Portierbarkeits-Claim ("byte-identical findings on shared inputs")
-- **Caption-Entwurf:** "The same four invariants ported to an independent
-  Unity/.NET 3D software city produce byte-identical findings on shared inputs."
+- **Caption-Entwurf:** "The same four algorithm invariants (R1-algo, R2, R3, R5)
+  ported to an independent Unity/.NET 3D software city produce byte-identical
+  implausibility alerts on shared inputs."
 
 ---
 

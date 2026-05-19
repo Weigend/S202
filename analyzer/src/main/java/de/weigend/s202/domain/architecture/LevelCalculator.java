@@ -88,6 +88,23 @@ public class LevelCalculator {
         // Step 3: Compute class levels
         calculateClassLevels(model);
 
+        // ---- DEMO_ALERT_INJECTION (review demo for M. Philippsen, 2026-05-19) ----
+        // When system property s202.demo.injectAlert=true, deliberately corrupt
+        // the architecture level of com.example.A so R1-algo fires when
+        // test-example is loaded. The local layout (which uses localLevel, not
+        // architectureLevel) is unaffected, so the visualization still shows
+        // C above B above A as expected -- but the implausibility alert dialog
+        // opens and reports the inconsistency. Tests run without the property
+        // and stay green. Remove this block once the demo session is over.
+        if (Boolean.getBoolean("s202.demo.injectAlert")) {
+            DomainModel.CalculatedElementInfo demoA = model.getClass("com.example.A");
+            DomainModel.CalculatedElementInfo demoC = model.getClass("com.example.C");
+            if (demoA != null && demoC != null) {
+                demoA.setArchitectureLevel(demoC.architectureLevel);
+            }
+        }
+        // ---- END DEMO_ALERT_INJECTION ----
+
         // Step 4: Compute package levels from weighted inter-package graph.
         calculatePackageLevels(model, rawModel);
 
