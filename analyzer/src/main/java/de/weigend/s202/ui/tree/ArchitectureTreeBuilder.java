@@ -142,7 +142,7 @@ public class ArchitectureTreeBuilder {
             });
 
             if (child.getType() == NodeType.PACKAGE) {
-                LevelPackageBox packageBox = new LevelPackageBox(child.getSimpleName(), child.getLevel(), false, child.getFullName());
+                LevelPackageBox packageBox = new LevelPackageBox(child.getSimpleName(), child.getLevel(), false, child.getFullName(), child.getArchitectureLevel());
                 packageContainers.put(child.getFullName(), packageBox);
                 elementRegistry.put(child.getFullName(), packageBox);
 
@@ -158,7 +158,7 @@ public class ArchitectureTreeBuilder {
 
                 processArchitectureNode(child, packageContainers, packageBox, elementsAddedToParent, effectiveRoot, false, 1, maxDepth);
             } else if (child.getType() == NodeType.CLASS) {
-                LevelClassBox classBox = new LevelClassBox(child.getSimpleName(), child.getLevel(), child.getFullName(), child.isInterfaceType());
+                LevelClassBox classBox = new LevelClassBox(child.getSimpleName(), child.getLevel(), child.getFullName(), child.isInterfaceType(), child.getArchitectureLevel());
                 elementRegistry.put(child.getFullName(), classBox);
                 levelRow.getChildren().add(classBox);
             }
@@ -244,7 +244,7 @@ public class ArchitectureTreeBuilder {
         });
 
         if (child.getType() == NodeType.PACKAGE) {
-            LevelPackageBox packageBox = new LevelPackageBox(child.getSimpleName(), child.getLevel(), false, child.getFullName());
+            LevelPackageBox packageBox = new LevelPackageBox(child.getSimpleName(), child.getLevel(), false, child.getFullName(), child.getArchitectureLevel());
             packageContainers.put(child.getFullName(), packageBox);
             elementRegistry.put(child.getFullName(), packageBox);
 
@@ -260,7 +260,7 @@ public class ArchitectureTreeBuilder {
             enqueueChildren(child, packageContainers, packageBox, elementsAddedToParent,
                     effectiveRoot, 1, maxDepth, queue, counter, progressSink);
         } else if (child.getType() == NodeType.CLASS) {
-            LevelClassBox classBox = new LevelClassBox(child.getSimpleName(), child.getLevel(), child.getFullName(), child.isInterfaceType());
+            LevelClassBox classBox = new LevelClassBox(child.getSimpleName(), child.getLevel(), child.getFullName(), child.isInterfaceType(), child.getArchitectureLevel());
             elementRegistry.put(child.getFullName(), classBox);
             levelRow.getChildren().add(classBox);
         }
@@ -312,7 +312,7 @@ public class ArchitectureTreeBuilder {
 
         if (child.getType() == NodeType.PACKAGE) {
             if (!packageContainers.containsKey(child.getFullName())) {
-                LevelPackageBox packageBox = new LevelPackageBox(child.getSimpleName(), child.getLevel(), false, child.getFullName());
+                LevelPackageBox packageBox = new LevelPackageBox(child.getSimpleName(), child.getLevel(), false, child.getFullName(), child.getArchitectureLevel());
                 packageContainers.put(child.getFullName(), packageBox);
                 elementRegistry.put(child.getFullName(), packageBox);
                 parentContainer.addToLevel(child.getLevel(), packageBox);
@@ -325,7 +325,7 @@ public class ArchitectureTreeBuilder {
             enqueueChildren(child, packageContainers, packageBox == null ? rootLevel : packageBox,
                     elementsAddedToParent, archRoot, currentDepth + 1, maxDepth, queue, counter, progressSink);
         } else if (child.getType() == NodeType.CLASS) {
-            LevelClassBox classBox = new LevelClassBox(child.getSimpleName(), child.getLevel(), child.getFullName(), child.isInterfaceType());
+            LevelClassBox classBox = new LevelClassBox(child.getSimpleName(), child.getLevel(), child.getFullName(), child.isInterfaceType(), child.getArchitectureLevel());
             elementRegistry.put(child.getFullName(), classBox);
             parentContainer.addToLevel(child.getLevel(), classBox);
         }
@@ -433,7 +433,7 @@ public class ArchitectureTreeBuilder {
             if (child.getType() == NodeType.PACKAGE) {
                 // Create package container if not already created
                 if (!packageContainers.containsKey(child.getFullName())) {
-                    LevelPackageBox packageBox = new LevelPackageBox(child.getSimpleName(), child.getLevel(), false, child.getFullName());
+                    LevelPackageBox packageBox = new LevelPackageBox(child.getSimpleName(), child.getLevel(), false, child.getFullName(), child.getArchitectureLevel());
                     packageContainers.put(child.getFullName(), packageBox);
                     elementRegistry.put(child.getFullName(), packageBox);
                     parentContainer.addToLevel(child.getLevel(), packageBox);
@@ -447,7 +447,7 @@ public class ArchitectureTreeBuilder {
                 processArchitectureNode(child, packageContainers, rootLevel, elementsAddedToParent, archRoot, false, currentDepth + 1, maxDepth);
             } else if (child.getType() == NodeType.CLASS) {
                 // Create class element
-                LevelClassBox classBox = new LevelClassBox(child.getSimpleName(), child.getLevel(), child.getFullName(), child.isInterfaceType());
+                LevelClassBox classBox = new LevelClassBox(child.getSimpleName(), child.getLevel(), child.getFullName(), child.isInterfaceType(), child.getArchitectureLevel());
                 elementRegistry.put(child.getFullName(), classBox);
                 parentContainer.addToLevel(child.getLevel(), classBox);
             }
@@ -482,9 +482,11 @@ public class ArchitectureTreeBuilder {
             currentPkg = currentPkg.isEmpty() ? part : currentPkg + "." + part;
 
             if (!packageContainers.containsKey(currentPkg)) {
-                int packageLevel = findPackageLevelInTree(currentPkg, rootNode);
+                ArchitectureNode pkgNode = findPackageNodeInTree(currentPkg, rootNode);
+                int packageLevel = pkgNode != null ? pkgNode.getLevel() : 0;
+                int packageArchLevel = pkgNode != null ? pkgNode.getArchitectureLevel() : -1;
 
-                LevelPackageBox packageBox = new LevelPackageBox(part, packageLevel, false, currentPkg);
+                LevelPackageBox packageBox = new LevelPackageBox(part, packageLevel, false, currentPkg, packageArchLevel);
                 packageContainers.put(currentPkg, packageBox);
 
                 // Add to parent at the correct architectural level
@@ -499,19 +501,19 @@ public class ArchitectureTreeBuilder {
     }
 
     /**
-     * Look up a package's level in the architecture tree.
+     * Look up a package node in the architecture tree, or {@code null} if absent.
      */
-    private int findPackageLevelInTree(String packageName, ArchitectureNode node) {
+    private ArchitectureNode findPackageNodeInTree(String packageName, ArchitectureNode node) {
         if (node.getFullName().equals(packageName) && node.getType() == NodeType.PACKAGE) {
-            return node.getLevel();
+            return node;
         }
         for (ArchitectureNode child : node.getChildren()) {
-            int level = findPackageLevelInTree(packageName, child);
-            if (level >= 0) {
-                return level;
+            ArchitectureNode found = findPackageNodeInTree(packageName, child);
+            if (found != null) {
+                return found;
             }
         }
-        return 0; // Default if not found
+        return null;
     }
 
     /**

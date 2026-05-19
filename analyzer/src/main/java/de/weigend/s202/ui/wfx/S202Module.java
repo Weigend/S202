@@ -131,6 +131,7 @@ public class S202Module implements Module {
     private CheckBox showWhatIfViolationsCheckbox;
     private CheckBox debugLinesCheckbox;
     private CheckBox showIconsCheckbox;
+    private CheckBox showArchLevelCheckbox;
     private Button zoomOutButton;
     private Label zoomLabel;
     private Button zoomInButton;
@@ -572,6 +573,15 @@ public class S202Module implements Module {
             }
         });
 
+        showArchLevelCheckbox = new CheckBox("Show Arch Level");
+        showArchLevelCheckbox.setTooltip(new Tooltip(
+                "Toggle the global architecture level (G:n) suffix next to each box's local level (L:n)"));
+        showArchLevelCheckbox.selectedProperty().addListener((obs, was, isNow) -> {
+            if (boundView != null) {
+                boundView.setShowArchitectureLevel(isNow);
+            }
+        });
+
         zoomOutButton = new Button("−");
         zoomOutButton.getStyleClass().add("toolbar-zoom-button");
         zoomOutButton.setTooltip(new Tooltip("Zoom Out (Ctrl+Scroll Down)"));
@@ -597,7 +607,7 @@ public class S202Module implements Module {
         viewDependentToolbarNodes.addAll(List.of(
                 depthLabel, depthSpinner, refreshButton,
                 showDependenciesCheckbox, circuitToggle, showSccCheckbox, showWhatIfViolationsCheckbox,
-                debugLinesCheckbox, showIconsCheckbox,
+                debugLinesCheckbox, showIconsCheckbox, showArchLevelCheckbox,
                 zoomOutButton, zoomLabel, zoomInButton, zoomResetButton));
 
         applicationWindow.getToolbarItems().setAll(
@@ -605,7 +615,7 @@ public class S202Module implements Module {
                 depthLabel, depthSpinner, refreshButton,
                 new Separator(),
                 showDependenciesCheckbox, circuitToggle, showSccCheckbox,
-                showWhatIfViolationsCheckbox, debugLinesCheckbox, showIconsCheckbox,
+                showWhatIfViolationsCheckbox, debugLinesCheckbox, showIconsCheckbox, showArchLevelCheckbox,
                 new Separator(),
                 zoomGroup, zoomResetButton);
 
@@ -647,6 +657,7 @@ public class S202Module implements Module {
         showWhatIfViolationsCheckbox.setSelected(view.isShowWhatIfViolations());
         debugLinesCheckbox.setSelected(view.isShowTangleDebugLines());
         showIconsCheckbox.setSelected(view.isShowIcons());
+        showArchLevelCheckbox.setSelected(view.isShowArchitectureLevel());
 
         ReadOnlyDoubleProperty zoomProp = view.zoomFactorProperty();
         if (zoomProp != null) {

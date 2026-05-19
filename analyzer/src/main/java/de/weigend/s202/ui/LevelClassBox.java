@@ -36,23 +36,33 @@ public class LevelClassBox extends HBox implements GraphSelection.Selectable {
     private static final Color INTERFACE_COLOR = Color.web("#4caf50");
 
     private final String fullClassName;
+    private final String simpleName;
+    private final int level;
+    private final int architectureLevel;
     private final Label nameLabel;
 
     public LevelClassBox(String name) {
-        this(name, -1, null, false);
+        this(name, -1, null, false, -1);
     }
 
     public LevelClassBox(String name, int level) {
-        this(name, level, null, false);
+        this(name, level, null, false, -1);
     }
 
     public LevelClassBox(String name, int level, String fullClassName) {
-        this(name, level, fullClassName, false);
+        this(name, level, fullClassName, false, -1);
     }
 
     public LevelClassBox(String name, int level, String fullClassName, boolean isInterface) {
+        this(name, level, fullClassName, isInterface, -1);
+    }
+
+    public LevelClassBox(String name, int level, String fullClassName, boolean isInterface, int architectureLevel) {
         super(4);
         this.fullClassName = fullClassName;
+        this.simpleName = name;
+        this.level = level;
+        this.architectureLevel = architectureLevel;
 
         this.getStyleClass().add("class-box");
         this.setAlignment(Pos.CENTER);
@@ -69,11 +79,18 @@ public class LevelClassBox extends HBox implements GraphSelection.Selectable {
         icon.visibleProperty().bind(ArchitectureView.showIconsProperty());
         icon.managedProperty().bind(ArchitectureView.showIconsProperty());
 
-        nameLabel = new Label(level >= 0 ? name + " (L:" + level + ")" : name);
+        nameLabel = new Label(BoxLabelFormatter.format(name, level, architectureLevel,
+                ArchitectureView.showArchitectureLevelProperty().get()));
         nameLabel.setWrapText(true);
         // text-fill doesn't cascade through HBox to descendant Label, so the
         // dark theme's derived text color (light on -fx-base #3c3f41) would win.
         nameLabel.setStyle("-fx-text-fill: #000000;");
+
+        // Live toggle: re-render the label whenever the global architecture-level
+        // visibility flips, without rebuilding the tree.
+        ArchitectureView.showArchitectureLevelProperty().addListener((obs, oldVal, newVal) ->
+                nameLabel.setText(BoxLabelFormatter.format(simpleName, this.level,
+                        this.architectureLevel, newVal)));
 
         this.getChildren().addAll(icon, nameLabel);
 

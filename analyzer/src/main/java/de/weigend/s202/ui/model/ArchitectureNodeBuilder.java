@@ -124,6 +124,7 @@ public class ArchitectureNodeBuilder {
                         element.localLevel,
                         element.interfaceType
                     );
+                    classNode.setArchitectureLevel(element.architectureLevel);
                     classNode.setDependencies(element.dependencies);
                     classNode.setDependents(element.dependents);
                     parentNode.addChild(classNode);
@@ -175,9 +176,10 @@ public class ArchitectureNodeBuilder {
                 true,
                 pkgLevel
             );
-            
+
             // Set package dependencies if available
             if (pkgInfo != null) {
+                subpkgNode.setArchitectureLevel(pkgInfo.architectureLevel);
                 subpkgNode.setDependencies(pkgInfo.dependencies);
                 subpkgNode.setDependents(pkgInfo.dependents);
             }

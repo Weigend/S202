@@ -136,6 +136,10 @@ public class ArchitectureView extends BorderPane {
     // their FontIcon visibility to this property so toggling refreshes every
     // open tab without rebuilding the tree.
     private static final BooleanProperty SHOW_ICONS = new SimpleBooleanProperty(true);
+    // Global architecture-level label visibility. Boxes append "G:n" to their
+    // header label when true. Local level "L:n" stays as the placement indicator;
+    // the global level reveals depth the package-aligned 2D layout otherwise hides.
+    private static final BooleanProperty SHOW_ARCHITECTURE_LEVEL = new SimpleBooleanProperty(false);
     private final ReadOnlyObjectWrapper<ArchitectureNode> architectureRoot = new ReadOnlyObjectWrapper<>(null);
     private final ReadOnlyObjectWrapper<QualityMetrics> qualityMetrics = new ReadOnlyObjectWrapper<>(null);
     private final ReadOnlyObjectWrapper<DomainModel> domainModel = new ReadOnlyObjectWrapper<>(null);
@@ -1127,6 +1131,23 @@ public class ArchitectureView extends BorderPane {
 
     public void setShowIcons(boolean show) {
         SHOW_ICONS.set(show);
+    }
+
+    /**
+     * Global toggle for the "G:n" architecture-level suffix shown alongside
+     * "L:n" in each package and class box header. Boxes react live without a
+     * tree rebuild, mirroring {@link #showIconsProperty()}.
+     */
+    public static BooleanProperty showArchitectureLevelProperty() {
+        return SHOW_ARCHITECTURE_LEVEL;
+    }
+
+    public boolean isShowArchitectureLevel() {
+        return SHOW_ARCHITECTURE_LEVEL.get();
+    }
+
+    public void setShowArchitectureLevel(boolean show) {
+        SHOW_ARCHITECTURE_LEVEL.set(show);
     }
 
     /* ----- Status sink ----------------------------------------------------- */

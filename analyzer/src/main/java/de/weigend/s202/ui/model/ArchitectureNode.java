@@ -51,6 +51,10 @@ public class ArchitectureNode {
     private Set<String> dependencies;
     private Set<String> dependents;
     private int level;
+    // Global architecture level (longest dependency-chain depth across the
+    // whole DAG). Separate from the local-layer {@link #level} used for
+    // vertical placement inside the parent. {@code -1} means "unknown".
+    private int architectureLevel = -1;
     private int horizontalLayoutOrder;
 
     public ArchitectureNode(String fullName, String simpleName, NodeType type, boolean autoExpanded) {
@@ -118,6 +122,10 @@ public class ArchitectureNode {
         return level;
     }
 
+    public int getArchitectureLevel() {
+        return architectureLevel;
+    }
+
     public int getHorizontalLayoutOrder() {
         return horizontalLayoutOrder;
     }
@@ -134,6 +142,10 @@ public class ArchitectureNode {
     
     public void setLevel(int level) {
         this.level = level;
+    }
+
+    public void setArchitectureLevel(int architectureLevel) {
+        this.architectureLevel = architectureLevel;
     }
 
     public void setHorizontalLayoutOrder(int horizontalLayoutOrder) {

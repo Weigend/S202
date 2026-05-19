@@ -58,6 +58,8 @@ public class LevelPackageBox extends VBox implements GraphSelection.Selectable {
     private boolean isExpanded = true;
     private final String simpleName;
     private final int staticLevel;
+    private int currentLocalLevel;
+    private final int architectureLevel;
     private String levelName;
     private final String fullName;
     private final Map<Integer, HBox> levelRows;
@@ -88,19 +90,28 @@ public class LevelPackageBox extends VBox implements GraphSelection.Selectable {
         this(levelName, level, transparent, null);
     }
 
+    public LevelPackageBox(String levelName, int level, boolean transparent, String fullName) {
+        this(levelName, level, transparent, fullName, -1);
+    }
+
     /**
      * Create a new LevelPackageBox.
      *
-     * @param levelName    Display name (simple name + optional level marker).
-     * @param level        Architectural level, -1 if unspecified.
-     * @param transparent  Pass-through visual (no border / no background).
-     * @param fullName     Fully qualified package name; required for selection.
+     * @param levelName          Display name (simple name + optional level marker).
+     * @param level              Local layer index, -1 if unspecified.
+     * @param transparent        Pass-through visual (no border / no background).
+     * @param fullName           Fully qualified package name; required for selection.
+     * @param architectureLevel  Global architecture level (longest dependency-chain
+     *                           depth), -1 if unknown. Shown next to the local level.
      */
-    public LevelPackageBox(String levelName, int level, boolean transparent, String fullName) {
+    public LevelPackageBox(String levelName, int level, boolean transparent, String fullName, int architectureLevel) {
         super(transparent ? 0 : 3);
         this.simpleName = levelName;
         this.staticLevel = level;
-        this.levelName = level >= 0 ? levelName + " (L:" + level + ")" : levelName;
+        this.currentLocalLevel = level;
+        this.architectureLevel = architectureLevel;
+        this.levelName = BoxLabelFormatter.format(levelName, level, architectureLevel,
+                ArchitectureView.showArchitectureLevelProperty().get());
         this.transparent = transparent;
         this.fullName = fullName;
 
@@ -123,6 +134,10 @@ public class LevelPackageBox extends VBox implements GraphSelection.Selectable {
         this.getChildren().add(contentContainer);
 
         ArchitectureDragController.makeDraggable(this);
+
+        // Live toggle: re-render the label whenever the global architecture-level
+        // visibility flips, without rebuilding the tree.
+        ArchitectureView.showArchitectureLevelProperty().addListener((obs, oldVal, newVal) -> applyLabelText());
 
         // Selectable click target on the package frame itself (free area outside
         // the header). The toggle icon and inner boxes consume their own clicks
@@ -317,7 +332,13 @@ public class LevelPackageBox extends VBox implements GraphSelection.Selectable {
      */
     public void setVirtualLevel(int level) {
         int shown = level >= 0 ? level : staticLevel;
-        String text = shown >= 0 ? simpleName + " (L:" + shown + ")" : simpleName;
+        this.currentLocalLevel = shown;
+        applyLabelText();
+    }
+
+    private void applyLabelText() {
+        String text = BoxLabelFormatter.format(simpleName, currentLocalLevel, architectureLevel,
+                ArchitectureView.showArchitectureLevelProperty().get());
         if (!text.equals(this.levelName)) {
             this.levelName = text;
             if (nameLabel != null) {
