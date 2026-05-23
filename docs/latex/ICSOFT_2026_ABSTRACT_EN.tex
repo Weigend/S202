@@ -56,9 +56,6 @@
   \authorname{Johannes Weigend}
   \affiliation{Weigend AM GmbH \& Co.KG, Germany/Brazil}
   \email{johannes.weigend@weigend.de}
-  \authorname{Michael Philippsen}
-  \affiliation{Friedrich-Alexander-Universit\"{a}t Erlangen-N\"{u}rnberg, Germany}
-  \email{michael.philippsen@fau.de}
 }
 
 \keywords{software architecture visualization, layout invariants,
@@ -152,13 +149,13 @@ minimum-violation arrangement, and no resorting after the fact.
         SCCs by a degree-rank heuristic, then assign every class an
         \emph{architecture level} by longest path on the SCC-DAG.
         Feeds the tangle view, the SCC display, and the class-level
-        consistency check; does not drive the 2D ($x,y$) layout, but
+        invariant check; does not drive the 2D ($x,y$) layout, but
         the class architecture level can be mapped to $z$ in 3D views
         as a complexity-height encoding.
   \item \textbf{Phase 2 --- Package order.}
         On the weighted inter-package graph, break SCCs by a weight-rank
         heuristic, then assign every package an \emph{architecture
-        level}. Feeds the package-level consistency checks and is
+        level}. Feeds the package-level invariant checks and is
         consumed by Phase 3 as a hard constraint.
   \item \textbf{Phase 3 --- Place classes into the package frame.}
         Phase 2 has fixed the vertical order of packages; Phase 3
@@ -266,7 +263,7 @@ artifact of the layout algorithm.
     The status bar additionally reports the four wrong-direction class edges
     induced by the bug. No human inspection of the picture was needed to
     surface the defect; the alert is generated automatically by the
-    consistency checks that run after every analysis.}
+    invariant checks that run after every analysis.}
   \label{fig:r1-wrong-direction}
 \end{figure}
 
@@ -389,7 +386,7 @@ The novelty lies in making the computation explicit, separating class
 architecture depth, package architecture order, and local layout position, and
 checking the resulting layout through executable invariants.
 
-S202 also continues a line of work the authors have published on layered
+S202 also continues a line of work the author has co-published on layered
 dependency visualization. \cite{Dashuber2021} introduced a layered software-city
 metaphor that uses building height for architectural depth, and \cite{Dashuber2022}
 extended it with static and dynamic dependency overlays. Both papers describe
