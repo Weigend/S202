@@ -17,6 +17,7 @@ package de.weigend.s202.domain.architecture;
 
 import de.weigend.s202.domain.DomainModel;
 import de.weigend.s202.domain.strategy.LevelCalculationStrategyContext;
+import de.weigend.s202.graph.SCCBreaker;
 import de.weigend.s202.graph.StronglyConnectedComponent;
 import de.weigend.s202.graph.TarjanSCCFinder;
 import de.weigend.s202.reader.DependencyModel;
@@ -30,19 +31,16 @@ import java.util.logging.Logger;
  * Pipeline:
  *   Step 1  Create class objects       (all levels = 0)
  *   Step 2  Create package objects     (all levels = 0)
- *   Step 3  Compute class levels       strategy (Tarjan → SCC-break → DAG → longest-path)
- *   Step 4  Compute package levels     weighted inter-package graph → SCC-break → DAG → longest-path
+ *   Step 3  Compute package levels     weighted inter-package graph → SCC-break → DAG → longest-path
+ *   Step 4  Compute class levels       package hypothesis → SCC-break → degree fallback → longest-path
  *   Step 5  Set reverse dependencies
  *   Step 6  Assign local layer index   per-parent sibling graph → SCC-break → DAG → longest-path
  *                                      (rendering position within each parent box, no global meaning)
  *
- * Package levels are computed independently from class levels using a weighted
- * inter-package dependency graph. The weight of an edge P_A → P_B is the
- * aggregated method-call count from classes in P_A's subtree to classes in P_B,
- * with a fallback weight of 1 for structural references without method-call data.
- * This separates the containment hierarchy from the dependency hierarchy and
- * correctly handles disconnected package trees (they are levelled independently,
- * both starting at 0).
+ * Package levels (Step 3) are computed first from a weighted inter-package dependency graph.
+ * The weight of an edge P_A → P_B is the aggregated method-call count from classes in
+ * P_A's subtree to classes in P_B, with a fallback weight of 1 for structural references
+ * without method-call data.
  *
  * Package SCC-breaking uses a weight-based rank score:
  *   rank(P) = (Σ outgoing weights within SCC − Σ incoming weights within SCC)
@@ -50,6 +48,12 @@ import java.util.logging.Logger;
  * Edge P_A→P_B is a back-edge when rank(P_A) < rank(P_B) − 0.1.
  * Equal-rank pairs (symmetric dependency) are left in the same SCC and assigned
  * the same level — they are genuine peers with no dominant dependency direction.
+ *
+ * Class SCC-breaking (Step 4) uses the package hypothesis computed in Step 3:
+ * a class edge A→B is cut when A and B are in an SCC AND pkgLevel(A.pkg) &lt; pkgLevel(B.pkg),
+ * i.e. the edge runs against the architecture hypothesis. For SCCs confined to
+ * equal-level packages (genuine intra-level tangles), the in/out-degree heuristic
+ * is used as a fallback.
  */
 public class LevelCalculator {
 
@@ -85,11 +89,18 @@ public class LevelCalculator {
                 packageName, rawPkg.simpleName, "PACKAGE", 0, new HashSet<>()));
         }
 
-        // Step 3: Compute class levels
-        calculateClassLevels(model);
-
-        // Step 4: Compute package levels from weighted inter-package graph.
+        // Step 3: Compute package levels first — the result is the architecture hypothesis
+        // that guides class SCC-breaking in Step 4.
         calculatePackageLevels(model, rawModel);
+
+        // Step 4: Compute class levels using the package hypothesis from Step 3.
+        // SCCs whose edges cross package-level boundaries are cut along the hypothesis;
+        // same-level-package SCCs fall back to the degree heuristic.
+        Map<String, Integer> packageLevels = new HashMap<>();
+        for (Map.Entry<String, DomainModel.CalculatedElementInfo> e : model.getAllPackages().entrySet()) {
+            packageLevels.put(e.getKey(), e.getValue().architectureLevel);
+        }
+        calculateClassLevels(model, packageLevels);
 
         // Step 5: Set reverse dependencies
         updateDependentRelationships(model);
@@ -125,16 +136,56 @@ public class LevelCalculator {
     }
 
     // -------------------------------------------------------------------------
-    // Step 3 — class levels
+    // Step 4 — class levels guided by the package hypothesis
     // -------------------------------------------------------------------------
 
-    private void calculateClassLevels(DomainModel model) {
-        Map<String, Set<String>> classDeps = new HashMap<>();
+    /**
+     * Breaks class-level SCCs using the architecture hypothesis established by
+     * package levels (Step 3). A class edge A→B inside an SCC is cut when
+     * pkgLevel(A.pkg) &lt; pkgLevel(B.pkg) — it runs against the hypothesis.
+     * SCCs whose members all belong to equal-level packages are genuine intra-level
+     * tangles; their edges are cut by the in/out-degree heuristic as a fallback.
+     */
+    private void calculateClassLevels(DomainModel model, Map<String, Integer> packageLevels) {
+        // Build class dependency graph
+        Map<String, Set<String>> graph = new HashMap<>();
         for (DomainModel.CalculatedElementInfo c : model.getAllClasses().values()) {
-            classDeps.put(c.fullName, new HashSet<>(c.dependencies));
+            graph.put(c.fullName, new HashSet<>(c.dependencies));
         }
+
+        // Phase 1: package-hypothesis-guided SCC breaking.
+        // Iteratively cut edges A→B that run against the package hypothesis
+        // (A is in a lower package than B) and are part of a cycle.
+        Set<String> hypothesisBackEdgeKeys = new LinkedHashSet<>();
+        boolean changed = true;
+        while (changed) {
+            changed = false;
+            for (StronglyConnectedComponent scc : new TarjanSCCFinder(graph).findSCCs()) {
+                if (scc.getSize() < 2) continue;
+                Set<String> members = scc.getMembers();
+                for (String from : new ArrayList<>(members)) {
+                    for (String to : new ArrayList<>(graph.getOrDefault(from, Set.of()))) {
+                        if (!members.contains(to)) continue;
+                        int fromPkgLevel = packageLevels.getOrDefault(extractPackageName(from), 0);
+                        int toPkgLevel   = packageLevels.getOrDefault(extractPackageName(to),   0);
+                        if (fromPkgLevel < toPkgLevel) {
+                            graph.get(from).remove(to);
+                            hypothesisBackEdgeKeys.add(from + "\0" + to);
+                            changed = true;
+                        }
+                    }
+                }
+            }
+        }
+        model.setClassBackEdges(hypothesisBackEdgeKeys);
+
+        // Phase 2: degree-heuristic fallback for residual SCCs (same-level packages).
+        SCCBreaker fallback = new SCCBreaker(graph);
+        graph = fallback.getGraphWithoutBackEdges();
+
+        // Phase 3: longest-path on the (now near-DAG) graph via the configured strategy.
         Map<String, Integer> levels =
-            strategyContext.getClassLevelStrategy().calculateClassLevels(classDeps);
+            strategyContext.getClassLevelStrategy().calculateClassLevels(graph);
         for (Map.Entry<String, Integer> e : levels.entrySet()) {
             DomainModel.CalculatedElementInfo info = model.getClass(e.getKey());
             if (info != null) info.setArchitectureLevel(e.getValue());

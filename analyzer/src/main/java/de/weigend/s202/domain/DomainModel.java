@@ -42,6 +42,14 @@ public class DomainModel {
     private Set<String> packageBackEdgeKeys = new LinkedHashSet<>();
 
     /**
+     * Class back-edges cut by the package-hypothesis-guided SCC-breaking phase
+     * (Phase 1 of Step 4). An edge A→B is here when pkgLevel(A.pkg) &lt; pkgLevel(B.pkg)
+     * and A→B was part of a cycle. R1 excludes these from level-direction checks.
+     * Stored as "from\0to" keys, analogous to {@link #packageBackEdgeKeys}.
+     */
+    private Set<String> classBackEdgeKeys = new LinkedHashSet<>();
+
+    /**
      * Information about a calculated element (class or package) with its level.
      */
     public static class CalculatedElementInfo {
@@ -107,6 +115,14 @@ public class DomainModel {
 
     public boolean isPackageBackEdge(String from, String to) {
         return packageBackEdgeKeys.contains(from + "\0" + to);
+    }
+
+    public void setClassBackEdges(Set<String> backEdgeKeys) {
+        classBackEdgeKeys = new LinkedHashSet<>(backEdgeKeys);
+    }
+
+    public boolean isClassBackEdge(String from, String to) {
+        return classBackEdgeKeys.contains(from + "\0" + to);
     }
 
     /** Returns the full weighted inter-package graph (unmodifiable). */
