@@ -82,7 +82,7 @@ public final class LayoutInvariantReport {
         sb.append("=== Structure202 Layout Invariant Report ===\n");
         sb.append("Generated: ").append(UTC.format(Instant.now())).append('\n');
         sb.append("Scope: algorithm-bug detector (R1 non-back-edge level inversion, ")
-          .append("R2 pkg-SCC equal level, R3 container, R5 type-flag drift)\n\n");
+          .append("R2 pkg-SCC equal level, R3 container, R4 type-flag drift)\n\n");
 
         sb.append("-- Inputs --\n");
         if (sourcePaths.isEmpty()) {
@@ -108,7 +108,7 @@ public final class LayoutInvariantReport {
 
         // Preserve insertion order of rule blocks; LinkedHashMap by ruleId
         // groups findings while letting us print rule headers in encounter
-        // order (R1 → R2 → R3 → R5 in practice).
+        // order (R1 → R2 → R3 → R4 in practice).
         Map<String, List<InvariantFinding>> grouped = new LinkedHashMap<>();
         for (InvariantFinding f : findings) {
             grouped.computeIfAbsent(f.ruleId(), k -> new ArrayList<>()).add(f);

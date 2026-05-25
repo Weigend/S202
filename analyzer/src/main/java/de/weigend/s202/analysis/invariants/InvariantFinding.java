@@ -23,7 +23,7 @@ package de.weigend.s202.analysis.invariants;
  * 1-to-1 — only Unity's (x, y, z) ground/height coordinate system has been
  * left behind.
  *
- * @param ruleId        rule identifier (R1, R2, R3, R5 — there is no R4)
+ * @param ruleId        rule identifier (R1, R2, R3, R4)
  * @param message       human-readable message including a classification reason
  * @param fromName      source element FQN
  * @param toName        target element FQN, may be null when only one side applies
