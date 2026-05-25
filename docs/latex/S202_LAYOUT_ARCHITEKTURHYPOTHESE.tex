@@ -81,11 +81,17 @@ benutzten Elements liegt:
   A \to B \quad\Longrightarrow\quad level(A) > level(B).
 \]
 
-Diese Konvention gilt f\"ur Klassenlevel, Paketlevel und lokale UI-Level.
-Bei verschachtelten UI-Elementen wird nicht nur ein einzelner Wert verglichen,
-sondern das sichtbare Level-Tupel entlang der Paketkette: zuerst das lokale
-Level des \"aussersten sichtbaren Containers, dann die inneren Container,
-zuletzt das lokale Level der Klasse.
+Diese Konvention gilt f\"ur Klassenlevel, Paketlevel und lokale UI-Level,
+aber die Berechnung erfolgt in zwei getrennten Schritten.
+
+Zuerst entsteht die Paketordnung: Aus den aggregierten Klassenabh\"angigkeiten
+werden Paketgewichte berechnet. Daraus folgt eine stabile Anordnung der
+Pakete und ihrer Subpakete, die unabh\"angig von einzelnen Klassen ist.
+
+Danach werden die Klassen eingeordnet: Innerhalb jedes Containers werden
+Klassen und sichtbare Subpakete anhand ihrer lokalen Abh\"angigkeiten
+untereinander sortiert. Die Paketordnung bleibt dabei erhalten --- eine
+einzelne Klasse kann die Reihenfolge der Pakete nicht verschieben.
 
 Eine Kante, die aus einem niedrigeren Element in ein h\"oheres Element zeigt,
 widerspricht der berechneten Ordnung. Im Folgenden heisst eine solche Kante
@@ -294,9 +300,9 @@ Konzeptionell reichen drei Nachbedingungen:
         $level(A) > level(B)$.
   \item Eine nicht ordnungskonforme Kante verschwindet nicht. Sie ist als
         Backedge, SCC-Kante, Schnittkante oder Verletzung klassifiziert.
-  \item Die sichtbare UI-Ordnung verwendet dieselbe Levelordnung wie das
-        Modell. Bei verschachtelten Elementen gilt der Vergleich \"uber das
-        sichtbare Level-Tupel entlang der Paketkette.
+  \item Die sichtbare UI-Ordnung stimmt mit dem Modell \"uberein: Die
+        Paketordnung aus der Architekturhypothese und die lokale Einordnung
+        der Klassen innerhalb ihrer Container sind konsistent dargestellt.
 \end{enumerate}
 
 Die aktuelle Implementierung zerlegt diese Nachbedingungen in vier konkrete
