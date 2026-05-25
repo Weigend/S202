@@ -186,6 +186,14 @@ sagt: Nach den beobachteten Klassenabh\"angigkeiten ist es plausibel, $P$
 oberhalb von $Q$ einzuordnen. Die sp\"atere lokale Platzierung darf diese
 Hypothese nicht unbemerkt umdeuten.
 
+Der entscheidende konzeptionelle Schritt ist, dass S202 die Paketbeziehungen
+als \emph{eigenst\"andigen Graphen} behandelt --- einen Paket-Wald, der
+unabh\"angig von den einzelnen Klassen existiert. Dieser Wald entsteht aus
+den aggregierten Gewichten und liefert eine stabile Ordnung. Erst diese
+Stabilit\"at macht das Schneideproblem in zyklischen Klassengraphen l\"osbar:
+Weil die Paketordnung feststeht, ist klar, welche Kanten gegen sie laufen
+--- und genau diese werden als Kandidaten f\"ur den Schnitt betrachtet.
+
 Sind die Gewichte in beiden Richtungen gleich gro\ss{},
 
 \[
@@ -212,9 +220,14 @@ kommt, das die Architekturhypothese niedriger eingeordnet hat, und in ein
 h\"oher eingeordnetes Paket zeigt.
 
 Ist eine solche Backedge Teil einer SCC, wird sie f\"ur die
-Ordnungsberechnung geschnitten. Dabei ist die fachliche Idee: Geschnitten
-wird entlang der Architekturhypothese. Eine Schnittkante soll den Zyklus so
-aufbrechen, dass die berechnete Paketordnung erhalten bleibt.
+Ordnungsberechnung geschnitten. Das Schneidekritierium ist dabei pr\"azise:
+Geschnitten wird die Kante mit dem gr\"ossten Levelunterschied zwischen
+Quell- und Zielpaket --- also die Kante, die am st\"arksten gegen die
+Architekturhypothese l\"auft. Abbildung~\ref{fig:cut-rule} zeigt ein
+Beispiel: Die Kante \texttt{core $\to$ api} \"uberspringt zwei Level
+(von~0 nach~2) und ist damit die eindeutige Schnittkante. Eine Kante
+\texttt{core $\to$ service} h\"atte nur einen Level \"ubersprungen und
+w\"are nachrangig.
 
 \begin{figure}[htbp]
   \centering
