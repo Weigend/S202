@@ -326,18 +326,19 @@ Aus dem konzeptionellen Modell ergibt sich eine klare Pipeline:
 
 \begin{enumerate}
   \item Klassenabh\"angigkeiten aus dem analysierten Code lesen.
-  \item Klassenlevel und Klassenzusammenh\"ange bestimmen.
   \item Paketgewichte aus Klassenabh\"angigkeiten aggregieren.
-  \item Aus den Paketgewichten eine Architekturhypothese berechnen.
-  \item Kanten gegen diese Hypothese als Backedges markieren.
-  \item Backedges in SCCs f\"ur die Ordnungsberechnung schneiden.
+  \item Aus den Paketgewichten eine Architekturhypothese berechnen
+        (Paketordnung).
+  \item Klassenlevel bestimmen: Zyklen im Klassengraphen werden entlang
+        der Architekturhypothese geschnitten. Eine Kante $A \to B$ in einem
+        Zyklus ist eine Schnittkante, wenn $pkgLevel(A) < pkgLevel(B)$.
+        F\"ur Zyklen innerhalb gleich-levelliger Pakete greift die
+        Grad-Heuristik als Fallback.
+  \item Kanten, die nach Schritt~4 gegen die berechnete Ordnung laufen,
+        als Backedges klassifizieren und sichtbar halten.
   \item Lokale UI-Level pro sichtbarem Container berechnen.
-  \item Die fertige Grafik durch Invarianten pr\"ufen.
+  \item Die fertige Grafik durch Invarianten pr\"ufen (R1--R4).
 \end{enumerate}
-
-Diese Pipeline beschreibt nicht jede aktuelle Codezeile. Sie beschreibt die
-Zielarchitektur des Layouts. Wo der existierende Code davon abweicht, soll er
-an dieses Modell angepasst werden.
 
 \section{Zusammenfassung}
 
