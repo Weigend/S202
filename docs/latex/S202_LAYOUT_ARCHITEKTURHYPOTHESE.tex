@@ -35,10 +35,10 @@
 \begin{abstract}
 S202 visualisiert Softwarearchitektur als geschichtetes Layout. Die
 entscheidende Aussage der Darstellung ist einfach: Ein Element, das ein
-anderes Element benutzt, steht oberhalb des benutzten Elements. Schwieriger
-wird diese Aussage in realen Java-Systemen, weil das Werkzeug keine
-direkten Paketabh\"angigkeiten beobachtet, sondern nur Abh\"angigkeiten
-zwischen Klassen. Paketordnung, lokale Platzierung und Zyklusbehandlung
+anderes Element benutzt, steht oberhalb des benutzten Elements. In realen
+Java-Systemen sind Paketabh\"angigkeiten nicht direkt beobachtbar --- sie
+entstehen implizit und k\"onnen technisch nur aus den Klassenabh\"angigkeiten
+ermittelt werden. Paketordnung, lokale Platzierung und Zyklusbehandlung
 m\"ussen daher getrennt berechnet werden. Dieses Dokument beschreibt das
 konzeptionelle Modell: Aus aggregierten Klassenabh\"angigkeiten entsteht
 eine Architekturhypothese f\"ur Pakete; konkrete Kanten, die dieser Ordnung
