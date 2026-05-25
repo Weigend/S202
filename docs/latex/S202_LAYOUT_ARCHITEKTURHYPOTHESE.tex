@@ -44,7 +44,7 @@ konzeptionelle Modell: Aus aggregierten Klassenabh\"angigkeiten entsteht
 eine Architekturhypothese f\"ur Pakete; konkrete Kanten, die dieser Ordnung
 widersprechen, werden als Backedges markiert; Kanten in SCCs werden f\"ur
 die Ordnungsberechnung geschnitten, bleiben aber als explizites Feedback
-sichtbar. Nachbedingungen dienen anschliessend als implementierungsneutrale,
+sichtbar. Konsistenzregeln dienen anschliessend als implementierungsneutrale,
 ausf\"uhrbare Spezifikation der erzeugten Grafik.
 \end{abstract}
 
@@ -307,24 +307,24 @@ Alle drei verwenden dieselbe Grundidee: Nutzer stehen h\"oher als das
 genutzte Element. Sie d\"urfen aber nicht zu einem einzigen globalen Level
 vermischt werden.
 
-\section{Nachbedingungen als ausf\"uhrbare Spezifikation}
+\section{Konsistenzregeln}
 
-Nachbedingungen waren in der Entwicklung von S202 nicht nur Testcode. Sie waren
+Konsistenzregeln waren in der Entwicklung von S202 nicht nur Testcode. Sie waren
 die implementierungsneutrale Formulierung dessen, was eine konsistente Grafik
 bedeuten muss.
 
 Der Layoutalgorithmus erzeugt Modell, Level, Kantenklassifikationen und
-sichtbare Reihenfolge. Die Nachbedingungen werden danach gepr\"uft. Sie
+sichtbare Reihenfolge. Die Konsistenzregeln werden danach gepr\"uft. Sie
 schneiden keine Kanten, verschieben keine Elemente und optimieren kein Layout.
 Sie pr\"ufen, ob die fertige Grafik ihre eigene Architekturhypothese einh\"alt.
 
-Der Vorteil dieser Formulierung liegt in der Redundanz. Eine Nachbedingung muss
+Der Vorteil dieser Formulierung liegt in der Redundanz. Eine Konsistenzregel muss
 nicht wissen, mit welchen internen Schritten der Layoutalgorithmus zu seinem
 Ergebnis gekommen ist. Sie kann unabh\"angig implementiert werden und nur das
 fertige Ergebnis lesen. Dadurch pr\"uft ein zweiter Codepfad dieselbe fachliche
 Aussage.
 
-Konzeptionell reichen drei Nachbedingungen:
+Konzeptionell reichen drei Konsistenzregeln:
 
 \begin{enumerate}
   \item Ordnungskonforme Abh\"angigkeiten erf\"ullen
@@ -336,24 +336,24 @@ Konzeptionell reichen drei Nachbedingungen:
         der Klassen innerhalb ihrer Container sind konsistent dargestellt.
 \end{enumerate}
 
-Die aktuelle Implementierung zerlegt diese Nachbedingungen in vier konkrete
+Die aktuelle Implementierung zerlegt diese Konsistenzregeln in vier konkrete
 Checks:
 
 \begin{description}
-  \item[R1] Pr\"uft Nachbedingung~1 f\"ur Klassenabh\"angigkeiten: Jede
+  \item[R1] Pr\"uft Konsistenzregel~1 f\"ur Klassenabh\"angigkeiten: Jede
         nicht als Backedge markierte Kante $A \to B$ muss
         $level(A) > level(B)$ erf\"ullen.
-  \item[R2] Pr\"uft Nachbedingung~1 f\"ur Pakete in derselben SCC: Peers
+  \item[R2] Pr\"uft Konsistenzregel~1 f\"ur Pakete in derselben SCC: Peers
         ohne dominante Abh\"angigkeitsrichtung erhalten denselben Level.
-  \item[R3] Pr\"uft Nachbedingung~1 f\"ur Paketabh\"angigkeiten: F\"ur jede
+  \item[R3] Pr\"uft Konsistenzregel~1 f\"ur Paketabh\"angigkeiten: F\"ur jede
         gewichtete Paketkante mit $w(P,Q) > w(Q,P)$ muss
         $level(P) > level(Q)$ gelten.
-  \item[R4] Pr\"uft Nachbedingung~2: Jede Abh\"angigkeit tr\"agt eine
+  \item[R4] Pr\"uft Konsistenzregel~2: Jede Abh\"angigkeit tr\"agt eine
         Klassifikation (NORMAL, VIOLATION, INTRA\_SCC). Kanten ohne
         Klassifikation sind ein Implementierungsfehler.
 \end{description}
 
-Nachbedingung~3 (Level-Tupel-Vergleich bei verschachtelten UI-Elementen)
+Konsistenzregel~3 (Level-Tupel-Vergleich bei verschachtelten UI-Elementen)
 wird durch R1 und R3 in Teilen abgedeckt, ist aber noch kein vollst\"andiger
 maschineller Check. Sie gilt konzeptionell als Ziel der Darstellung.
 
@@ -374,7 +374,7 @@ Aus dem konzeptionellen Modell ergibt sich eine klare Pipeline:
   \item Kanten, die nach Schritt~4 gegen die berechnete Ordnung laufen,
         als Backedges klassifizieren und sichtbar halten.
   \item Lokale UI-Level pro sichtbarem Container berechnen.
-  \item Die fertige Grafik durch Nachbedingungen pr\"ufen (R1--R4).
+  \item Die fertige Grafik durch Konsistenzregeln pr\"ufen (R1--R4).
 \end{enumerate}
 
 \section{Zusammenfassung}
