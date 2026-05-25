@@ -44,7 +44,7 @@ konzeptionelle Modell: Aus aggregierten Klassenabh\"angigkeiten entsteht
 eine Architekturhypothese f\"ur Pakete; konkrete Kanten, die dieser Ordnung
 widersprechen, werden als Backedges markiert; Kanten in SCCs werden f\"ur
 die Ordnungsberechnung geschnitten, bleiben aber als explizites Feedback
-sichtbar. Invarianten dienen anschliessend als implementierungsneutrale,
+sichtbar. Nachbedingungen dienen anschliessend als implementierungsneutrale,
 ausf\"uhrbare Spezifikation der erzeugten Grafik.
 \end{abstract}
 
@@ -307,18 +307,18 @@ Alle drei verwenden dieselbe Grundidee: Nutzer stehen h\"oher als das
 genutzte Element. Sie d\"urfen aber nicht zu einem einzigen globalen Level
 vermischt werden.
 
-\section{Invarianten als ausf\"uhrbare Spezifikation}
+\section{Nachbedingungen als ausf\"uhrbare Spezifikation}
 
-Invarianten waren in der Entwicklung von S202 nicht nur Testcode. Sie waren
+Nachbedingungen waren in der Entwicklung von S202 nicht nur Testcode. Sie waren
 die implementierungsneutrale Formulierung dessen, was eine konsistente Grafik
 bedeuten muss.
 
 Der Layoutalgorithmus erzeugt Modell, Level, Kantenklassifikationen und
-sichtbare Reihenfolge. Die Invarianten laufen danach. Sie schneiden keine
-Kanten, verschieben keine Elemente und optimieren kein Layout. Sie pr\"ufen,
-ob die fertige Grafik ihre eigene Architekturhypothese einh\"alt.
+sichtbare Reihenfolge. Die Nachbedingungen werden danach gepr\"uft. Sie
+schneiden keine Kanten, verschieben keine Elemente und optimieren kein Layout.
+Sie pr\"ufen, ob die fertige Grafik ihre eigene Architekturhypothese einh\"alt.
 
-Der Vorteil dieser Formulierung liegt in der Redundanz. Eine Invariante muss
+Der Vorteil dieser Formulierung liegt in der Redundanz. Eine Nachbedingung muss
 nicht wissen, mit welchen internen Schritten der Layoutalgorithmus zu seinem
 Ergebnis gekommen ist. Sie kann unabh\"angig implementiert werden und nur das
 fertige Ergebnis lesen. Dadurch pr\"uft ein zweiter Codepfad dieselbe fachliche
@@ -374,7 +374,7 @@ Aus dem konzeptionellen Modell ergibt sich eine klare Pipeline:
   \item Kanten, die nach Schritt~4 gegen die berechnete Ordnung laufen,
         als Backedges klassifizieren und sichtbar halten.
   \item Lokale UI-Level pro sichtbarem Container berechnen.
-  \item Die fertige Grafik durch Invarianten pr\"ufen (R1--R4).
+  \item Die fertige Grafik durch Nachbedingungen pr\"ufen (R1--R4).
 \end{enumerate}
 
 \section{Zusammenfassung}
