@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="590" height="419" viewBox="0 0 590 419">
+  <!-- Overlay for test-example-classgraph-acyclic.png.
+       Compose with the base image to create test-example-classgraph-acyclic-levels.png. -->
+  <g font-family="DejaVu Sans, Arial, sans-serif" font-size="15" fill="#334155">
+    <rect x="480" y="0" width="110" height="419" fill="#ffffff"/>
+
+    <g stroke="#64748b" stroke-width="1.4" stroke-dasharray="6 5" opacity="0.75">
+      <line x1="0" y1="94" x2="570" y2="94"/>
+      <line x1="0" y1="214" x2="570" y2="214"/>
+      <line x1="0" y1="334" x2="570" y2="334"/>
+    </g>
+
+    <g font-weight="600">
+      <text x="500" y="34">Level 3</text>
+      <text x="500" y="154">Level 2</text>
+      <text x="500" y="274">Level 1</text>
+      <text x="500" y="394">Level 0</text>
+    </g>
+  </g>
+</svg>
