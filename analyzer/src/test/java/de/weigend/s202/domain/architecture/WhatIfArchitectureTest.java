@@ -71,6 +71,21 @@ class WhatIfArchitectureTest {
     }
 
     @Test
+    void whatIfViolationKeepsClassBackEdgeFlagAfterMove() {
+        DomainModel domain = layered();
+        domain.setClassBackEdges(Set.of("ui.View\0domain.Model"));
+        HierarchicalLayeredArchitecture original =
+                (HierarchicalLayeredArchitecture) new HierarchicalLayeredArchitectureBuilder().build(domain);
+        WhatIfArchitecture wif = new WhatIfArchitecture(original, domain);
+
+        wif.moveElementAsNewRow("ui", "", 1);
+
+        assertEquals(1, wif.violations().size());
+        assertTrue(wif.violations().get(0).backEdge(),
+                "the renderer should still know that this visible upward edge is an SCC break edge");
+    }
+
+    @Test
     void consecutiveMovesKeepRowIndicesAlignedWithVisualScene() {
         DomainModel domain = layered();
         HierarchicalLayeredArchitecture original =

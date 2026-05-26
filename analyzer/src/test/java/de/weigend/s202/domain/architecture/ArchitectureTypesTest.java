@@ -21,6 +21,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -68,6 +69,13 @@ class ArchitectureTypesTest {
                 () -> new Violation("a.X", "", ViolationKind.UPWARD, 1, 2));
         assertThrows(IllegalArgumentException.class,
                 () -> new Violation("a.X", "x.Y", null, 1, 2));
+    }
+
+    @Test
+    void violationDefaultsToNonBackEdge() {
+        Violation violation = new Violation("a.X", "b.Y", ViolationKind.UPWARD, 0, 1);
+
+        assertFalse(violation.backEdge());
     }
 
     @Test

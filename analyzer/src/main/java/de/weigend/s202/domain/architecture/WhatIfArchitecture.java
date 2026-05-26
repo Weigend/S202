@@ -49,7 +49,7 @@ public final class WhatIfArchitecture implements Architecture {
     private final HierarchicalLayeredArchitecture original;
     private final List<Tangle> tangles;
     /** Snapshot of class-to-class edges captured at construction. */
-    private final List<String[]> staticEdges;
+    private final List<StaticEdge> staticEdges;
 
     /** Mutable root — its {@code rows} are the top-level rows of the architecture. */
     private final Node root = new Node("", true);
@@ -146,15 +146,15 @@ public final class WhatIfArchitecture implements Architecture {
         Map<String, int[]> positions = new HashMap<>();
         collectPositions(root, new int[0], positions);
         List<Violation> result = new ArrayList<>();
-        for (String[] edge : staticEdges) {
-            int[] srcPos = positions.get(edge[0]);
-            int[] tgtPos = positions.get(edge[1]);
+        for (StaticEdge edge : staticEdges) {
+            int[] srcPos = positions.get(edge.source());
+            int[] tgtPos = positions.get(edge.target());
             if (srcPos == null || tgtPos == null) {
                 continue;
             }
             if (compareLex(srcPos, tgtPos) > 0) {
-                result.add(new Violation(edge[0], edge[1], ViolationKind.UPWARD,
-                        depthValue(srcPos), depthValue(tgtPos)));
+                result.add(new Violation(edge.source(), edge.target(), ViolationKind.UPWARD,
+                        depthValue(srcPos), depthValue(tgtPos), edge.backEdge()));
             }
         }
         return result;
@@ -283,12 +283,12 @@ public final class WhatIfArchitecture implements Architecture {
         return position.length == 0 ? 0 : position[position.length - 1];
     }
 
-    private static List<String[]> extractStaticEdges(DomainModel domain) {
-        List<String[]> edges = new ArrayList<>();
+    private static List<StaticEdge> extractStaticEdges(DomainModel domain) {
+        List<StaticEdge> edges = new ArrayList<>();
         for (CalculatedElementInfo cls : domain.getAllClasses().values()) {
             String src = cls.fullName;
             for (String dep : cls.dependencies) {
-                edges.add(new String[]{src, dep});
+                edges.add(new StaticEdge(src, dep, domain.isClassBackEdge(src, dep)));
             }
         }
         return edges;
@@ -324,4 +324,6 @@ public final class WhatIfArchitecture implements Architecture {
             this.isPackage = isPackage;
         }
     }
+
+    private record StaticEdge(String source, String target, boolean backEdge) {}
 }

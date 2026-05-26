@@ -12,6 +12,7 @@
 \usepackage{amssymb}
 \usepackage{xcolor}
 \usepackage{listings}
+\usepackage{float}
 \usepackage{hyperref}
 
 \geometry{margin=2.4cm}
@@ -31,9 +32,9 @@
 }
 
 \title{Software-Architektur als Schichtendarstellung\\
-  \large Analyse der Software-Architektur mit S202}
+  \large Analyse von Software-Architektur mit S202}
 \author{Johannes Weigend}
-\date{Entwurf, 24.~Mai~2026}
+\date{Finale Fassung, 26.~Mai~2026}
 
 \begin{document}
 
@@ -66,9 +67,9 @@ einem Jar, \texttt{dot} erzeugt daraus einen gerichteten Graphen.
 Abbildung~\ref{fig:acyclic-levels} zeigt zun\"achst nur den azyklischen Teil
 des Example-Jars.
 
-\begin{figure}[htbp]
+\begin{figure}[H]
   \centering
-  \includegraphics[width=\textwidth]{figures/test-example-classgraph-acyclic-levels.png}
+  \includegraphics[width=0.75\textwidth]{figures/test-example-classgraph-acyclic-levels.png}
   \caption{Azyklischer Ausschnitt aus \texttt{test-example-1.0.0.jar}. Die
   Pfeile zeigen von der nutzenden Klasse zur genutzten Klasse; die horizontalen
   Linien markieren die berechneten Levels.}
@@ -93,9 +94,10 @@ realer Anwendungen hat sie aber drei praktische Probleme:
   \item Bei zyklischen Abh\"angigkeiten muss der Zyklus f\"ur die
         Levelberechnung aufgebrochen werden, damit \"uberhaupt eine vertikale
         Ordnung entsteht. Der urspr\"ungliche Abh\"angigkeitsgraph bleibt
-        unver\"andert; ver\"andert wird der daraus abgeleitete DAG, auf dem
-        die Levels berechnet werden. Entscheidend ist deshalb, welche Kante
-        in diesem Berechnungsgraphen gesondert behandelt wird.
+        unver\"andert; ver\"andert wird der daraus abgeleitete DAG
+        (\emph{Directed Acyclic Graph}, ein gerichteter Graph ohne Zyklen), auf
+        dem die Levels berechnet werden. Entscheidend ist deshalb, welche
+        Kante in diesem Berechnungsgraphen gesondert behandelt wird.
 \end{enumerate}
 
 \section{S202 als hierarchische Schichtendarstellung}
@@ -110,7 +112,7 @@ angeordnet.
 Die Pfeile k\"onnen optional eingeblendet werden. Im Normalfall soll die
 vertikale Ordnung aber bereits ohne Pfeile verst\"andlich machen, welche
 Teile der Anwendung weiter oben liegen und welche als Fundament dienen.
-Unerw\"unschte Dependencies fallen dadurch nicht als einzelne Linie in einem
+Unerw\"unschte Abh\"angigkeiten fallen dadurch nicht als einzelne Linie in einem
 gro\ss{}en Netz auf, sondern als Bruch in einer erwarteten Schichtenordnung.
 
 Im Gegensatz zum flachen Klassengraphen sind die Levels bei S202 hierarchisch
@@ -119,9 +121,9 @@ also Subpakete oder Klassen, nach deren lokalen Abh\"angigkeiten. Die
 Paketstruktur bleibt dadurch sichtbar, statt im Klassengraphen
 auseinandergezogen zu werden.
 
-\begin{figure}[htbp]
+\begin{figure}[H]
   \centering
-  \includegraphics[width=\textwidth]{figures/s202-dependencies-acyclic.png}
+  \includegraphics[width=0.55\textwidth]{figures/s202-dependencies-acyclic.png}
   \caption{S202-Darstellung des azyklischen Beispielausschnitts: Pakete
   bleiben als Container sichtbar, Klassen werden innerhalb ihres Containers
   geordnet, und Pfeile k\"onnen bei Bedarf eingeblendet werden.}
@@ -163,6 +165,11 @@ Darstellung sieht oft noch plausibel aus, aber die berechneten Ebenen sind
 nicht mehr stabil oder nicht mehr fachlich erkl\"arbar.
 
 Ein korrektes Schichtlayout muss gleichzeitig mehrere Aussagen erf\"ullen:
+
+Eine SCC (\emph{Strongly Connected Component}, stark zusammenh\"angende
+Komponente) ist dabei eine Menge von Knoten, in der jeder Knoten jeden anderen
+\"uber gerichtete Abh\"angigkeitspfade erreichen kann. In einem solchen Zyklus
+k\"onnen nicht alle Abh\"angigkeiten gleichzeitig nach unten laufen.
 
 \begin{enumerate}
   \item Wenn $A \to B$ gilt, muss $A$ oberhalb von $B$ stehen.
@@ -226,9 +233,9 @@ Das klingt trivial, ist es aber nicht. Gerade weil Pakete Container f\"ur
 Klassen sind, liegt es nahe, ihre Position aus den enthaltenen Klassen
 abzuleiten. Genau dadurch vermischt man jedoch zwei Ebenen, die getrennt
 bleiben m\"ussen. Erst wenn Paketlevel aus Paketabh\"angigkeiten entstehen,
-bleiben Pakete stabile architektonische Einheiten. Sonst kann eine einzelne
-Klasse die sichtbare Paketordnung verschieben und damit den Container genau in
-dem Moment entwerten, in dem er Orientierung geben soll.
+bleiben Pakete stabile architektonische Einheiten. Sonst gen\"ugt eine einzige
+Ausrei\ss{}er-Klasse, um das Paket auf die falsche Ebene zu heben~-- und damit
+den Container unbrauchbar zu machen, der eigentlich Orientierung bieten soll.
 
 \subsection{Der gro\ss{}e See}
 
@@ -244,7 +251,7 @@ Entscheidend ist, dass die geschnittenen Kanten nicht verschwinden. Sie m\"ussen
 sichtbar bleiben, weil genau sie erkl\"aren, warum die berechnete Ordnung nur
 als Architekturhypothese gilt.
 
-\section{Die L\"osung}
+\section{Der Paketgraph als Architekturhypothese}
 
 Die L\"osung besteht darin, Analyse, Ordnungsbildung und Darstellung konsequent
 zu trennen. Der Klassengraph bleibt das Rohmodell der tats\"achlichen
@@ -267,7 +274,7 @@ werden innerhalb ihrer Pakete geordnet, Pakete dagegen nach ihren eigenen
 Paketbeziehungen. Dadurch kann ein Paket als Container stabil bleiben, auch
 wenn einzelne Klassen darin hoch oder niedrig liegen. Gleichzeitig liefert die
 Paketordnung ein Kriterium, um Back-Edges nicht beliebig auszuw\"ahlen, sondern
-als Kanten gegen die erwartete Ordnung zu erkl\"aren.
+als konkrete Verletzungen der erwarteten Ordnung zu kennzeichnen.
 
 Damit verschwinden die oben beschriebenen Fehlermodi nicht durch einen einzelnen
 Algorithmustrick, sondern durch eine klare Zust\"andigkeit der
@@ -315,53 +322,63 @@ Abbildung~\ref{fig:cyclic-class} zeigt den zyklischen Teil des Example-Jars
 als klassischen Klassengraphen. Die beiden Teilgraphen f\"ur Notification und
 Payment enthalten jeweils R\"uckkopplungen.
 
-\begin{figure}[htbp]
+\begin{figure}[H]
   \centering
-  \includegraphics[width=\textwidth]{figures/test-example-classgraph-cyclic.png}
+  \includegraphics[width=0.9\textwidth]{figures/test-example-classgraph-cyclic.png}
   \caption{Zyklischer Ausschnitt aus \texttt{test-example-1.0.0.jar}. In jedem
   Zyklus muss mindestens eine Kante f\"ur die Levelberechnung geschnitten werden.}
   \label{fig:cyclic-class}
 \end{figure}
 
-Der wichtige Begriff daf\"ur ist SCC, kurz f\"ur \emph{Strongly Connected
-Component}. Eine SCC ist eine Menge von Klassen, in der jede Klasse jede andere
-Klasse \"uber gerichtete Abh\"angigkeitspfade erreichen kann. Das etablierte
-Verfahren zur Ermittlung solcher Komponenten ist der Tarjan-Algorithmus. Die
-markierten zyklischen Bereiche bilden zwei nicht-triviale SCCs: eine
+Die markierten zyklischen Bereiche sind zwei nicht-triviale SCCs: eine
 Notification-SCC mit \texttt{NotificationController}, \texttt{NotificationService},
 \texttt{MessageQueue} und \texttt{Event}, sowie eine Payment-SCC mit
 \texttt{PaymentController}, \texttt{PaymentService}, \texttt{PaymentRepository}
-und \texttt{Order}.
+und \texttt{Order}. Das etablierte Verfahren zur Ermittlung solcher Komponenten
+ist der Tarjan-Algorithmus.
 
 Damit stellt der Klassengraph im Zyklusfall die technische Frage: Welche Kante
 muss man ignorieren, damit aus der SCC wieder ein berechenbarer DAG f\"ur die
 Levelbildung wird? Der Klassengraph allein liefert daf\"ur aber kein fachliches
-Kriterium. Erst die Paketordnung liefert dieses Kriterium: Eine sichtbare
-Back-Edge ist dann keine beliebige Schnittkante im flachen Klassengraphen,
-sondern eine konkrete Abh\"angigkeit, die gegen die berechnete Paketordnung
-l\"auft und deshalb die Architekturhypothese erkl\"art.
+Kriterium. Erst die Paketordnung liefert dieses Kriterium: Eine als Back-Edge
+klassifizierte Kante ist dann keine beliebige Schnittkante im flachen
+Klassengraphen, sondern eine konkrete Abh\"angigkeit, die gegen die berechnete
+Paketordnung l\"auft und damit den Bruch in der Architekturhypothese sichtbar
+macht.
 
-\begin{figure}[htbp]
+\begin{figure}[H]
   \centering
-  \includegraphics[width=\textwidth]{figures/s202-dependencies-cyclic.png}
-  \caption{Zyklischer S202-Ausschnitt. Die gestrichelten Kanten sind Back-Edges:
+  \includegraphics[width=0.6\textwidth]{figures/s202-dependencies-cyclic.png}
+  \caption{Zyklischer S202-Ausschnitt. Die gestrichelten Kanten sind Verletzungen:
   Sie laufen gegen die aus den Paketabh\"angigkeiten abgeleitete Ordnung und
-  bleiben als sichtbarer Befund der Architekturhypothese erhalten.}
+  bleiben als sichtbarer Befund der Architekturhypothese erhalten. Alle vier
+  gestrichelten Kanten geh\"oren zu den zwei SCCs und werden von S202 als
+  Back-Edges f\"ur die Levelberechnung klassifiziert.}
   \label{fig:s202-cyclic}
 \end{figure}
 
-Der Unterschied zwischen Back-Edge und Verletzung ist wichtig. Eine Back-Edge
-geh\"ort zur Zyklusbehandlung: Sie ist eine Kante, die innerhalb einer SCC
-gegen die angenommene Ordnung l\"auft und f\"ur die Berechnung der Ordnung
-nicht wie eine normale Abh\"angigkeit behandelt werden kann. Eine Verletzung
-dagegen ist allgemeiner: Sie ist eine konkrete Abh\"angigkeit, die nach der
-berechneten Ordnung nach oben l\"auft --- auch au\ss{}erhalb eines zyklischen
-Klassengraphen.
+Die Begriffe Back-Edge, Verletzung und CUT beschreiben unterschiedliche Rollen:
 
-S202 versteckt den Zyklus daher nicht. Die Back-Edge bleibt sichtbar, weil
-sie erkl\"art, warum die Paketordnung nicht vollst\"andig zu den konkreten
-Klassenabh\"angigkeiten passt. Dadurch wird die Abweichung nachvollziehbar
-statt beliebig.
+\begin{description}
+  \item[Back-Edge] Eine ausgew\"ahlte Kante innerhalb einer SCC, die f\"ur die
+        Levelberechnung gesondert behandelt wird, damit der Berechnungsgraph
+        azyklisch wird. Sie geh\"ort zur Zyklusbehandlung.
+  \item[Verletzung] Eine konkrete Abh\"angigkeit, die nach der berechneten
+        Ordnung nach oben l\"auft. Sie kann aus einer SCC stammen, muss es aber
+        nicht. Im Beispiel sind alle sichtbaren Verletzungen zugleich
+        Back-Edges; begrifflich bleibt eine Verletzung aber die sichtbare
+        Ordnungsabweichung, w\"ahrend eine Back-Edge die Rolle der Kante in der
+        Zyklusbehandlung beschreibt.
+  \item[CUT] Eine vom Benutzer markierte geplante Trennung eines konkreten
+        Methodenaufrufs. Ein CUT ist keine automatische Layoutentscheidung,
+        sondern ein Refactoring-Vorschlag, dessen Wirkung auf die SCC gepr\"uft
+        wird.
+\end{description}
+
+S202 versteckt den Zyklus daher nicht. Als Back-Edges klassifizierte Kanten
+bleiben als Verletzungen sichtbar, weil sie erkl\"aren, warum die Paketordnung
+nicht vollst\"andig zu den konkreten Klassenabh\"angigkeiten passt. Dadurch wird
+die Abweichung nachvollziehbar statt beliebig.
 
 \section{Redundante Pr\"ufung der Konsistenz}
 
@@ -369,7 +386,7 @@ Die bisher beschriebenen Schritte zeigen bereits, warum die Umsetzung
 fehleranf\"allig ist. Es reicht nicht, einzelne Algorithmen isoliert mit Unit
 Tests abzusichern. Viele Fehler entstehen erst durch das Zusammenspiel der
 Daten: konkrete Klassenabh\"angigkeiten, Paketstruktur, SCCs, aggregierte
-Paketgewichte und lokale UI-Positionen beeinflussen sich gegenseitig.
+Paketgewichte und lokale Darstellungspositionen beeinflussen sich gegenseitig.
 
 S202 pr\"uft deshalb nicht nur einzelne Rechenschritte. Nachdem die komplette
 Pipeline gelaufen ist, wird das fertige Ergebnis redundant gegen
@@ -390,7 +407,7 @@ Die Pr\"ufung betrachtet drei Ebenen:
         Kanten, die beim Aufbrechen einer Paket-SCC geschnitten werden, d\"urfen
         in dieser Pr\"ufung nicht wie normale dominante Kanten behandelt werden;
         sie m\"ussen gesondert als Paket-Back-Edges klassifiziert sein.
-  \item \textbf{UI-Darstellung:} Die sichtbare Anordnung muss zum berechneten
+  \item \textbf{Sichtbare Darstellung:} Die sichtbare Anordnung muss zum berechneten
         Modell passen. Paketcontainer, lokale Klassenpositionen und
         verschachtelte Levels d\"urfen die berechnete Architekturhypothese nicht
         stillschweigend umkehren.
@@ -455,8 +472,11 @@ vorliegen, die diese Position begr\"unden.
   \item \textbf{Paketordnung berechnen:} Aus den gewichteten Ein- und Ausg\"angen
         wird das Rangma\ss{} $rank(P)$ berechnet. Daraus entsteht die vertikale
         Paketordnung. Kleine Rangunterschiede werden als Peer-Beziehung behandelt.
-  \item \textbf{Back-Edges bestimmen:} Kanten, die gegen die dominante Richtung
-        laufen, werden f\"ur die Levelberechnung gesondert behandelt.
+  \item \textbf{Back-Edges bestimmen:} Innerhalb jeder SCC werden die Kanten
+        ausgew\"ahlt, die f\"ur die Zyklusentfernung ausreichen. Diese Kanten
+        sind Back-Edges f\"ur die Levelberechnung und bleiben zugleich als
+        Verletzungen sichtbar, wenn sie nach der berechneten Ordnung nach oben
+        laufen.
         \emph{Geschnitten} bedeutet dabei nicht, dass die Kante aus dem Modell
         verschwindet. Sie wird nur f\"ur den DAG der Levelberechnung ausgenommen
         und bleibt als Befund erhalten.
@@ -465,22 +485,22 @@ vorliegen, die diese Position begr\"unden.
         Kinder angeordnet. Dadurch wird die globale Paketordnung nicht mit
         lokalen Klassenlevels vermischt.
   \item \textbf{Konsistenz pr\"ufen:} Zum Schluss wird die fertige Darstellung
-        redundant gegen die Konsistenzregeln gepr\"uft. Normale Dependencies,
-        SCCs, Back-Edges und Violations werden unterschieden und klassifiziert.
+        redundant gegen die Konsistenzregeln gepr\"uft. Normale Abh\"angigkeiten,
+        SCCs, Back-Edges und Verletzungen werden unterschieden und klassifiziert.
 \end{enumerate}
 
 Kurz gefasst:
 
 \begin{lstlisting}
 Bytecode -> Klassengraph -> SCCs -> Paketgraph -> Paketordnung
-         -> Back-Edges -> UI-Schichtung -> Konsistenzregeln
+         -> Back-Edges -> sichtbare Schichtung -> Konsistenzregeln
 \end{lstlisting}
 
 \section{Fazit}
 
 S202 berechnet nicht die eine wahre Architektur eines Systems. Das w\"are aus
 Bytecode allein auch nicht m\"oglich. S202 erzeugt eine \"uberpr\"ufbare
-Architekturhypothese: Klassenabh\"angigkeiten liefern den Graphen,
+Architekturhypothese als hierarchische Schichtendarstellung: Klassenabh\"angigkeiten liefern den Graphen,
 Paketabh\"angigkeiten liefern eine plausible Ordnung, Back-Edges machen
 notwendige Br\"uche sichtbar, und Konsistenzregeln pr\"ufen, ob die fertige
 Darstellung ihre eigene Aussage einh\"alt.

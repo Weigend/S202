@@ -33,6 +33,9 @@ package de.weigend.s202.domain.architecture;
  *   <li>{@code sourceLevel}, {@code targetLevel} — the levels the
  *       architecture computed for source and target, useful for
  *       sorting, grouping, and rendering hints.</li>
+ *   <li>{@code backEdge} — true when this violation is also one of the
+ *       dependency edges deliberately removed from the level-computation
+ *       DAG to break a class-level SCC.</li>
  * </ul>
  */
 public record Violation(
@@ -40,7 +43,16 @@ public record Violation(
         String targetFqn,
         ViolationKind kind,
         int sourceLevel,
-        int targetLevel) {
+        int targetLevel,
+        boolean backEdge) {
+
+    public Violation(String sourceFqn,
+                     String targetFqn,
+                     ViolationKind kind,
+                     int sourceLevel,
+                     int targetLevel) {
+        this(sourceFqn, targetFqn, kind, sourceLevel, targetLevel, false);
+    }
 
     public Violation {
         if (sourceFqn == null || sourceFqn.isEmpty()) {

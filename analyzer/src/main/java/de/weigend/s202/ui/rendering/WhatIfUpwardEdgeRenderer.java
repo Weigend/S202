@@ -67,6 +67,8 @@ public final class WhatIfUpwardEdgeRenderer {
     private static final double ARROW_SIZE = 8.0;
     private static final double DASH_ON = 6.0;
     private static final double DASH_OFF = 4.0;
+    private static final double DOT_ON = 1.2;
+    private static final double DOT_OFF = 4.0;
     /** Horizontal control-point offset as a fraction of the vertical span. */
     private static final double CURVE_BOW = 0.18;
     private static final Font BADGE_FONT = Font.font(null, FontWeight.BOLD, 10.0);
@@ -105,9 +107,10 @@ public final class WhatIfUpwardEdgeRenderer {
             if (violation.source() == violation.target()) {
                 drawSelfLoop(violation.source(), badge == null
                         ? Integer.toString(violation.classEdges().size())
-                        : badge);
+                        : badge,
+                        violation.containsBackEdge());
             } else {
-                drawCurvedArrow(violation.source(), violation.target(), badge);
+                drawCurvedArrow(violation.source(), violation.target(), badge, violation.containsBackEdge());
             }
         }
     }
@@ -135,10 +138,12 @@ public final class WhatIfUpwardEdgeRenderer {
                 continue;
             }
             List<ClassEdge> edges = new ArrayList<>(entry.getValue().size());
+            boolean containsBackEdge = false;
             for (de.weigend.s202.domain.architecture.Violation v : entry.getValue()) {
                 edges.add(new ClassEdge(v.sourceFqn(), v.targetFqn(), 1));
+                containsBackEdge |= v.backEdge();
             }
-            result.add(new Violation(src, tgt, Collections.unmodifiableList(edges)));
+            result.add(new Violation(src, tgt, Collections.unmodifiableList(edges), containsBackEdge));
         }
         return result;
     }
@@ -189,7 +194,7 @@ public final class WhatIfUpwardEdgeRenderer {
      * curves up and over, and re-enters from the right with an arrowhead
      * pointing down into the box.
      */
-    private void drawSelfLoop(Node box, String badge) {
+    private void drawSelfLoop(Node box, String badge, boolean containsBackEdge) {
         double[] b = boundsInPane(box);
         if (b == null) {
             return;
@@ -207,7 +212,7 @@ public final class WhatIfUpwardEdgeRenderer {
         curve.setStroke(UPWARD_COLOR);
         curve.setStrokeWidth(LINE_WIDTH);
         curve.setFill(null);
-        curve.getStrokeDashArray().setAll(DASH_ON, DASH_OFF);
+        applyLinePattern(curve, containsBackEdge);
         curve.setMouseTransparent(true);
 
         double tangentX = endX - controlX;
@@ -231,7 +236,7 @@ public final class WhatIfUpwardEdgeRenderer {
         }
     }
 
-    private void drawCurvedArrow(Node source, Node target, String badge) {
+    private void drawCurvedArrow(Node source, Node target, String badge, boolean containsBackEdge) {
         double[] srcBounds = boundsInPane(source);
         double[] tgtBounds = boundsInPane(target);
         if (srcBounds == null || tgtBounds == null) {
@@ -255,7 +260,7 @@ public final class WhatIfUpwardEdgeRenderer {
         curve.setStroke(UPWARD_COLOR);
         curve.setStrokeWidth(LINE_WIDTH);
         curve.setFill(null);
-        curve.getStrokeDashArray().setAll(DASH_ON, DASH_OFF);
+        applyLinePattern(curve, containsBackEdge);
         curve.setMouseTransparent(true);
 
         // Arrowhead tangent at the end of the curve (towards target). For a
@@ -279,6 +284,14 @@ public final class WhatIfUpwardEdgeRenderer {
 
         if (badge != null) {
             pane.getChildren().add(buildBadge(badge, controlX, controlY));
+        }
+    }
+
+    private static void applyLinePattern(QuadCurve curve, boolean containsBackEdge) {
+        if (containsBackEdge) {
+            curve.getStrokeDashArray().setAll(DASH_ON, DASH_OFF);
+        } else {
+            curve.getStrokeDashArray().setAll(DOT_ON, DOT_OFF);
         }
     }
 
@@ -354,5 +367,5 @@ public final class WhatIfUpwardEdgeRenderer {
     }
 
     /** A class edge pair after rollup to currently-visible boxes. */
-    public record Violation(Node source, Node target, List<ClassEdge> classEdges) {}
+    public record Violation(Node source, Node target, List<ClassEdge> classEdges, boolean containsBackEdge) {}
 }

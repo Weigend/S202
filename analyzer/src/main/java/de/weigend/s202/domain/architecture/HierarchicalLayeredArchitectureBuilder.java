@@ -202,7 +202,8 @@ public final class HierarchicalLayeredArchitectureBuilder {
                     int tgtClassLevel = target == null ? -1 : target.architectureLevel;
                     violations.add(new Violation(
                             cls.fullName, dep, ViolationKind.UPWARD,
-                            cls.architectureLevel, tgtClassLevel));
+                            cls.architectureLevel, tgtClassLevel,
+                            domain.isClassBackEdge(cls.fullName, dep)));
                 }
             }
         }

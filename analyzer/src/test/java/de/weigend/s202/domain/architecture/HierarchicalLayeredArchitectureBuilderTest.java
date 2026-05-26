@@ -125,6 +125,26 @@ class HierarchicalLayeredArchitectureBuilderTest {
     }
 
     @Test
+    void classBackEdgeViolationCarriesBackEdgeFlag() {
+        DomainModel domain = new DomainModel();
+        addPackage(domain, "app", 1);
+        addClass(domain, "app.Low", 0, Set.of("app.High"));   // upward
+        addClass(domain, "app.High", 1, Set.of());
+        domain.setPackageEdgeWeights(Map.of());
+        domain.setPackageBackEdges(Set.of());
+        domain.setClassBackEdges(Set.of("app.Low\0app.High"));
+
+        HierarchicalLayeredArchitecture arch =
+                (HierarchicalLayeredArchitecture) new HierarchicalLayeredArchitectureBuilder().build(domain);
+
+        assertEquals(1, arch.violations().size());
+        Violation v = arch.violations().get(0);
+        assertEquals("app.Low", v.sourceFqn());
+        assertEquals("app.High", v.targetFqn());
+        assertTrue(v.backEdge(), "the renderer needs this flag to emphasize the selected SCC break edge");
+    }
+
+    @Test
     void mutuallyDependentPackagesProduceATangle() {
         DomainModel domain = new DomainModel();
         addPackage(domain, "a", 0);
