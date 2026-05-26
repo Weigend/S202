@@ -164,12 +164,14 @@ den Graphen nicht mehr aus. Genau dort beginnen die interessanten Fehler: Die
 Darstellung sieht oft noch plausibel aus, aber die berechneten Ebenen sind
 nicht mehr stabil oder nicht mehr fachlich erkl\"arbar.
 
-Ein korrektes Schichtlayout muss gleichzeitig mehrere Aussagen erf\"ullen:
-
-Eine SCC (\emph{Strongly Connected Component}, stark zusammenh\"angende
-Komponente) ist dabei eine Menge von Knoten, in der jeder Knoten jeden anderen
+In den folgenden Abschnitten spielt der Begriff SCC eine zentrale Rolle. Eine
+SCC (\emph{Strongly Connected Component}, stark zusammenh\"angende Komponente)
+ist eine Menge von Knoten, in der jeder Knoten jeden anderen
 \"uber gerichtete Abh\"angigkeitspfade erreichen kann. In einem solchen Zyklus
 k\"onnen nicht alle Abh\"angigkeiten gleichzeitig nach unten laufen.
+
+Ein korrektes Schichtlayout muss deshalb gleichzeitig mehrere Aussagen
+erf\"ullen:
 
 \begin{enumerate}
   \item Wenn $A \to B$ gilt, muss $A$ oberhalb von $B$ stehen.
@@ -290,8 +292,9 @@ zu erkennen, globale Klassenlevel zu berechnen und Klassenabh\"angigkeiten zu
 Paketbeziehungen zu aggregieren. Die sichtbare S202-Grafik entsteht danach aus
 der Paketstruktur und der lokalen Ordnung innerhalb der Paketcontainer.
 
-S202 f\"uhrt dieses fehlende Kriterium \"uber die Paketordnung ein. Daf\"ur
-werden die Klassenabh\"angigkeiten zun\"achst zu Paketabh\"angigkeiten
+Die Paketordnung entsteht aus den aggregierten Abh\"angigkeiten zwischen
+Paketen. Daf\"ur werden die Klassenabh\"angigkeiten zun\"achst zu
+Paketabh\"angigkeiten
 aggregiert: Wenn Klassen aus Paket $P$ Klassen aus Paket $Q$ benutzen, entsteht
 eine gewichtete Kante $P \to Q$. Das Gewicht ist die Anzahl der aggregierten
 Nutzungen; f\"ur strukturelle Abh\"angigkeiten ohne Aufrufz\"ahlung wird ein
@@ -440,6 +443,25 @@ Werkzeug keine eindeutige Ordnung mehr findet: gro\ss{}e SCCs, symmetrische
 Paketabh\"angigkeiten oder historisch gewachsene Kopplungen lassen sich nicht
 immer automatisch sinnvoll aufl\"osen.
 
+\begin{figure}[H]
+  \centering
+  \includegraphics[width=0.45\textwidth]{figures/whatif-core-over-infra.png}
+  \caption{What-If-Verschiebung: Das Paket \texttt{core} wird aus Level~0
+  zwischen Level~3 und Level~4 verschoben. Dadurch entstehen sechs
+  Verletzungen, weil bestehende Abh\"angigkeiten nun gegen die gew\"ahlte
+  Anordnung laufen.}
+  \label{fig:whatif-core-over-infra}
+\end{figure}
+
+Abbildung~\ref{fig:whatif-core-over-infra} zeigt genau diese Arbeitsweise:
+Die manuelle Anordnung entspricht nicht mehr der aus den Abh\"angigkeiten
+berechneten Ordnung. Sie kann trotzdem eine gew\"unschte Zielarchitektur
+ausdr\"ucken, etwa wenn \texttt{core} fachlich oberhalb der Infrastruktur
+liegen soll. S202 behandelt diese Entscheidung deshalb nicht als Fehler der
+Darstellung, sondern macht ihre Kosten sichtbar: In diesem Fall m\"ussten sechs
+konkrete Beziehungen refaktoriert oder entkoppelt werden, damit die
+Abh\"angigkeiten wieder zur gew\"ahlten Schichtung passen.
+
 Erg\"anzend dazu gibt es eine manuelle CUT-Logik. Back-Edges k\"onnen gezielt
 als geplante Schnitte markiert werden, und das Werkzeug kann anschlie\ss{}end
 pr\"ufen, ob diese Schnitte die betroffene SCC tats\"achlich aufl\"osen. Der
@@ -498,10 +520,10 @@ Bytecode -> Klassengraph -> SCCs -> Paketgraph -> Paketordnung
 
 \section{Fazit}
 
-S202 berechnet nicht die eine wahre Architektur eines Systems. Das w\"are aus
-Bytecode allein auch nicht m\"oglich. S202 erzeugt eine \"uberpr\"ufbare
-Architekturhypothese als hierarchische Schichtendarstellung: Klassenabh\"angigkeiten liefern den Graphen,
-Paketabh\"angigkeiten liefern eine plausible Ordnung, Back-Edges machen
+S202 berechnet aus den bestehenden Abh\"angigkeiten die plausibelste Hypothese
+der Ist-Architektur. Das Ergebnis ist eine \"uberpr\"ufbare hierarchische
+Schichtendarstellung: Klassenabh\"angigkeiten liefern den Graphen,
+Paketabh\"angigkeiten liefern eine belastbare Ordnung, Back-Edges machen
 notwendige Br\"uche sichtbar, und Konsistenzregeln pr\"ufen, ob die fertige
 Darstellung ihre eigene Aussage einh\"alt.
 
