@@ -1,62 +1,62 @@
 # S202 Code Analyzer - Quickstart
 
-## 🚀 In 3 Schritten starten
+## 🚀 Start in 3 Steps
 
-### 1. Terminal öffnen
+### 1. Open a terminal
 ```bash
 cd /home/johannes/Programieren/Structure202
 ```
 
-### 2. Anwendung bauen & starten
+### 2. Build and start the application
 ```bash
 mvn javafx:run
 ```
 
-### 3. Code laden
-Drei Einstiegspunkte im **File**-Menü:
+### 3. Load code
+There are three entry points in the **File** menu:
 
-- **Open JAR…** — eine oder mehrere JARs (Mehrfachauswahl öffnet einen Staging-Dialog)
-- **Open Maven Project…** — auf das Wurzel-`pom.xml` zeigen, alle Modul-JARs aus `target/` werden gesammelt
-- **Open Gradle Project…** — auf `settings.gradle(.kts)` oder `build.gradle(.kts)` zeigen, alle Modul-JARs aus `build/libs/` werden gesammelt
+- **Open JAR…** - one or more JARs (multi-selection opens a staging dialog)
+- **Open Maven Project…** - select the root `pom.xml`; all module JARs from `target/` are collected
+- **Open Gradle Project…** - select `settings.gradle(.kts)` or `build.gradle(.kts)`; all module JARs from `build/libs/` are collected
 
-Voraussetzung für Maven/Gradle-Projekte: `mvn package` bzw. `gradle build` muss bereits gelaufen sein.
+Prerequisite for Maven/Gradle projects: `mvn package` or `gradle build` must already have been run.
 
-## Beispiel: S202 selbst analysieren
+## Example: Analyze S202 Itself
 
 ```bash
 mvn clean package -DskipTests
 mvn javafx:run
-# Im UI: File → Open JAR... → analyzer/target/s202-code-analyzer-1.0.0.jar
+# In the UI: File -> Open JAR... -> analyzer/target/s202-code-analyzer-1.0.0.jar
 ```
 
-## Hauptfunktionen
+## Main Features
 
-| Feature | Beschreibung |
+| Feature | Description |
 |---------|--------------|
-| **Open JAR / Maven / Gradle** | JARs einzeln oder ganze Multi-Modul-Projekte laden |
-| **Package Tree** | Hierarchische Paket-Ansicht |
-| **Level-Layout** | Pakete nach Abhängigkeitstiefe sortiert |
-| **Violations** | Fette gestrichelte Pfeile zeigen architektonische Probleme (Paket-Aggregate mit gefülltem Kreis für die Aufrufanzahl) |
-| **Invariant Check** | Fünf Invarianten als Plausibilitäts-Alerts; vier melden Algorithmus-Bugs in der Level-Pipeline, R1-visual zeigt echte Architekturverletzungen |
+| **Open JAR / Maven / Gradle** | Load individual JARs or complete multi-module projects |
+| **Package Tree** | Hierarchical package view |
+| **Level Layout** | Packages sorted by dependency depth |
+| **Violations** | Bold dashed arrows show architectural problems (package aggregates use a filled circle for the call count) |
+| **Invariant Check** | Five invariants as plausibility alerts; four report algorithm bugs in the level pipeline, while R1-visual shows real architectural violations |
 
-## Level-Bedeutung
+## Level Meaning
 
-- **Level 0** = Basispakete (keine Abhängigkeiten)
-- **Level 1** = Hängen von Level 0 ab
-- **Level 2+** = Hängen von tieferen Schichten ab
+- **Level 0** = Base packages (no dependencies)
+- **Level 1** = Depend on Level 0
+- **Level 2+** = Depend on lower layers
 
-## Nützliche Befehle
+## Useful Commands
 
 ```bash
-mvn clean install    # Projekt bauen
-mvn test             # Tests ausführen
-mvn javafx:run       # UI starten
+mvn clean install    # Build project
+mvn test             # Run tests
+mvn javafx:run       # Start UI
 ```
 
-## Weitere Dokumentation
+## Additional Documentation
 
-- [README.md](README.md) - Projekt-Übersicht
+- [README.md](README.md) - Project overview
 - [docs/VS_CODE_SETUP.md](docs/VS_CODE_SETUP.md) - VS Code Integration
 
-**F: Kann ich eine bestimmte Paket-Struktur exportieren?**
-- Noch nicht - Export-Feature ist in der TODO-Liste (PlantUML, SVG, etc.)
+**Q: Can I export a specific package structure?**
+- Not yet - an export feature is on the TODO list (PlantUML, SVG, etc.)

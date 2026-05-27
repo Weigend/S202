@@ -1,6 +1,6 @@
-# Test JAR mit zyklischen Abhängigkeiten
+# Test JAR with Cyclic Dependencies
 
-Test-Projekt zum Prüfen der SCC-Zyklenerkennung.
+Test project for checking SCC cycle detection.
 
 ## Build
 
@@ -9,9 +9,9 @@ cd test-example
 mvn clean package
 ```
 
-JAR wird erstellt: `target/test-example-1.0.0.jar`
+The JAR is created at: `target/test-example-1.0.0.jar`
 
-## Struktur
+## Structure
 
 ```
 com.example
@@ -22,9 +22,9 @@ com.example
 └── e (E → A)
 ```
 
-**Zyklus**: A → B → E → A
+**Cycle**: A → B → E → A
 
-## Testen mit S202
+## Test with S202
 
 ```bash
 cd ..

@@ -1,23 +1,23 @@
 # S202 UI Concepts and Workflows
 
-## Ziel
+## Goal
 
-Dieses Dokument beschreibt die UI-Konzepte und Arbeitsabläufe von S202. Es dient als Brücke zwischen Konzeptdokumentation, User Guide und konkreter Implementierung.
+This document describes the UI concepts and workflows of S202. It serves as a bridge between the conceptual documentation, the user guide, and the concrete implementation.
 
-## Geplanter Inhalt
+## Planned Content
 
-1. Grundaufbau der Oberfläche
-2. Bedeutung von Farben, Linien und Markierungen
-3. Paketcontainer und lokale Schichtung
-4. Darstellung normaler Abhängigkeiten
-5. Darstellung von Verletzungen und Back-Edges
-6. Drag-and-drop-Workflows
-7. What-if-Modus
-8. CUT-Markierung und Validierung
-9. Zustände, Filter und Detailansichten
+1. Basic UI structure
+2. Meaning of colors, lines, and markers
+3. Package containers and local layering
+4. Representation of normal dependencies
+5. Representation of violations and back edges
+6. Drag-and-drop workflows
+7. What-if mode
+8. CUT marking and validation
+9. States, filters, and detail views
 
-## Offene Punkte
+## Open Points
 
-- UI-Legende definieren.
-- Screenshots oder Wireframes ergänzen.
-- Abgleich mit den Begriffen im Konzeptdokument sicherstellen.
+- Define a UI legend.
+- Add screenshots or wireframes.
+- Ensure alignment with the terms used in the concept document.

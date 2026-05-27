@@ -1,23 +1,23 @@
-# Refactoring mit S202
+# Refactoring with S202
 
-## Ziel
+## Goal
 
-Dieses Dokument beschreibt, wie S202 zur Planung und Bewertung von Refactorings genutzt werden kann. Der Fokus liegt nicht auf der Bedienung einzelner UI-Elemente, sondern auf dem Arbeitsablauf von Befund zu Entscheidung.
+This document describes how S202 can be used to plan and evaluate refactorings. The focus is not on operating individual UI elements, but on the workflow from finding to decision.
 
-## Geplanter Inhalt
+## Planned Content
 
-1. Architekturhypothese als Ausgangspunkt
-2. Verletzungen als Refactoring-Hinweise
-3. Back-Edges und Zyklen bewerten
-4. CUTs als geplante Trennungen nutzen
-5. What-if-Verschiebungen interpretieren
-6. Refactoring-Kandidaten priorisieren
-7. Vorher-nachher-Vergleich durchführen
-8. Grenzen der automatischen Ableitung
+1. Architectural hypothesis as the starting point
+2. Violations as refactoring hints
+3. Evaluate back edges and cycles
+4. Use CUTs as planned separations
+5. Interpret what-if moves
+6. Prioritize refactoring candidates
+7. Perform before/after comparison
+8. Limits of automatic derivation
 
-## Leitfragen
+## Guiding Questions
 
-- Welche Verletzungen sind technisch dringend?
-- Welche Verletzungen sind fachlich akzeptiert?
-- Welche Abhängigkeiten müssen entkoppelt werden, damit eine Zielordnung tragfähig wird?
-- Welche CUTs lösen tatsächlich eine SCC auf?
+- Which violations are technically urgent?
+- Which violations are accepted from a domain perspective?
+- Which dependencies must be decoupled so that a target order becomes viable?
+- Which CUTs actually dissolve an SCC?

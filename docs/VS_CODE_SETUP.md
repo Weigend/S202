@@ -1,22 +1,22 @@
 # VS Code Setup
 
-## Extensions installieren
+## Install Extensions
 
 - **Extension Pack for Java** (Microsoft): `vscjava.vscode-java-pack`
 - **Maven for Java** (Microsoft): `vscjava.vscode-maven`
 
-## Projekt öffnen
+## Open the Project
 
 ```bash
 cd /home/johannes/Programieren/Structure202
 code .
 ```
 
-## Anwendung starten
+## Start the Application
 
 ### Option 1: Maven Task
-1. `Ctrl+Shift+P` → `Maven: Run from Terminal`
-2. Wähle `javafx:run`
+1. `Ctrl+Shift+P` -> `Maven: Run from Terminal`
+2. Select `javafx:run`
 
 ### Option 2: Terminal
 ```bash
@@ -25,7 +25,7 @@ mvn javafx:run
 
 ### Option 3: Run Configuration
 
-Erstelle `.vscode/launch.json`:
+Create `.vscode/launch.json`:
 ```json
 {
   "version": "0.2.0",
@@ -40,12 +40,12 @@ Erstelle `.vscode/launch.json`:
   ]
 }
 ```
-Dann `F5` zum Starten.
+Then press `F5` to start.
 
-## Tests ausführen
+## Run Tests
 
 ```bash
 mvn test
 ```
 
-Oder über VS Code: Test Explorer (Beaker-Icon in Sidebar).
+Or through VS Code: Test Explorer (beaker icon in the sidebar).

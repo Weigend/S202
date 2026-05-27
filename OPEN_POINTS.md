@@ -1,11 +1,11 @@
-# Offene Punkte
+# Open Points
 
-## 1. Innere Klassen (Inner Classes)
+## 1. Inner Classes
 
-**Status:** Nicht implementiert
+**Status:** Not implemented
 
-Innere Klassen (z.B. `MyClass$InnerClass`) werden aktuell ignoriert und nicht separat visualisiert.
+Inner classes (for example `MyClass$InnerClass`) are currently ignored and not visualized separately.
 
-**Grund:** Vereinfacht die Darstellung, verhindert doppelte Zählung.
+**Reason:** Simplifies the representation and prevents double counting.
 
-**Mögliche Erweiterung:** Innere Klassen optional als untergeordnete Knoten anzeigen.
+**Possible extension:** Optionally show inner classes as child nodes.

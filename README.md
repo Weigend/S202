@@ -1,63 +1,63 @@
 # S202 Code Analyzer
 
-Ein JavaFX-basiertes Tool zur Analyse von Java-Bytecode und Visualisierung der Code-Architektur.
+A JavaFX-based tool for analyzing Java bytecode and visualizing code architecture.
 
 ![UI Screenshot](docs/Beispiel.png)
 
 ## Features
 
-- **Bytecode-Analyse**: Parst Java `.class`-Dateien mit ASM 9.6
-- **Abhängigkeitserkennung**: Extrahiert Klassen- und Paket-Abhängigkeiten
-- **Zykluserkennung**: Findet zyklische Abhängigkeiten (Strongly Connected Components)
-- **Architektur-Layering**: Topologische Sortierung nach Abhängigkeitstiefe
-- **Hierarchische Visualisierung**: JavaFX TreeView mit aufklappbaren Paketen
-- **Violation-Erkennung**: Markiert architektonische Verletzungen (Rückwärts-Abhängigkeiten)
-- **Multi-Projekt-Import**: Maven (`pom.xml`) und Gradle (`settings.gradle`) Multi-Modul-Projekte direkt einlesen — alle Modul-JARs werden automatisch eingesammelt
-- **Layout-Invariant-Check**: Fünf maschinenprüfbare Invarianten fungieren als Plausibilitäts-Alerts an den Entwickler; vier davon (R1/R2/R3/R5) feuern nie auf einer korrekten Pipeline und melden Algorithmus-Bugs mit kopierbarem Reproducer-Block, R1-visual feuert nur an Restkanten aufgebrochener Zyklen und zeigt echte Architekturverletzungen
+- **Bytecode analysis**: Parses Java `.class` files with ASM 9.6
+- **Dependency detection**: Extracts class and package dependencies
+- **Cycle detection**: Finds cyclic dependencies (Strongly Connected Components)
+- **Architecture layering**: Topological ordering by dependency depth
+- **Hierarchical visualization**: JavaFX TreeView with expandable packages
+- **Violation detection**: Marks architectural violations (backward dependencies)
+- **Multi-project import**: Load Maven (`pom.xml`) and Gradle (`settings.gradle`) multi-module projects directly; all module JARs are collected automatically
+- **Layout invariant check**: Five machine-checkable invariants act as plausibility alerts for developers; four of them (R1/R2/R3/R5) never fire on a correct pipeline and report algorithm bugs with a copyable reproducer block, while R1-visual fires only on remaining edges of broken cycles and shows real architectural violations
 
-## Schnellstart
+## Quick Start
 
 ```bash
 # Build
 mvn clean install
 
-# Anwendung starten
+# Start application
 mvn javafx:run
 
-# Tests ausführen
+# Run tests
 mvn test
 ```
 
-Dann im **File**-Menü:
+Then use the **File** menu:
 
-- **Open JAR…** — eine oder mehrere JARs (Mehrfachauswahl öffnet einen Staging-Dialog)
-- **Open Maven Project…** — auf das Wurzel-`pom.xml` zeigen, alle Modul-JARs aus `target/` werden gesammelt
-- **Open Gradle Project…** — auf `settings.gradle(.kts)` oder `build.gradle(.kts)` zeigen, alle Modul-JARs aus `build/libs/` werden gesammelt
+- **Open JAR…** - one or more JARs (multi-selection opens a staging dialog)
+- **Open Maven Project…** - select the root `pom.xml`; all module JARs from `target/` are collected
+- **Open Gradle Project…** - select `settings.gradle(.kts)` or `build.gradle(.kts)`; all module JARs from `build/libs/` are collected
 
-→ Architektur wird analysiert, visualisiert und automatisch gegen fünf Layout-Invarianten (Plausibilitäts-Alerts) geprüft.
+The architecture is analyzed, visualized, and automatically checked against five layout invariants (plausibility alerts).
 
-## Systemanforderungen
+## Requirements
 
 - **Java 21+**
 - **Maven 3.9+**
-- **JavaFX 21.0.1** (wird automatisch via Maven geladen)
+- **JavaFX 21.0.1** (loaded automatically via Maven)
 
-## Projektstruktur
+## Project Structure
 
 ```
 analyzer/src/main/java/de/weigend/s202/
-├── analysis/       # Algorithmen (SCC, Level-Strategien)
-├── domain/         # Kernmodelle (DomainModel, LevelCalculator)
-├── reader/         # JAR-Loading, Dependency-Extraktion
-└── ui/             # JavaFX-Oberfläche
+├── analysis/       # Algorithms (SCC, level strategies)
+├── domain/         # Core models (DomainModel, LevelCalculator)
+├── reader/         # JAR loading, dependency extraction
+└── ui/             # JavaFX UI
 ```
 
-## Verwendung
+## Usage
 
-1. **Code laden**: Über `File → Open JAR…` einzelne JARs, `Open Maven Project…` oder `Open Gradle Project…` ganze Multi-Modul-Bauten
-2. **Analyse**: Pakete und Klassen werden automatisch analysiert; ein Layout-Invariant-Check meldet Plausibilitäts-Alerts an den Entwickler
-3. **Navigation**: Pakete auf-/zuklappen, Abhängigkeiten einsehen
-4. **Violations**: Fette gestrichelte Pfeile zeigen architektonische Probleme (bei Paketen mit einem gefüllten Kreis, der die Anzahl der Aufrufe bündelt); bei Pipeline-Bugs öffnet sich ein Reproducer-Dialog mit Copy-Button
+1. **Load code**: Use `File -> Open JAR…` for individual JARs, or `Open Maven Project…` / `Open Gradle Project…` for complete multi-module builds
+2. **Analyze**: Packages and classes are analyzed automatically; a layout invariant check reports plausibility alerts to the developer
+3. **Navigate**: Expand and collapse packages, inspect dependencies
+4. **Violations**: Bold dashed arrows show architectural problems (package aggregates use a filled circle to bundle the call count); for pipeline bugs, a reproducer dialog opens with a copy button
 
 ## VS Code Integration
 
@@ -68,7 +68,7 @@ code .
 
 Details: [docs/VS_CODE_SETUP.md](docs/VS_CODE_SETUP.md)
 
-## Dokumentation
+## Documentation
 
-- [QUICKSTART.md](QUICKSTART.md) - Schneller Einstieg
-- [docs/](docs/) - Weitere technische Dokumentation
+- [QUICKSTART.md](QUICKSTART.md) - Quick introduction
+- [docs/](docs/) - Additional technical documentation

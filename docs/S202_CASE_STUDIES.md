@@ -1,22 +1,22 @@
 # S202 Case Studies
 
-## Ziel
+## Goal
 
-Dieses Dokument sammelt konkrete Fallstudien, in denen S202 auf reale oder realistische Codebasen angewendet wird. Jede Fallstudie soll zeigen, welches Architekturproblem sichtbar wurde und welche Refactoring-Entscheidung daraus abgeleitet werden kann.
+This document collects concrete case studies in which S202 is applied to real or realistic codebases. Each case study should show which architectural problem became visible and which refactoring decision can be derived from it.
 
-## Geplanter Aufbau pro Fallstudie
+## Planned Structure per Case Study
 
-1. Ausgangssystem
-2. Beobachtete Struktur
-3. Auffällige Zyklen oder Verletzungen
-4. Interpretation der Befunde
-5. What-if-Analyse
-6. Möglicher Refactoring-Plan
-7. Ergebnis oder erwartete Wirkung
+1. Initial system
+2. Observed structure
+3. Notable cycles or violations
+4. Interpretation of the findings
+5. What-if analysis
+6. Possible refactoring plan
+7. Result or expected effect
 
-## Kandidaten
+## Candidates
 
-- Example-Jar aus der Konzeptdokumentation
-- S202-eigene Module
-- Historisch gewachsene Paketstruktur mit großen SCCs
-- Zielarchitektur, die bewusst von der berechneten Ist-Architektur abweicht
+- Example JAR from the concept documentation
+- S202's own modules
+- Historically grown package structure with large SCCs
+- Target architecture that deliberately differs from the computed actual architecture

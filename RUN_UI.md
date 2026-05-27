@@ -3,20 +3,20 @@
 ## Quick Start
 
 ```bash
-# Ohne JAR (öffnet Dateiauswahl)
+# Without a JAR (opens file chooser)
 ./run-ui.sh
 
-# Mit JAR
+# With a JAR
 ./run-ui.sh path/to/your/file.jar
 ```
 
-## Beispiel
+## Example
 
 ```bash
 ./run-ui.sh test-example/target/test-example-1.0.0.jar
 ```
 
-## Voraussetzungen
+## Requirements
 
 - Maven 3.9+
 - Java 21+
