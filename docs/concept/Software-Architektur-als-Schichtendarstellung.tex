@@ -54,7 +54,7 @@ Refactoring-Planung genutzt werden kann.
 \section{Einleitung}
 
 Sp\"atestens seit den Schichtenmodellen f\"ur Betriebssysteme Ende der
-1960er- und Anfang der 1970er-Jahre wird Software-Architektur als
+1960er-Jahre wird Software-Architektur als
 geschichtete Abh\"angigkeitsstruktur dargestellt. Dieses Prinzip ist bis
 heute aktuell: Es hilft in Cloud-Native-Architekturen, technische
 Abh\"angigkeiten zwischen Diensten, Plattformen und Infrastruktur zu ordnen,
@@ -303,33 +303,40 @@ zuletzt wird gepr\"uft, ob die Darstellung ihre eigene Aussage einh\"alt.
 
 Der flache Klassengraph ist in S202 nicht das sichtbare Layoutmodell. Er ist
 ein Analyseartefakt: Er dient dazu, konkrete Abh\"angigkeiten zu erfassen, SCCs
-zu erkennen, globale Klassenlevel zu berechnen und Klassenabh\"angigkeiten zu
-Paketbeziehungen zu aggregieren. Die sichtbare S202-Grafik entsteht danach aus
-der Paketstruktur und der lokalen Ordnung innerhalb der Paketcontainer.
+zu erkennen, Klassenabh\"angigkeiten zu Paketbeziehungen zu aggregieren und
+daraus die sp\"ateren Levels abzuleiten. Die sichtbare S202-Grafik entsteht
+danach aus der Paketstruktur und der lokalen Ordnung innerhalb der
+Paketcontainer.
 
 Die Paketordnung entsteht lokal im Kontext eines Parent-Pakets. S202
 vergleicht nicht beliebige Pakete global miteinander, sondern jeweils die
 direkten Kindpakete desselben Containers. Klassen sind in diesem Schritt keine
-eigenen Vergleichsknoten. Sie liefern nur die Information f\"ur die Aggregation:
+eigenen Vergleichsknoten. Sie liefern die Information f\"ur die Aggregation:
 Eine Klassenabh\"angigkeit wird auf die Kindpakete hochgerollt, in deren
 Teilb\"aumen Quelle und Ziel liegen.
 
-F\"ur jedes Parent-Paket entsteht so ein eigener Geschwistergraph seiner
-Kindpakete. Die Kanten in diesem Graphen sind Paketabh\"angigkeiten zwischen
-diesen Kindpaketen. Wenn eine Klasse im Teilbaum von Kindpaket $P$ eine Klasse
-im Teilbaum von Kindpaket $Q$ benutzt, entsteht eine Kante $P \to Q$. Ihr
-Gewicht ist die Anzahl der konkreten Nutzungen, die auf diese Paketkante
-hochgerollt werden; f\"ur strukturelle Abh\"angigkeiten ohne Aufrufz\"ahlung
-wird ein Gewicht von~1 verwendet. Die Gegenrichtung wird ebenfalls gez\"ahlt.
+F\"ur jedes Parent-Paket entsteht so ein gewichteter Geschwistergraph seiner
+Kindpakete. Die Kanten in diesem Graphen sind direkt beobachtete
+Paketabh\"angigkeiten zwischen diesen Kindpaketen. Wenn eine Klasse im Teilbaum
+von Kindpaket $P$ eine Klasse im Teilbaum von Kindpaket $Q$ benutzt, entsteht
+eine Kante $P \to Q$. Ihr Gewicht ist die Anzahl der konkreten Nutzungen, die
+auf diese Paketkante hochgerollt werden; f\"ur strukturelle Abh\"angigkeiten
+ohne Aufrufz\"ahlung wird ein Gewicht von~1 verwendet. Die Gegenrichtung wird
+ebenfalls gez\"ahlt.
+
+Der Geschwistergraph enth\"alt nur solche direkten Paketabh\"angigkeiten. Aus
+$B \to A$ und $C \to B$ wird keine zus\"atzliche Kante $C \to A$ erzeugt. Die
+transitive Ordnung entsteht erst bei der anschlie\ss{}enden Levelberechnung.
 Abh\"angigkeiten innerhalb desselben Kindpakets ver\"andern die Ordnung der
 Kindpakete nicht; Abh\"angigkeiten, die den Parent-Container verlassen, werden
 auf einer h\"oheren Ebene der Paketstruktur behandelt. Dieser Vergleich wird
 rekursiv f\"ur alle Paketcontainer wiederholt. Die Ordnung der Klassen
 innerhalb eines Paketcontainers ist ein nachgelagerter Schritt.
 
-Das Rangma\ss{} bewertet f\"ur jedes Kindpaket, ob es im aktuellen
-Geschwistergraphen eher andere Pakete nutzt oder eher von ihnen genutzt wird.
-Im Paketgraphen wird es aus gewichteten Paketkanten berechnet:
+Vor der Levelberechnung muss der Geschwistergraph azyklisch sein. Bilden
+Kindpakete eine SCC, bewertet S202 mit einem Rangma\ss{}, ob ein Kindpaket im
+aktuellen Geschwistergraphen eher andere Pakete nutzt oder eher von ihnen
+genutzt wird:
 
 \[
   rank(P) = \frac{out(P) - in(P)}{\max(1,\; out(P) + in(P))}
@@ -342,12 +349,19 @@ benutzt mehr, als es selbst benutzt wird; es geh\"ort tendenziell nach oben.
 Ein negativer Rang bedeutet: Das Paket wird eher benutzt und geh\"ort
 tendenziell nach unten.
 
-Eine Kante wird erst dann als Bruch dieser Ordnung behandelt, wenn der
-Rangunterschied gr\"o\ss{}er als eine Schwelle $\varepsilon$ ist. In S202 wird
-daf\"ur aktuell $\varepsilon = 0{,}1$ verwendet. Liegen zwei Pakete zu nah
-beieinander, bleiben sie konzeptionell Peers und damit auf demselben Level. Ein
-gegenseitiges Aufrufverh\"altnis von $100 : 101$ ist deshalb keine belastbare
-Architekturentscheidung.
+In einer Paket-SCC wird eine Kante $P \to Q$ erst dann als Back-Edge behandelt,
+wenn $rank(P)$ um mehr als eine Schwelle $\varepsilon$ unter $rank(Q)$ liegt.
+In S202 wird daf\"ur aktuell $\varepsilon = 0{,}1$ verwendet. Liegen zwei
+Pakete zu nah beieinander, bleiben sie konzeptionell Peers und damit auf
+demselben Level. Ein gegenseitiges Aufrufverh\"altnis von $100 : 101$ ist
+deshalb keine belastbare Architekturentscheidung.
+
+Nach dieser Zyklusbehandlung berechnet S202 die Levels auf dem resultierenden
+DAG. Level~0 bilden die Pakete, die im aktuellen Berechnungsgraphen keine
+weiteren Kindpakete benutzen. Jedes andere Paket liegt eine Ebene \"uber dem
+h\"ochsten Kindpaket, das es direkt benutzt. Dadurch entsteht die transitive
+Schichtung: Aus $B \to A$ und $C \to B$ folgt $A$ auf Level~0, $B$ auf
+Level~1 und $C$ auf Level~2, auch wenn keine direkte Kante $C \to A$ existiert.
 
 \section{Vom Klassenzyklus zur Paketordnung}
 
