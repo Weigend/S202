@@ -488,6 +488,7 @@ public class ArchitectureTreeBuilder {
 
                 LevelPackageBox packageBox = new LevelPackageBox(part, packageLevel, false, currentPkg, packageArchLevel);
                 packageContainers.put(currentPkg, packageBox);
+                elementRegistry.put(currentPkg, packageBox);
 
                 // Add to parent at the correct architectural level
                 LevelPackageBox parentContainer = packageContainers.get(previousPkg);

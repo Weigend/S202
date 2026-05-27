@@ -1216,4 +1216,49 @@ public class ArchitectureView extends BorderPane {
             tangleRenderer.setOnEdgeRestore(this::handleTangleEdgeRestore);
         }
     }
+
+    /**
+     * Returns the layout bounds of every registered element in the JavaFX
+     * scene coordinate space. Forces a layout pass so bounds are valid.
+     * Must be called on the JavaFX Application Thread after the scene is shown.
+     */
+    public java.util.Map<String, javafx.geometry.Bounds> getElementBoundsInScene() {
+        if (getScene() != null && getScene().getRoot() != null) {
+            getScene().getRoot().layout();
+        }
+        var result = new java.util.LinkedHashMap<String, javafx.geometry.Bounds>();
+        for (var entry : elementRegistry.entrySet()) {
+            var node = entry.getValue();
+            if (node.getScene() == null || !node.isVisible()) continue;
+            result.put(entry.getKey(), node.localToScene(node.getBoundsInLocal()));
+        }
+        return result;
+    }
+
+    /**
+     * Returns 3D footprint bounds for registered package/class boxes. Helper
+     * registry entries for transparent parent containers are filtered out.
+     */
+    public java.util.Map<String, javafx.geometry.Bounds> getElementFootprintBoundsInScene() {
+        if (getScene() != null && getScene().getRoot() != null) {
+            getScene().getRoot().layout();
+        }
+        var result = new java.util.LinkedHashMap<String, javafx.geometry.Bounds>();
+        for (var entry : elementRegistry.entrySet()) {
+            var node = entry.getValue();
+            if (node.getScene() == null || !node.isVisible()) continue;
+            javafx.geometry.Bounds bounds = footprintBoundsInScene(node);
+            if (bounds != null) {
+                result.put(entry.getKey(), bounds);
+            }
+        }
+        return result;
+    }
+
+    private static javafx.geometry.Bounds footprintBoundsInScene(javafx.scene.Node node) {
+        if (node instanceof LevelPackageBox || node instanceof LevelClassBox) {
+            return node.localToScene(node.getBoundsInLocal());
+        }
+        return null;
+    }
 }
