@@ -53,26 +53,35 @@ Refactoring-Planung genutzt werden kann.
 
 \section{Einleitung}
 
-Software-Architektur wird seit langem als geschichtete Abh\"angigkeitsstruktur
-dargestellt. Die Grundidee ist einfach: Ein Element, das ein anderes Element
-benutzt, steht oberhalb des benutzten Elements. Abh\"angigkeiten laufen damit
-von oben nach unten. Kanten in Gegenrichtung sind auff\"allig, weil sie
-h\"aufig auf Zyklen, unerw\"unschte Kopplung oder eine gebrochene Schichtenordnung
-hinweisen.
+Sp\"atestens seit den Schichtenmodellen f\"ur Betriebssysteme Ende der
+1960er- und Anfang der 1970er-Jahre wird Software-Architektur als
+geschichtete Abh\"angigkeitsstruktur dargestellt. Dieses Prinzip ist bis
+heute aktuell: Es hilft in Cloud-Native-Architekturen, technische
+Abh\"angigkeiten zwischen Diensten, Plattformen und Infrastruktur zu ordnen,
+und im Domain-driven Design, fachliche Grenzen und Abh\"angigkeiten zwischen
+Bounded Contexts sichtbar zu machen. Die Grundidee ist einfach: Ein Element,
+das ein anderes Element benutzt, steht oberhalb des benutzten Elements.
+Abh\"angigkeiten laufen damit von oben nach unten. Kanten in Gegenrichtung
+sind auff\"allig, weil sie h\"aufig auf Zyklen, unerw\"unschte Kopplung oder
+eine gebrochene Schichtenordnung hinweisen.
 
-Solche vertikal ausgerichteten Graphen helfen, Abh\"angigkeiten in einem System
-sichtbar zu machen. Ein einfaches Beispiel liefern die Werkzeuge \texttt{jdeps}
-und \texttt{dot}: \texttt{jdeps} extrahiert die Klassenabh\"angigkeiten aus
-einem Jar, \texttt{dot} erzeugt daraus einen gerichteten Graphen.
-Abbildung~\ref{fig:acyclic-levels} zeigt zun\"achst nur den azyklischen Teil
-des Example-Jars.
+Solche vertikal ausgerichteten Graphen helfen, Systeme zu verstehen und
+Anomalien in ihren Abh\"angigkeiten zu erkennen. Ein einfaches Beispiel liefern
+das Java-Werkzeug \texttt{jdeps} und das Graphviz-Werkzeug \texttt{dot}:
+\texttt{jdeps} extrahiert die Klassenabh\"angigkeiten aus einem Jar,
+\texttt{dot} erzeugt daraus einen gerichteten Graphen.
+
+\newpage
+
+Abbildung~\ref{fig:acyclic-levels} zeigt ein azyklisches Beispiel aus dem
+Example-Jar der S202-Codebasis. Erstellt mit \texttt{jdeps} und \texttt{dot}.
+Das Jar enth\"alt neun Klassen in drei Paketen:
+\texttt{example}, \texttt{example1} und \texttt{example2}.
 
 \begin{figure}[H]
   \centering
   \includegraphics[width=0.75\textwidth]{figures/test-example-classgraph-acyclic-levels.png}
-  \caption{Azyklischer Ausschnitt aus \texttt{test-example-1.0.0.jar}. Die
-  Pfeile zeigen von der nutzenden Klasse zur genutzten Klasse; die horizontalen
-  Linien markieren die berechneten Levels.}
+  \caption{Azyklisches Beispiel aus \texttt{test-example-1.0.0.jar}.}
   \label{fig:acyclic-levels}
 \end{figure}
 
@@ -94,17 +103,18 @@ realer Anwendungen hat sie aber drei praktische Probleme:
   \item Bei zyklischen Abh\"angigkeiten muss der Zyklus f\"ur die
         Levelberechnung aufgebrochen werden, damit \"uberhaupt eine vertikale
         Ordnung entsteht. Der urspr\"ungliche Abh\"angigkeitsgraph bleibt
-        unver\"andert; ver\"andert wird der daraus abgeleitete DAG
+        unver\"andert; ver\"andert wird nur der daraus abgeleitete DAG
         (\emph{Directed Acyclic Graph}, ein gerichteter Graph ohne Zyklen), auf
         dem die Levels berechnet werden. Entscheidend ist deshalb, welche
-        Kante in diesem Berechnungsgraphen gesondert behandelt wird.
+        Kante f\"ur diese Berechnung ausgeklammert wird, denn genau diese
+        Kante erscheint sp\"ater als Bruch der berechneten Ordnung.
 \end{enumerate}
 
 \section{S202 als hierarchische Schichtendarstellung}
 
 Mit dem Open-Source-Werkzeug S202 versuchen wir, diese Probleme gezielt zu
 adressieren. S202 ersetzt den flachen Klassengraphen nicht einfach durch eine
-h\"ubschere Darstellung, sondern durch eine hierarchische
+verbesserte Darstellung, sondern durch eine hierarchische
 Architekturhypothese: Pakete bleiben als Container sichtbar, und innerhalb
 jedes Containers werden Pakete oder Klassen nach ihren Abh\"angigkeiten
 angeordnet.
@@ -130,14 +140,16 @@ auseinandergezogen zu werden.
   \label{fig:s202-acyclic}
 \end{figure}
 
-Das Beispiel zeigt die innere Klassenhierarchie im Paket \texttt{example2}
-und zugleich die \"ubergreifende Struktur: \texttt{example2} h\"angt von
-\texttt{example} und \texttt{example1} ab. Auf Klassenebene gilt f\"ur
-\texttt{example2}: $E \to A \to (B \mid C) \to D$. Die Darstellung abstrahiert
-dabei bewusst von einzelnen Kanten. Ob \texttt{A} eine Abh\"angigkeit nach
-\texttt{B}, nach \texttt{C} oder nach beiden hat, ist f\"ur die grobe
-Architekturansicht weniger wichtig als die Schichtung des Pakets. Genau diese
-Abstraktion macht umfangreiche Beziehungsnetze noch lesbar.
+Das Beispiel zeigt die Paketstruktur unterhalb des \"au\ss{}eren Pakets
+\texttt{com}: \texttt{example}, \texttt{example1} und \texttt{example2} sind
+Teilb\"aume dieses Containers. Im Teilbaum \texttt{example2} gibt es eine
+nicht triviale innere Klassenstruktur; zugleich zeigt die \"ubergreifende Struktur, dass
+\texttt{example2} von \texttt{example} und \texttt{example1} abh\"angt. Auf
+Klassenebene gilt f\"ur \texttt{example2}: $E \to A \to (B \mid C) \to D$.
+Die Darstellung abstrahiert dabei bewusst von einzelnen Kanten. Ob \texttt{A}
+eine Abh\"angigkeit nach \texttt{B}, nach \texttt{C} oder nach beiden hat, ist
+f\"ur die grobe Architekturansicht weniger wichtig als die Schichtung des
+Pakets. Genau diese Abstraktion macht umfangreiche Beziehungsnetze noch lesbar.
 
 Die Idee ist nicht neu. Das kommerzielle Produkt Structure101 hatte bereits
 eine sehr \"ahnliche Darstellung. Es gibt jedoch keine offene Implementierung
@@ -152,7 +164,7 @@ Probleme konzeptionell sauber eliminieren lassen.
 \section{Typische Fehler bei der Berechnung von Schichten}
 
 Die Abbildungen~\ref{fig:acyclic-levels} und~\ref{fig:s202-acyclic} zeigen
-bewusst einen einfachen, azyklischen Ausschnitt. F\"ur diesen Fall ist die
+bewusst ein einfaches, azyklisches Beispiel. F\"ur diesen Fall ist die
 Schichtung eindeutig: \texttt{E} steht \"uber \texttt{A}, \texttt{A} steht
 \"uber \texttt{B} und \texttt{C}, und beide stehen \"uber \texttt{D}. Es gibt
 keine R\"uckkopplung, deshalb muss keine Kante ausgew\"ahlt werden, die f\"ur
@@ -170,7 +182,7 @@ ist eine Menge von Knoten, in der jeder Knoten jeden anderen
 \"uber gerichtete Abh\"angigkeitspfade erreichen kann. In einem solchen Zyklus
 k\"onnen nicht alle Abh\"angigkeiten gleichzeitig nach unten laufen.
 
-Ein korrektes Schichtlayout muss deshalb gleichzeitig mehrere Aussagen
+Ein korrektes Schichtlayout muss deshalb gleichzeitig mehrere Anforderungen
 erf\"ullen:
 
 \begin{enumerate}
@@ -183,7 +195,7 @@ erf\"ullen:
         laufen k\"onnen.
 \end{enumerate}
 
-Diese Regeln sind einzeln gut l\"osbar. Zusammen erzeugen sie aber ein
+Diese Anforderungen sind einzeln gut l\"osbar. Zusammen erzeugen sie aber ein
 zirkul\"ares Abh\"angigkeitssystem zwischen den Ebenen der Berechnung selbst:
 Klassenlevel beeinflussen sichtbare Positionen, Paketcontainer strukturieren
 diese Positionen, und SCCs erzwingen Korrekturen an einer Ordnung, die man
@@ -191,6 +203,9 @@ ohne Zyklusbehandlung schon berechnet h\"atte. Genau daraus entstehen die
 typischen Fehlermodi.
 
 \subsection{Retroaktive Korrektur}
+
+Retroaktive Korrektur bedeutet hier: Eine sp\"ater erkannte Struktur erzwingt
+eine nachtr\"agliche \"Anderung an bereits berechneten Levels.
 
 Ein naiver Algorithmus l\"auft \"uber die Klassen und vergibt direkt Level. Er
 sieht zuerst Klasse \texttt{A}, setzt ihr Level und hebt damit auch das Paket
@@ -255,8 +270,8 @@ als Architekturhypothese gilt.
 
 \section{Der Paketgraph als Architekturhypothese}
 
-Die L\"osung besteht darin, Analyse, Ordnungsbildung und Darstellung konsequent
-zu trennen. Der Klassengraph bleibt das Rohmodell der tats\"achlichen
+Die von S202 gew\"ahlte L\"osung besteht darin, Analyse, Ordnungsbildung und
+Darstellung konsequent zu trennen. Der Klassengraph bleibt das Rohmodell der tats\"achlichen
 Abh\"angigkeiten. Er wird nicht ver\"andert, nur weil f\"ur eine
 Schichtendarstellung ein DAG ben\"otigt wird. Stattdessen erzeugt S202 aus
 diesem Graphen zus\"atzliche Sichten: SCCs f\"ur die Zyklenerkennung, einen
@@ -266,7 +281,7 @@ UI-Struktur f\"ur die Darstellung.
 Mit Architekturhypothese ist dabei keine behauptete Soll-Architektur gemeint.
 Gemeint ist eine aus den beobachteten Abh\"angigkeiten abgeleitete
 Ist-Architektur: die Ordnung, die dem vorhandenen Code und seinen Abh\"angigkeiten
-am engsten entspricht, ohne zu verschweigen, wo diese Ordnung durch Zyklen oder
+am engsten entspricht, ohne zu verbergen, wo diese Ordnung durch Zyklen oder
 R\"uckkanten gebrochen wird.
 
 Die Paketordnung bildet dabei das zentrale Bindeglied. Sie wird nicht aus den
@@ -292,43 +307,58 @@ zu erkennen, globale Klassenlevel zu berechnen und Klassenabh\"angigkeiten zu
 Paketbeziehungen zu aggregieren. Die sichtbare S202-Grafik entsteht danach aus
 der Paketstruktur und der lokalen Ordnung innerhalb der Paketcontainer.
 
-Die Paketordnung entsteht aus den aggregierten Abh\"angigkeiten zwischen
-Paketen. Daf\"ur werden die Klassenabh\"angigkeiten zun\"achst zu
-Paketabh\"angigkeiten
-aggregiert: Wenn Klassen aus Paket $P$ Klassen aus Paket $Q$ benutzen, entsteht
-eine gewichtete Kante $P \to Q$. Das Gewicht ist die Anzahl der aggregierten
-Nutzungen; f\"ur strukturelle Abh\"angigkeiten ohne Aufrufz\"ahlung wird ein
-Gewicht von~1 verwendet. Die Gegenrichtung wird ebenfalls gez\"ahlt.
+Die Paketordnung entsteht lokal im Kontext eines Parent-Pakets. S202
+vergleicht nicht beliebige Pakete global miteinander, sondern jeweils die
+direkten Kindpakete desselben Containers. Klassen sind in diesem Schritt keine
+eigenen Vergleichsknoten. Sie liefern nur die Information f\"ur die Aggregation:
+Eine Klassenabh\"angigkeit wird auf die Kindpakete hochgerollt, in deren
+Teilb\"aumen Quelle und Ziel liegen.
 
-Aus diesen Gewichten berechnet S202 f\"ur Pakete ein Rangma\ss{}:
+F\"ur jedes Parent-Paket entsteht so ein eigener Geschwistergraph seiner
+Kindpakete. Die Kanten in diesem Graphen sind Paketabh\"angigkeiten zwischen
+diesen Kindpaketen. Wenn eine Klasse im Teilbaum von Kindpaket $P$ eine Klasse
+im Teilbaum von Kindpaket $Q$ benutzt, entsteht eine Kante $P \to Q$. Ihr
+Gewicht ist die Anzahl der konkreten Nutzungen, die auf diese Paketkante
+hochgerollt werden; f\"ur strukturelle Abh\"angigkeiten ohne Aufrufz\"ahlung
+wird ein Gewicht von~1 verwendet. Die Gegenrichtung wird ebenfalls gez\"ahlt.
+Abh\"angigkeiten innerhalb desselben Kindpakets ver\"andern die Ordnung der
+Kindpakete nicht; Abh\"angigkeiten, die den Parent-Container verlassen, werden
+auf einer h\"oheren Ebene der Paketstruktur behandelt. Dieser Vergleich wird
+rekursiv f\"ur alle Paketcontainer wiederholt. Die Ordnung der Klassen
+innerhalb eines Paketcontainers ist ein nachgelagerter Schritt.
+
+Das Rangma\ss{} bewertet f\"ur jedes Kindpaket, ob es im aktuellen
+Geschwistergraphen eher andere Pakete nutzt oder eher von ihnen genutzt wird.
+Im Paketgraphen wird es aus gewichteten Paketkanten berechnet:
 
 \[
   rank(P) = \frac{out(P) - in(P)}{\max(1,\; out(P) + in(P))}
 \]
 
-$out(P)$ ist die Summe der gewichteten Kanten von $P$ zu anderen betrachteten
-Paketen, $in(P)$ die Summe der gewichteten Kanten aus diesen Paketen nach $P$.
-Ein positiver Rang bedeutet: Das Paket benutzt mehr, als es selbst benutzt wird;
-es geh\"ort tendenziell nach oben. Ein negativer Rang bedeutet: Das Paket wird
-eher benutzt und geh\"ort tendenziell nach unten.
+$out(P)$ ist die Summe der Kantengewichte von $P$ zu anderen betrachteten
+Geschwistern im aktuellen Graphen, $in(P)$ die Summe der Kantengewichte aus
+diesen Geschwistern nach $P$. Ein positiver Rang bedeutet: Das Paket
+benutzt mehr, als es selbst benutzt wird; es geh\"ort tendenziell nach oben.
+Ein negativer Rang bedeutet: Das Paket wird eher benutzt und geh\"ort
+tendenziell nach unten.
 
-Eine Ordnungsentscheidung entsteht erst, wenn der Rangunterschied gr\"o\ss{}er
-als eine Schwelle $\varepsilon$ ist. In S202 wird daf\"ur aktuell
-$\varepsilon = 0{,}1$ verwendet. Liegen zwei Pakete zu nah beieinander, bleiben
-sie konzeptionell Peers und damit auf demselben Level. Ein gegenseitiges
-Aufrufverh\"altnis von $100 : 101$ ist deshalb keine belastbare
+Eine Kante wird erst dann als Bruch dieser Ordnung behandelt, wenn der
+Rangunterschied gr\"o\ss{}er als eine Schwelle $\varepsilon$ ist. In S202 wird
+daf\"ur aktuell $\varepsilon = 0{,}1$ verwendet. Liegen zwei Pakete zu nah
+beieinander, bleiben sie konzeptionell Peers und damit auf demselben Level. Ein
+gegenseitiges Aufrufverh\"altnis von $100 : 101$ ist deshalb keine belastbare
 Architekturentscheidung.
 
 \section{Vom Klassenzyklus zur Paketordnung}
 
-Abbildung~\ref{fig:cyclic-class} zeigt den zyklischen Teil des Example-Jars
-als klassischen Klassengraphen. Die beiden Teilgraphen f\"ur Notification und
+Abbildung~\ref{fig:cyclic-class} zeigt ein zyklisches Beispiel aus dem
+Example-Jar als klassischen Klassengraphen. Die beiden Teilgraphen f\"ur Notification und
 Payment enthalten jeweils R\"uckkopplungen.
 
 \begin{figure}[H]
   \centering
   \includegraphics[width=0.9\textwidth]{figures/test-example-classgraph-cyclic.png}
-  \caption{Zyklischer Ausschnitt aus \texttt{test-example-1.0.0.jar}. In jedem
+  \caption{Zyklisches Beispiel aus \texttt{test-example-1.0.0.jar}. In jedem
   Zyklus muss mindestens eine Kante f\"ur die Levelberechnung geschnitten werden.}
   \label{fig:cyclic-class}
 \end{figure}
@@ -352,7 +382,7 @@ macht.
 \begin{figure}[H]
   \centering
   \includegraphics[width=0.6\textwidth]{figures/s202-dependencies-cyclic.png}
-  \caption{Zyklischer S202-Ausschnitt. Die gestrichelten Kanten sind Verletzungen:
+  \caption{Zyklisches Beispiel in der S202-Darstellung. Die gestrichelten Kanten sind Verletzungen:
   Sie laufen gegen die aus den Paketabh\"angigkeiten abgeleitete Ordnung und
   bleiben als sichtbarer Befund der Architekturhypothese erhalten. Alle vier
   gestrichelten Kanten geh\"oren zu den zwei SCCs und werden von S202 als
@@ -360,7 +390,7 @@ macht.
   \label{fig:s202-cyclic}
 \end{figure}
 
-Die Begriffe Back-Edge, Verletzung und CUT beschreiben unterschiedliche Rollen:
+Die Begriffe Back-Edge und Verletzung beschreiben unterschiedliche Rollen:
 
 \begin{description}
   \item[Back-Edge] Eine ausgew\"ahlte Kante innerhalb einer SCC, die f\"ur die
@@ -368,14 +398,11 @@ Die Begriffe Back-Edge, Verletzung und CUT beschreiben unterschiedliche Rollen:
         azyklisch wird. Sie geh\"ort zur Zyklusbehandlung.
   \item[Verletzung] Eine konkrete Abh\"angigkeit, die nach der berechneten
         Ordnung nach oben l\"auft. Sie kann aus einer SCC stammen, muss es aber
-        nicht. Im Beispiel sind alle sichtbaren Verletzungen zugleich
-        Back-Edges; begrifflich bleibt eine Verletzung aber die sichtbare
-        Ordnungsabweichung, w\"ahrend eine Back-Edge die Rolle der Kante in der
-        Zyklusbehandlung beschreibt.
-  \item[CUT] Eine vom Benutzer markierte geplante Trennung eines konkreten
-        Methodenaufrufs. Ein CUT ist keine automatische Layoutentscheidung,
-        sondern ein Refactoring-Vorschlag, dessen Wirkung auf die SCC gepr\"uft
-        wird.
+        nicht. Verletzungen sind damit eine Obermenge der Back-Edges: Eine
+        Back-Edge kann als Verletzung sichtbar werden, aber nicht jede
+        Verletzung ist eine Back-Edge. Begrifflich bleibt eine Verletzung die
+        sichtbare Ordnungsabweichung, w\"ahrend eine Back-Edge die Rolle der
+        Kante in der Zyklusbehandlung beschreibt.
 \end{description}
 
 S202 versteckt den Zyklus daher nicht. Als Back-Edges klassifizierte Kanten
@@ -425,7 +452,7 @@ markiert; eine normale Kante l\"auft nach oben, ohne dass sie Teil einer SCC ist
 
 Der entscheidende Punkt ist Redundanz. Die Pipeline erzeugt die Darstellung.
 Die Regeln pr\"ufen anschlie\ss{}end, ob diese Darstellung ihre eigene Aussage
-einh\"alt. Damit wird aus einer h\"ubschen Grafik ein \"uberpr\"ufbares Modell.
+einh\"alt. Damit wird aus einer reinen Grafik ein \"uberpr\"ufbares Modell.
 
 \section{Von der Visualisierung zur Aktion}
 
@@ -527,8 +554,9 @@ Paketabh\"angigkeiten liefern eine belastbare Ordnung, Back-Edges machen
 notwendige Br\"uche sichtbar, und Konsistenzregeln pr\"ufen, ob die fertige
 Darstellung ihre eigene Aussage einh\"alt.
 
-Der wichtigste Beitrag liegt deshalb nicht in einer sch\"oneren Grafik, sondern
-in der Verbindung von Darstellung, Erkl\"arung und Ver\"anderbarkeit. Die
+Der wichtigste Beitrag liegt deshalb nicht in einer optisch verbesserten
+Grafik, sondern in der Verbindung von Darstellung, Erkl\"arung und
+Ver\"anderbarkeit. Die
 Schichtung zeigt eine m\"ogliche Ordnung. Die markierten Befunde erkl\"aren,
 wo diese Ordnung durch konkrete Abh\"angigkeiten gebrochen wird. What-If-Verschiebungen
 und manuelle CUTs machen sichtbar, welche Refactorings diese Br\"uche reduzieren
