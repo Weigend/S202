@@ -71,6 +71,7 @@ public class ArchitectureView3D implements View {
     private final FlyCamera flyCamera;
     private Map<String, SceneBuilder3D.HoverTarget> hoverTargets = Map.of();
     private SceneBuilder3D.HoverTarget hoveredTarget;
+    private SceneBuilder3D.HoverTarget selectedTarget;
     private Consumer<String> elementSelectionSink = fqn -> {};
 
     public ArchitectureView3D() {
@@ -111,6 +112,7 @@ public class ArchitectureView3D implements View {
         flyCamera.detach();
         scene3D.getChildren().clear();
         clearHover();
+        clearSelection();
         hoverTargets = Map.of();
         hideSelectionOverlay();
 
@@ -178,8 +180,7 @@ public class ArchitectureView3D implements View {
             return;
         }
         setHovered(pickable);
-        showSelectionOverlay(pickable);
-        elementSelectionSink.accept(pickable.fullName());
+        toggleSelection(pickable);
         event.consume();
     }
 
@@ -211,6 +212,30 @@ public class ArchitectureView3D implements View {
         if (hoveredTarget != null) {
             hoveredTarget.setHovered(false);
             hoveredTarget = null;
+        }
+    }
+
+    private void toggleSelection(SceneBuilder3D.PickableElement pickable) {
+        SceneBuilder3D.HoverTarget target = hoverTargets.get(pickable.fullName());
+        if (target == null) {
+            return;
+        }
+        if (selectedTarget == target) {
+            clearSelection();
+            hideSelectionOverlay();
+            return;
+        }
+        clearSelection();
+        selectedTarget = target;
+        selectedTarget.setSelected(true);
+        showSelectionOverlay(pickable);
+        elementSelectionSink.accept(pickable.fullName());
+    }
+
+    private void clearSelection() {
+        if (selectedTarget != null) {
+            selectedTarget.setSelected(false);
+            selectedTarget = null;
         }
     }
 

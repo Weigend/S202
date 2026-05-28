@@ -100,11 +100,20 @@ class SceneBuilder3DTest {
         assertTrue(pkgHoverBar.isVisible(), "package hover border becomes visible on hover");
         pkgHover.setHovered(false);
         assertFalse(pkgHoverBar.isVisible(), "package hover border hides again");
+        pkgHover.setSelected(true);
+        assertTrue(pkgHoverBar.isVisible(), "package selected border stays visible");
+        assertEquals(SceneBuilder3D.SELECTED_BORDER_COLOR, material(pkgHoverBar).getDiffuseColor());
+        pkgHover.setSelected(false);
+        assertFalse(pkgHoverBar.isVisible(), "package selected border hides when deselected");
 
         SceneBuilder3D.HoverTarget clsHover = result.hoverTargets().get("com.example.Foo");
         clsHover.setHovered(true);
         assertEquals(SceneBuilder3D.HOVER_BORDER_COLOR, material(clsBorder).getDiffuseColor());
+        clsHover.setSelected(true);
+        assertEquals(SceneBuilder3D.SELECTED_BORDER_COLOR, material(clsBorder).getDiffuseColor());
         clsHover.setHovered(false);
+        assertEquals(SceneBuilder3D.SELECTED_BORDER_COLOR, material(clsBorder).getDiffuseColor());
+        clsHover.setSelected(false);
         assertEquals(SceneBuilder3D.CLASS_BORDER_COLOR, material(clsBorder).getDiffuseColor());
     }
 

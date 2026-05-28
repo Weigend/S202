@@ -89,6 +89,8 @@ class SceneBuilder3D {
     static final String PICKABLE_PROPERTY = SceneBuilder3D.class.getName() + ".pickable";
     /** Subtle border colour for the element currently under the pointer. */
     static final Color HOVER_BORDER_COLOR = Color.web("#f8fafc");
+    /** Same orange used by the 2D selected class/package border. */
+    static final Color SELECTED_BORDER_COLOR = Color.web("#ff6600");
     /** Width of the hover outline on package slabs. */
     static final double HOVER_BORDER_WIDTH = 2.0;
     /** Height of hover outline bars. */
@@ -107,16 +109,69 @@ class SceneBuilder3D {
 
     record PickableElement(String fullName, NodeType type) {}
 
-    record HoverTarget(String fullName,
-                       NodeType type,
-                       List<Box> borderBars,
-                       PhongMaterial idleMaterial,
-                       PhongMaterial hoverMaterial,
-                       boolean hiddenWhenIdle) {
+    static final class HoverTarget {
+        private final String fullName;
+        private final NodeType type;
+        private final List<Box> borderBars;
+        private final PhongMaterial idleMaterial;
+        private final PhongMaterial hoverMaterial;
+        private final PhongMaterial selectedMaterial;
+        private final boolean hiddenWhenIdle;
+        private boolean hovered;
+        private boolean selected;
+
+        HoverTarget(String fullName,
+                    NodeType type,
+                    List<Box> borderBars,
+                    PhongMaterial idleMaterial,
+                    PhongMaterial hoverMaterial,
+                    PhongMaterial selectedMaterial,
+                    boolean hiddenWhenIdle) {
+            this.fullName = fullName;
+            this.type = type;
+            this.borderBars = borderBars;
+            this.idleMaterial = idleMaterial;
+            this.hoverMaterial = hoverMaterial;
+            this.selectedMaterial = selectedMaterial;
+            this.hiddenWhenIdle = hiddenWhenIdle;
+        }
+
+        String fullName() {
+            return fullName;
+        }
+
+        NodeType type() {
+            return type;
+        }
+
+        List<Box> borderBars() {
+            return borderBars;
+        }
+
         void setHovered(boolean hovered) {
+            this.hovered = hovered;
+            refresh();
+        }
+
+        void setSelected(boolean selected) {
+            this.selected = selected;
+            refresh();
+        }
+
+        boolean isSelected() {
+            return selected;
+        }
+
+        private void refresh() {
             for (Box bar : borderBars) {
-                bar.setVisible(hovered || !hiddenWhenIdle);
-                bar.setMaterial(hovered ? hoverMaterial : idleMaterial);
+                bar.setVisible(selected || hovered || !hiddenWhenIdle);
+                if (selected) {
+                    bar.setMaterial(selectedMaterial);
+                } else if (hovered) {
+                    bar.setMaterial(hoverMaterial);
+                } else {
+                    bar.setMaterial(idleMaterial);
+                }
             }
         }
     }
@@ -215,6 +270,7 @@ class SceneBuilder3D {
                 hoverBars,
                 hoverMaterial,
                 hoverMaterial,
+                selectedBorderMaterial(),
                 true);
         return new RenderedElement(slab, hoverTarget);
     }
@@ -313,6 +369,7 @@ class SceneBuilder3D {
                 borderBars,
                 classBorderMaterial(),
                 hoverBorderMaterial(),
+                selectedBorderMaterial(),
                 false);
         return new RenderedElement(tile, hoverTarget);
     }
@@ -422,6 +479,13 @@ class SceneBuilder3D {
     private PhongMaterial hoverBorderMaterial() {
         PhongMaterial mat = new PhongMaterial(HOVER_BORDER_COLOR);
         mat.setSpecularColor(HOVER_BORDER_COLOR);
+        mat.setSpecularPower(128.0);
+        return mat;
+    }
+
+    private PhongMaterial selectedBorderMaterial() {
+        PhongMaterial mat = new PhongMaterial(SELECTED_BORDER_COLOR);
+        mat.setSpecularColor(SELECTED_BORDER_COLOR);
         mat.setSpecularPower(128.0);
         return mat;
     }
