@@ -192,11 +192,11 @@ public class S202Module implements Module {
         ArchitectureView view = new ArchitectureView();
         view.setStatusSink(this::publishStatus);
 
-        // Bridge graph node double-clicks (class or package) onto the bus so
+        // Bridge graph node selections (class or package) onto the bus so
         // the outline (and any future listener) can react without a direct
         // dependency.
         EventBus<EventObject> bus = Lookup.lookup(EventBus.class);
-        view.setOnNodeDoubleClicked(fqn -> bus.publish(new NodeSelectionEvent(fqn, view)));
+        view.setOnNodeSelected(fqn -> bus.publish(new NodeSelectionEvent(fqn, view)));
 
         var css = getClass().getResource("/de/weigend/s202/ui/styles.css");
         if (css != null) {
@@ -1334,7 +1334,7 @@ public class S202Module implements Module {
         tangleView.setTopTanglesScopeOwner(false);
         tangleView.setStatusSink(this::publishStatus);
         EventBus<EventObject> bus = Lookup.lookup(EventBus.class);
-        tangleView.setOnNodeDoubleClicked(fqn -> bus.publish(new NodeSelectionEvent(fqn, tangleView)));
+        tangleView.setOnNodeSelected(fqn -> bus.publish(new NodeSelectionEvent(fqn, tangleView)));
         tangleView.setOnTangleEdgeClicked((from, to) ->
                 publishTangleEdgeSelection(bus, tangleView, from, to));
         tangleView.setOnTangleEdgeCut((from, to) ->

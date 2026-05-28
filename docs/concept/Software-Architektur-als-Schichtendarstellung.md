@@ -1,7 +1,7 @@
 # Software-Architektur als Schichtendarstellung
-*Analyse der Software-Architektur mit S202*
+*Analyse der Software-Architektur mit S202*  
 
-Johannes Weigend
+Johannes Weigend  
 Entwurf, 24. Mai 2026
 
 ## Einleitung

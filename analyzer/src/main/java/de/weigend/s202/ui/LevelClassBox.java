@@ -97,8 +97,7 @@ public class LevelClassBox extends HBox implements GraphSelection.Selectable {
         ArchitectureDragController.makeDraggable(this);
 
         // Single click toggles selection. Double click ensures the class stays
-        // selected (no toggle off) and notifies the double-click listener so
-        // external panels — e.g. the outline explorer — can reveal the class.
+        // selected for direct GraphSelection consumers.
         this.setOnMouseClicked(event -> {
             if (event.getButton() != MouseButton.PRIMARY) {
                 return;

@@ -120,7 +120,8 @@ public class ArchitectureView extends BorderPane {
 
     private javafx.scene.layout.Pane zoomableContent;
     private Consumer<String> statusSink = msg -> { /* no-op default */ };
-    private Consumer<String> nodeDoubleClickSink = fqn -> { /* no-op default */ };
+    private Consumer<String> nodeSelectionSink = fqn -> { /* no-op default */ };
+    private boolean suppressSelectionSink = false;
     private BiConsumer<String, String> tangleEdgeClickedSink = (a, b) -> { /* no-op default */ };
     private BiConsumer<String, String> tangleEdgeCutSink = (a, b) -> { /* no-op default */ };
     private BiConsumer<String, String> tangleEdgeRestoreSink = (a, b) -> { /* no-op default */ };
@@ -352,11 +353,15 @@ public class ArchitectureView extends BorderPane {
             if (showScc.get()) {
                 sccRenderer.drawSccLines(currentRootNode);
             }
+            if (!suppressSelectionSink && fqn != null) {
+                nodeSelectionSink.accept(fqn);
+            }
         });
 
-        // Re-route double-clicks on graph boxes (class or package) through this
-        // view's sink so external panels (e.g. outline explorer) can reveal it.
-        GraphSelection.setOnDoubleClick(fqn -> nodeDoubleClickSink.accept(fqn));
+        // Node selection is now a single-click action. Keep the legacy
+        // double-click callback disconnected to avoid duplicate selection
+        // events when users double-click out of habit.
+        GraphSelection.setOnDoubleClick(fqn -> {});
     }
 
     private void finishArchitectureRootBuild(ArchitectureNode rootNode,
@@ -707,7 +712,7 @@ public class ArchitectureView extends BorderPane {
         }
         javafx.scene.Node node = elementRegistry.get(fullName);
         if (node instanceof GraphSelection.Selectable target) {
-            GraphSelection.ensureSelected(target);
+            runWithoutSelectionSink(() -> GraphSelection.ensureSelected(target));
             // Defer scrolling until layout has settled; the box may have just
             // been created during a refresh and have unresolved bounds.
             javafx.application.Platform.runLater(() -> scrollToNode(node));
@@ -718,8 +723,18 @@ public class ArchitectureView extends BorderPane {
         // highlight to apply, but external observers (quality view, etc.) still
         // need the announcement. Clear any visible chart selection and update
         // the property directly.
-        GraphSelection.clear();
+        runWithoutSelectionSink(GraphSelection::clear);
         selectedFullName.set(fullName);
+    }
+
+    private void runWithoutSelectionSink(Runnable action) {
+        boolean wasSuppressing = suppressSelectionSink;
+        suppressSelectionSink = true;
+        try {
+            action.run();
+        } finally {
+            suppressSelectionSink = wasSuppressing;
+        }
     }
 
     /** @deprecated use {@link #selectByFullName(String)}. */
@@ -1170,17 +1185,25 @@ public class ArchitectureView extends BorderPane {
     }
 
     /**
-     * Set a sink that receives the full name whenever the user double-clicks
-     * a node (class or package) in the graph. Pass null to detach.
+     * Set a sink that receives the full name whenever the user selects a node
+     * (class or package) in the graph. Pass null to detach.
      */
-    public void setOnNodeDoubleClicked(Consumer<String> sink) {
-        this.nodeDoubleClickSink = sink != null ? sink : (fqn -> {});
+    public void setOnNodeSelected(Consumer<String> sink) {
+        this.nodeSelectionSink = sink != null ? sink : (fqn -> {});
     }
 
-    /** @deprecated use {@link #setOnNodeDoubleClicked(Consumer)}. */
+    /**
+     * @deprecated use {@link #setOnNodeSelected(Consumer)}.
+     */
+    @Deprecated
+    public void setOnNodeDoubleClicked(Consumer<String> sink) {
+        setOnNodeSelected(sink);
+    }
+
+    /** @deprecated use {@link #setOnNodeSelected(Consumer)}. */
     @Deprecated
     public void setOnClassDoubleClicked(Consumer<String> sink) {
-        setOnNodeDoubleClicked(sink);
+        setOnNodeSelected(sink);
     }
 
     /**
@@ -1215,5 +1238,98 @@ public class ArchitectureView extends BorderPane {
         if (tangleRenderer != null) {
             tangleRenderer.setOnEdgeRestore(this::handleTangleEdgeRestore);
         }
+    }
+
+    /**
+     * Returns the layout bounds of every registered element in the JavaFX
+     * scene coordinate space. Forces a layout pass so bounds are valid.
+     * Must be called on the JavaFX Application Thread after the scene is shown.
+     */
+    public java.util.Map<String, javafx.geometry.Bounds> getElementBoundsInScene() {
+        if (getScene() != null && getScene().getRoot() != null) {
+            getScene().getRoot().layout();
+        }
+        var result = new java.util.LinkedHashMap<String, javafx.geometry.Bounds>();
+        for (var entry : elementRegistry.entrySet()) {
+            var node = entry.getValue();
+            if (node.getScene() == null || !node.isVisible()) continue;
+            result.put(entry.getKey(), node.localToScene(node.getBoundsInLocal()));
+        }
+        return result;
+    }
+
+    /**
+     * Returns 3D footprint bounds for registered package/class boxes. Helper
+     * registry entries for transparent parent containers are filtered out.
+     */
+    public java.util.Map<String, javafx.geometry.Bounds> getElementFootprintBoundsInScene() {
+        if (getScene() != null && getScene().getRoot() != null) {
+            getScene().getRoot().layout();
+        }
+        var result = new java.util.LinkedHashMap<String, javafx.geometry.Bounds>();
+        for (var entry : elementRegistry.entrySet()) {
+            var node = entry.getValue();
+            if (node.getScene() == null || !node.isVisible()) continue;
+            javafx.geometry.Bounds bounds = footprintBoundsInScene(node);
+            if (bounds != null) {
+                result.put(entry.getKey(), bounds);
+            }
+        }
+        return result;
+    }
+
+    /**
+     * Returns the closest visible package parent per currently registered
+     * package/class box. Used by projections such as the 3D view that need to
+     * roll hidden class-level edges up to the same visible endpoint as the 2D
+     * scene, including after What-If drag-and-drop moves.
+     */
+    public java.util.Map<String, String> getVisibleElementParentFqns() {
+        if (getScene() != null && getScene().getRoot() != null) {
+            getScene().getRoot().layout();
+        }
+        var result = new java.util.LinkedHashMap<String, String>();
+        for (var entry : elementRegistry.entrySet()) {
+            javafx.scene.Node node = entry.getValue();
+            if (!(node instanceof LevelPackageBox || node instanceof LevelClassBox)) continue;
+            if (node.getScene() == null) continue;
+            String parent = nearestVisiblePackageParent(node.getParent());
+            if (parent != null) {
+                result.put(entry.getKey(), parent);
+            }
+        }
+        return result;
+    }
+
+    private static javafx.geometry.Bounds footprintBoundsInScene(javafx.scene.Node node) {
+        if (node instanceof LevelPackageBox || node instanceof LevelClassBox) {
+            return node.localToScene(node.getBoundsInLocal());
+        }
+        return null;
+    }
+
+    private static String nearestVisiblePackageParent(javafx.scene.Node node) {
+        javafx.scene.Node current = node;
+        while (current != null) {
+            if (current instanceof LevelPackageBox pkg && isActuallyVisible(current)) {
+                return pkg.getFullName();
+            }
+            current = current.getParent();
+        }
+        return null;
+    }
+
+    private static boolean isActuallyVisible(javafx.scene.Node node) {
+        if (node == null || !node.isVisible()) {
+            return false;
+        }
+        javafx.scene.Parent parent = node.getParent();
+        while (parent != null) {
+            if (!parent.isVisible()) {
+                return false;
+            }
+            parent = parent.getParent();
+        }
+        return true;
     }
 }
