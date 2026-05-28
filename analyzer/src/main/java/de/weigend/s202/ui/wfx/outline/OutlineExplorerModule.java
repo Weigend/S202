@@ -72,7 +72,7 @@ public class OutlineExplorerModule implements Module {
         outlineView = new OutlineExplorerView();
 
         EventBus<EventObject> bus = Lookup.lookup(EventBus.class);
-        outlineView.setOnNodeDoubleClick(fqn ->
+        outlineView.setOnNodeClick(fqn ->
                 bus.publish(new NodeSelectionEvent(fqn, outlineView)));
         outlineView.setOnOpenScope(scope ->
                 bus.publish(new OpenScopeEvent(scope, boundView, outlineView)));

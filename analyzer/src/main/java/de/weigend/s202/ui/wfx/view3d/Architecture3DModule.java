@@ -69,6 +69,7 @@ public class Architecture3DModule implements Module {
     }
 
     @Override
+    @SuppressWarnings("unchecked")
     public void start() {
         stage = Lookup.lookup(ApplicationWindow.class).getStage();
         WindowManager wm = Lookup.lookup(WindowManager.class);
@@ -76,6 +77,14 @@ public class Architecture3DModule implements Module {
         installActivationOnShow(wm);
         wm.focusedViewProperty().addListener((obs, was, isNow) -> rebindToFocusedView());
         rebindToFocusedView();
+
+        EventBus<EventObject> bus = (EventBus<EventObject>) Lookup.lookup(EventBus.class);
+        bus.subscribe(NodeSelectionEvent.class, ev -> {
+            if (ev.getSource() != view) {
+                Platform.runLater(() -> view.selectByFullName(ev.getFullName()));
+            }
+            return true;
+        });
     }
 
     @Override
@@ -97,10 +106,10 @@ public class Architecture3DModule implements Module {
         unbind();
         boundView = newBound;
         syncOverlaySettings();
-        scheduleRefresh();
+        scheduleRefresh(true);
 
         if (newBound != null) {
-            rootListener = (obs, was, isNow) -> scheduleRefresh();
+            rootListener = (obs, was, isNow) -> scheduleRefresh(true);
             newBound.architectureRootProperty().addListener(rootListener);
             showDependenciesListener = (obs, was, isNow) -> view.setShowDependencies(isNow);
             showSccListener = (obs, was, isNow) -> view.setShowScc(isNow);
@@ -108,7 +117,7 @@ public class Architecture3DModule implements Module {
             newBound.showDependenciesProperty().addListener(showDependenciesListener);
             newBound.showSccProperty().addListener(showSccListener);
             newBound.showWhatIfViolationsProperty().addListener(showViolationsListener);
-            redrawTickListener = (obs, was, isNow) -> scheduleRefresh();
+            redrawTickListener = (obs, was, isNow) -> scheduleRefresh(false);
             newBound.redrawTickProperty().addListener(redrawTickListener);
         }
     }
@@ -147,8 +156,12 @@ public class Architecture3DModule implements Module {
     /**
      * Waits two JavaFX layout pulses before reading the 2D bounds, so the
      * ArchitectureView's scene graph is fully laid out.
+     *
+     * @param resetCamera true when the architecture root changed or the bound view switched;
+     *                    false for pure redraw ticks (selection, violations toggle) where the
+     *                    camera position should be preserved.
      */
-    private void scheduleRefresh() {
+    private void scheduleRefresh(boolean resetCamera) {
         if (boundView == null) {
             view.setData(null, null, null, stage);
             return;
@@ -163,7 +176,7 @@ public class Architecture3DModule implements Module {
                     ? captured.getWhatIfArchitecture()
                     : captured.getArchitecture();
             Map<String, String> visibleParentByFqn = captured.getVisibleElementParentFqns();
-            view.setData(bounds, root, architecture, visibleParentByFqn, stage);
+            view.setData(bounds, root, architecture, visibleParentByFqn, stage, resetCamera);
         }));
     }
 

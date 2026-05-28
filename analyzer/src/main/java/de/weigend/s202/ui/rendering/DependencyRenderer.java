@@ -145,8 +145,10 @@ public class DependencyRenderer implements DependencyRendererStrategy {
                     // Draw arrows for each dependency
                     for (String depName : child.getDependencies()) {
                         // If a class is selected, only show dependencies involving that class
-                        boolean isSourceSelected = selectedClass != null && child.getFullName().equals(selectedClass);
-                        boolean isTargetSelected = selectedClass != null && depName.equals(selectedClass);
+                        boolean isSourceSelected = selectedClass != null &&
+                                (child.getFullName().equals(selectedClass) || child.getFullName().startsWith(selectedClass + "."));
+                        boolean isTargetSelected = selectedClass != null &&
+                                (depName.equals(selectedClass) || depName.startsWith(selectedClass + "."));
 
                         if (selectedClass != null && !isSourceSelected && !isTargetSelected) {
                             continue; // Skip this dependency

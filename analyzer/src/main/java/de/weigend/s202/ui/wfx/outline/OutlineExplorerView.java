@@ -43,9 +43,9 @@ import java.util.function.Consumer;
 /**
  * WFX side-panel view that shows the entire package/class hierarchy of the
  * currently focused {@link de.weigend.s202.ui.ArchitectureView ArchitectureView}
- * as a {@link TreeView}. Double-clicking any node — class or package —
+ * as a {@link TreeView}. Single-clicking any node — class or package —
  * forwards a selection request through the
- * {@link #setOnNodeDoubleClick(Consumer) configured handler}.
+ * {@link #setOnNodeClick(Consumer) configured handler}.
  */
 public class OutlineExplorerView implements View {
 
@@ -55,7 +55,7 @@ public class OutlineExplorerView implements View {
     private final TreeView<OutlineRow> treeView = new TreeView<>();
     private final Label emptyPlaceholder = new Label("No JAR loaded");
 
-    private Consumer<String> nodeDoubleClickHandler = fqn -> { /* no-op */ };
+    private Consumer<String> nodeClickHandler = fqn -> { /* no-op */ };
     private Consumer<String> openScopeHandler = fqn -> { /* no-op */ };
 
     public OutlineExplorerView() {
@@ -66,14 +66,14 @@ public class OutlineExplorerView implements View {
         treeView.setCellFactory(tv -> new ArchitectureNodeCell());
 
         treeView.setOnMouseClicked(event -> {
-            if (event.getButton() != MouseButton.PRIMARY || event.getClickCount() != 2) {
+            if (event.getButton() != MouseButton.PRIMARY || event.getClickCount() != 1) {
                 return;
             }
             TreeItem<OutlineRow> selected = treeView.getSelectionModel().getSelectedItem();
             if (selected == null || !(selected.getValue() instanceof NodeRow row)) {
                 return;
             }
-            nodeDoubleClickHandler.accept(row.node().getFullName());
+            nodeClickHandler.accept(row.node().getFullName());
         });
 
         showEmpty();
@@ -111,8 +111,8 @@ public class OutlineExplorerView implements View {
         }
     }
 
-    public void setOnNodeDoubleClick(Consumer<String> handler) {
-        this.nodeDoubleClickHandler = handler != null ? handler : fqn -> { };
+    public void setOnNodeClick(Consumer<String> handler) {
+        this.nodeClickHandler = handler != null ? handler : fqn -> { };
     }
 
     public void setOnOpenScope(Consumer<String> handler) {

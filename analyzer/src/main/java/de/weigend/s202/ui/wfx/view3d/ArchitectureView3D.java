@@ -85,6 +85,7 @@ public class ArchitectureView3D implements View {
     private Map<String, String> parentByFqn = Map.of();
     private SceneBuilder3D.HoverTarget hoveredTarget;
     private SceneBuilder3D.HoverTarget selectedTarget;
+    private String selectedFqn;
     private ArchitectureNode currentRoot;
     private Architecture currentArchitecture;
     private boolean showDependencies;
@@ -115,6 +116,30 @@ public class ArchitectureView3D implements View {
         elementSelectionSink = selectionSink == null ? fqn -> {} : selectionSink;
     }
 
+    /** Selects the element with the given FQN in the 3D scene without firing the selection sink. */
+    public void selectByFullName(String fqn) {
+        applySelection(fqn);
+        rebuildEdgeOverlays();
+    }
+
+    private void applySelection(String fqn) {
+        SceneBuilder3D.HoverTarget target = fqn == null ? null : hoverTargets.get(fqn);
+        if (target == null) {
+            clearSelection();
+            hideSelectionOverlay();
+            return;
+        }
+        if (selectedTarget == target) return;
+        clearSelection();
+        selectedTarget = target;
+        selectedFqn = fqn;
+        selectedTarget.setSelected(true);
+        ArchitectureNode node = nodeByFqn.get(fqn);
+        String kind = (node != null && node.getType() == ArchitectureNode.NodeType.CLASS) ? "Class" : "Package";
+        selectionOverlay.setText(kind + ": " + fqn);
+        selectionOverlay.setVisible(true);
+    }
+
     public void setOverlayVisibility(boolean showDependencies, boolean showScc, boolean showViolations) {
         this.showDependencies = showDependencies;
         this.showScc = showScc;
@@ -141,33 +166,20 @@ public class ArchitectureView3D implements View {
      * Rebuilds the 3D scene from pre-read 2D layout bounds.
      * Pass {@code null} maps to clear the view.
      *
-     * @param elementBounds bounds per FQN read from the 2D ArchitectureView
-     * @param root          root of the ArchitectureNode tree
-     * @param architecture  domain model (for tangle/SCC detection)
-     * @param stage         owning stage (needed for mouse-grab centering)
-     */
-    public void setData(Map<String, Bounds> elementBounds,
-                        ArchitectureNode root,
-                        Architecture architecture,
-                        Stage stage) {
-        setData(elementBounds, root, architecture, null, stage);
-    }
-
-    /**
-     * Rebuilds the 3D scene from pre-read 2D layout bounds.
-     * Pass {@code null} maps to clear the view.
-     *
      * @param elementBounds      bounds per FQN read from the 2D ArchitectureView
      * @param root               root of the ArchitectureNode tree
      * @param architecture       domain model (for tangle/SCC detection)
      * @param visibleParentByFqn closest visible 2D package parent per FQN
      * @param stage              owning stage (needed for mouse-grab centering)
+     * @param resetCamera        true → reposition camera to computed hint; false → keep current camera pose
      */
     public void setData(Map<String, Bounds> elementBounds,
                         ArchitectureNode root,
                         Architecture architecture,
                         Map<String, String> visibleParentByFqn,
-                        Stage stage) {
+                        Stage stage,
+                        boolean resetCamera) {
+        String prevSelectedFqn = selectedFqn; // save before clearSelection() zeroes it
         flyCamera.detach();
         scene3D.getChildren().clear();
         edgeLayer.getChildren().clear();
@@ -194,11 +206,44 @@ public class ArchitectureView3D implements View {
         }
         scene3D.getChildren().add(result.group());
         scene3D.getChildren().add(edgeLayer);
-        rebuildEdgeOverlays();
 
         flyCamera.attach(subScene, stage);
-        SceneBuilder3D.CameraHint h = result.cameraHint();
-        flyCamera.resetToLookAt(h.x(), h.y(), h.z(), h.targetX(), h.targetY(), h.targetZ());
+        if (resetCamera) {
+            SceneBuilder3D.CameraHint h = result.cameraHint();
+            flyCamera.resetToLookAt(h.x(), h.y(), h.z(), h.targetX(), h.targetY(), h.targetZ());
+        } else if (prevSelectedFqn != null) {
+            applySelection(prevSelectedFqn); // restore visual state without redundant edge rebuild
+        }
+        rebuildEdgeOverlays(); // single rebuild at the end with correct selectedFqn
+    }
+
+    /**
+     * Rebuilds the 3D scene and repositions the camera to the computed default view.
+     * Convenience overload for callers that always want a camera reset (e.g. initial load,
+     * root change, or view binding change).
+     */
+    public void setData(Map<String, Bounds> elementBounds,
+                        ArchitectureNode root,
+                        Architecture architecture,
+                        Map<String, String> visibleParentByFqn,
+                        Stage stage) {
+        setData(elementBounds, root, architecture, visibleParentByFqn, stage, true);
+    }
+
+    /**
+     * Rebuilds the 3D scene from pre-read 2D layout bounds.
+     * Pass {@code null} maps to clear the view.
+     *
+     * @param elementBounds bounds per FQN read from the 2D ArchitectureView
+     * @param root          root of the ArchitectureNode tree
+     * @param architecture  domain model (for tangle/SCC detection)
+     * @param stage         owning stage (needed for mouse-grab centering)
+     */
+    public void setData(Map<String, Bounds> elementBounds,
+                        ArchitectureNode root,
+                        Architecture architecture,
+                        Stage stage) {
+        setData(elementBounds, root, architecture, null, stage, true);
     }
 
     // -----------------------------------------------------------------------
@@ -297,13 +342,16 @@ public class ArchitectureView3D implements View {
         if (selectedTarget == target) {
             clearSelection();
             hideSelectionOverlay();
+            rebuildEdgeOverlays();
             return;
         }
         clearSelection();
         selectedTarget = target;
+        selectedFqn = pickable.fullName();
         selectedTarget.setSelected(true);
         showSelectionOverlay(pickable);
         elementSelectionSink.accept(pickable.fullName());
+        rebuildEdgeOverlays();
     }
 
     private void clearSelection() {
@@ -311,6 +359,7 @@ public class ArchitectureView3D implements View {
             selectedTarget.setSelected(false);
             selectedTarget = null;
         }
+        selectedFqn = null;
     }
 
     private void showSelectionOverlay(SceneBuilder3D.PickableElement pickable) {
@@ -331,9 +380,12 @@ public class ArchitectureView3D implements View {
         }
         double safeCeilingY = safeCeilingY();
         int lane = 0;
-        if (showDependencies) {
-            for (Edge edge : dependencyEdges()) {
-                lane = addArrow(edge.source(), edge.target(), Color.rgb(90, 94, 98), 1.4, safeCeilingY, lane);
+        if (showDependencies && selectedFqn != null) {
+            for (Edge edge : outgoingDependencyEdges(selectedFqn)) {
+                lane = addArrow(edge.source(), edge.target(), Color.rgb(70, 130, 220), 1.4, safeCeilingY, lane);
+            }
+            for (Edge edge : incomingDependencyEdges(selectedFqn)) {
+                lane = addArrow(edge.source(), edge.target(), Color.rgb(80, 200, 100), 1.4, safeCeilingY, lane);
             }
         }
         if (showScc) {
@@ -359,19 +411,60 @@ public class ArchitectureView3D implements View {
         return lane + 1;
     }
 
-    private List<Edge> dependencyEdges() {
+    private List<Edge> outgoingDependencyEdges(String fqn) {
+        ArchitectureNode node = nodeByFqn.get(fqn);
+        if (node == null) return List.of();
+        Set<String> sources = visibleClassFqns(node);
+        if (sources.isEmpty()) return List.of();
         List<Edge> edges = new ArrayList<>();
-        for (ArchitectureNode node : nodeByFqn.values()) {
-            if (node.getType() != ArchitectureNode.NodeType.CLASS || !edgeTargets.containsKey(node.getFullName())) {
-                continue;
-            }
-            for (String dep : node.getDependencies()) {
-                if (edgeTargets.containsKey(dep)) {
-                    edges.add(new Edge(node.getFullName(), dep));
+        for (String sourceFqn : sources) {
+            ArchitectureNode sourceNode = nodeByFqn.get(sourceFqn);
+            if (sourceNode == null) continue;
+            for (String dep : sourceNode.getDependencies()) {
+                if (edgeTargets.containsKey(dep) && !dep.equals(sourceFqn) && !sources.contains(dep)) {
+                    edges.add(new Edge(sourceFqn, dep));
                 }
             }
         }
         return sorted(edges);
+    }
+
+    private List<Edge> incomingDependencyEdges(String fqn) {
+        ArchitectureNode node = nodeByFqn.get(fqn);
+        if (node == null) return List.of();
+        Set<String> targets = visibleClassFqns(node);
+        if (targets.isEmpty()) return List.of();
+        List<Edge> edges = new ArrayList<>();
+        for (ArchitectureNode caller : nodeByFqn.values()) {
+            if (caller.getType() != ArchitectureNode.NodeType.CLASS) continue;
+            if (!edgeTargets.containsKey(caller.getFullName())) continue;
+            if (targets.contains(caller.getFullName())) continue; // skip internal
+            for (String dep : caller.getDependencies()) {
+                if (targets.contains(dep) && edgeTargets.containsKey(dep)) {
+                    edges.add(new Edge(caller.getFullName(), dep));
+                }
+            }
+        }
+        return sorted(edges);
+    }
+
+    /** Returns all visible class FQNs reachable from node (the node itself if CLASS, all descendant classes if PACKAGE). */
+    private Set<String> visibleClassFqns(ArchitectureNode node) {
+        Set<String> result = new HashSet<>();
+        collectVisibleClassFqns(node, result);
+        return result;
+    }
+
+    private void collectVisibleClassFqns(ArchitectureNode node, Set<String> result) {
+        if (node.getType() == ArchitectureNode.NodeType.CLASS) {
+            if (edgeTargets.containsKey(node.getFullName())) {
+                result.add(node.getFullName());
+            }
+        } else {
+            for (ArchitectureNode child : node.getChildren()) {
+                collectVisibleClassFqns(child, result);
+            }
+        }
     }
 
     private List<Edge> sccEdges() {

@@ -116,6 +116,7 @@ class SceneBuilder3D {
         private final String fullName;
         private final NodeType type;
         private final List<Box> borderBars;
+        private final List<Box> selectionOnlyBars;
         private final PhongMaterial idleMaterial;
         private final PhongMaterial hoverMaterial;
         private final PhongMaterial selectedMaterial;
@@ -126,6 +127,7 @@ class SceneBuilder3D {
         HoverTarget(String fullName,
                     NodeType type,
                     List<Box> borderBars,
+                    List<Box> selectionOnlyBars,
                     PhongMaterial idleMaterial,
                     PhongMaterial hoverMaterial,
                     PhongMaterial selectedMaterial,
@@ -133,6 +135,7 @@ class SceneBuilder3D {
             this.fullName = fullName;
             this.type = type;
             this.borderBars = borderBars;
+            this.selectionOnlyBars = selectionOnlyBars;
             this.idleMaterial = idleMaterial;
             this.hoverMaterial = hoverMaterial;
             this.selectedMaterial = selectedMaterial;
@@ -175,6 +178,9 @@ class SceneBuilder3D {
                 } else {
                     bar.setMaterial(idleMaterial);
                 }
+            }
+            for (Box bar : selectionOnlyBars) {
+                bar.setVisible(selected);
             }
         }
     }
@@ -277,6 +283,7 @@ class SceneBuilder3D {
                 fullName,
                 NodeType.PACKAGE,
                 hoverBars,
+                List.of(),
                 hoverMaterial,
                 hoverMaterial,
                 selectedBorderMaterial(),
@@ -378,10 +385,17 @@ class SceneBuilder3D {
             installPickable(borderBar, node.getFullName(), NodeType.CLASS);
         }
         tile.getChildren().addAll(borderBars);
+        List<Box> cornerPillars = buildClassCornerPillars(b, fanInWidth, elevation, thickness);
+        for (Box pillar : cornerPillars) {
+            pillar.setVisible(false);
+            installPickable(pillar, node.getFullName(), NodeType.CLASS);
+        }
+        tile.getChildren().addAll(cornerPillars);
         HoverTarget hoverTarget = new HoverTarget(
                 node.getFullName(),
                 NodeType.CLASS,
                 borderBars,
+                cornerPillars,
                 classBorderMaterial(),
                 hoverBorderMaterial(),
                 selectedBorderMaterial(),
@@ -421,6 +435,22 @@ class SceneBuilder3D {
                 line,
                 CLASS_BORDER_THICKNESS,
                 classBorderMaterial());
+    }
+
+    private List<Box> buildClassCornerPillars(Bounds b, double width, double elevation, double thickness) {
+        double depth = Math.max(MIN_FOOTPRINT, b.getHeight());
+        double line = Math.min(CLASS_BORDER_WIDTH, Math.min(width, depth) / 3.0);
+        double minX = b.getCenterX() - width / 2.0;
+        double maxX = b.getCenterX() + width / 2.0;
+        double minZ = worldZ(b.getCenterY()) - depth / 2.0;
+        double maxZ = worldZ(b.getCenterY()) + depth / 2.0;
+        PhongMaterial mat = selectedBorderMaterial();
+        // 4 vertical corner pillars spanning the full class height
+        Box fl = buildPositionedBox(minX + line / 2, minZ + line / 2, line, thickness, line, elevation, mat);
+        Box fr = buildPositionedBox(maxX - line / 2, minZ + line / 2, line, thickness, line, elevation, mat);
+        Box bl = buildPositionedBox(minX + line / 2, maxZ - line / 2, line, thickness, line, elevation, mat);
+        Box br = buildPositionedBox(maxX - line / 2, maxZ - line / 2, line, thickness, line, elevation, mat);
+        return List.of(fl, fr, bl, br);
     }
 
     private List<Box> buildFootprintBorderBars(double centerX,

@@ -2,7 +2,7 @@
 
 A JavaFX-based tool for analyzing Java bytecode and visualizing code architecture.
 
-![UI Screenshot](docs/Beispiel.png)
+![UI Screenshot](docs/image1.png)
 
 ## Features
 
