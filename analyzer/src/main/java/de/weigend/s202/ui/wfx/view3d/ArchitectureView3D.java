@@ -16,6 +16,10 @@
 package de.weigend.s202.ui.wfx.view3d;
 
 import de.weigend.s202.domain.architecture.Architecture;
+import de.weigend.s202.domain.architecture.EndpointPair;
+import de.weigend.s202.domain.architecture.Violation;
+import de.weigend.s202.graph.StronglyConnectedComponent;
+import de.weigend.s202.graph.TarjanSCCFinder;
 import de.weigend.s202.ui.model.ArchitectureNode;
 import io.softwareecg.wfx.windowmtg.api.Position;
 import io.softwareecg.wfx.windowmtg.api.View;
@@ -36,8 +40,13 @@ import javafx.scene.paint.Color;
 import javafx.stage.Stage;
 
 import java.net.URL;
+import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.HashMap;
+import java.util.HashSet;
+import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.function.Consumer;
 
 /**
@@ -66,15 +75,25 @@ public class ArchitectureView3D implements View {
 
     private final StackPane root     = new StackPane();
     private final Group     scene3D  = new Group();
+    private final Group     edgeLayer = new Group();
     private final SubScene  subScene;
     private final Label     selectionOverlay = new Label();
     private final FlyCamera flyCamera;
     private Map<String, SceneBuilder3D.HoverTarget> hoverTargets = Map.of();
+    private Map<String, SceneBuilder3D.EdgeTarget> edgeTargets = Map.of();
+    private Map<String, ArchitectureNode> nodeByFqn = Map.of();
+    private Map<String, String> parentByFqn = Map.of();
     private SceneBuilder3D.HoverTarget hoveredTarget;
     private SceneBuilder3D.HoverTarget selectedTarget;
+    private ArchitectureNode currentRoot;
+    private Architecture currentArchitecture;
+    private boolean showDependencies;
+    private boolean showScc;
+    private boolean showViolations;
     private Consumer<String> elementSelectionSink = fqn -> {};
 
     public ArchitectureView3D() {
+        edgeLayer.setMouseTransparent(true);
         subScene = new SubScene(scene3D, 800, 600, true, SceneAntialiasing.BALANCED);
         subScene.setFill(Color.rgb(20, 20, 30));
         subScene.widthProperty().bind(root.widthProperty());
@@ -96,6 +115,28 @@ public class ArchitectureView3D implements View {
         elementSelectionSink = selectionSink == null ? fqn -> {} : selectionSink;
     }
 
+    public void setOverlayVisibility(boolean showDependencies, boolean showScc, boolean showViolations) {
+        this.showDependencies = showDependencies;
+        this.showScc = showScc;
+        this.showViolations = showViolations;
+        rebuildEdgeOverlays();
+    }
+
+    public void setShowDependencies(boolean showDependencies) {
+        this.showDependencies = showDependencies;
+        rebuildEdgeOverlays();
+    }
+
+    public void setShowScc(boolean showScc) {
+        this.showScc = showScc;
+        rebuildEdgeOverlays();
+    }
+
+    public void setShowViolations(boolean showViolations) {
+        this.showViolations = showViolations;
+        rebuildEdgeOverlays();
+    }
+
     /**
      * Rebuilds the 3D scene from pre-read 2D layout bounds.
      * Pass {@code null} maps to clear the view.
@@ -109,18 +150,51 @@ public class ArchitectureView3D implements View {
                         ArchitectureNode root,
                         Architecture architecture,
                         Stage stage) {
+        setData(elementBounds, root, architecture, null, stage);
+    }
+
+    /**
+     * Rebuilds the 3D scene from pre-read 2D layout bounds.
+     * Pass {@code null} maps to clear the view.
+     *
+     * @param elementBounds      bounds per FQN read from the 2D ArchitectureView
+     * @param root               root of the ArchitectureNode tree
+     * @param architecture       domain model (for tangle/SCC detection)
+     * @param visibleParentByFqn closest visible 2D package parent per FQN
+     * @param stage              owning stage (needed for mouse-grab centering)
+     */
+    public void setData(Map<String, Bounds> elementBounds,
+                        ArchitectureNode root,
+                        Architecture architecture,
+                        Map<String, String> visibleParentByFqn,
+                        Stage stage) {
         flyCamera.detach();
         scene3D.getChildren().clear();
+        edgeLayer.getChildren().clear();
         clearHover();
         clearSelection();
         hoverTargets = Map.of();
+        edgeTargets = Map.of();
+        nodeByFqn = Map.of();
+        parentByFqn = Map.of();
+        currentRoot = root;
+        currentArchitecture = architecture;
         hideSelectionOverlay();
 
         if (elementBounds == null || elementBounds.isEmpty()) return;
 
         SceneBuilder3D.SceneResult result = new SceneBuilder3D().build(elementBounds, root, architecture);
         hoverTargets = new HashMap<>(result.hoverTargets());
+        edgeTargets = new HashMap<>(result.edgeTargets());
+        nodeByFqn = buildNodeMap(root);
+        parentByFqn = buildParentMap(root);
+        if (visibleParentByFqn != null && !visibleParentByFqn.isEmpty()) {
+            parentByFqn = new HashMap<>(parentByFqn);
+            parentByFqn.putAll(visibleParentByFqn);
+        }
         scene3D.getChildren().add(result.group());
+        scene3D.getChildren().add(edgeLayer);
+        rebuildEdgeOverlays();
 
         flyCamera.attach(subScene, stage);
         SceneBuilder3D.CameraHint h = result.cameraHint();
@@ -249,4 +323,183 @@ public class ArchitectureView3D implements View {
         selectionOverlay.setVisible(false);
         selectionOverlay.setText("");
     }
+
+    private void rebuildEdgeOverlays() {
+        edgeLayer.getChildren().clear();
+        if (edgeTargets.isEmpty() || currentRoot == null) {
+            return;
+        }
+        double safeCeilingY = safeCeilingY();
+        int lane = 0;
+        if (showDependencies) {
+            for (Edge edge : dependencyEdges()) {
+                lane = addArrow(edge.source(), edge.target(), Color.rgb(90, 94, 98), 1.4, safeCeilingY, lane);
+            }
+        }
+        if (showScc) {
+            for (Edge edge : sccEdges()) {
+                lane = addArrow(edge.source(), edge.target(), Color.RED, 1.8, safeCeilingY, lane);
+            }
+        }
+        if (showViolations && currentArchitecture != null) {
+            for (Edge edge : violationEdges()) {
+                lane = addArrow(edge.source(), edge.target(), Color.web("#ff9800"), 2.0, safeCeilingY, lane);
+            }
+        }
+    }
+
+    private int addArrow(String sourceFqn, String targetFqn, Color color,
+                         double radius, double safeCeilingY, int lane) {
+        SceneBuilder3D.EdgeTarget source = edgeTargets.get(sourceFqn);
+        SceneBuilder3D.EdgeTarget target = edgeTargets.get(targetFqn);
+        if (source == null || target == null) {
+            return lane;
+        }
+        edgeLayer.getChildren().add(CurvedArrow3D.build(source, target, safeCeilingY, lane, radius, color));
+        return lane + 1;
+    }
+
+    private List<Edge> dependencyEdges() {
+        List<Edge> edges = new ArrayList<>();
+        for (ArchitectureNode node : nodeByFqn.values()) {
+            if (node.getType() != ArchitectureNode.NodeType.CLASS || !edgeTargets.containsKey(node.getFullName())) {
+                continue;
+            }
+            for (String dep : node.getDependencies()) {
+                if (edgeTargets.containsKey(dep)) {
+                    edges.add(new Edge(node.getFullName(), dep));
+                }
+            }
+        }
+        return sorted(edges);
+    }
+
+    private List<Edge> sccEdges() {
+        Map<String, Set<String>> graph = visibleClassGraph();
+        if (graph.isEmpty()) {
+            return List.of();
+        }
+        List<Edge> edges = new ArrayList<>();
+        for (StronglyConnectedComponent scc : new TarjanSCCFinder(graph).findSCCs()) {
+            if (!scc.isTangle()) {
+                continue;
+            }
+            Set<String> members = scc.getMembers();
+            for (String member : members) {
+                for (String dep : graph.getOrDefault(member, Set.of())) {
+                    if (members.contains(dep)) {
+                        edges.add(new Edge(member, dep));
+                    }
+                }
+            }
+        }
+        return sorted(edges);
+    }
+
+    private Map<String, Set<String>> visibleClassGraph() {
+        Map<String, Set<String>> graph = new HashMap<>();
+        for (ArchitectureNode node : nodeByFqn.values()) {
+            if (node.getType() != ArchitectureNode.NodeType.CLASS || !edgeTargets.containsKey(node.getFullName())) {
+                continue;
+            }
+            Set<String> deps = new HashSet<>();
+            for (String dep : node.getDependencies()) {
+                ArchitectureNode depNode = nodeByFqn.get(dep);
+                if (depNode != null
+                        && depNode.getType() == ArchitectureNode.NodeType.CLASS
+                        && edgeTargets.containsKey(dep)) {
+                    deps.add(dep);
+                }
+            }
+            graph.put(node.getFullName(), deps);
+        }
+        return graph;
+    }
+
+    private List<Edge> violationEdges() {
+        Map<EndpointPair, List<Violation>> grouped =
+                currentArchitecture.groupUpwardViolations(this::visibleEndpointFqn);
+        List<Edge> edges = new ArrayList<>(grouped.size());
+        for (EndpointPair pair : grouped.keySet()) {
+            if (edgeTargets.containsKey(pair.source()) && edgeTargets.containsKey(pair.target())) {
+                edges.add(new Edge(pair.source(), pair.target()));
+            }
+        }
+        return sorted(edges);
+    }
+
+    private String visibleEndpointFqn(String fqn) {
+        if (edgeTargets.containsKey(fqn)) {
+            return fqn;
+        }
+        String parent = parentByFqn.get(fqn);
+        while (parent != null) {
+            if (edgeTargets.containsKey(parent)) {
+                return parent;
+            }
+            parent = parentByFqn.get(parent);
+        }
+        int dot = fqn.lastIndexOf('.');
+        while (dot > 0) {
+            String candidate = fqn.substring(0, dot);
+            if (edgeTargets.containsKey(candidate)) {
+                return candidate;
+            }
+            dot = candidate.lastIndexOf('.');
+        }
+        return null;
+    }
+
+    private double safeCeilingY() {
+        double top = edgeTargets.values().stream()
+                .filter(t -> t.type() == ArchitectureNode.NodeType.CLASS)
+                .mapToDouble(SceneBuilder3D.EdgeTarget::topY)
+                .min()
+                .orElseGet(() -> edgeTargets.values().stream()
+                        .mapToDouble(SceneBuilder3D.EdgeTarget::topY)
+                        .min()
+                        .orElse(-100.0));
+        return top - 45.0;
+    }
+
+    private static Map<String, ArchitectureNode> buildNodeMap(ArchitectureNode root) {
+        Map<String, ArchitectureNode> map = new HashMap<>();
+        if (root != null) {
+            collectNodes(root, map);
+        }
+        return map;
+    }
+
+    private static void collectNodes(ArchitectureNode node, Map<String, ArchitectureNode> map) {
+        map.put(node.getFullName(), node);
+        for (ArchitectureNode child : node.getChildren()) {
+            collectNodes(child, map);
+        }
+    }
+
+    private static Map<String, String> buildParentMap(ArchitectureNode root) {
+        Map<String, String> map = new HashMap<>();
+        if (root != null) {
+            for (ArchitectureNode child : root.getChildren()) {
+                collectParents(child, null, map);
+            }
+        }
+        return map;
+    }
+
+    private static void collectParents(ArchitectureNode node, String parentFqn, Map<String, String> map) {
+        if (parentFqn != null) {
+            map.put(node.getFullName(), parentFqn);
+        }
+        for (ArchitectureNode child : node.getChildren()) {
+            collectParents(child, node.getFullName(), map);
+        }
+    }
+
+    private static List<Edge> sorted(List<Edge> edges) {
+        edges.sort(Comparator.comparing(Edge::source).thenComparing(Edge::target));
+        return edges;
+    }
+
+    private record Edge(String source, String target) {}
 }

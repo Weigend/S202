@@ -19,10 +19,13 @@ import de.weigend.s202.ui.model.ArchitectureNode;
 import de.weigend.s202.ui.model.ArchitectureNode.NodeType;
 import javafx.geometry.BoundingBox;
 import javafx.geometry.Bounds;
+import javafx.geometry.Point3D;
 import javafx.scene.Group;
 import javafx.scene.paint.PhongMaterial;
 import javafx.scene.shape.Box;
 import javafx.scene.shape.DrawMode;
+import javafx.scene.shape.MeshView;
+import javafx.scene.shape.TriangleMesh;
 import org.junit.jupiter.api.Test;
 
 import java.util.LinkedHashMap;
@@ -92,6 +95,10 @@ class SceneBuilder3DTest {
 
         assertPickable(pkgBox, "com.example", NodeType.PACKAGE);
         assertPickable(clsBox, "com.example.Foo", NodeType.CLASS);
+        assertEdgeTarget(result.edgeTargets().get("com.example"), "com.example", NodeType.PACKAGE,
+                110, topY(pkgBox), -80);
+        assertEdgeTarget(result.edgeTargets().get("com.example.Foo"), "com.example.Foo", NodeType.CLASS,
+                75, topY(clsBox), -72);
 
         SceneBuilder3D.HoverTarget pkgHover = result.hoverTargets().get("com.example");
         Box pkgHoverBar = pkgHover.borderBars().get(0);
@@ -115,6 +122,29 @@ class SceneBuilder3DTest {
         assertEquals(SceneBuilder3D.SELECTED_BORDER_COLOR, material(clsBorder).getDiffuseColor());
         clsHover.setSelected(false);
         assertEquals(SceneBuilder3D.CLASS_BORDER_COLOR, material(clsBorder).getDiffuseColor());
+    }
+
+    @Test
+    void curvedArrowStaysAboveElementTops() {
+        SceneBuilder3D.EdgeTarget source = new SceneBuilder3D.EdgeTarget(
+                "a.A", NodeType.CLASS, 0, -20, 0);
+        SceneBuilder3D.EdgeTarget target = new SceneBuilder3D.EdgeTarget(
+                "b.B", NodeType.CLASS, 120, -40, -80);
+
+        Group arrow = CurvedArrow3D.build(source, target, -120, 0, 1.5, SceneBuilder3D.SELECTED_BORDER_COLOR);
+
+        assertEquals(2, arrow.getChildren().size(), "arrow consists of one tube mesh plus one head mesh");
+        MeshView shaft = assertInstanceOf(MeshView.class, arrow.getChildren().get(0));
+        TriangleMesh mesh = assertInstanceOf(TriangleMesh.class, shaft.getMesh());
+        double highestY = minY(mesh);
+        assertTrue(highestY < Math.min(source.topY(), target.topY()),
+                "curved arrow must bow above both source and target tops");
+        Point3D firstRing = ringCenter(mesh, 0);
+        Point3D secondRing = ringCenter(mesh, 1);
+        double firstHorizontalOffset = Math.hypot(
+                secondRing.getX() - firstRing.getX(),
+                secondRing.getZ() - firstRing.getZ());
+        assertTrue(firstHorizontalOffset > 0.5, "arrow must not start as a vertical riser");
     }
 
     @Test
@@ -190,8 +220,46 @@ class SceneBuilder3DTest {
         assertEquals(type, pickable.type());
     }
 
+    private static void assertEdgeTarget(SceneBuilder3D.EdgeTarget target,
+                                         String fullName,
+                                         NodeType type,
+                                         double centerX,
+                                         double topY,
+                                         double centerZ) {
+        assertEquals(fullName, target.fullName());
+        assertEquals(type, target.type());
+        assertEquals(centerX, target.centerX(), 0.01);
+        assertEquals(topY, target.topY(), 0.01);
+        assertEquals(centerZ, target.centerZ(), 0.01);
+    }
+
     private static double topY(Box box) {
         return box.getTranslateY() - box.getHeight() / 2.0;
+    }
+
+    private static double minY(TriangleMesh mesh) {
+        double min = Double.POSITIVE_INFINITY;
+        for (int i = 1; i < mesh.getPoints().size(); i += 3) {
+            min = Math.min(min, mesh.getPoints().get(i));
+        }
+        return min;
+    }
+
+    private static Point3D ringCenter(TriangleMesh mesh, int ring) {
+        double x = 0;
+        double y = 0;
+        double z = 0;
+        int vertexOffset = ring * CurvedArrow3D.TUBE_SEGMENTS;
+        for (int i = 0; i < CurvedArrow3D.TUBE_SEGMENTS; i++) {
+            int p = (vertexOffset + i) * 3;
+            x += mesh.getPoints().get(p);
+            y += mesh.getPoints().get(p + 1);
+            z += mesh.getPoints().get(p + 2);
+        }
+        return new Point3D(
+                x / CurvedArrow3D.TUBE_SEGMENTS,
+                y / CurvedArrow3D.TUBE_SEGMENTS,
+                z / CurvedArrow3D.TUBE_SEGMENTS);
     }
 
     private static double bottomY(Box box) {

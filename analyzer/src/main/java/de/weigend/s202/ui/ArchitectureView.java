@@ -1278,10 +1278,58 @@ public class ArchitectureView extends BorderPane {
         return result;
     }
 
+    /**
+     * Returns the closest visible package parent per currently registered
+     * package/class box. Used by projections such as the 3D view that need to
+     * roll hidden class-level edges up to the same visible endpoint as the 2D
+     * scene, including after What-If drag-and-drop moves.
+     */
+    public java.util.Map<String, String> getVisibleElementParentFqns() {
+        if (getScene() != null && getScene().getRoot() != null) {
+            getScene().getRoot().layout();
+        }
+        var result = new java.util.LinkedHashMap<String, String>();
+        for (var entry : elementRegistry.entrySet()) {
+            javafx.scene.Node node = entry.getValue();
+            if (!(node instanceof LevelPackageBox || node instanceof LevelClassBox)) continue;
+            if (node.getScene() == null) continue;
+            String parent = nearestVisiblePackageParent(node.getParent());
+            if (parent != null) {
+                result.put(entry.getKey(), parent);
+            }
+        }
+        return result;
+    }
+
     private static javafx.geometry.Bounds footprintBoundsInScene(javafx.scene.Node node) {
         if (node instanceof LevelPackageBox || node instanceof LevelClassBox) {
             return node.localToScene(node.getBoundsInLocal());
         }
         return null;
+    }
+
+    private static String nearestVisiblePackageParent(javafx.scene.Node node) {
+        javafx.scene.Node current = node;
+        while (current != null) {
+            if (current instanceof LevelPackageBox pkg && isActuallyVisible(current)) {
+                return pkg.getFullName();
+            }
+            current = current.getParent();
+        }
+        return null;
+    }
+
+    private static boolean isActuallyVisible(javafx.scene.Node node) {
+        if (node == null || !node.isVisible()) {
+            return false;
+        }
+        javafx.scene.Parent parent = node.getParent();
+        while (parent != null) {
+            if (!parent.isVisible()) {
+                return false;
+            }
+            parent = parent.getParent();
+        }
+        return true;
     }
 }

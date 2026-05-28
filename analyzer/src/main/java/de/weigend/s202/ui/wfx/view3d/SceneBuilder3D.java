@@ -109,6 +109,9 @@ class SceneBuilder3D {
 
     record PickableElement(String fullName, NodeType type) {}
 
+    record EdgeTarget(String fullName, NodeType type,
+                      double centerX, double topY, double centerZ) {}
+
     static final class HoverTarget {
         private final String fullName;
         private final NodeType type;
@@ -176,9 +179,12 @@ class SceneBuilder3D {
         }
     }
 
-    record RenderedElement(Node node, HoverTarget hoverTarget) {}
+    record RenderedElement(Node node, HoverTarget hoverTarget, EdgeTarget edgeTarget) {}
 
-    record SceneResult(Group group, CameraHint cameraHint, Map<String, HoverTarget> hoverTargets) {}
+    record SceneResult(Group group,
+                       CameraHint cameraHint,
+                       Map<String, HoverTarget> hoverTargets,
+                       Map<String, EdgeTarget> edgeTargets) {}
 
     SceneResult build(Map<String, Bounds> elementBounds,
                       ArchitectureNode root,
@@ -204,6 +210,7 @@ class SceneBuilder3D {
         Group hoverLayer = new Group();
         hoverLayer.setMouseTransparent(true);
         Map<String, HoverTarget> hoverTargets = new HashMap<>();
+        Map<String, EdgeTarget> edgeTargets = new HashMap<>();
 
         // Package slabs first (behind class tiles).
         for (var e : elementBounds.entrySet()) {
@@ -215,6 +222,7 @@ class SceneBuilder3D {
             group.getChildren().add(rendered.node());
             hoverLayer.getChildren().addAll(rendered.hoverTarget().borderBars());
             hoverTargets.put(e.getKey(), rendered.hoverTarget());
+            edgeTargets.put(e.getKey(), rendered.edgeTarget());
         }
 
         for (var e : elementBounds.entrySet()) {
@@ -224,6 +232,7 @@ class SceneBuilder3D {
             RenderedElement rendered = buildClassTile(e.getValue(), depth, node);
             group.getChildren().add(rendered.node());
             hoverTargets.put(e.getKey(), rendered.hoverTarget());
+            edgeTargets.put(e.getKey(), rendered.edgeTarget());
         }
 
         group.getChildren().add(hoverLayer);
@@ -233,7 +242,7 @@ class SceneBuilder3D {
                 elementBounds,
                 maxDepth,
                 maxRenderedClassArchitectureLevel(elementBounds, nodeMap));
-        return new SceneResult(group, hint, hoverTargets);
+        return new SceneResult(group, hint, hoverTargets, edgeTargets);
     }
 
     // -----------------------------------------------------------------------
@@ -272,7 +281,13 @@ class SceneBuilder3D {
                 hoverMaterial,
                 selectedBorderMaterial(),
                 true);
-        return new RenderedElement(slab, hoverTarget);
+        EdgeTarget edgeTarget = new EdgeTarget(
+                fullName,
+                NodeType.PACKAGE,
+                centerX,
+                -packageElevation(depth) - PACKAGE_THICKNESS,
+                centerZ);
+        return new RenderedElement(slab, hoverTarget, edgeTarget);
     }
 
     // ── Footprint computation (bottom-up) ────────────────────────────────────
@@ -371,7 +386,13 @@ class SceneBuilder3D {
                 hoverBorderMaterial(),
                 selectedBorderMaterial(),
                 false);
-        return new RenderedElement(tile, hoverTarget);
+        EdgeTarget edgeTarget = new EdgeTarget(
+                node.getFullName(),
+                NodeType.CLASS,
+                b.getCenterX(),
+                -elevation - thickness,
+                worldZ(b.getCenterY()));
+        return new RenderedElement(tile, hoverTarget, edgeTarget);
     }
 
     private Box buildPositionedBox(double centerX, double centerZ,

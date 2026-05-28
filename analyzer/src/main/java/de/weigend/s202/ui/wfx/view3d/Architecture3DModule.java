@@ -15,6 +15,7 @@
  */
 package de.weigend.s202.ui.wfx.view3d;
 
+import de.weigend.s202.domain.architecture.Architecture;
 import de.weigend.s202.ui.ArchitectureView;
 import de.weigend.s202.ui.model.ArchitectureNode;
 import de.weigend.s202.ui.wfx.ArchitectureWfxView;
@@ -51,6 +52,10 @@ public class Architecture3DModule implements Module {
     private ArchitectureView3D view;
     private ArchitectureView   boundView;
     private ChangeListener<ArchitectureNode> rootListener;
+    private ChangeListener<Boolean> showDependenciesListener;
+    private ChangeListener<Boolean> showSccListener;
+    private ChangeListener<Boolean> showViolationsListener;
+    private ChangeListener<Number> redrawTickListener;
     private ChangeListener<Parent> activationListener;
     private Stage stage;
 
@@ -91,12 +96,32 @@ public class Architecture3DModule implements Module {
 
         unbind();
         boundView = newBound;
+        syncOverlaySettings();
         scheduleRefresh();
 
         if (newBound != null) {
             rootListener = (obs, was, isNow) -> scheduleRefresh();
             newBound.architectureRootProperty().addListener(rootListener);
+            showDependenciesListener = (obs, was, isNow) -> view.setShowDependencies(isNow);
+            showSccListener = (obs, was, isNow) -> view.setShowScc(isNow);
+            showViolationsListener = (obs, was, isNow) -> view.setShowViolations(isNow);
+            newBound.showDependenciesProperty().addListener(showDependenciesListener);
+            newBound.showSccProperty().addListener(showSccListener);
+            newBound.showWhatIfViolationsProperty().addListener(showViolationsListener);
+            redrawTickListener = (obs, was, isNow) -> scheduleRefresh();
+            newBound.redrawTickProperty().addListener(redrawTickListener);
         }
+    }
+
+    private void syncOverlaySettings() {
+        if (boundView == null) {
+            view.setOverlayVisibility(false, false, false);
+            return;
+        }
+        view.setOverlayVisibility(
+                boundView.isShowDependencies(),
+                boundView.isShowScc(),
+                boundView.isShowWhatIfViolations());
     }
 
     /**
@@ -134,7 +159,11 @@ public class Architecture3DModule implements Module {
             if (captured != boundView) return; // stale — a newer rebind won
             Map<String, Bounds> bounds = captured.getElementFootprintBoundsInScene();
             ArchitectureNode root = captured.getArchitectureRoot();
-            view.setData(bounds, root, captured.getArchitecture(), stage);
+            Architecture architecture = captured.getWhatIfArchitecture() != null
+                    ? captured.getWhatIfArchitecture()
+                    : captured.getArchitecture();
+            Map<String, String> visibleParentByFqn = captured.getVisibleElementParentFqns();
+            view.setData(bounds, root, architecture, visibleParentByFqn, stage);
         }));
     }
 
@@ -142,8 +171,24 @@ public class Architecture3DModule implements Module {
         if (boundView != null && rootListener != null) {
             boundView.architectureRootProperty().removeListener(rootListener);
         }
+        if (boundView != null && showDependenciesListener != null) {
+            boundView.showDependenciesProperty().removeListener(showDependenciesListener);
+        }
+        if (boundView != null && showSccListener != null) {
+            boundView.showSccProperty().removeListener(showSccListener);
+        }
+        if (boundView != null && showViolationsListener != null) {
+            boundView.showWhatIfViolationsProperty().removeListener(showViolationsListener);
+        }
+        if (boundView != null && redrawTickListener != null) {
+            boundView.redrawTickProperty().removeListener(redrawTickListener);
+        }
         boundView    = null;
         rootListener = null;
+        showDependenciesListener = null;
+        showSccListener = null;
+        showViolationsListener = null;
+        redrawTickListener = null;
     }
 
     private ArchitectureWfxView focusedArchitectureView() {
