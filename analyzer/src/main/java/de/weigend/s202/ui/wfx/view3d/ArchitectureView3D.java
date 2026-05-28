@@ -22,15 +22,23 @@ import io.softwareecg.wfx.windowmtg.api.View;
 import io.softwareecg.wfx.windowmtg.api.ViewKind;
 import javafx.animation.AnimationTimer;
 import javafx.geometry.Bounds;
+import javafx.geometry.Insets;
+import javafx.geometry.Pos;
 import javafx.scene.Group;
+import javafx.scene.Node;
 import javafx.scene.SceneAntialiasing;
 import javafx.scene.SubScene;
+import javafx.scene.control.Label;
+import javafx.scene.input.MouseButton;
+import javafx.scene.input.MouseEvent;
 import javafx.scene.layout.StackPane;
 import javafx.scene.paint.Color;
 import javafx.stage.Stage;
 
 import java.net.URL;
+import java.util.HashMap;
 import java.util.Map;
+import java.util.function.Consumer;
 
 /**
  * WFX {@link View} that renders the architecture as an interactive 3D landscape.
@@ -48,8 +56,9 @@ import java.util.Map;
  * packages become thin stacked slabs, classes become thin rectangles on their
  * package slab. It must not recompute package or class ordering.
  *
- * <p>Navigation: click to grab the pointer, WASD + mouse to fly, scroll to
- * zoom, ESC to release.
+ * <p>Navigation: click to focus/capture the 3D view, WASD to fly, CTRL+mouse
+ * to look around, CTRL+scroll to zoom, ESC to release. Without CTRL the pointer
+ * selects classes and packages.
  */
 public class ArchitectureView3D implements View {
 
@@ -58,7 +67,11 @@ public class ArchitectureView3D implements View {
     private final StackPane root     = new StackPane();
     private final Group     scene3D  = new Group();
     private final SubScene  subScene;
+    private final Label     selectionOverlay = new Label();
     private final FlyCamera flyCamera;
+    private Map<String, SceneBuilder3D.HoverTarget> hoverTargets = Map.of();
+    private SceneBuilder3D.HoverTarget hoveredTarget;
+    private Consumer<String> elementSelectionSink = fqn -> {};
 
     public ArchitectureView3D() {
         subScene = new SubScene(scene3D, 800, 600, true, SceneAntialiasing.BALANCED);
@@ -68,12 +81,18 @@ public class ArchitectureView3D implements View {
 
         flyCamera = new FlyCamera();
         subScene.setCamera(flyCamera.getCamera());
-        root.getChildren().add(subScene);
+        configureSelectionOverlay();
+        installSelectionHandlers();
+        root.getChildren().addAll(subScene, selectionOverlay);
 
         AnimationTimer timer = new AnimationTimer() {
             @Override public void handle(long now) { flyCamera.tick(); }
         };
         timer.start();
+    }
+
+    public void setOnElementSelected(Consumer<String> selectionSink) {
+        elementSelectionSink = selectionSink == null ? fqn -> {} : selectionSink;
     }
 
     /**
@@ -91,10 +110,14 @@ public class ArchitectureView3D implements View {
                         Stage stage) {
         flyCamera.detach();
         scene3D.getChildren().clear();
+        clearHover();
+        hoverTargets = Map.of();
+        hideSelectionOverlay();
 
         if (elementBounds == null || elementBounds.isEmpty()) return;
 
         SceneBuilder3D.SceneResult result = new SceneBuilder3D().build(elementBounds, root, architecture);
+        hoverTargets = new HashMap<>(result.hoverTargets());
         scene3D.getChildren().add(result.group());
 
         flyCamera.attach(subScene, stage);
@@ -109,11 +132,96 @@ public class ArchitectureView3D implements View {
     @Override public String getViewId()            { return VIEW_ID; }
     @Override public String getTitle()             { return "3D Architecture"; }
     @Override public String getToolTipInfo()       {
-        return "3D view — click to grab mouse, WASD+mouse to fly, scroll to zoom, ESC to release";
+        return "3D view — click to focus, hover/click to select, CTRL+mouse to look, CTRL+scroll to zoom, ESC to release";
     }
     @Override public Position getDefaultPosition() { return Position.CENTER; }
     @Override public ViewKind getKind()            { return ViewKind.TOOL; }
     @Override public double getViewAreaSize()      { return 0.5; }
     @Override public javafx.scene.Parent getRootNode() { return root; }
     @Override public URL getViewImagePath()        { return null; }
+
+    private void configureSelectionOverlay() {
+        selectionOverlay.setMouseTransparent(true);
+        selectionOverlay.setVisible(false);
+        selectionOverlay.setStyle("""
+                -fx-background-color: rgba(0, 0, 0, 0.52);
+                -fx-background-radius: 4;
+                -fx-text-fill: white;
+                -fx-padding: 7 9 7 9;
+                -fx-font-size: 12px;
+                """);
+        StackPane.setAlignment(selectionOverlay, Pos.TOP_LEFT);
+        StackPane.setMargin(selectionOverlay, new Insets(12));
+    }
+
+    private void installSelectionHandlers() {
+        subScene.addEventHandler(MouseEvent.MOUSE_MOVED, this::handleHover);
+        subScene.addEventHandler(MouseEvent.MOUSE_DRAGGED, this::handleHover);
+        subScene.addEventHandler(MouseEvent.MOUSE_EXITED, event -> clearHover());
+        subScene.addEventHandler(MouseEvent.MOUSE_CLICKED, this::handleSelectionClick);
+    }
+
+    private void handleHover(MouseEvent event) {
+        if (event.isControlDown()) {
+            clearHover();
+            return;
+        }
+        setHovered(findPickable(event));
+    }
+
+    private void handleSelectionClick(MouseEvent event) {
+        if (event.getButton() != MouseButton.PRIMARY || event.isControlDown()) {
+            return;
+        }
+        SceneBuilder3D.PickableElement pickable = findPickable(event);
+        if (pickable == null) {
+            return;
+        }
+        setHovered(pickable);
+        showSelectionOverlay(pickable);
+        elementSelectionSink.accept(pickable.fullName());
+        event.consume();
+    }
+
+    private SceneBuilder3D.PickableElement findPickable(MouseEvent event) {
+        Node node = event.getPickResult() == null ? null : event.getPickResult().getIntersectedNode();
+        while (node != null) {
+            Object value = node.getProperties().get(SceneBuilder3D.PICKABLE_PROPERTY);
+            if (value instanceof SceneBuilder3D.PickableElement pickable) {
+                return pickable;
+            }
+            node = node.getParent();
+        }
+        return null;
+    }
+
+    private void setHovered(SceneBuilder3D.PickableElement pickable) {
+        SceneBuilder3D.HoverTarget target = pickable == null ? null : hoverTargets.get(pickable.fullName());
+        if (target == hoveredTarget) {
+            return;
+        }
+        clearHover();
+        hoveredTarget = target;
+        if (hoveredTarget != null) {
+            hoveredTarget.setHovered(true);
+        }
+    }
+
+    private void clearHover() {
+        if (hoveredTarget != null) {
+            hoveredTarget.setHovered(false);
+            hoveredTarget = null;
+        }
+    }
+
+    private void showSelectionOverlay(SceneBuilder3D.PickableElement pickable) {
+        String kind = pickable.type() == ArchitectureNode.NodeType.CLASS ? "Class" : "Package";
+        selectionOverlay.setText(kind + ": " + pickable.fullName());
+        selectionOverlay.setVisible(true);
+    }
+
+    private void hideSelectionOverlay() {
+        selectionOverlay.setVisible(false);
+        selectionOverlay.setText("");
+    }
 }

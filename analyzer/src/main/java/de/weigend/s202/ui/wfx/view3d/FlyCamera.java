@@ -16,6 +16,7 @@
 package de.weigend.s202.ui.wfx.view3d;
 
 import javafx.event.EventHandler;
+import javafx.geometry.Bounds;
 import javafx.scene.Cursor;
 import javafx.scene.PerspectiveCamera;
 import javafx.scene.SubScene;
@@ -37,10 +38,10 @@ import java.util.Set;
  *
  * <p>Controls:
  * <ul>
- *   <li>Left-click in the SubScene to grab the mouse pointer</li>
+ *   <li>Left-click in the SubScene to focus/capture the 3D view</li>
  *   <li>WASD to move forward/backward/strafe (only while grabbed)</li>
- *   <li>Mouse movement (while grabbed) to rotate yaw/pitch</li>
- *   <li>Scroll wheel to zoom (always active over the SubScene)</li>
+ *   <li>CTRL + mouse movement (while grabbed) to rotate yaw/pitch</li>
+ *   <li>CTRL + scroll wheel to zoom over the SubScene</li>
  *   <li>ESC to release the mouse pointer</li>
  * </ul>
  *
@@ -114,17 +115,21 @@ class FlyCamera {
 
         clickHandler = e -> {
             if (e.getButton() == MouseButton.PRIMARY && !grabbed) {
+                lastScreenX = e.getScreenX();
+                lastScreenY = e.getScreenY();
                 grab();
-                e.consume();
             }
         };
         movedHandler = e -> {
-            if (grabbed) handleMouseDelta(e.getScreenX(), e.getScreenY());
+            if (grabbed) handleMouseMove(e);
         };
         draggedHandler = e -> {
-            if (grabbed) handleMouseDelta(e.getScreenX(), e.getScreenY());
+            if (grabbed) handleMouseMove(e);
         };
         scrollHandler = e -> {
+            if (!e.isControlDown()) {
+                return;
+            }
             double delta = e.getDeltaY() * ZOOM_SPEED * 0.1;
             translateAlongView(0, 0, delta);
             e.consume();
@@ -136,11 +141,13 @@ class FlyCamera {
                 e.consume();
             } else {
                 pressedKeys.add(e.getCode());
+                updateGrabCursor();
                 e.consume();
             }
         };
         grabKeyReleasedFilter = e -> {
             pressedKeys.remove(e.getCode());
+            updateGrabCursor();
             e.consume();
         };
 
@@ -205,6 +212,25 @@ class FlyCamera {
         }
     }
 
+    private void handleMouseMove(MouseEvent event) {
+        if (recentering) {
+            handleMouseDelta(event.getScreenX(), event.getScreenY());
+            event.consume();
+            return;
+        }
+        if (event.isControlDown()) {
+            if (attachedScene != null) {
+                attachedScene.setCursor(Cursor.NONE);
+            }
+            handleMouseDelta(event.getScreenX(), event.getScreenY());
+            event.consume();
+            return;
+        }
+        updateGrabCursor();
+        lastScreenX = event.getScreenX();
+        lastScreenY = event.getScreenY();
+    }
+
     private void handleMouseDelta(double screenX, double screenY) {
         if (recentering) {
             recentering = false;
@@ -224,8 +250,15 @@ class FlyCamera {
 
     private void centerMouse() {
         if (attachedStage == null) return;
-        double cx = attachedStage.getX() + attachedStage.getWidth()  / 2.0;
-        double cy = attachedStage.getY() + attachedStage.getHeight() / 2.0;
+        Bounds screenBounds = attachedScene == null
+                ? null
+                : attachedScene.localToScreen(attachedScene.getBoundsInLocal());
+        double cx = screenBounds == null
+                ? attachedStage.getX() + attachedStage.getWidth() / 2.0
+                : (screenBounds.getMinX() + screenBounds.getMaxX()) / 2.0;
+        double cy = screenBounds == null
+                ? attachedStage.getY() + attachedStage.getHeight() / 2.0
+                : (screenBounds.getMinY() + screenBounds.getMaxY()) / 2.0;
         lastScreenX = cx;
         lastScreenY = cy;
         recentering = true;
@@ -250,8 +283,7 @@ class FlyCamera {
     private void grab() {
         if (attachedScene == null || attachedStage == null) return;
         grabbed = true;
-        attachedScene.setCursor(Cursor.NONE);
-        centerMouse();
+        updateGrabCursor();
         // Intercept all key events at outer-scene level while grabbed
         attachedStage.getScene().addEventFilter(KeyEvent.KEY_PRESSED,  grabKeyPressedFilter);
         attachedStage.getScene().addEventFilter(KeyEvent.KEY_RELEASED, grabKeyReleasedFilter);
@@ -261,6 +293,7 @@ class FlyCamera {
     private void release() {
         if (!grabbed) return;
         grabbed = false;
+        recentering = false;
         pressedKeys.clear();
         if (attachedScene != null) {
             attachedScene.setCursor(Cursor.DEFAULT);
@@ -271,6 +304,12 @@ class FlyCamera {
             // Return focus to the main window root so the rest of the UI is responsive
             attachedStage.getScene().getRoot().requestFocus();
         }
+    }
+
+    private void updateGrabCursor() {
+        if (attachedScene == null || !grabbed) return;
+        boolean controlDown = pressedKeys.contains(KeyCode.CONTROL);
+        attachedScene.setCursor(controlDown ? Cursor.NONE : Cursor.CROSSHAIR);
     }
 
     private static double clamp(double value, double min, double max) {

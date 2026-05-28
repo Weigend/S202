@@ -18,7 +18,9 @@ package de.weigend.s202.ui.wfx.view3d;
 import de.weigend.s202.ui.ArchitectureView;
 import de.weigend.s202.ui.model.ArchitectureNode;
 import de.weigend.s202.ui.wfx.ArchitectureWfxView;
+import de.weigend.s202.ui.wfx.events.NodeSelectionEvent;
 import io.softwareecg.wfx.lookup.Lookup;
+import io.softwareecg.wfx.platform.api.EventBus;
 import io.softwareecg.wfx.platform.api.Module;
 import io.softwareecg.wfx.platform.api.exceptions.PlatformException;
 import io.softwareecg.wfx.windowmtg.api.ApplicationWindow;
@@ -31,6 +33,7 @@ import javafx.geometry.Bounds;
 import javafx.scene.Parent;
 import javafx.stage.Stage;
 
+import java.util.EventObject;
 import java.util.Map;
 
 /**
@@ -57,6 +60,7 @@ public class Architecture3DModule implements Module {
     @Override
     public void preload() throws PlatformException {
         view = new ArchitectureView3D();
+        view.setOnElementSelected(fqn -> eventBus().publish(new NodeSelectionEvent(fqn, view)));
     }
 
     @Override
@@ -164,5 +168,10 @@ public class Architecture3DModule implements Module {
                 .filter(ArchitectureWfxView.class::isInstance)
                 .map(ArchitectureWfxView.class::cast)
                 .findFirst().orElse(null);
+    }
+
+    @SuppressWarnings("unchecked")
+    private static EventBus<EventObject> eventBus() {
+        return (EventBus<EventObject>) Lookup.lookup(EventBus.class);
     }
 }

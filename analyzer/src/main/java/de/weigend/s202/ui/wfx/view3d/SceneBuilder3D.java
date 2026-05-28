@@ -85,8 +85,18 @@ class SceneBuilder3D {
     static final double CLASS_BORDER_THICKNESS = 0.8;
     /** Small separation above the tile surface to avoid z-fighting. */
     static final double CLASS_BORDER_SURFACE_LIFT = 0.15;
+    /** Property key used by the interaction layer to identify selectable 3D nodes. */
+    static final String PICKABLE_PROPERTY = SceneBuilder3D.class.getName() + ".pickable";
+    /** Subtle border colour for the element currently under the pointer. */
+    static final Color HOVER_BORDER_COLOR = Color.web("#f8fafc");
+    /** Width of the hover outline on package slabs. */
+    static final double HOVER_BORDER_WIDTH = 2.0;
+    /** Height of hover outline bars. */
+    static final double HOVER_BORDER_THICKNESS = 1.0;
+    /** Small separation above the hovered surface to avoid z-fighting. */
+    static final double HOVER_BORDER_SURFACE_LIFT = 0.35;
 
-    // Diagnostic: set true to print element bounds to stdout
+    // Diagnostic: set true to print element bounds + class levels to stdout
     private static final boolean DEBUG_BOUNDS = false;
 
     // -----------------------------------------------------------------------
@@ -95,86 +105,216 @@ class SceneBuilder3D {
     record CameraHint(double x, double y, double z,
                       double targetX, double targetY, double targetZ) {}
 
-    record SceneResult(Group group, CameraHint cameraHint) {}
+    record PickableElement(String fullName, NodeType type) {}
+
+    record HoverTarget(String fullName,
+                       NodeType type,
+                       List<Box> borderBars,
+                       PhongMaterial idleMaterial,
+                       PhongMaterial hoverMaterial,
+                       boolean hiddenWhenIdle) {
+        void setHovered(boolean hovered) {
+            for (Box bar : borderBars) {
+                bar.setVisible(hovered || !hiddenWhenIdle);
+                bar.setMaterial(hovered ? hoverMaterial : idleMaterial);
+            }
+        }
+    }
+
+    record RenderedElement(Node node, HoverTarget hoverTarget) {}
+
+    record SceneResult(Group group, CameraHint cameraHint, Map<String, HoverTarget> hoverTargets) {}
 
     SceneResult build(Map<String, Bounds> elementBounds,
                       ArchitectureNode root,
                       Architecture architecture) {
 
-        if (DEBUG_BOUNDS) dumpBounds(elementBounds);
+        Map<String, ArchitectureNode> nodeMap  = buildNodeMap(root);
+        Map<String, Integer>          depthMap = buildDepthMap(root);
 
-        Map<String, ArchitectureNode> nodeMap     = buildNodeMap(root);
-        Map<String, Integer>          depthMap    = buildDepthMap(root);
+        if (DEBUG_BOUNDS) {
+            dumpBounds(elementBounds);
+            dumpClassLevels(elementBounds, nodeMap);
+        }
 
         int maxDepth = depthMap.values().stream().mapToInt(i -> i).max().orElse(1);
 
-        Group group = new Group();
+        // ── Bottom-up footprint computation ──────────────────────────────────
+        // 1. Compute each class tile's actual 3D XZ footprint (fanin-expanded).
+        Map<String, double[]> classFootprints = computeClassFootprints(elementBounds, nodeMap);
+        // 2. Each package slab must cover all descendant class footprints.
+        Map<String, double[]> slabFootprints  = computeSlabFootprints(elementBounds, nodeMap, classFootprints);
 
-        // Package slabs first, then class tiles. Coordinates and footprint come
-        // directly from the 2D view so the visual order remains identical.
+        Group group = new Group();
+        Group hoverLayer = new Group();
+        hoverLayer.setMouseTransparent(true);
+        Map<String, HoverTarget> hoverTargets = new HashMap<>();
+
+        // Package slabs first (behind class tiles).
         for (var e : elementBounds.entrySet()) {
             ArchitectureNode node = nodeMap.get(e.getKey());
             if (node == null || node.getType() != NodeType.PACKAGE) continue;
             int depth = depthMap.getOrDefault(e.getKey(), 0);
-            group.getChildren().add(
-                    buildPackageSlab(e.getValue(), depth, maxDepth));
+            double[] fp = slabFootprints.getOrDefault(e.getKey(), rawFootprint(e.getValue()));
+            RenderedElement rendered = buildPackageSlabFromFootprint(e.getKey(), fp, depth, maxDepth);
+            group.getChildren().add(rendered.node());
+            hoverLayer.getChildren().addAll(rendered.hoverTarget().borderBars());
+            hoverTargets.put(e.getKey(), rendered.hoverTarget());
         }
 
         for (var e : elementBounds.entrySet()) {
             ArchitectureNode node = nodeMap.get(e.getKey());
             if (node == null || node.getType() != NodeType.CLASS) continue;
             int depth = depthMap.getOrDefault(e.getKey(), 0);
-            group.getChildren().add(
-                    buildClassTile(e.getValue(), depth, node));
+            RenderedElement rendered = buildClassTile(e.getValue(), depth, node);
+            group.getChildren().add(rendered.node());
+            hoverTargets.put(e.getKey(), rendered.hoverTarget());
         }
 
+        group.getChildren().add(hoverLayer);
         group.getChildren().addAll(buildLights(elementBounds));
 
         CameraHint hint = computeCameraHint(
                 elementBounds,
                 maxDepth,
                 maxRenderedClassArchitectureLevel(elementBounds, nodeMap));
-        return new SceneResult(group, hint);
+        return new SceneResult(group, hint, hoverTargets);
     }
 
     // -----------------------------------------------------------------------
     // Tilted 2D elements
     // -----------------------------------------------------------------------
 
-    private Box buildPackageSlab(Bounds b, int depth, int maxDepth) {
-        return buildTilted2DBox(
-                b,
-                PACKAGE_THICKNESS,
-                packageElevation(depth),
-                packageMaterial(depth, maxDepth));
+    /** Builds a package slab from an already-expanded [minX,maxX,minZ,maxZ] footprint. */
+    private RenderedElement buildPackageSlabFromFootprint(String fullName, double[] fp, int depth, int maxDepth) {
+        double centerX = (fp[0] + fp[1]) / 2.0;
+        double centerZ = (fp[2] + fp[3]) / 2.0;
+        double width   = Math.max(MIN_FOOTPRINT, fp[1] - fp[0]);
+        double slabD   = Math.max(MIN_FOOTPRINT, fp[3] - fp[2]);
+        Box slab = buildPositionedBox(centerX, centerZ, width, PACKAGE_THICKNESS, slabD,
+                packageElevation(depth), packageMaterial(depth, maxDepth));
+        installPickable(slab, fullName, NodeType.PACKAGE);
+
+        PhongMaterial hoverMaterial = hoverBorderMaterial();
+        List<Box> hoverBars = buildFootprintBorderBars(
+                centerX,
+                centerZ,
+                width,
+                slabD,
+                packageElevation(depth) + PACKAGE_THICKNESS + HOVER_BORDER_SURFACE_LIFT,
+                HOVER_BORDER_WIDTH,
+                HOVER_BORDER_THICKNESS,
+                hoverMaterial);
+        for (Box bar : hoverBars) {
+            bar.setVisible(false);
+            bar.setMouseTransparent(true);
+        }
+        HoverTarget hoverTarget = new HoverTarget(
+                fullName,
+                NodeType.PACKAGE,
+                hoverBars,
+                hoverMaterial,
+                hoverMaterial,
+                true);
+        return new RenderedElement(slab, hoverTarget);
     }
 
-    private Node buildClassTile(Bounds b, int depth, ArchitectureNode node) {
+    // ── Footprint computation (bottom-up) ────────────────────────────────────
+
+    /**
+     * For every class in the registry, compute its actual 3D XZ footprint as
+     * [minX, maxX, minZ, maxZ] using the fanin-expanded width.
+     */
+    private static Map<String, double[]> computeClassFootprints(
+            Map<String, Bounds> elementBounds,
+            Map<String, ArchitectureNode> nodeMap) {
+        Map<String, double[]> result = new HashMap<>();
+        for (var e : elementBounds.entrySet()) {
+            ArchitectureNode node = nodeMap.get(e.getKey());
+            if (node == null || node.getType() != NodeType.CLASS) continue;
+            Bounds b = e.getValue();
+            double w  = Layout3D.UNIT * (1 + Math.log10(Math.max(1, node.getDependents().size())));
+            double d  = Math.max(MIN_FOOTPRINT, b.getHeight());
+            double cx = b.getCenterX();
+            double cz = worldZ(b.getCenterY());
+            result.put(e.getKey(), new double[]{cx - w / 2, cx + w / 2, cz - d / 2, cz + d / 2});
+        }
+        return result;
+    }
+
+    /**
+     * For every package, start from its raw 2D footprint and expand outward
+     * to cover every descendant class tile. Returns [minX,maxX,minZ,maxZ] per FQN.
+     */
+    private static Map<String, double[]> computeSlabFootprints(
+            Map<String, Bounds> elementBounds,
+            Map<String, ArchitectureNode> nodeMap,
+            Map<String, double[]> classFootprints) {
+        Map<String, double[]> result = new HashMap<>();
+        for (var e : elementBounds.entrySet()) {
+            ArchitectureNode node = nodeMap.get(e.getKey());
+            if (node == null || node.getType() != NodeType.PACKAGE) continue;
+            double[] fp = rawFootprint(e.getValue());
+            fp = expandWithDescendants(node, classFootprints, fp);
+            result.put(e.getKey(), fp);
+        }
+        return result;
+    }
+
+    /** Converts a JavaFX {@link Bounds} to [minX,maxX,minZ,maxZ] in 3D world coords. */
+    private static double[] rawFootprint(Bounds b) {
+        return new double[]{b.getMinX(), b.getMaxX(), worldZ(b.getMaxY()), worldZ(b.getMinY())};
+    }
+
+    /** Recursively expands fp to cover all descendant class tiles. */
+    private static double[] expandWithDescendants(ArchitectureNode node,
+                                                   Map<String, double[]> classFootprints,
+                                                   double[] fp) {
+        for (ArchitectureNode child : node.getChildren()) {
+            double[] cf = classFootprints.get(child.getFullName());
+            if (cf != null) {
+                fp[0] = Math.min(fp[0], cf[0]);
+                fp[1] = Math.max(fp[1], cf[1]);
+                fp[2] = Math.min(fp[2], cf[2]);
+                fp[3] = Math.max(fp[3], cf[3]);
+            }
+            fp = expandWithDescendants(child, classFootprints, fp);
+        }
+        return fp;
+    }
+
+    private RenderedElement buildClassTile(Bounds b, int depth, ArchitectureNode node) {
         double elevation = classElevation(depth);
         double thickness = classThickness(node.getArchitectureLevel());
-        Box fill = buildTilted2DBox(
-                b,
-                thickness,
-                elevation,
-                classMaterial());
-        Group tile = new Group(fill);
-        tile.getChildren().addAll(buildClassBorderBars(b, elevation, thickness));
-        tile.setMouseTransparent(true);
-        return tile;
-    }
 
-    private Box buildTilted2DBox(Bounds b, double thickness, double elevation,
-                                 PhongMaterial material) {
-        double width = Math.max(MIN_FOOTPRINT, b.getWidth());
-        double depth = Math.max(MIN_FOOTPRINT, b.getHeight());
-        return buildPositionedBox(
+        // Phase 1: logarithmic fanin width — 2× at fanin=10, 3× at fanin=100
+        double fanInWidth = Layout3D.UNIT * (1 + Math.log10(Math.max(1, node.getDependents().size())));
+
+        Box fill = buildPositionedBox(
                 b.getCenterX(),
                 worldZ(b.getCenterY()),
-                width,
+                fanInWidth,
                 thickness,
-                depth,
+                Math.max(MIN_FOOTPRINT, b.getHeight()),
                 elevation,
-                material);
+                classMaterial());
+        installPickable(fill, node.getFullName(), NodeType.CLASS);
+
+        Group tile = new Group(fill);
+        installPickable(tile, node.getFullName(), NodeType.CLASS);
+        List<Box> borderBars = buildClassBorderBars(b, fanInWidth, elevation, thickness);
+        for (Box borderBar : borderBars) {
+            installPickable(borderBar, node.getFullName(), NodeType.CLASS);
+        }
+        tile.getChildren().addAll(borderBars);
+        HoverTarget hoverTarget = new HoverTarget(
+                node.getFullName(),
+                NodeType.CLASS,
+                borderBars,
+                classBorderMaterial(),
+                hoverBorderMaterial(),
+                false);
+        return new RenderedElement(tile, hoverTarget);
     }
 
     private Box buildPositionedBox(double centerX, double centerZ,
@@ -188,28 +328,44 @@ class SceneBuilder3D {
         return box;
     }
 
-    private List<Box> buildClassBorderBars(Bounds b, double classElevation,
+    private List<Box> buildClassBorderBars(Bounds b, double width, double classElevation,
                                            double classThickness) {
-        double width = Math.max(MIN_FOOTPRINT, b.getWidth());
         double depth = Math.max(MIN_FOOTPRINT, b.getHeight());
         double line = Math.min(CLASS_BORDER_WIDTH, Math.min(width, depth) / 3.0);
         double centerX = b.getCenterX();
         double centerZ = worldZ(b.getCenterY());
+        return buildFootprintBorderBars(
+                centerX,
+                centerZ,
+                width,
+                depth,
+                classElevation + classThickness + CLASS_BORDER_SURFACE_LIFT,
+                line,
+                CLASS_BORDER_THICKNESS,
+                classBorderMaterial());
+    }
+
+    private List<Box> buildFootprintBorderBars(double centerX,
+                                               double centerZ,
+                                               double width,
+                                               double depth,
+                                               double borderElevation,
+                                               double line,
+                                               double thickness,
+                                               PhongMaterial material) {
         double minX = centerX - width / 2.0;
         double maxX = centerX + width / 2.0;
         double minZ = centerZ - depth / 2.0;
         double maxZ = centerZ + depth / 2.0;
-        double borderElevation = classElevation + classThickness + CLASS_BORDER_SURFACE_LIFT;
-        PhongMaterial material = classBorderMaterial();
 
         Box front = buildPositionedBox(centerX, minZ + line / 2.0,
-                width, CLASS_BORDER_THICKNESS, line, borderElevation, material);
+                width, thickness, line, borderElevation, material);
         Box back = buildPositionedBox(centerX, maxZ - line / 2.0,
-                width, CLASS_BORDER_THICKNESS, line, borderElevation, material);
+                width, thickness, line, borderElevation, material);
         Box left = buildPositionedBox(minX + line / 2.0, centerZ,
-                line, CLASS_BORDER_THICKNESS, depth, borderElevation, material);
+                line, thickness, depth, borderElevation, material);
         Box right = buildPositionedBox(maxX - line / 2.0, centerZ,
-                line, CLASS_BORDER_THICKNESS, depth, borderElevation, material);
+                line, thickness, depth, borderElevation, material);
         return List.of(front, back, left, right);
     }
 
@@ -261,6 +417,17 @@ class SceneBuilder3D {
         mat.setSpecularColor(CLASS_BORDER_COLOR);
         mat.setSpecularPower(96.0);
         return mat;
+    }
+
+    private PhongMaterial hoverBorderMaterial() {
+        PhongMaterial mat = new PhongMaterial(HOVER_BORDER_COLOR);
+        mat.setSpecularColor(HOVER_BORDER_COLOR);
+        mat.setSpecularPower(128.0);
+        return mat;
+    }
+
+    private static void installPickable(Node node, String fullName, NodeType type) {
+        node.getProperties().put(PICKABLE_PROPERTY, new PickableElement(fullName, type));
     }
 
     // -----------------------------------------------------------------------
@@ -369,5 +536,18 @@ class SceneBuilder3D {
                             e.getKey(), b.getMinX(), b.getMinY(), b.getWidth(), b.getHeight());
                 });
         System.out.println("===================================================");
+    }
+
+    private static void dumpClassLevels(Map<String, Bounds> elementBounds,
+                                         Map<String, ArchitectureNode> nodeMap) {
+        System.out.println("=== Class architectureLevel → 3D height ===");
+        elementBounds.keySet().stream().sorted().forEach(fqn -> {
+            ArchitectureNode n = nodeMap.get(fqn);
+            if (n == null || n.getType() != NodeType.CLASS) return;
+            int lvl = n.getArchitectureLevel();
+            System.out.printf("  %-60s  archLevel=%3d  height=%.1f%n",
+                    fqn, lvl, classThickness(lvl));
+        });
+        System.out.println("===========================================");
     }
 }

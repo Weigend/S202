@@ -30,19 +30,19 @@ import java.util.Map;
 import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class SceneBuilder3DTest {
 
     @Test
-    void sceneUses2DBoundsAsFootprintAndStacksClassesAbovePackages() {
+    void sceneUses2DBoundsForPackageFootprintAndStacksClassesAbovePackages() {
         ArchitectureNode root = node("root", NodeType.PACKAGE, -1);
         ArchitectureNode pkg = node("com.example", NodeType.PACKAGE, 1);
         ArchitectureNode cls = node("com.example.Foo", NodeType.CLASS, 1);
 
-        // Large dependency counts must not influence 3D footprint. The 2D
-        // layout is the source of truth for width/depth.
+        // Class width is fan-in encoded; depth still follows the 2D bounds.
         cls.setDependents(Set.of("a", "b", "c", "d", "e"));
         cls.setDependencies(Set.of("x", "y", "z"));
 
@@ -66,7 +66,7 @@ class SceneBuilder3DTest {
         assertEquals(SceneBuilder3D.PACKAGE_THICKNESS, pkgBox.getHeight(), 0.01);
         assertEquals(SceneBuilder3D.PACKAGE_BASE_COLOR, material(pkgBox).getDiffuseColor());
 
-        assertEquals(70, clsBox.getWidth(), 0.01);
+        assertEquals(fanInWidth(cls), clsBox.getWidth(), 0.01);
         assertEquals(24, clsBox.getDepth(), 0.01);
         assertEquals(SceneBuilder3D.classThickness(1), clsBox.getHeight(), 0.01);
         assertEquals(SceneBuilder3D.CLASS_COLOR, material(clsBox).getDiffuseColor());
@@ -89,6 +89,23 @@ class SceneBuilder3DTest {
         assertEquals(-80, hint.targetZ(), 0.01);
         assertTrue(hint.y() < hint.targetY(), "camera must start above the scene");
         assertTrue(hint.z() < hint.targetZ(), "camera must start in front of the scene");
+
+        assertPickable(pkgBox, "com.example", NodeType.PACKAGE);
+        assertPickable(clsBox, "com.example.Foo", NodeType.CLASS);
+
+        SceneBuilder3D.HoverTarget pkgHover = result.hoverTargets().get("com.example");
+        Box pkgHoverBar = pkgHover.borderBars().get(0);
+        assertFalse(pkgHoverBar.isVisible(), "package hover border is hidden until hovered");
+        pkgHover.setHovered(true);
+        assertTrue(pkgHoverBar.isVisible(), "package hover border becomes visible on hover");
+        pkgHover.setHovered(false);
+        assertFalse(pkgHoverBar.isVisible(), "package hover border hides again");
+
+        SceneBuilder3D.HoverTarget clsHover = result.hoverTargets().get("com.example.Foo");
+        clsHover.setHovered(true);
+        assertEquals(SceneBuilder3D.HOVER_BORDER_COLOR, material(clsBorder).getDiffuseColor());
+        clsHover.setHovered(false);
+        assertEquals(SceneBuilder3D.CLASS_BORDER_COLOR, material(clsBorder).getDiffuseColor());
     }
 
     @Test
@@ -112,7 +129,7 @@ class SceneBuilder3DTest {
     }
 
     @Test
-    void classBoxHeightEncodesGlobalArchitectureLevelWithoutChangingFootprint() {
+    void classBoxHeightEncodesGlobalArchitectureLevelWithoutChangingFaninWidth() {
         ArchitectureNode root = node("root", NodeType.PACKAGE, -1);
         ArchitectureNode pkg = node("com.example", NodeType.PACKAGE, 0);
         ArchitectureNode low = node("com.example.Low", NodeType.CLASS, 0);
@@ -132,9 +149,9 @@ class SceneBuilder3DTest {
         Box lowBox = assertInstanceOf(Box.class, lowGroup.getChildren().get(0));
         Box highBox = assertInstanceOf(Box.class, highGroup.getChildren().get(0));
 
-        assertEquals(70, lowBox.getWidth(), 0.01);
+        assertEquals(fanInWidth(low), lowBox.getWidth(), 0.01);
         assertEquals(24, lowBox.getDepth(), 0.01);
-        assertEquals(70, highBox.getWidth(), 0.01);
+        assertEquals(fanInWidth(high), highBox.getWidth(), 0.01);
         assertEquals(24, highBox.getDepth(), 0.01);
         assertEquals(SceneBuilder3D.classThickness(0), lowBox.getHeight(), 0.01);
         assertEquals(SceneBuilder3D.classThickness(3), highBox.getHeight(), 0.01);
@@ -150,6 +167,18 @@ class SceneBuilder3DTest {
 
     private static PhongMaterial material(Box box) {
         return assertInstanceOf(PhongMaterial.class, box.getMaterial());
+    }
+
+    private static double fanInWidth(ArchitectureNode node) {
+        return Layout3D.UNIT * (1 + Math.log10(Math.max(1, node.getDependents().size())));
+    }
+
+    private static void assertPickable(Box box, String fullName, NodeType type) {
+        SceneBuilder3D.PickableElement pickable = assertInstanceOf(
+                SceneBuilder3D.PickableElement.class,
+                box.getProperties().get(SceneBuilder3D.PICKABLE_PROPERTY));
+        assertEquals(fullName, pickable.fullName());
+        assertEquals(type, pickable.type());
     }
 
     private static double topY(Box box) {
