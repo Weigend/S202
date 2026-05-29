@@ -36,11 +36,14 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assumptions.assumeTrue;
 
 class SceneBuilder3DTest {
 
     @Test
     void sceneUses2DBoundsForPackageFootprintAndStacksClassesAbovePackages() {
+        assumeJavaFx3DAvailable();
+
         ArchitectureNode root = node("root", NodeType.PACKAGE, -1);
         ArchitectureNode pkg = node("com.example", NodeType.PACKAGE, 1);
         ArchitectureNode cls = node("com.example.Foo", NodeType.CLASS, 1);
@@ -131,6 +134,8 @@ class SceneBuilder3DTest {
 
     @Test
     void curvedArrowStaysAboveElementTops() {
+        assumeJavaFx3DAvailable();
+
         SceneBuilder3D.EdgeTarget source = new SceneBuilder3D.EdgeTarget(
                 "a.A", NodeType.CLASS, 0, -20, 0);
         SceneBuilder3D.EdgeTarget target = new SceneBuilder3D.EdgeTarget(
@@ -154,6 +159,8 @@ class SceneBuilder3DTest {
 
     @Test
     void packageColourDarkensWithNestingDepthWithoutTurningRed() {
+        assumeJavaFx3DAvailable();
+
         ArchitectureNode root = node("root", NodeType.PACKAGE, -1);
         ArchitectureNode outer = node("outer", NodeType.PACKAGE, 1);
         ArchitectureNode inner = node("outer.inner", NodeType.PACKAGE, 1);
@@ -174,6 +181,8 @@ class SceneBuilder3DTest {
 
     @Test
     void classBoxHeightEncodesGlobalArchitectureLevelWithoutChangingFaninWidth() {
+        assumeJavaFx3DAvailable();
+
         ArchitectureNode root = node("root", NodeType.PACKAGE, -1);
         ArchitectureNode pkg = node("com.example", NodeType.PACKAGE, 0);
         ArchitectureNode low = node("com.example.Low", NodeType.CLASS, 0);
@@ -207,6 +216,21 @@ class SceneBuilder3DTest {
         ArchitectureNode node = new ArchitectureNode(fqn, fqn, type, false);
         node.setArchitectureLevel(architectureLevel);
         return node;
+    }
+
+    private static void assumeJavaFx3DAvailable() {
+        assumeTrue(javaFx3DAvailable(),
+                "JavaFX 3D pipeline is not available in this test runtime");
+    }
+
+    private static boolean javaFx3DAvailable() {
+        try {
+            new Box(1, 1, 1);
+            new PhongMaterial();
+            return true;
+        } catch (Throwable unavailable) {
+            return false;
+        }
     }
 
     private static PhongMaterial material(Box box) {
