@@ -37,8 +37,8 @@ import java.util.Map;
  *
  * <p><b>Coordinate mapping</b> ("tip horizontal"):
  * <pre>
- *   2D scene X  →  3D X  (unchanged)
- *   2D scene Y  →  3D Z  (inverted, so the 2D bottom edge faces the camera)
+ *   2D layout X →  3D X  (unchanged)
+ *   2D layout Y →  3D Z  (inverted, so the 2D bottom edge faces the camera)
  * </pre>
  *
  * <p><b>Geometry</b> is intentionally derived from the 2D view, not from
@@ -642,7 +642,7 @@ class SceneBuilder3D {
     // -----------------------------------------------------------------------
 
     private static void dumpBounds(Map<String, Bounds> elementBounds) {
-        System.out.println("=== 3D Scene – element bounds (2D scene coords) ===");
+        System.out.println("=== 3D Scene - element bounds (2D layout coords) ===");
         elementBounds.entrySet().stream()
                 .sorted(Map.Entry.comparingByKey())
                 .forEach(e -> {

@@ -53,11 +53,11 @@ import java.util.function.Consumer;
  * WFX {@link View} that renders the architecture as an interactive 3D landscape.
  *
  * <p>The 3D layout is built directly from the 2D element bounds read out of
- * {@link de.weigend.s202.ui.ArchitectureView#getElementFootprintBoundsInScene()}
+ * {@link de.weigend.s202.ui.ArchitectureView#getElementFootprintBoundsInLayout()}
  * after each layout pulse:
  * <pre>
- *   2D scene X  →  3D world X
- *   2D scene Y  →  3D world -Z  ("tip horizontal")
+ *   2D layout X →  3D world X
+ *   2D layout Y →  3D world -Z  ("tip horizontal")
  *   new 3D Y    →  thin stack offset by package nesting depth
  * </pre>
  *
@@ -83,6 +83,7 @@ public class ArchitectureView3D implements View {
     private Map<String, SceneBuilder3D.EdgeTarget> edgeTargets = Map.of();
     private Map<String, ArchitectureNode> nodeByFqn = Map.of();
     private Map<String, String> parentByFqn = Map.of();
+    private SceneBuilder3D.CameraHint cameraHint;
     private SceneBuilder3D.HoverTarget hoveredTarget;
     private SceneBuilder3D.HoverTarget selectedTarget;
     private String selectedFqn;
@@ -119,6 +120,7 @@ public class ArchitectureView3D implements View {
     /** Selects the element with the given FQN in the 3D scene without firing the selection sink. */
     public void selectByFullName(String fqn) {
         applySelection(fqn);
+        ensureSelectedTargetVisible(fqn);
         rebuildEdgeOverlays();
     }
 
@@ -189,6 +191,7 @@ public class ArchitectureView3D implements View {
         edgeTargets = Map.of();
         nodeByFqn = Map.of();
         parentByFqn = Map.of();
+        cameraHint = null;
         currentRoot = root;
         currentArchitecture = architecture;
         hideSelectionOverlay();
@@ -198,6 +201,7 @@ public class ArchitectureView3D implements View {
         SceneBuilder3D.SceneResult result = new SceneBuilder3D().build(elementBounds, root, architecture);
         hoverTargets = new HashMap<>(result.hoverTargets());
         edgeTargets = new HashMap<>(result.edgeTargets());
+        cameraHint = result.cameraHint();
         nodeByFqn = buildNodeMap(root);
         parentByFqn = buildParentMap(root);
         if (visibleParentByFqn != null && !visibleParentByFqn.isEmpty()) {
@@ -209,12 +213,35 @@ public class ArchitectureView3D implements View {
 
         flyCamera.attach(subScene, stage);
         if (resetCamera) {
-            SceneBuilder3D.CameraHint h = result.cameraHint();
-            flyCamera.resetToLookAt(h.x(), h.y(), h.z(), h.targetX(), h.targetY(), h.targetZ());
+            flyCamera.resetToLookAt(cameraHint.x(), cameraHint.y(), cameraHint.z(),
+                    cameraHint.targetX(), cameraHint.targetY(), cameraHint.targetZ());
         } else if (prevSelectedFqn != null) {
             applySelection(prevSelectedFqn); // restore visual state without redundant edge rebuild
         }
         rebuildEdgeOverlays(); // single rebuild at the end with correct selectedFqn
+    }
+
+    private void ensureSelectedTargetVisible(String fqn) {
+        SceneBuilder3D.EdgeTarget target = fqn == null ? null : edgeTargets.get(fqn);
+        if (target == null || cameraHint == null) {
+            return;
+        }
+        if (flyCamera.isWorldPointVisible(
+                target.centerX(), target.topY(), target.centerZ(),
+                subScene.getWidth(), subScene.getHeight())) {
+            return;
+        }
+
+        double offsetX = cameraHint.x() - cameraHint.targetX();
+        double offsetY = cameraHint.y() - cameraHint.targetY();
+        double offsetZ = cameraHint.z() - cameraHint.targetZ();
+        flyCamera.resetToLookAt(
+                target.centerX() + offsetX,
+                target.topY() + offsetY,
+                target.centerZ() + offsetZ,
+                target.centerX(),
+                target.topY(),
+                target.centerZ());
     }
 
     /**

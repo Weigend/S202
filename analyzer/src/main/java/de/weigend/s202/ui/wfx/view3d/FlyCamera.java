@@ -55,6 +55,7 @@ class FlyCamera {
     private static final double MOUSE_SENS  = 0.25;
     private static final double ZOOM_SPEED  = 30.0;
     private static final double PITCH_LIMIT = 89.0;
+    private static final double FOV_MARGIN  = 0.98;
 
     private static final double START_X     =  0;
     private static final double START_Y     = -400;
@@ -199,6 +200,44 @@ class FlyCamera {
         resetTo(x, y, z, computedPitch, computedYaw);
     }
 
+    boolean isWorldPointVisible(double targetX,
+                                double targetY,
+                                double targetZ,
+                                double viewportWidth,
+                                double viewportHeight) {
+        if (viewportWidth <= 0 || viewportHeight <= 0) {
+            return true;
+        }
+
+        Basis basis = basis();
+        double dx = targetX - position.getX();
+        double dy = targetY - position.getY();
+        double dz = targetZ - position.getZ();
+        double forwardDistance = dot(dx, dy, dz, basis.forwardX, basis.forwardY, basis.forwardZ);
+        if (forwardDistance <= camera.getNearClip()) {
+            return false;
+        }
+
+        double horizontalDistance = Math.abs(dot(dx, dy, dz, basis.rightX, basis.rightY, basis.rightZ));
+        double verticalDistance = Math.abs(dot(dx, dy, dz, basis.downX, basis.downY, basis.downZ));
+        double aspect = viewportWidth / viewportHeight;
+        double fieldOfView = Math.toRadians(camera.getFieldOfView());
+        double halfHorizontalFov;
+        double halfVerticalFov;
+        if (camera.isVerticalFieldOfView()) {
+            halfVerticalFov = fieldOfView / 2.0;
+            halfHorizontalFov = Math.atan(Math.tan(halfVerticalFov) * aspect);
+        } else {
+            halfHorizontalFov = fieldOfView / 2.0;
+            halfVerticalFov = Math.atan(Math.tan(halfHorizontalFov) / aspect);
+        }
+
+        double horizontalAngle = Math.atan2(horizontalDistance, forwardDistance);
+        double verticalAngle = Math.atan2(verticalDistance, forwardDistance);
+        return horizontalAngle <= halfHorizontalFov * FOV_MARGIN
+                && verticalAngle <= halfVerticalFov * FOV_MARGIN;
+    }
+
     /** Called each animation frame to apply held-key movement. */
     void tick() {
         if (!grabbed || pressedKeys.isEmpty()) return;
@@ -266,19 +305,51 @@ class FlyCamera {
     }
 
     private void translateAlongView(double rightDelta, double upDelta, double forwardDelta) {
+        Basis basis = basis();
+
+        position.setX(position.getX() + basis.forwardX * forwardDelta + basis.rightX * rightDelta);
+        position.setY(position.getY() + basis.forwardY * forwardDelta + upDelta);
+        position.setZ(position.getZ() + basis.forwardZ * forwardDelta + basis.rightZ * rightDelta);
+    }
+
+    private Basis basis() {
         double yawRad = Math.toRadians(yaw);
         double pitchRad = Math.toRadians(-pitch);
         double horizontal = Math.cos(pitchRad);
-        double fx =  Math.sin(yawRad) * horizontal;
-        double fy =  Math.sin(pitchRad);
-        double fz =  Math.cos(yawRad) * horizontal;
-        double rx =  Math.cos(yawRad);
-        double rz = -Math.sin(yawRad);
+        double forwardX = Math.sin(yawRad) * horizontal;
+        double forwardY = Math.sin(pitchRad);
+        double forwardZ = Math.cos(yawRad) * horizontal;
+        double rightX = Math.cos(yawRad);
+        double rightY = 0.0;
+        double rightZ = -Math.sin(yawRad);
 
-        position.setX(position.getX() + fx * forwardDelta + rx * rightDelta);
-        position.setY(position.getY() + fy * forwardDelta + upDelta);
-        position.setZ(position.getZ() + fz * forwardDelta + rz * rightDelta);
+        double downX = forwardY * rightZ - forwardZ * rightY;
+        double downY = forwardZ * rightX - forwardX * rightZ;
+        double downZ = forwardX * rightY - forwardY * rightX;
+        return new Basis(
+                forwardX, forwardY, forwardZ,
+                rightX, rightY, rightZ,
+                downX, downY, downZ);
     }
+
+    private static double dot(double ax,
+                              double ay,
+                              double az,
+                              double bx,
+                              double by,
+                              double bz) {
+        return ax * bx + ay * by + az * bz;
+    }
+
+    private record Basis(double forwardX,
+                         double forwardY,
+                         double forwardZ,
+                         double rightX,
+                         double rightY,
+                         double rightZ,
+                         double downX,
+                         double downY,
+                         double downZ) {}
 
     private void grab() {
         if (attachedScene == null || attachedStage == null) return;

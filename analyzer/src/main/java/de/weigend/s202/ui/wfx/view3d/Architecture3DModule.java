@@ -43,7 +43,7 @@ import java.util.Map;
  * <p>Tracks the focused {@link ArchitectureWfxView}. When the architecture
  * root changes, waits two JavaFX pulses (so the 2D layout is settled) and
  * then reads element footprints directly from the 2D view via
- * {@link ArchitectureView#getElementFootprintBoundsInScene()}.
+ * {@link ArchitectureView#getElementFootprintBoundsInLayout()}.
  */
 @Singleton
 @Priority(35)
@@ -170,7 +170,7 @@ public class Architecture3DModule implements Module {
         ArchitectureView captured = boundView;
         Platform.runLater(() -> Platform.runLater(() -> {
             if (captured != boundView) return; // stale — a newer rebind won
-            Map<String, Bounds> bounds = captured.getElementFootprintBoundsInScene();
+            Map<String, Bounds> bounds = captured.getElementFootprintBoundsInLayout();
             ArchitectureNode root = captured.getArchitectureRoot();
             Architecture architecture = captured.getWhatIfArchitecture() != null
                     ? captured.getWhatIfArchitecture()

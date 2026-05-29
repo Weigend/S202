@@ -232,11 +232,10 @@ public class ArchitectureView extends BorderPane {
             return;
         }
         if (visible) {
-            if (currentRootNode != null && (!dependencyRenderer.isDependencyLinesDrawn() || linesNeedUpdate)) {
-                dependencyRenderer.drawDependencyArrows(currentRootNode);
-                linesNeedUpdate = false;
-            }
             dependencyPane.setVisible(true);
+            if (currentRootNode != null && (!dependencyRenderer.isDependencyLinesDrawn() || linesNeedUpdate)) {
+                arrowsCoalescer.markDirty();
+            }
         } else {
             dependencyPane.setVisible(false);
         }
@@ -275,8 +274,8 @@ public class ArchitectureView extends BorderPane {
         }
         dependencyRenderer = circuitMode.get() ? circuitRenderer : classicRenderer;
         if (showDependencies.get() && currentRootNode != null) {
-            dependencyRenderer.drawDependencyArrows(currentRootNode);
             dependencyPane.setVisible(true);
+            arrowsCoalescer.markDirty();
         }
     }
 
@@ -715,7 +714,7 @@ public class ArchitectureView extends BorderPane {
             runWithoutSelectionSink(() -> GraphSelection.ensureSelected(target));
             // Defer scrolling until layout has settled; the box may have just
             // been created during a refresh and have unresolved bounds.
-            javafx.application.Platform.runLater(() -> scrollToNode(node));
+            javafx.application.Platform.runLater(() -> scrollToNodeIfNeeded(node));
             return;
         }
         // Tree-only node (e.g. a package skipped as a transparent passthrough
@@ -743,7 +742,7 @@ public class ArchitectureView extends BorderPane {
         selectByFullName(fullClassName);
     }
 
-    private void scrollToNode(javafx.scene.Node target) {
+    private void scrollToNodeIfNeeded(javafx.scene.Node target) {
         if (scrollPane == null || scrollPane.getContent() == null) {
             return;
         }
@@ -760,21 +759,55 @@ public class ArchitectureView extends BorderPane {
 
         double overflowX = Math.max(0, contentWidth - viewport.getWidth());
         double overflowY = Math.max(0, contentHeight - viewport.getHeight());
+        double viewMinX = contentBounds.getMinX() + scrollPane.getHvalue() * overflowX;
+        double viewMinY = contentBounds.getMinY() + scrollPane.getVvalue() * overflowY;
+        double viewMaxX = viewMinX + viewport.getWidth();
+        double viewMaxY = viewMinY + viewport.getHeight();
+        double margin = 24.0;
+
         if (overflowX > 0) {
-            double centerX = targetInContent.getMinX() + targetInContent.getWidth() / 2.0;
-            double hValue = (centerX - viewport.getWidth() / 2.0) / overflowX;
-            scrollPane.setHvalue(Math.max(0, Math.min(1, hValue)));
+            double targetMinX = targetInContent.getMinX();
+            double targetMaxX = targetInContent.getMaxX();
+            if (targetMinX < viewMinX + margin || targetMaxX > viewMaxX - margin) {
+                double newViewMinX = nextVisibleStart(
+                        targetMinX, targetMaxX, viewport.getWidth(), margin, viewMinX);
+                scrollPane.setHvalue(clamp01((newViewMinX - contentBounds.getMinX()) / overflowX));
+            }
         }
         if (overflowY > 0) {
-            double centerY = targetInContent.getMinY() + targetInContent.getHeight() / 2.0;
-            double vValue = (centerY - viewport.getHeight() / 2.0) / overflowY;
-            scrollPane.setVvalue(Math.max(0, Math.min(1, vValue)));
+            double targetMinY = targetInContent.getMinY();
+            double targetMaxY = targetInContent.getMaxY();
+            if (targetMinY < viewMinY + margin || targetMaxY > viewMaxY - margin) {
+                double newViewMinY = nextVisibleStart(
+                        targetMinY, targetMaxY, viewport.getHeight(), margin, viewMinY);
+                scrollPane.setVvalue(clamp01((newViewMinY - contentBounds.getMinY()) / overflowY));
+            }
         }
+    }
+
+    private static double nextVisibleStart(double targetMin,
+                                           double targetMax,
+                                           double viewportSize,
+                                           double margin,
+                                           double currentStart) {
+        double targetSize = targetMax - targetMin;
+        if (targetSize + margin * 2.0 >= viewportSize) {
+            return targetMin - margin;
+        }
+        if (targetMin < currentStart + margin) {
+            return targetMin - margin;
+        }
+        return targetMax - viewportSize + margin;
+    }
+
+    private static double clamp01(double value) {
+        return Math.max(0, Math.min(1, value));
     }
 
     private void redrawVisibleArrows() {
         if (showDependencies.get()) {
             dependencyRenderer.drawDependencyArrows(currentRootNode);
+            linesNeedUpdate = false;
         }
         if (showScc.get()) {
             sccRenderer.drawSccLines(currentRootNode);
@@ -1279,6 +1312,27 @@ public class ArchitectureView extends BorderPane {
     }
 
     /**
+     * Returns 3D footprint bounds in this view's unscaled layout coordinate
+     * space. Unlike scene coordinates, these stay stable when the 2D
+     * ScrollPane moves or the application window changes focus.
+     */
+    public java.util.Map<String, javafx.geometry.Bounds> getElementFootprintBoundsInLayout() {
+        if (getScene() != null && getScene().getRoot() != null) {
+            getScene().getRoot().layout();
+        }
+        var result = new java.util.LinkedHashMap<String, javafx.geometry.Bounds>();
+        for (var entry : elementRegistry.entrySet()) {
+            var node = entry.getValue();
+            if (node.getScene() == null || !node.isVisible()) continue;
+            javafx.geometry.Bounds bounds = footprintBoundsInLayout(node);
+            if (bounds != null) {
+                result.put(entry.getKey(), bounds);
+            }
+        }
+        return result;
+    }
+
+    /**
      * Returns the closest visible package parent per currently registered
      * package/class box. Used by projections such as the 3D view that need to
      * roll hidden class-level edges up to the same visible endpoint as the 2D
@@ -1306,6 +1360,16 @@ public class ArchitectureView extends BorderPane {
             return node.localToScene(node.getBoundsInLocal());
         }
         return null;
+    }
+
+    private javafx.geometry.Bounds footprintBoundsInLayout(javafx.scene.Node node) {
+        if (!(node instanceof LevelPackageBox || node instanceof LevelClassBox)) {
+            return null;
+        }
+        if (zoomableContent == null || zoomableContent.getScene() == null) {
+            return footprintBoundsInScene(node);
+        }
+        return zoomableContent.sceneToLocal(node.localToScene(node.getBoundsInLocal()));
     }
 
     private static String nearestVisiblePackageParent(javafx.scene.Node node) {
