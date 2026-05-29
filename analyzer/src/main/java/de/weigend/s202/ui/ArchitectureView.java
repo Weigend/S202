@@ -41,10 +41,14 @@ import javafx.beans.property.ReadOnlyStringProperty;
 import javafx.beans.property.ReadOnlyStringWrapper;
 import javafx.beans.property.SimpleBooleanProperty;
 import javafx.beans.property.SimpleIntegerProperty;
+import javafx.geometry.Pos;
 import javafx.scene.control.ScrollPane;
 import javafx.scene.layout.BorderPane;
+import javafx.scene.layout.HBox;
 import javafx.scene.layout.Pane;
+import javafx.scene.layout.Priority;
 import javafx.scene.layout.StackPane;
+import javafx.scene.layout.VBox;
 
 import java.util.Collection;
 import java.util.HashMap;
@@ -112,6 +116,11 @@ public class ArchitectureView extends BorderPane {
     // the cosmetic decoration.
     private final Set<String> movedFqns = new HashSet<>();
     private ArchitectureDragController.DropListener whatIfDropListener;
+
+    // Undo/redo for What-If moves.
+    private final WhatIfUndoManager undoManager = new WhatIfUndoManager();
+    // Top-level VBox of the current layout — used by applyMoveToScene for root-level moves.
+    private VBox whatIfRootContainer;
 
     // Pulses every time the arrow overlay finishes a redraw. WFX side panels
     // (e.g. the Dependencies module) can subscribe to refresh themselves.
@@ -365,6 +374,7 @@ public class ArchitectureView extends BorderPane {
 
     private void finishArchitectureRootBuild(ArchitectureNode rootNode,
                                              javafx.scene.layout.VBox topLevelContainer) {
+        this.whatIfRootContainer = topLevelContainer;
         dependencyPane.getChildren().clear();
         dependencyPane.setVisible(false);
         sccPane.getChildren().clear();
@@ -497,6 +507,7 @@ public class ArchitectureView extends BorderPane {
 
     public void setDomainModel(DomainModel model) {
         domainModel.set(model);
+        undoManager.clear();
         if (model == null) {
             architecture.set(null);
             whatIfArchitecture.set(null);
@@ -598,12 +609,14 @@ public class ArchitectureView extends BorderPane {
             return;
         }
         if (wasNewRow) {
+            undoManager.record(new WhatIfUndoManager.Move.AsNewRow(movedFqcn, destinationContainerFqcn, rowIndex));
             wif.moveElementAsNewRow(movedFqcn, destinationContainerFqcn, rowIndex);
         } else {
             int colIndex = destinationRow.getChildren().indexOf(movedSource);
             if (colIndex < 0) {
                 return;
             }
+            undoManager.record(new WhatIfUndoManager.Move.InRow(movedFqcn, destinationContainerFqcn, rowIndex, colIndex));
             wif.moveElement(movedFqcn, destinationContainerFqcn, rowIndex, colIndex);
         }
         movedFqns.add(movedFqcn);
@@ -861,20 +874,92 @@ public class ArchitectureView extends BorderPane {
      * package-depth change).
      */
     public void refreshLayout() {
+        resetVisualLayout();
+        undoManager.clear();
+    }
+
+    private void resetVisualLayout() {
         if (currentRootNode == null) {
             return;
         }
-        // The rebuild is driven by the original ArchitectureNode tree, so
-        // any What-If moves the user made get visually undone. Reset the
-        // model state too — otherwise the side panel keeps reporting
-        // violations for an arrangement that no longer exists on screen,
-        // and the orange "moved" glow sticks to freshly-built boxes.
         WhatIfArchitecture wif = whatIfArchitecture.get();
         if (wif != null) {
             wif.reset();
         }
         movedFqns.clear();
         setArchitectureRoot(currentRootNode);
+    }
+
+    public void undoWhatIf() {
+        if (whatIfArchitecture.get() == null) return;
+        List<WhatIfUndoManager.Move> remaining = undoManager.decrement();
+        if (remaining == null) return;
+        boolean violations = showWhatIfViolations.get();
+        resetVisualLayout();
+        remaining.forEach(this::applyMoveToScene);
+        showWhatIfViolations.set(violations);
+        arrowsCoalescer.markDirty();
+    }
+
+    public void redoWhatIf() {
+        if (whatIfArchitecture.get() == null) return;
+        WhatIfUndoManager.Move m = undoManager.increment();
+        if (m == null) return;
+        applyMoveToScene(m);
+        arrowsCoalescer.markDirty();
+    }
+
+    public BooleanProperty canUndoWhatIfProperty() { return undoManager.canUndoProperty(); }
+    public BooleanProperty canRedoWhatIfProperty() { return undoManager.canRedoProperty(); }
+
+    private VBox findRowStack(String containerFqn) {
+        if (containerFqn == null || containerFqn.isEmpty()) {
+            return whatIfRootContainer;
+        }
+        javafx.scene.Node container = elementRegistry.get(containerFqn);
+        return container instanceof LevelPackageBox lpb ? lpb.getContentContainer() : null;
+    }
+
+    private void applyMoveToScene(WhatIfUndoManager.Move move) {
+        javafx.scene.Node node = elementRegistry.get(move.fqn());
+        if (node == null) return;
+        VBox stack = findRowStack(move.containerFqn());
+        if (stack == null) return;
+        WhatIfArchitecture wif = whatIfArchitecture.get();
+        if (wif == null) return;
+
+        if (node.getParent() instanceof HBox srcRow) {
+            srcRow.getChildren().remove(node);
+            if (srcRow.getChildren().isEmpty() && srcRow.getParent() instanceof VBox v) {
+                v.getChildren().remove(srcRow);
+            }
+        }
+
+        if (move instanceof WhatIfUndoManager.Move.AsNewRow asNewRow) {
+            HBox newRow = new HBox(8);
+            newRow.setMaxWidth(Double.MAX_VALUE);
+            newRow.setMaxHeight(Double.MAX_VALUE);
+            newRow.setAlignment(Pos.CENTER);
+            newRow.setStyle("-fx-background-color: transparent;");
+            VBox.setVgrow(newRow, Priority.ALWAYS);
+            ArchitectureDragController.markAsRow(newRow);
+            int idx = Math.max(0, Math.min(asNewRow.rowIndex(), stack.getChildren().size()));
+            stack.getChildren().add(idx, newRow);
+            newRow.getChildren().add(node);
+            wif.moveElementAsNewRow(move.fqn(), move.containerFqn(), asNewRow.rowIndex());
+        } else if (move instanceof WhatIfUndoManager.Move.InRow inRow) {
+            while (stack.getChildren().size() <= inRow.rowIndex()) {
+                HBox gap = new HBox(8);
+                ArchitectureDragController.markAsRow(gap);
+                stack.getChildren().add(gap);
+            }
+            HBox targetRow = (HBox) stack.getChildren().get(inRow.rowIndex());
+            int col = Math.max(0, Math.min(inRow.colIndex(), targetRow.getChildren().size()));
+            targetRow.getChildren().add(col, node);
+            wif.moveElement(move.fqn(), move.containerFqn(), inRow.rowIndex(), inRow.colIndex());
+        }
+
+        movedFqns.add(move.fqn());
     }
 
     public boolean hasRoot() {

@@ -21,6 +21,7 @@ import io.softwareecg.wfx.lookup.Lookup;
 import io.softwareecg.wfx.platform.api.EventBus;
 import io.softwareecg.wfx.windowmtg.api.ApplicationWindow;
 import io.softwareecg.wfx.windowmtg.api.ShutdownConfirmation;
+import javafx.beans.property.BooleanProperty;
 import javafx.geometry.Insets;
 import javafx.geometry.Pos;
 import javafx.scene.control.ButtonType;
@@ -65,16 +66,39 @@ public class S202MenuBar {
 
     private final ApplicationWindow applicationWindow;
     private final EventBus<EventObject> eventBus;
+    private final BooleanProperty canUndo;
+    private final BooleanProperty canRedo;
 
-    public S202MenuBar(ApplicationWindow applicationWindow, EventBus<EventObject> eventBus) {
+    public S202MenuBar(ApplicationWindow applicationWindow, EventBus<EventObject> eventBus,
+                       BooleanProperty canUndo, BooleanProperty canRedo) {
         this.applicationWindow = applicationWindow;
         this.eventBus = eventBus;
+        this.canUndo = canUndo;
+        this.canRedo = canRedo;
     }
 
     public void install() {
         installFileMenu();
+        installEditMenu();
         installWindowsMenu();
         installHelpMenu();
+    }
+
+    private void installEditMenu() {
+        MenuItem undoItem = MenuUtil.createMenuItem(
+                "edit.undo", "Undo", e -> publish(new MenuRequestEvent.Undo(this)));
+        undoItem.setAccelerator(new KeyCodeCombination(KeyCode.Z, KeyCombination.SHORTCUT_DOWN));
+        undoItem.disableProperty().bind(canUndo.not());
+
+        MenuItem redoItem = MenuUtil.createMenuItem(
+                "edit.redo", "Redo", e -> publish(new MenuRequestEvent.Redo(this)));
+        redoItem.setAccelerator(new KeyCodeCombination(KeyCode.Z,
+                KeyCombination.SHORTCUT_DOWN, KeyCombination.SHIFT_DOWN));
+        redoItem.disableProperty().bind(canRedo.not());
+
+        Menu editMenu = MenuUtil.createMenu("edit", "Edit");
+        editMenu.getItems().addAll(undoItem, redoItem);
+        applicationWindow.getMenu().add(1, editMenu);
     }
 
     private void installFileMenu() {
