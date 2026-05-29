@@ -21,7 +21,9 @@ import de.weigend.s202.graph.StronglyConnectedComponent;
 import de.weigend.s202.graph.TarjanSCCFinder;
 import de.weigend.s202.reader.DependencyModel;
 
+import java.util.ArrayDeque;
 import java.util.ArrayList;
+import java.util.Deque;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedHashSet;
@@ -341,31 +343,129 @@ public class LocalLevelCalculator {
     }
 
     /**
-     * Score how much one candidate cut decomposes the current SCC. The score
-     * compares the original SCC size squared with the sum of squared SCC sizes
-     * after removing the candidate edge. A cut that splits one large cycle into
-     * several smaller components therefore wins over a cut that leaves the SCC
-     * almost intact.
+     * Score how much one candidate cut decomposes the current SCC.
+     *
+     * Fast path: if cutTo is still reachable from cutFrom via an alternative
+     * path (BFS, skipping the direct edge), the SCC stays intact and the score
+     * is 0 — no Tarjan needed. This eliminates the expensive Tarjan call for
+     * the majority of candidates in dense cycles.
+     *
+     * When there is no alternative path, Tarjan is run inline (the cut edge is
+     * simply skipped during traversal) to avoid allocating a full graph copy.
      */
     private static int cycleBreakScore(Map<String, Set<String>> graph,
                                        Set<String> members,
                                        String cutFrom,
                                        String cutTo) {
-        Map<String, Set<String>> copy = new HashMap<>();
-        for (String member : members) {
-            copy.put(member, new HashSet<>());
-            for (String to : graph.getOrDefault(member, Set.of())) {
-                if (members.contains(to) && !(member.equals(cutFrom) && to.equals(cutTo))) {
-                    copy.get(member).add(to);
-                }
-            }
+        if (hasAlternativePath(graph, members, cutFrom, cutTo)) {
+            return 0;
         }
 
-        int after = 0;
-        for (StronglyConnectedComponent scc : new TarjanSCCFinder(copy).findSCCs()) {
-            after += scc.getSize() * scc.getSize();
+        // Inline Tarjan on the SCC subgraph with (cutFrom→cutTo) skipped.
+        int[] idxHolder = {0};
+        Map<String, Integer> nodeIdx  = new HashMap<>((int)(members.size() / 0.75f) + 1);
+        Map<String, Integer> lowLink  = new HashMap<>((int)(members.size() / 0.75f) + 1);
+        Set<String>          onStack  = new HashSet<>((int)(members.size() / 0.75f) + 1);
+        Deque<String>        stk      = new ArrayDeque<>();
+        int[]                after    = {0};
+
+        // iterative Tarjan to avoid stack-overflow on deep recursion
+        for (String start : members) {
+            if (!nodeIdx.containsKey(start)) {
+                tarjanInline(start, graph, members, cutFrom, cutTo,
+                             idxHolder, nodeIdx, lowLink, onStack, stk, after);
+            }
         }
-        return members.size() * members.size() - after;
+        return members.size() * members.size() - after[0];
+    }
+
+    /** BFS reachability check: is cutTo reachable from cutFrom without the direct edge? */
+    private static boolean hasAlternativePath(Map<String, Set<String>> graph,
+                                              Set<String> members,
+                                              String cutFrom,
+                                              String cutTo) {
+        Set<String>   visited = new HashSet<>();
+        Deque<String> queue   = new ArrayDeque<>();
+        visited.add(cutFrom);
+        queue.add(cutFrom);
+        while (!queue.isEmpty()) {
+            String cur = queue.poll();
+            for (String to : graph.getOrDefault(cur, Set.of())) {
+                if (!members.contains(to)) continue;
+                if (cur.equals(cutFrom) && to.equals(cutTo)) continue; // skip the cut edge
+                if (to.equals(cutTo)) return true;
+                if (visited.add(to)) queue.add(to);
+            }
+        }
+        return false;
+    }
+
+    /** Iterative Tarjan on a subgraph defined by {@code members}, skipping (cutFrom→cutTo). */
+    private static void tarjanInline(String root,
+                                     Map<String, Set<String>> graph,
+                                     Set<String> members,
+                                     String cutFrom, String cutTo,
+                                     int[] idxHolder,
+                                     Map<String, Integer> nodeIdx,
+                                     Map<String, Integer> lowLink,
+                                     Set<String> onStack,
+                                     Deque<String> stk,
+                                     int[] after) {
+        // Use an explicit call stack: each frame holds (node, iterator-over-neighbors)
+        Deque<Object[]> callStack = new ArrayDeque<>();
+        callStack.push(new Object[]{root, null});
+
+        while (!callStack.isEmpty()) {
+            Object[] frame = callStack.peek();
+            String node = (String) frame[0];
+
+            if (frame[1] == null) {
+                // First visit
+                nodeIdx.put(node, idxHolder[0]);
+                lowLink.put(node, idxHolder[0]);
+                idxHolder[0]++;
+                stk.push(node);
+                onStack.add(node);
+                frame[1] = graph.getOrDefault(node, Set.of()).iterator();
+            }
+
+            @SuppressWarnings("unchecked")
+            java.util.Iterator<String> it = (java.util.Iterator<String>) frame[1];
+            boolean pushed = false;
+            while (it.hasNext()) {
+                String dep = it.next();
+                if (!members.contains(dep)) continue;
+                if (node.equals(cutFrom) && dep.equals(cutTo)) continue;
+
+                if (!nodeIdx.containsKey(dep)) {
+                    callStack.push(new Object[]{dep, null});
+                    pushed = true;
+                    break;
+                } else if (onStack.contains(dep)) {
+                    lowLink.put(node, Math.min(lowLink.get(node), nodeIdx.get(dep)));
+                }
+            }
+            if (pushed) continue;
+
+            // Post-order: update parent's lowLink
+            callStack.pop();
+            if (!callStack.isEmpty()) {
+                String parent = (String) callStack.peek()[0];
+                lowLink.put(parent, Math.min(lowLink.get(parent), lowLink.get(node)));
+            }
+
+            // SCC root?
+            if (lowLink.get(node).equals(nodeIdx.get(node))) {
+                int size = 0;
+                while (true) {
+                    String w = stk.pop();
+                    onStack.remove(w);
+                    size++;
+                    if (w.equals(node)) break;
+                }
+                after[0] += size * size;
+            }
+        }
     }
 
     /**

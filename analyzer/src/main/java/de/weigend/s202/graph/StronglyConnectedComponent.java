@@ -16,6 +16,7 @@
 package de.weigend.s202.graph;
 
 import java.util.*;
+import java.util.Collections;
 
 /**
  * Represents a strongly connected component (SCC) - a maximal set of nodes where
@@ -25,14 +26,14 @@ import java.util.*;
  */
 public class StronglyConnectedComponent implements Comparable<StronglyConnectedComponent> {
     private final int id;
-    private final Set<String> members;
+    private final SortedSet<String> members;
     private final Set<String> outgoingDependencies;
     private final Set<String> incomingDependencies;
     private int level;
     
     public StronglyConnectedComponent(int id, Set<String> members) {
         this.id = id;
-        this.members = new HashSet<>(members);
+        this.members = new TreeSet<>(members);
         this.outgoingDependencies = new HashSet<>();
         this.incomingDependencies = new HashSet<>();
         this.level = -1;
@@ -43,7 +44,7 @@ public class StronglyConnectedComponent implements Comparable<StronglyConnectedC
     }
     
     public Set<String> getMembers() {
-        return new HashSet<>(members);
+        return Collections.unmodifiableSortedSet(members);
     }
     
     public boolean isTangle() {

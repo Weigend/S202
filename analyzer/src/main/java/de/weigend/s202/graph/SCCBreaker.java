@@ -59,7 +59,8 @@ public class SCCBreaker {
     }
 
     public SCCBreaker(Map<String, Set<String>> dependencyGraph) {
-        this.originalGraph = new HashMap<>();
+        int capacity = (int)(dependencyGraph.size() / 0.75f) + 1;
+        this.originalGraph = new HashMap<>(capacity);
         for (Map.Entry<String, Set<String>> entry : dependencyGraph.entrySet()) {
             this.originalGraph.put(entry.getKey(), new HashSet<>(entry.getValue()));
         }
@@ -111,10 +112,11 @@ public class SCCBreaker {
     private Set<Edge> breakSCC(StronglyConnectedComponent scc,
                                 Map<String, Set<String>> filteredGraph) {
         Set<String> members = scc.getMembers();
+        int cap = (int)(members.size() / 0.75f) + 1;
         Set<Edge> identifiedBackEdges = new HashSet<>();
 
-        Map<String, Integer> inDegree  = new HashMap<>();
-        Map<String, Integer> outDegree = new HashMap<>();
+        Map<String, Integer> inDegree  = new HashMap<>(cap);
+        Map<String, Integer> outDegree = new HashMap<>(cap);
         for (String m : members) { inDegree.put(m, 0); outDegree.put(m, 0); }
 
         for (String member : members) {
@@ -126,7 +128,7 @@ public class SCCBreaker {
             }
         }
 
-        Map<String, Double> rankScore = new HashMap<>();
+        Map<String, Double> rankScore = new HashMap<>(cap);
         for (String member : members) {
             int out = outDegree.get(member), in = inDegree.get(member);
             rankScore.put(member, (out - in) / (double) Math.max(1, out + in));

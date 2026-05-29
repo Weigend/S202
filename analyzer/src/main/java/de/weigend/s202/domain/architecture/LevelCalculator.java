@@ -21,9 +21,11 @@ import de.weigend.s202.graph.SCCBreaker;
 import de.weigend.s202.graph.StronglyConnectedComponent;
 import de.weigend.s202.graph.TarjanSCCFinder;
 import de.weigend.s202.reader.DependencyModel;
+import de.weigend.s202.reader.EdgeKind;
 
 import java.util.*;
 import java.util.logging.Logger;
+import java.util.stream.Collectors;
 
 /**
  * Calculates architectural levels for classes and packages based on dependencies.
@@ -75,15 +77,18 @@ public class LevelCalculator {
         DomainModel model = new DomainModel();
 
         // Step 1: Create class objects (all levels = 0)
-        for (String className : rawModel.getAllClassNames()) {
+        for (String className : sorted(rawModel.getAllClassNames())) {
             DependencyModel.ClassInfo rawClass = rawModel.getClass(className);
+            Set<String> structuralDeps = rawClass.dependencies.stream()
+                .filter(dep -> rawClass.getKinds(dep).stream().anyMatch(k -> k != EdgeKind.USES))
+                .collect(Collectors.toSet());
             model.addClass(className, new DomainModel.CalculatedElementInfo(
                 className, rawClass.simpleName, "CLASS", 0,
-                new HashSet<>(rawClass.dependencies), rawClass.interfaceType));
+                structuralDeps, rawClass.interfaceType));
         }
 
         // Step 2: Create package objects (all levels = 0)
-        for (String packageName : rawModel.getAllPackageNames()) {
+        for (String packageName : sorted(rawModel.getAllPackageNames())) {
             DependencyModel.PackageInfo rawPkg = rawModel.getPackage(packageName);
             model.addPackage(packageName, new DomainModel.CalculatedElementInfo(
                 packageName, rawPkg.simpleName, "PACKAGE", 0, new HashSet<>()));
@@ -135,6 +140,15 @@ public class LevelCalculator {
         return strategyContext;
     }
 
+    private static List<String> sorted(Collection<String> c) {
+        return c.stream().sorted().collect(Collectors.toList());
+    }
+
+    /** Filter to members first, then sort — mirrors C#'s .Where(members.Contains).OrderBy(). */
+    private static List<String> sortedFiltered(Collection<String> c, Set<String> filter) {
+        return c.stream().filter(filter::contains).sorted().collect(Collectors.toList());
+    }
+
     // -------------------------------------------------------------------------
     // Step 4 — class levels guided by the package hypothesis
     // -------------------------------------------------------------------------
@@ -163,9 +177,8 @@ public class LevelCalculator {
             for (StronglyConnectedComponent scc : new TarjanSCCFinder(graph).findSCCs()) {
                 if (scc.getSize() < 2) continue;
                 Set<String> members = scc.getMembers();
-                for (String from : new ArrayList<>(members)) {
-                    for (String to : new ArrayList<>(graph.getOrDefault(from, Set.of()))) {
-                        if (!members.contains(to)) continue;
+                for (String from : members) {
+                    for (String to : sortedFiltered(graph.getOrDefault(from, Set.of()), members)) {
                         int fromPkgLevel = packageLevels.getOrDefault(extractPackageName(from), 0);
                         int toPkgLevel   = packageLevels.getOrDefault(extractPackageName(to),   0);
                         if (fromPkgLevel < toPkgLevel) {
@@ -236,9 +249,8 @@ public class LevelCalculator {
                 }
 
                 // Identify back-edges: from→to where rank(from) < rank(to) - threshold
-                for (String from : new ArrayList<>(members)) {
-                    for (String to : new ArrayList<>(graph.getOrDefault(from, Set.of()))) {
-                        if (!members.contains(to)) continue;
+                for (String from : members) {
+                    for (String to : sortedFiltered(graph.getOrDefault(from, Set.of()), members)) {
                         if (rank.get(from) < rank.get(to) - RANK_THRESHOLD) {
                             String key = from + "\0" + to;
                             if (backEdgeKeys.add(key)) {
@@ -262,7 +274,8 @@ public class LevelCalculator {
         Map<Integer, Set<Integer>> sccDeps = new HashMap<>();
         for (StronglyConnectedComponent scc : sccs) {
             sccDeps.put(scc.getId(), new HashSet<>());
-            for (String m : scc.getMembers()) {
+            Set<String> sccMembers = scc.getMembers();
+            for (String m : sccMembers) {
                 for (String to : graph.getOrDefault(m, Set.of())) {
                     StronglyConnectedComponent toScc = pkgToScc.get(to);
                     if (toScc != null && toScc.getId() != scc.getId()) {
@@ -333,7 +346,9 @@ public class LevelCalculator {
 
         Set<String> allPkgNames = weights.keySet();
 
-        for (DomainModel.CalculatedElementInfo cls : model.getAllClasses().values()) {
+        List<DomainModel.CalculatedElementInfo> sortedClasses = model.getAllClasses().values()
+                .stream().sorted(Comparator.comparing(c -> c.fullName)).collect(Collectors.toList());
+        for (DomainModel.CalculatedElementInfo cls : sortedClasses) {
             String leafPkg = extractPackageName(cls.fullName);
             if (leafPkg == null || !allPkgNames.contains(leafPkg)) continue;
 
@@ -343,10 +358,8 @@ public class LevelCalculator {
             if (rawCls != null) {
                 for (DependencyModel.MethodInfo method : rawCls.methods.values()) {
                     for (Map.Entry<String, Integer> call : method.methodCalls.entrySet()) {
-                        // Method call key format: "ownerClass.methodName"
-                        // Find the target class by checking known dependencies
                         String calledKey = call.getKey();
-                        for (String dep : cls.dependencies) {
+                        for (String dep : sorted(cls.dependencies)) {
                             if (calledKey.startsWith(dep + ".")) {
                                 String toPkg = extractPackageName(dep);
                                 if (toPkg != null && !leafPkg.equals(toPkg)
@@ -359,8 +372,7 @@ public class LevelCalculator {
                     }
                 }
             }
-            // Fall back to 1 per target package for structural deps with no call data
-            for (String dep : cls.dependencies) {
+            for (String dep : sorted(cls.dependencies)) {
                 String toPkg = extractPackageName(dep);
                 if (toPkg != null && !leafPkg.equals(toPkg) && allPkgNames.contains(toPkg)) {
                     callCountPerPkg.putIfAbsent(toPkg, 1);
@@ -372,7 +384,7 @@ public class LevelCalculator {
             // decides direction based on actual call-count weight. Layout
             // positioning is the LocalLevelCalculator's job (step 6), so the
             // global package level can be a direct dependency-chain count.
-            for (Map.Entry<String, Integer> entry : callCountPerPkg.entrySet()) {
+            for (Map.Entry<String, Integer> entry : new TreeMap<>(callCountPerPkg).entrySet()) {
                 String toPkg = entry.getKey();
                 int callCount = entry.getValue();
                 String ancestor = leafPkg;
@@ -391,14 +403,18 @@ public class LevelCalculator {
     // -------------------------------------------------------------------------
 
     private void updateDependentRelationships(DomainModel model) {
-        for (DomainModel.CalculatedElementInfo cls : model.getAllClasses().values()) {
-            for (String dep : cls.dependencies) {
+        for (DomainModel.CalculatedElementInfo cls :
+                model.getAllClasses().values().stream()
+                    .sorted(Comparator.comparing(c -> c.fullName)).collect(Collectors.toList())) {
+            for (String dep : sorted(cls.dependencies)) {
                 DomainModel.CalculatedElementInfo d = model.getClass(dep);
                 if (d != null) d.addDependent(cls.fullName);
             }
         }
-        for (DomainModel.CalculatedElementInfo pkg : model.getAllPackages().values()) {
-            for (String dep : pkg.dependencies) {
+        for (DomainModel.CalculatedElementInfo pkg :
+                model.getAllPackages().values().stream()
+                    .sorted(Comparator.comparing(p -> p.fullName)).collect(Collectors.toList())) {
+            for (String dep : sorted(pkg.dependencies)) {
                 DomainModel.CalculatedElementInfo d = model.getPackage(dep);
                 if (d != null) d.addDependent(pkg.fullName);
             }
