@@ -24,14 +24,21 @@ class FlyCameraTest {
 
     @Test
     void worldPointVisibilityFollowsCameraOrientation() {
-        FlyCamera camera = new FlyCamera();
-        camera.resetToLookAt(0, -400, -600, 0, 0, 0);
+        FlyCamera.Pose pose = FlyCamera.lookAtPose(0, -400, -600, 0, 0, 0);
 
-        assertTrue(camera.isWorldPointVisible(0, 0, 0, 800, 600));
-        assertFalse(camera.isWorldPointVisible(10_000, 0, 0, 800, 600));
-        assertFalse(camera.isWorldPointVisible(0, -400, -1_200, 800, 600));
+        assertTrue(isVisible(pose, 0, 0, 0));
+        assertFalse(isVisible(pose, 10_000, 0, 0));
+        assertFalse(isVisible(pose, 0, -400, -1_200));
 
-        camera.resetToLookAt(0, -400, -600, 10_000, 0, 0);
-        assertTrue(camera.isWorldPointVisible(10_000, 0, 0, 800, 600));
+        pose = FlyCamera.lookAtPose(0, -400, -600, 10_000, 0, 0);
+        assertTrue(isVisible(pose, 10_000, 0, 0));
+    }
+
+    private static boolean isVisible(FlyCamera.Pose pose, double targetX, double targetY, double targetZ) {
+        return FlyCamera.isWorldPointVisible(
+                pose.x(), pose.y(), pose.z(), pose.pitch(), pose.yaw(),
+                targetX, targetY, targetZ,
+                800, 600,
+                30.0, true, 1.0);
     }
 }

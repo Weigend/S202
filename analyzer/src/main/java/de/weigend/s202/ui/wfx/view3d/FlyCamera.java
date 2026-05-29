@@ -63,6 +63,8 @@ class FlyCamera {
     private static final double START_PITCH = -30;
     private static final double START_YAW   =  0;
 
+    record Pose(double x, double y, double z, double pitch, double yaw) {}
+
     private final PerspectiveCamera camera;
     private final Translate position;
     private final Rotate rotY;
@@ -191,13 +193,8 @@ class FlyCamera {
 
     void resetToLookAt(double x, double y, double z,
                        double targetX, double targetY, double targetZ) {
-        double dx = targetX - x;
-        double dy = targetY - y;
-        double dz = targetZ - z;
-        double horizontalDistance = Math.hypot(dx, dz);
-        double computedYaw = Math.toDegrees(Math.atan2(dx, dz));
-        double computedPitch = -Math.toDegrees(Math.atan2(dy, horizontalDistance));
-        resetTo(x, y, z, computedPitch, computedYaw);
+        Pose pose = lookAtPose(x, y, z, targetX, targetY, targetZ);
+        resetTo(pose.x(), pose.y(), pose.z(), pose.pitch(), pose.yaw());
     }
 
     boolean isWorldPointVisible(double targetX,
@@ -205,30 +202,67 @@ class FlyCamera {
                                 double targetZ,
                                 double viewportWidth,
                                 double viewportHeight) {
+        return isWorldPointVisible(
+                position.getX(), position.getY(), position.getZ(), pitch, yaw,
+                targetX, targetY, targetZ,
+                viewportWidth, viewportHeight,
+                camera.getFieldOfView(),
+                camera.isVerticalFieldOfView(),
+                camera.getNearClip());
+    }
+
+    static Pose lookAtPose(double x,
+                           double y,
+                           double z,
+                           double targetX,
+                           double targetY,
+                           double targetZ) {
+        double dx = targetX - x;
+        double dy = targetY - y;
+        double dz = targetZ - z;
+        double horizontalDistance = Math.hypot(dx, dz);
+        double computedYaw = Math.toDegrees(Math.atan2(dx, dz));
+        double computedPitch = -Math.toDegrees(Math.atan2(dy, horizontalDistance));
+        return new Pose(x, y, z, clamp(computedPitch, -PITCH_LIMIT, PITCH_LIMIT), computedYaw);
+    }
+
+    static boolean isWorldPointVisible(double cameraX,
+                                       double cameraY,
+                                       double cameraZ,
+                                       double pitch,
+                                       double yaw,
+                                       double targetX,
+                                       double targetY,
+                                       double targetZ,
+                                       double viewportWidth,
+                                       double viewportHeight,
+                                       double fieldOfView,
+                                       boolean verticalFieldOfView,
+                                       double nearClip) {
         if (viewportWidth <= 0 || viewportHeight <= 0) {
             return true;
         }
 
-        Basis basis = basis();
-        double dx = targetX - position.getX();
-        double dy = targetY - position.getY();
-        double dz = targetZ - position.getZ();
+        Basis basis = basis(pitch, yaw);
+        double dx = targetX - cameraX;
+        double dy = targetY - cameraY;
+        double dz = targetZ - cameraZ;
         double forwardDistance = dot(dx, dy, dz, basis.forwardX, basis.forwardY, basis.forwardZ);
-        if (forwardDistance <= camera.getNearClip()) {
+        if (forwardDistance <= nearClip) {
             return false;
         }
 
         double horizontalDistance = Math.abs(dot(dx, dy, dz, basis.rightX, basis.rightY, basis.rightZ));
         double verticalDistance = Math.abs(dot(dx, dy, dz, basis.downX, basis.downY, basis.downZ));
         double aspect = viewportWidth / viewportHeight;
-        double fieldOfView = Math.toRadians(camera.getFieldOfView());
+        double fovRadians = Math.toRadians(fieldOfView);
         double halfHorizontalFov;
         double halfVerticalFov;
-        if (camera.isVerticalFieldOfView()) {
-            halfVerticalFov = fieldOfView / 2.0;
+        if (verticalFieldOfView) {
+            halfVerticalFov = fovRadians / 2.0;
             halfHorizontalFov = Math.atan(Math.tan(halfVerticalFov) * aspect);
         } else {
-            halfHorizontalFov = fieldOfView / 2.0;
+            halfHorizontalFov = fovRadians / 2.0;
             halfVerticalFov = Math.atan(Math.tan(halfHorizontalFov) / aspect);
         }
 
@@ -313,6 +347,10 @@ class FlyCamera {
     }
 
     private Basis basis() {
+        return basis(pitch, yaw);
+    }
+
+    private static Basis basis(double pitch, double yaw) {
         double yawRad = Math.toRadians(yaw);
         double pitchRad = Math.toRadians(-pitch);
         double horizontal = Math.cos(pitchRad);

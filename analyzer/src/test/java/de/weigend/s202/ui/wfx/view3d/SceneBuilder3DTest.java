@@ -75,8 +75,11 @@ class SceneBuilder3DTest {
         assertEquals(SceneBuilder3D.CLASS_COLOR, material(clsBox).getDiffuseColor());
         assertEquals(SceneBuilder3D.CLASS_SPECULAR_COLOR, material(clsBox).getSpecularColor());
         assertEquals(SceneBuilder3D.CLASS_BORDER_COLOR, material(clsBorder).getDiffuseColor());
-        assertEquals(5, clsGroup.getChildren().size());
+        assertEquals(9, clsGroup.getChildren().size(),
+                "class group consists of fill, four top border bars, and four selected corner pillars");
         assertEquals(DrawMode.FILL, clsBorder.getDrawMode());
+        Box clsCornerPillar = assertInstanceOf(Box.class, clsGroup.getChildren().get(5));
+        assertFalse(clsCornerPillar.isVisible(), "selection-only corner pillars are hidden when idle");
 
         assertEquals(110, pkgBox.getTranslateX(), 0.01);
         assertEquals(-80, pkgBox.getTranslateZ(), 0.01);
@@ -118,10 +121,12 @@ class SceneBuilder3DTest {
         assertEquals(SceneBuilder3D.HOVER_BORDER_COLOR, material(clsBorder).getDiffuseColor());
         clsHover.setSelected(true);
         assertEquals(SceneBuilder3D.SELECTED_BORDER_COLOR, material(clsBorder).getDiffuseColor());
+        assertTrue(clsCornerPillar.isVisible(), "selection-only corner pillars become visible when selected");
         clsHover.setHovered(false);
         assertEquals(SceneBuilder3D.SELECTED_BORDER_COLOR, material(clsBorder).getDiffuseColor());
         clsHover.setSelected(false);
         assertEquals(SceneBuilder3D.CLASS_BORDER_COLOR, material(clsBorder).getDiffuseColor());
+        assertFalse(clsCornerPillar.isVisible(), "selection-only corner pillars hide again when deselected");
     }
 
     @Test
