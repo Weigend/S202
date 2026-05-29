@@ -146,9 +146,11 @@ public class SCCBreaker {
         int maxBackEdges = Math.max(1, countInternalEdges(scc, filteredGraph) / 3);
         if (identifiedBackEdges.size() > maxBackEdges) {
             List<Edge> sorted = identifiedBackEdges.stream()
-                .sorted((e1, e2) -> Double.compare(
-                    rankScore.get(e2.to) - rankScore.get(e2.from),
-                    rankScore.get(e1.to) - rankScore.get(e1.from)))
+                .sorted(Comparator
+                    .<Edge>comparingDouble(e -> rankScore.get(e.to) - rankScore.get(e.from))
+                    .reversed()
+                    .thenComparing(e -> e.from)
+                    .thenComparing(e -> e.to))
                 .limit(maxBackEdges)
                 .collect(Collectors.toList());
             identifiedBackEdges = new HashSet<>(sorted);

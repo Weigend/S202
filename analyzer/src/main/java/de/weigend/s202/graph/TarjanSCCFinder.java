@@ -51,7 +51,9 @@ public class TarjanSCCFinder {
      * Finds all strongly connected components in the graph.
      */
     public List<StronglyConnectedComponent> findSCCs() {
-        for (String node : graph.keySet()) {
+        List<String> nodes = new ArrayList<>(graph.keySet());
+        Collections.sort(nodes);
+        for (String node : nodes) {
             if (nodeIndex.get(node) == -1) {
                 strongconnect(node);
             }
@@ -70,8 +72,9 @@ public class TarjanSCCFinder {
         stack.push(node);
         onStack.put(node, true);
         
-        // Consider successors (dependencies) of node
-        Set<String> dependencies = graph.getOrDefault(node, new HashSet<>());
+        // Consider successors (dependencies) of node — sorted for determinism
+        List<String> dependencies = new ArrayList<>(graph.getOrDefault(node, new HashSet<>()));
+        Collections.sort(dependencies);
         for (String dep : dependencies) {
             if (!graph.containsKey(dep)) {
                 // External dependency, skip

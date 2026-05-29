@@ -23,6 +23,8 @@ import de.weigend.s202.reader.DependencyModel;
 
 import java.util.ArrayDeque;
 import java.util.ArrayList;
+import java.util.Collections;
+import java.util.Comparator;
 import java.util.Deque;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -30,6 +32,7 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.TreeMap;
 
 /**
  * Assigns a per-parent layer position ({@code localLevel}) to every
@@ -90,9 +93,8 @@ public class LocalLevelCalculator {
 
     public void assign(DomainModel domain, DependencyModel rawModel) {
         Map<String, List<CalculatedElementInfo>> childrenByParent = groupChildrenByParent(domain);
-        for (Map.Entry<String, List<CalculatedElementInfo>> entry : childrenByParent.entrySet()) {
-            assignForParent(entry.getValue(), domain, rawModel);
-        }
+        new TreeMap<>(childrenByParent).forEach((key, siblings) ->
+            assignForParent(siblings, domain, rawModel));
     }
 
     private void assignForParent(List<CalculatedElementInfo> siblings,
@@ -126,12 +128,16 @@ public class LocalLevelCalculator {
         for (String s : siblingFqns) {
             weights.put(s, new HashMap<>());
         }
-        for (CalculatedElementInfo cls : domain.getAllClasses().values()) {
+        List<CalculatedElementInfo> sortedClasses = new ArrayList<>(domain.getAllClasses().values());
+        sortedClasses.sort(Comparator.comparing(c -> c.fullName));
+        for (CalculatedElementInfo cls : sortedClasses) {
             String fromSibling = containingSibling(cls.fullName, siblingFqns);
             if (fromSibling == null) {
                 continue;
             }
-            for (String dep : cls.dependencies) {
+            List<String> sortedDeps = new ArrayList<>(cls.dependencies);
+            Collections.sort(sortedDeps);
+            for (String dep : sortedDeps) {
                 if (domain.getClass(dep) == null) {
                     continue; // external — not in any sibling
                 }
@@ -168,12 +174,12 @@ public class LocalLevelCalculator {
 
     private static Map<String, List<CalculatedElementInfo>> groupChildrenByParent(DomainModel domain) {
         Map<String, List<CalculatedElementInfo>> result = new HashMap<>();
-        for (CalculatedElementInfo cls : domain.getAllClasses().values()) {
-            result.computeIfAbsent(parentOf(cls.fullName), k -> new ArrayList<>()).add(cls);
-        }
-        for (CalculatedElementInfo pkg : domain.getAllPackages().values()) {
-            result.computeIfAbsent(parentOf(pkg.fullName), k -> new ArrayList<>()).add(pkg);
-        }
+        domain.getAllClasses().values().stream()
+            .sorted(Comparator.comparing(c -> c.fullName))
+            .forEach(cls -> result.computeIfAbsent(parentOf(cls.fullName), k -> new ArrayList<>()).add(cls));
+        domain.getAllPackages().values().stream()
+            .sorted(Comparator.comparing(p -> p.fullName))
+            .forEach(pkg -> result.computeIfAbsent(parentOf(pkg.fullName), k -> new ArrayList<>()).add(pkg));
         return result;
     }
 
@@ -230,11 +236,13 @@ public class LocalLevelCalculator {
                     continue;
                 }
                 Set<String> members = scc.getMembers();
+                List<String> sortedMembers = new ArrayList<>(members);
+                Collections.sort(sortedMembers);
                 Map<String, Double> rank = new HashMap<>();
-                for (String m : members) {
+                for (String m : sortedMembers) {
                     int out = 0;
                     int in = 0;
-                    for (String other : members) {
+                    for (String other : sortedMembers) {
                         if (other.equals(m)) {
                             continue;
                         }
@@ -252,8 +260,10 @@ public class LocalLevelCalculator {
                     continue;
                 }
                 // Legacy path: remove all rank-based back-edges found in this SCC.
-                for (String from : new ArrayList<>(members)) {
-                    for (String to : new ArrayList<>(graph.getOrDefault(from, Set.of()))) {
+                for (String from : sortedMembers) {
+                    List<String> toList = new ArrayList<>(graph.getOrDefault(from, Set.of()));
+                    Collections.sort(toList);
+                    for (String to : toList) {
                         if (!members.contains(to)) {
                             continue;
                         }
@@ -277,7 +287,7 @@ public class LocalLevelCalculator {
         Map<Integer, Set<Integer>> sccDeps = new HashMap<>();
         for (StronglyConnectedComponent scc : sccs) {
             sccDeps.put(scc.getId(), new HashSet<>());
-            for (String m : scc.getMembers()) {
+            for (String m : new ArrayList<>(scc.getMembers()).stream().sorted().collect(java.util.stream.Collectors.toList())) {
                 for (String to : graph.getOrDefault(m, Set.of())) {
                     StronglyConnectedComponent toScc = nodeToScc.get(to);
                     if (toScc != null && toScc.getId() != scc.getId()) {
@@ -322,8 +332,8 @@ public class LocalLevelCalculator {
                                                           Map<String, Double> rank,
                                                           Map<String, CalculatedElementInfo> siblingByName) {
         EdgeCutCandidate best = null;
-        for (String from : members) {
-            for (String to : graph.getOrDefault(from, Set.of())) {
+        for (String from : new ArrayList<>(members).stream().sorted().collect(java.util.stream.Collectors.toList())) {
+            for (String to : new ArrayList<>(graph.getOrDefault(from, Set.of())).stream().sorted().collect(java.util.stream.Collectors.toList())) {
                 if (!members.contains(to)) {
                     continue;
                 }
@@ -426,7 +436,9 @@ public class LocalLevelCalculator {
                 idxHolder[0]++;
                 stk.push(node);
                 onStack.add(node);
-                frame[1] = graph.getOrDefault(node, Set.of()).iterator();
+                List<String> sortedDeps = new ArrayList<>(graph.getOrDefault(node, Set.of()));
+                Collections.sort(sortedDeps);
+                frame[1] = sortedDeps.iterator();
             }
 
             @SuppressWarnings("unchecked")
@@ -508,18 +520,17 @@ public class LocalLevelCalculator {
         @Override
         public int compareTo(EdgeCutCandidate other) {
             int cmp = Integer.compare(architectureContradiction, other.architectureContradiction);
-            if (cmp != 0) {
-                return cmp;
-            }
+            if (cmp != 0) return cmp;
             cmp = Integer.compare(cycleBreakScore, other.cycleBreakScore);
-            if (cmp != 0) {
-                return cmp;
-            }
+            if (cmp != 0) return cmp;
             cmp = Integer.compare(other.weight, weight);
-            if (cmp != 0) {
-                return cmp;
-            }
-            return Double.compare(rankBackEdgeScore, other.rankBackEdgeScore);
+            if (cmp != 0) return cmp;
+            cmp = Double.compare(rankBackEdgeScore, other.rankBackEdgeScore);
+            if (cmp != 0) return cmp;
+            // Stable tie-breaker: deterministic regardless of iteration order
+            cmp = from.compareTo(other.from);
+            if (cmp != 0) return cmp;
+            return to.compareTo(other.to);
         }
     }
 }
