@@ -373,10 +373,11 @@ mesmo sem existir uma aresta direta $C \to A$.
 Os n\'iveis produzidos aqui s\~ao o \emph{architectureLevel} de cada pacote~--
 a hip\'otese arquitetural que guia o tratamento de SCCs de classes na etapa
 seguinte. Em uma etapa separada, executada ap\'os os n\'iveis de classes serem
-atribu\'idos, S202 aplica o mesmo algoritmo de rank-score de forma independente
-dentro de cada cont\^einer pai. Um grafo ponderado somente entre irm\~aos dos
-filhos diretos \'e constru\'ido e um \emph{localLevel} \'e derivado para cada
-elemento. O localLevel controla o posicionamento visual dentro do cont\^einer
+atribu\'idos, dentro de cada cont\^einer pai \'e constru\'ido de forma
+independente um grafo ponderado somente entre irm\~aos dos filhos diretos.
+As back edges de classes j\'a resolvidas na etapa anterior s\~ao exclu\'idas,
+de modo que o grafo de irm\~aos \'e ac\'iclico por constru\c{c}\~ao. Desse
+grafo \'e derivado um \emph{localLevel} para cada elemento. O localLevel controla o posicionamento visual dentro do cont\^einer
 pai e n\~ao influencia a hip\'otese arquitetural nem a detec\c{c}\~ao de
 viola\c{c}\~oes.
 
@@ -591,8 +592,9 @@ estejam dispon\'iveis as informa\c{c}\~oes que justificam essa posi\c{c}\~ao.
         atribui\c{c}\~ao dos n\'iveis de classes, o \emph{localLevel} de cada
         elemento \'e calculado. Dentro de cada cont\^einer pai, um grafo
         ponderado somente entre irm\~aos dos filhos diretos \'e constru\'ido;
-        o mesmo algoritmo de rank-score quebra eventuais ciclos; o caminho mais
-        longo produz um \emph{localLevel} por filho. O \emph{localLevel}
+        as back edges de classes do Passo~5 s\~ao exclu\'idas; o grafo de
+        irm\~aos \'e ac\'iclico por constru\c{c}\~ao; o caminho mais longo
+        produz um \emph{localLevel} por filho. O \emph{localLevel}
         governa o posicionamento visual dentro da caixa pai; o
         \emph{architectureLevel} \'e o n\'ivel sem\^antico global que aciona a
         detec\c{c}\~ao de viola\c{c}\~oes.

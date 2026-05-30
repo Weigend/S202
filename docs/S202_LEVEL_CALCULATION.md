@@ -86,8 +86,9 @@ every parent container separately. For each container, it builds a weighted
 sibling-only graph of the direct children (packages or classes). Dependencies
 that leave the container or stay within the same child subtree are excluded.
 
-The same rank-score algorithm from Phase 1 is applied to break any cycles
-within each sibling group. The result is a `localLevel` per element.
+Class back-edges from Phase 2 are excluded when building the sibling graph,
+so the sibling graph is acyclic by construction. Longest-path yields a
+`localLevel` per element.
 
 `localLevel` determines the **visual position** within the parent container.
 `architectureLevel` is the **global semantic level** — it drives violation

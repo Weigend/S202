@@ -367,10 +367,11 @@ wenn keine direkte Kante $C \to A$ existiert.
 Die hier erzeugten Levels sind das \emph{architectureLevel} jedes Pakets~--
 die Architekturhypothese, die im n\"achsten Schritt die Klassen-SCC-Behandlung
 steuert. In einem separaten Schritt, der nach den Klassenlevels ausgef\"uhrt
-wird, wendet S202 denselben Rank-Score-Algorithmus innerhalb jedes
-Parent-Containers unabh\"angig an. Dabei wird ein geschwistergewichteter Graph
-der direkten Kinder aufgebaut und ein \emph{localLevel} f\"ur jedes Element
-abgeleitet. Das LocalLevel steuert die visuelle Position innerhalb des
+wird, wird innerhalb jedes Parent-Containers unabh\"angig ein
+geschwistergewichteter Graph der direkten Kinder aufgebaut. Dabei werden die in
+Schritt~4 bereits entschiedenen Klassen-Back-Edges ausgeschlossen, sodass der
+Geschwistergraph konstruktionsbedingt azyklisch ist. Daraus wird ein
+\emph{localLevel} f\"ur jedes Element abgeleitet. Das LocalLevel steuert die visuelle Position innerhalb des
 Parent-Containers und hat keinen Einfluss auf die Architekturhypothese oder
 die Verletzungserkennung.
 
@@ -579,7 +580,8 @@ vorliegen, die diese Position begr\"unden.
         Klassenlevels vergeben sind, wird das \emph{localLevel} jedes Elements
         berechnet. Innerhalb jedes Parent-Containers wird ein
         geschwistergewichteter Graph der direkten Kinder aufgebaut; derselbe
-        Rank-Score-Algorithmus bricht etwaige Zyklen auf; Longest-Path ergibt
+        Klassen-Back-Edges aus Schritt~5 werden ausgeschlossen; der
+        Geschwistergraph ist konstruktionsbedingt azyklisch; Longest-Path ergibt
         dann ein \emph{localLevel} pro Kind. Das \emph{localLevel} bestimmt
         die visuelle Position innerhalb der Parent-Box; das
         \emph{architectureLevel} ist das globale semantische Level, das die

@@ -349,9 +349,10 @@ $C \to A$ exists.
 The levels produced here are the \emph{architectureLevel} of each package —
 the architectural hypothesis used in the next step to guide class
 SCC-breaking. A separate step, run after class levels are assigned, applies
-the same rank-score algorithm within each parent container independently. It
-builds a sibling-only weighted graph of the direct children and derives a
-\emph{localLevel} for every element. The local level controls visual
+the same approach within each parent container independently. It builds a
+sibling-only weighted graph of the direct children, excluding class back-edges
+already resolved in the previous step, and derives a \emph{localLevel} for
+every element. The local level controls visual
 positioning inside the parent container and has no effect on the architectural
 hypothesis or violation detection.
 
@@ -552,8 +553,9 @@ information that justifies this position is available.
   \item \textbf{Assign local display positions:} After class levels are
         assigned, the \emph{localLevel} of every element is computed. Inside
         each parent container a sibling-only weighted graph of the direct
-        children is built; the same rank-score algorithm breaks any cycles;
-        longest-path yields a \emph{localLevel} per child. \emph{localLevel}
+        children is built, excluding class back-edges from Step~5; the sibling
+        graph is acyclic by construction; longest-path yields a
+        \emph{localLevel} per child. \emph{localLevel}
         governs visual positioning inside the parent box; \emph{architectureLevel}
         is the global semantic level that drives violation detection.
   \item \textbf{Check consistency:} Finally, the finished representation is

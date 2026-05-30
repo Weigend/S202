@@ -38,19 +38,11 @@ import java.util.TreeMap;
  * only dependencies whose source <em>and</em> target both live inside the parent's
  * direct children contribute to the sibling-only weighted graph.
  *
- * <p>Cycle breaking uses the same rank-score algorithm as
- * {@link LevelCalculator#calculatePackageLevels}:
- * <ol>
- *   <li><b>Asymmetric SCC</b> — ranks differ within the SCC.  All edges where
- *       {@code rank(from) < rank(to)} are cut in one pass; then Tarjan
- *       restarts.</li>
- *   <li><b>Symmetric SCC</b> — all ranks are equal; topology gives no direction.
- *       All internal edges are removed.  Levels are then determined solely by
- *       dependencies outside the former cycle; nodes with no such deps stay at
- *       the same level.</li>
- * </ol>
- *
- * <p>No threshold is used: any measurable rank difference justifies a cut.
+ * <p>Class back-edges recorded by {@link LevelCalculator} (Step 4) are excluded
+ * when building the sibling graph.  Because the class graph after Step 4 is a
+ * DAG, the aggregated sibling graph is acyclic by construction and no
+ * cycle-breaking fires in practice.  The rank-score SCC-break in
+ * {@link #computeLayers} is retained as a safety net.
  */
 public class LocalLevelCalculator {
 
@@ -107,6 +99,9 @@ public class LocalLevelCalculator {
                 String toSibling = containingSibling(dep, siblingFqns);
                 if (toSibling == null || toSibling.equals(fromSibling)) {
                     continue; // out of parent OR intra-sibling
+                }
+                if (domain.isClassBackEdge(cls.fullName, dep)) {
+                    continue; // already cut in Step 4 — keep local ordering consistent
                 }
                 int w = callCount(cls.fullName, dep, rawModel);
                 weights.get(fromSibling).merge(toSibling, w, Integer::sum);

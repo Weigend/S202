@@ -34,7 +34,7 @@ import java.util.stream.Collectors;
  *   Step 3  Compute package levels     weighted inter-package graph → SCC-break → DAG → longest-path
  *   Step 4  Compute class levels       package hypothesis → Fall-A/B SCC-break → longest-path
  *   Step 5  Set reverse dependencies
- *   Step 6  Assign local layer index   per-parent sibling graph → SCC-break → DAG → longest-path
+ *   Step 6  Assign local layer index   per-parent sibling graph (classBackEdges excluded) → longest-path
  *                                      (rendering position within each parent box, no global meaning)
  *
  * Package levels (Step 3) are computed first from a weighted inter-package dependency graph.
