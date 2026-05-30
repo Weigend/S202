@@ -72,4 +72,12 @@ public abstract class MenuRequestEvent extends EventObject {
     public static final class RestoreDefaultLayout extends MenuRequestEvent {
         public RestoreDefaultLayout(Object source) { super(source); }
     }
+
+    public static final class Undo extends MenuRequestEvent {
+        public Undo(Object source) { super(source); }
+    }
+
+    public static final class Redo extends MenuRequestEvent {
+        public Redo(Object source) { super(source); }
+    }
 }

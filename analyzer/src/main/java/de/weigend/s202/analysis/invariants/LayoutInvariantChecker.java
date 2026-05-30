@@ -17,7 +17,6 @@ package de.weigend.s202.analysis.invariants;
 
 import de.weigend.s202.graph.EdgeClassification;
 import de.weigend.s202.graph.EdgeClassification.EdgeType;
-import de.weigend.s202.graph.SCCBreaker;
 import de.weigend.s202.graph.StronglyConnectedComponent;
 import de.weigend.s202.graph.TarjanSCCFinder;
 import de.weigend.s202.domain.DomainModel;
@@ -36,7 +35,7 @@ import java.util.Set;
 /**
  * Verifies that a generated {@link DomainModel} is internally consistent —
  * i.e. reports actual algorithm bugs in the level pipeline, not architectural
- * violations the heuristic SCC-breaker is allowed to produce by design.
+ * violations the deterministic SCC-breaker is allowed to produce by design.
  *
  * <p>Ported 1:1 from the Software City (.NET / Unity) project's
  * {@code LayoutInvariantChecker.cs}. The 2D Structure202 view uses the same
@@ -48,7 +47,7 @@ import java.util.Set;
  * <h2>Rules</h2>
  * <ul>
  *   <li><b>R1 ClassDepDownward</b> — for every class dep A→B, A.level &gt; B.level
- *       unless the edge is a heuristic back-edge or both endpoints sit in a
+ *       unless the edge is a registered back-edge or both endpoints sit in a
  *       broken/equalised SCC.</li>
  *   <li><b>R2 PkgSccEqualLevel</b> — packages that form an SCC at the
  *       package-dep level (after filtering back-edges, same-class-SCC deps
@@ -63,9 +62,8 @@ import java.util.Set;
  *       and SCC state say it should be.</li>
  * </ul>
  *
- * <p>Architectural violations the heuristic deliberately produces (e.g.
- * uphill edges inside a broken SCC, the back-edges themselves) are not
- * findings — they already render as red violation edges in the view via
+ * <p>Edges removed by the level algorithm (back-edges from Fall A and Fall B)
+ * are not findings — they already render as red violation edges in the view via
  * {@code EdgeClassification}.</p>
  *
  * <p>Pure, allocation-light, thread-safe — safe to invoke from a JavaFX
@@ -93,33 +91,38 @@ public final class LayoutInvariantChecker {
         Map<String, CalculatedElementInfo> classes = domainModel.getAllClasses();
         Map<String, CalculatedElementInfo> packages = domainModel.getAllPackages();
 
-        // Reconstruct the class graph (only edges to classes that exist in
-        // the model) and run SCC + breaker analysis once. R1 needs both the
-        // SCC IDs and the heuristic back-edge set to distinguish "by design"
-        // from "real bug".
+        // Reconstruct the class graph and run Tarjan once. R1 needs the SCC map
+        // to distinguish "by design" level spread from real bugs.
         Map<String, Set<String>> classGraph = buildClassGraph(classes);
         Map<String, StronglyConnectedComponent> classToScc = buildClassToSccMap(classGraph);
-        Set<SCCBreaker.Edge> backEdges = new SCCBreaker(classGraph).findBackEdges();
 
-        // SCCs the heuristic explicitly broke (≥1 back edge points into them)
-        // intentionally spread their members across DAG levels via the
-        // SCC-DAG topo-sort. Drift between two members of a broken SCC is
-        // the algorithm's intended output — not a bug R1 should flag. (Forge's
-        // ~4000-class monolith would otherwise produce thousands of noise findings.)
+        // An SCC is "broken" when the deterministic algorithm deliberately spread
+        // its members across different levels (Fall A or Fall B cuts). This is
+        // detected directly from the computed levels: if members of the same original
+        // SCC have different architecture levels, the SCC was broken by design.
+        // Drift between two members of a broken SCC is the algorithm's intended
+        // output — not a bug R1 should flag. (Forge's ~4000-class monolith would
+        // otherwise produce thousands of noise findings.)
         Set<Integer> brokenSccIds = new HashSet<>();
-        for (SCCBreaker.Edge e : backEdges) {
-            StronglyConnectedComponent fromScc = classToScc.get(e.from);
-            StronglyConnectedComponent toScc = classToScc.get(e.to);
-            if (fromScc != null && toScc != null && fromScc.getId() == toScc.getId()) {
-                brokenSccIds.add(fromScc.getId());
+        for (StronglyConnectedComponent scc : new HashSet<>(classToScc.values())) {
+            if (scc.getSize() < 2) continue;
+            int firstLevel = -1;
+            for (String m : scc.getMembers()) {
+                CalculatedElementInfo info = classes.get(m);
+                if (info == null) continue;
+                if (firstLevel < 0) firstLevel = info.architectureLevel;
+                else if (info.architectureLevel != firstLevel) {
+                    brokenSccIds.add(scc.getId());
+                    break;
+                }
             }
         }
 
         List<InvariantFinding> findings = new ArrayList<>();
         int dependencyCount = checkLevelInversionAcrossNonBackEdge(
-                classes, classToScc, backEdges, brokenSccIds, domainModel, findings);
+                classes, classToScc, brokenSccIds, domainModel, findings);
         checkPackageEdgeDirection(packages, domainModel.getPackageEdgeWeights(), domainModel, findings);
-        checkPkgSccEqualLevel(classes, packages, rawModel, domainModel, classToScc, backEdges, findings);
+        checkPkgSccEqualLevel(classes, packages, rawModel, domainModel, classToScc, findings);
         checkViolationFlagConsistency(classes, classGraph, classToScc, findings);
 
         List<String> paths = sourcePaths != null
@@ -132,7 +135,7 @@ public final class LayoutInvariantChecker {
                 packages.size(),
                 classes.size(),
                 dependencyCount,
-                backEdges.size(),
+                domainModel.getClassBackEdgeCount(),
                 findings);
     }
 
@@ -189,7 +192,6 @@ public final class LayoutInvariantChecker {
     private static int checkLevelInversionAcrossNonBackEdge(
             Map<String, CalculatedElementInfo> classes,
             Map<String, StronglyConnectedComponent> classToScc,
-            Set<SCCBreaker.Edge> backEdges,
             Set<Integer> brokenSccIds,
             DomainModel domainModel,
             List<InvariantFinding> findings) {
@@ -202,7 +204,6 @@ public final class LayoutInvariantChecker {
                 depCount++;
 
                 if (from.architectureLevel > to.architectureLevel) continue;
-                if (backEdges.contains(new SCCBreaker.Edge(from.fullName, to.fullName))) continue;
                 if (domainModel.isClassBackEdge(from.fullName, to.fullName)) continue;
 
                 StronglyConnectedComponent fromScc = classToScc.get(from.fullName);
@@ -220,16 +221,12 @@ public final class LayoutInvariantChecker {
                 if (sameScc && from.architectureLevel == to.architectureLevel) continue;
 
                 // Same-SCC drift in a *broken* SCC is also by design: the
-                // heuristic deliberately spread members across DAG levels via
-                // back-edge removal. Only unbroken-SCC drift is a real bug.
+                // deterministic algorithm deliberately spread members across levels
+                // via Fall-A / Fall-B edge removal. Only unbroken-SCC drift is a bug.
                 if (sameScc && brokenSccIds.contains(fromScc.getId())) continue;
 
                 String classification;
-                if (sameScc && fromSize == 2) {
-                    classification = "same 2-member SCC (heuristic skips SCCs<3); "
-                            + "members should share level but DIFFER — likely a hoist step "
-                            + "moved one without re-running topo-sort.";
-                } else if (sameScc) {
+                if (sameScc) {
                     classification = "same original SCC (size=" + fromSize
                             + "); members should share level but DIFFER — likely a hoist step "
                             + "moved one without re-running topo-sort.";
@@ -323,11 +320,10 @@ public final class LayoutInvariantChecker {
             DependencyModel rawModel,
             DomainModel domainModel,
             Map<String, StronglyConnectedComponent> classToScc,
-            Set<SCCBreaker.Edge> backEdges,
             List<InvariantFinding> findings) {
 
         // Build the same filtered package-dep graph LevelCalculator uses:
-        //   - drop class-level back-edges identified by the SccBreaker
+        //   - drop class-level back-edges (registered in domainModel)
         //   - drop package-level back-edges identified during package SCC-breaking
         //   - drop deps where both classes share an SCC (handled by R1 already)
         //   - drop edges between packages in the same subtree (parent ↔ child)
@@ -347,7 +343,7 @@ public final class LayoutInvariantChecker {
                 if (fromPkg.equals(toPkg)) continue;
                 if (isInSameSubtree(fromPkg, toPkg)) continue;
 
-                if (backEdges.contains(new SCCBreaker.Edge(cls.fullName, depName))) continue;
+                if (domainModel.isClassBackEdge(cls.fullName, depName)) continue;
                 StronglyConnectedComponent toScc = classToScc.get(depName);
                 if (fromScc != null && toScc != null && fromScc.getId() == toScc.getId()) continue;
 

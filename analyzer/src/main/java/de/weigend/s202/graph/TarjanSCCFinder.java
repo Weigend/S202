@@ -28,15 +28,19 @@ public class TarjanSCCFinder {
     private final Map<String, Set<String>> graph; // node -> dependencies
     private int index = 0;
     private final Stack<String> stack = new Stack<>();
-    private final Map<String, Integer> nodeIndex = new HashMap<>();
-    private final Map<String, Integer> nodeLowLink = new HashMap<>();
-    private final Map<String, Boolean> onStack = new HashMap<>();
+    private final Map<String, Integer> nodeIndex;
+    private final Map<String, Integer> nodeLowLink;
+    private final Map<String, Boolean> onStack;
     private final List<StronglyConnectedComponent> sccs = new ArrayList<>();
     private int sccCounter = 0;
-    
+
     public TarjanSCCFinder(Map<String, Set<String>> graph) {
         this.graph = graph;
-        // Initialize all nodes with index -1 (unvisited)
+        int n = graph.size();
+        int capacity = (int)(n / 0.75f) + 1;
+        nodeIndex   = new HashMap<>(capacity);
+        nodeLowLink = new HashMap<>(capacity);
+        onStack     = new HashMap<>(capacity);
         for (String node : graph.keySet()) {
             nodeIndex.put(node, -1);
             onStack.put(node, false);
@@ -47,7 +51,9 @@ public class TarjanSCCFinder {
      * Finds all strongly connected components in the graph.
      */
     public List<StronglyConnectedComponent> findSCCs() {
-        for (String node : graph.keySet()) {
+        List<String> nodes = new ArrayList<>(graph.keySet());
+        Collections.sort(nodes);
+        for (String node : nodes) {
             if (nodeIndex.get(node) == -1) {
                 strongconnect(node);
             }
@@ -66,8 +72,9 @@ public class TarjanSCCFinder {
         stack.push(node);
         onStack.put(node, true);
         
-        // Consider successors (dependencies) of node
-        Set<String> dependencies = graph.getOrDefault(node, new HashSet<>());
+        // Consider successors (dependencies) of node — sorted for determinism
+        List<String> dependencies = new ArrayList<>(graph.getOrDefault(node, new HashSet<>()));
+        Collections.sort(dependencies);
         for (String dep : dependencies) {
             if (!graph.containsKey(dep)) {
                 // External dependency, skip

@@ -16,14 +16,14 @@
 package de.weigend.s202.domain.architecture;
 
 import de.weigend.s202.domain.DomainModel;
-import de.weigend.s202.domain.strategy.LevelCalculationStrategyContext;
-import de.weigend.s202.graph.SCCBreaker;
 import de.weigend.s202.graph.StronglyConnectedComponent;
 import de.weigend.s202.graph.TarjanSCCFinder;
 import de.weigend.s202.reader.DependencyModel;
+import de.weigend.s202.reader.EdgeKind;
 
 import java.util.*;
 import java.util.logging.Logger;
+import java.util.stream.Collectors;
 
 /**
  * Calculates architectural levels for classes and packages based on dependencies.
@@ -42,48 +42,39 @@ import java.util.logging.Logger;
  * P_A's subtree to classes in P_B, with a fallback weight of 1 for structural references
  * without method-call data.
  *
- * Package SCC-breaking uses a weight-based rank score:
+ * Package SCC-breaking uses a weight-based rank score (no threshold):
  *   rank(P) = (Σ outgoing weights within SCC − Σ incoming weights within SCC)
  *             / max(1, sum of both)
- * Edge P_A→P_B is a back-edge when rank(P_A) < rank(P_B) − 0.1.
- * Equal-rank pairs (symmetric dependency) are left in the same SCC and assigned
- * the same level — they are genuine peers with no dominant dependency direction.
+ * All edges P_A→P_B where rank(P_A) &lt; rank(P_B) are cut in one pass.
+ * When all ranks are equal (topology gives no direction), all internal edges
+ * are removed and levels emerge from dependencies outside the former cycle.
  *
  * Class SCC-breaking (Step 4) uses the package hypothesis computed in Step 3:
- * a class edge A→B is cut when A and B are in an SCC AND pkgLevel(A.pkg) &lt; pkgLevel(B.pkg),
- * i.e. the edge runs against the architecture hypothesis. For SCCs confined to
- * equal-level packages (genuine intra-level tangles), the in/out-degree heuristic
- * is used as a fallback.
+ * Fall A — a class edge A→B is cut when pkgLevel(A.pkg) &lt; pkgLevel(B.pkg)
+ *           (runs against the architecture hypothesis).
+ * Fall B — residual SCCs confined to equal-level packages have all internal
+ *           edges removed; levels emerge from external dependencies.
  */
 public class LevelCalculator {
 
     private static final Logger LOG = Logger.getLogger(LevelCalculator.class.getName());
-    private static final double RANK_THRESHOLD = 0.1;
-
-    private final LevelCalculationStrategyContext strategyContext;
-
-    public LevelCalculator() {
-        this(LevelCalculationStrategyFactory.createDefault());
-    }
-
-    public LevelCalculator(LevelCalculationStrategyContext strategyContext) {
-        Objects.requireNonNull(strategyContext, "strategyContext cannot be null");
-        this.strategyContext = strategyContext;
-    }
 
     public DomainModel calculate(DependencyModel rawModel) {
         DomainModel model = new DomainModel();
 
         // Step 1: Create class objects (all levels = 0)
-        for (String className : rawModel.getAllClassNames()) {
+        for (String className : sorted(rawModel.getAllClassNames())) {
             DependencyModel.ClassInfo rawClass = rawModel.getClass(className);
+            Set<String> structuralDeps = rawClass.dependencies.stream()
+                .filter(dep -> rawClass.getKinds(dep).stream().anyMatch(k -> k != EdgeKind.USES))
+                .collect(Collectors.toSet());
             model.addClass(className, new DomainModel.CalculatedElementInfo(
                 className, rawClass.simpleName, "CLASS", 0,
-                new HashSet<>(rawClass.dependencies), rawClass.interfaceType));
+                structuralDeps, rawClass.interfaceType));
         }
 
         // Step 2: Create package objects (all levels = 0)
-        for (String packageName : rawModel.getAllPackageNames()) {
+        for (String packageName : sorted(rawModel.getAllPackageNames())) {
             DependencyModel.PackageInfo rawPkg = rawModel.getPackage(packageName);
             model.addPackage(packageName, new DomainModel.CalculatedElementInfo(
                 packageName, rawPkg.simpleName, "PACKAGE", 0, new HashSet<>()));
@@ -131,8 +122,13 @@ public class LevelCalculator {
         return model;
     }
 
-    public LevelCalculationStrategyContext getStrategyContext() {
-        return strategyContext;
+    private static List<String> sorted(Collection<String> c) {
+        return c.stream().sorted().collect(Collectors.toList());
+    }
+
+    /** Filter to members first, then sort — mirrors C#'s .Where(members.Contains).OrderBy(). */
+    private static List<String> sortedFiltered(Collection<String> c, Set<String> filter) {
+        return c.stream().filter(filter::contains).sorted().collect(Collectors.toList());
     }
 
     // -------------------------------------------------------------------------
@@ -163,9 +159,8 @@ public class LevelCalculator {
             for (StronglyConnectedComponent scc : new TarjanSCCFinder(graph).findSCCs()) {
                 if (scc.getSize() < 2) continue;
                 Set<String> members = scc.getMembers();
-                for (String from : new ArrayList<>(members)) {
-                    for (String to : new ArrayList<>(graph.getOrDefault(from, Set.of()))) {
-                        if (!members.contains(to)) continue;
+                for (String from : members) {
+                    for (String to : sortedFiltered(graph.getOrDefault(from, Set.of()), members)) {
                         int fromPkgLevel = packageLevels.getOrDefault(extractPackageName(from), 0);
                         int toPkgLevel   = packageLevels.getOrDefault(extractPackageName(to),   0);
                         if (fromPkgLevel < toPkgLevel) {
@@ -177,18 +172,73 @@ public class LevelCalculator {
                 }
             }
         }
+        // Phase 2 (Fall B): residual SCCs are same-level tangles — no package context
+        // provides a direction.  Remove every internal edge; class levels then derive
+        // purely from dependencies outside the former cycle.  Nodes with no such deps
+        // end up at the same level (correct: no justified ordering between them).
+        // These edges are also recorded as back-edges so the LayoutInvariantChecker
+        // does not flag the resulting level spread as an R1 violation.
+        boolean fallBChanged = true;
+        while (fallBChanged) {
+            fallBChanged = false;
+            for (StronglyConnectedComponent scc : new TarjanSCCFinder(graph).findSCCs()) {
+                if (scc.getSize() < 2) continue;
+                Set<String> members = scc.getMembers();
+                for (String from : sortedFiltered(new ArrayList<>(graph.keySet()), members)) {
+                    for (String to : sortedFiltered(new ArrayList<>(graph.getOrDefault(from, Set.of())), members)) {
+                        graph.get(from).remove(to);
+                        hypothesisBackEdgeKeys.add(from + "\0" + to);
+                    }
+                }
+                fallBChanged = true;
+                break; // restart Tarjan after each modification
+            }
+        }
+
+        // Publish all removed edges (Phase 1 + Phase 2) as class back-edges.
         model.setClassBackEdges(hypothesisBackEdgeKeys);
 
-        // Phase 2: degree-heuristic fallback for residual SCCs (same-level packages).
-        SCCBreaker fallback = new SCCBreaker(graph);
-        graph = fallback.getGraphWithoutBackEdges();
-
-        // Phase 3: longest-path on the (now near-DAG) graph via the configured strategy.
-        Map<String, Integer> levels =
-            strategyContext.getClassLevelStrategy().calculateClassLevels(graph);
-        for (Map.Entry<String, Integer> e : levels.entrySet()) {
-            DomainModel.CalculatedElementInfo info = model.getClass(e.getKey());
-            if (info != null) info.setArchitectureLevel(e.getValue());
+        // Phase 3: SCC-collapsed longest-path on the cleaned DAG.
+        List<StronglyConnectedComponent> classSccs = new TarjanSCCFinder(graph).findSCCs();
+        Map<String, StronglyConnectedComponent> classToScc = new HashMap<>();
+        for (StronglyConnectedComponent scc : classSccs) {
+            for (String m : scc.getMembers()) classToScc.put(m, scc);
+        }
+        Map<Integer, Set<Integer>> sccDeps = new HashMap<>();
+        for (StronglyConnectedComponent scc : classSccs) {
+            sccDeps.put(scc.getId(), new HashSet<>());
+            for (String m : scc.getMembers()) {
+                for (String to : graph.getOrDefault(m, Set.of())) {
+                    StronglyConnectedComponent toScc = classToScc.get(to);
+                    if (toScc != null && toScc.getId() != scc.getId()) {
+                        sccDeps.get(scc.getId()).add(toScc.getId());
+                    }
+                }
+            }
+        }
+        Map<Integer, Integer> sccLevels = new HashMap<>();
+        for (StronglyConnectedComponent scc : classSccs) sccLevels.put(scc.getId(), 0);
+        boolean lvlChanged = true;
+        while (lvlChanged) {
+            lvlChanged = false;
+            for (StronglyConnectedComponent scc : classSccs) {
+                int maxDep = -1;
+                for (int depId : sccDeps.get(scc.getId())) {
+                    maxDep = Math.max(maxDep, sccLevels.get(depId));
+                }
+                int newLevel = maxDep >= 0 ? maxDep + 1 : 0;
+                if (sccLevels.get(scc.getId()) != newLevel) {
+                    sccLevels.put(scc.getId(), newLevel);
+                    lvlChanged = true;
+                }
+            }
+        }
+        for (StronglyConnectedComponent scc : classSccs) {
+            int level = sccLevels.get(scc.getId());
+            for (String m : scc.getMembers()) {
+                DomainModel.CalculatedElementInfo info = model.getClass(m);
+                if (info != null) info.setArchitectureLevel(level);
+            }
         }
     }
 
@@ -212,9 +262,16 @@ public class LevelCalculator {
             graph.get(entry.getKey()).addAll(entry.getValue().keySet());
         }
 
-        // Iteratively break SCCs using weight-based rank, then assign levels
-        // via SCC-collapsed DAG longest-path. Remaining SCCs (equal-rank peers)
-        // are collapsed to the same level without cutting any edge.
+        // Two-step deterministic cycle breaking — no heuristics, no thresholds:
+        //
+        // Step 1 (asymmetric): find the min-weight edge in the SCC and cut it, then
+        //   restart.  Alphabetically first (from, to) breaks ties in the minimum.
+        // Step 2 (symmetric): when all internal edges share the same weight there is
+        //   no architecturally justified direction — remove every internal edge.
+        //   Levels are then determined solely by dependencies outside the former cycle;
+        //   nodes with no such deps stay at the same level.
+        //
+        // Both steps iterate until no SCC of size ≥ 2 remains.
         Set<String> backEdgeKeys = new LinkedHashSet<>(); // "from\0to" — tracked for R3
         boolean changed = true;
         while (changed) {
@@ -223,7 +280,10 @@ public class LevelCalculator {
                 if (scc.getSize() < 2) continue;
                 Set<String> members = scc.getMembers();
 
-                // Compute weight-based rank for each member within this SCC
+                // Compute rank per member from in/out weights within the SCC.
+                // Rank captures global flow direction — a node called by many others has
+                // low rank (foundation); a node calling many others has high rank (user).
+                // Equal weights can still produce different ranks when topologies differ.
                 Map<String, Double> rank = new HashMap<>();
                 for (String m : members) {
                     int out = 0, in = 0;
@@ -235,19 +295,30 @@ public class LevelCalculator {
                     rank.put(m, (out - in) / (double) Math.max(1, out + in));
                 }
 
-                // Identify back-edges: from→to where rank(from) < rank(to) - threshold
-                for (String from : new ArrayList<>(members)) {
-                    for (String to : new ArrayList<>(graph.getOrDefault(from, Set.of()))) {
-                        if (!members.contains(to)) continue;
-                        if (rank.get(from) < rank.get(to) - RANK_THRESHOLD) {
-                            String key = from + "\0" + to;
-                            if (backEdgeKeys.add(key)) {
-                                graph.get(from).remove(to);
-                                changed = true;
-                            }
+                // Cut all edges that run against the dependency flow (rank(to) > rank(from)).
+                // If no edge qualifies (ranks are equal for all pairs → truly no direction),
+                // remove every internal edge so the SCC dissolves.
+                boolean anyCut = false;
+                for (String from : sorted(members)) {
+                    for (String to : sortedFiltered(new ArrayList<>(graph.getOrDefault(from, Set.of())), members)) {
+                        if (rank.get(to) > rank.get(from)) {
+                            graph.get(from).remove(to);
+                            backEdgeKeys.add(from + "\0" + to);
+                            anyCut = true;
                         }
                     }
                 }
+                if (!anyCut) {
+                    // Truly symmetric — topology gives no direction. Remove all edges;
+                    // levels are then determined by dependencies outside the former cycle.
+                    for (String from : sorted(members)) {
+                        for (String to : sortedFiltered(new ArrayList<>(graph.getOrDefault(from, Set.of())), members)) {
+                            graph.get(from).remove(to);
+                            backEdgeKeys.add(from + "\0" + to);
+                        }
+                    }
+                }
+                changed = true;
             }
         }
 
@@ -262,7 +333,8 @@ public class LevelCalculator {
         Map<Integer, Set<Integer>> sccDeps = new HashMap<>();
         for (StronglyConnectedComponent scc : sccs) {
             sccDeps.put(scc.getId(), new HashSet<>());
-            for (String m : scc.getMembers()) {
+            Set<String> sccMembers = scc.getMembers();
+            for (String m : sccMembers) {
                 for (String to : graph.getOrDefault(m, Set.of())) {
                     StronglyConnectedComponent toScc = pkgToScc.get(to);
                     if (toScc != null && toScc.getId() != scc.getId()) {
@@ -333,7 +405,9 @@ public class LevelCalculator {
 
         Set<String> allPkgNames = weights.keySet();
 
-        for (DomainModel.CalculatedElementInfo cls : model.getAllClasses().values()) {
+        List<DomainModel.CalculatedElementInfo> sortedClasses = model.getAllClasses().values()
+                .stream().sorted(Comparator.comparing(c -> c.fullName)).collect(Collectors.toList());
+        for (DomainModel.CalculatedElementInfo cls : sortedClasses) {
             String leafPkg = extractPackageName(cls.fullName);
             if (leafPkg == null || !allPkgNames.contains(leafPkg)) continue;
 
@@ -343,10 +417,8 @@ public class LevelCalculator {
             if (rawCls != null) {
                 for (DependencyModel.MethodInfo method : rawCls.methods.values()) {
                     for (Map.Entry<String, Integer> call : method.methodCalls.entrySet()) {
-                        // Method call key format: "ownerClass.methodName"
-                        // Find the target class by checking known dependencies
                         String calledKey = call.getKey();
-                        for (String dep : cls.dependencies) {
+                        for (String dep : sorted(cls.dependencies)) {
                             if (calledKey.startsWith(dep + ".")) {
                                 String toPkg = extractPackageName(dep);
                                 if (toPkg != null && !leafPkg.equals(toPkg)
@@ -359,8 +431,7 @@ public class LevelCalculator {
                     }
                 }
             }
-            // Fall back to 1 per target package for structural deps with no call data
-            for (String dep : cls.dependencies) {
+            for (String dep : sorted(cls.dependencies)) {
                 String toPkg = extractPackageName(dep);
                 if (toPkg != null && !leafPkg.equals(toPkg) && allPkgNames.contains(toPkg)) {
                     callCountPerPkg.putIfAbsent(toPkg, 1);
@@ -372,7 +443,7 @@ public class LevelCalculator {
             // decides direction based on actual call-count weight. Layout
             // positioning is the LocalLevelCalculator's job (step 6), so the
             // global package level can be a direct dependency-chain count.
-            for (Map.Entry<String, Integer> entry : callCountPerPkg.entrySet()) {
+            for (Map.Entry<String, Integer> entry : new TreeMap<>(callCountPerPkg).entrySet()) {
                 String toPkg = entry.getKey();
                 int callCount = entry.getValue();
                 String ancestor = leafPkg;
@@ -391,14 +462,18 @@ public class LevelCalculator {
     // -------------------------------------------------------------------------
 
     private void updateDependentRelationships(DomainModel model) {
-        for (DomainModel.CalculatedElementInfo cls : model.getAllClasses().values()) {
-            for (String dep : cls.dependencies) {
+        for (DomainModel.CalculatedElementInfo cls :
+                model.getAllClasses().values().stream()
+                    .sorted(Comparator.comparing(c -> c.fullName)).collect(Collectors.toList())) {
+            for (String dep : sorted(cls.dependencies)) {
                 DomainModel.CalculatedElementInfo d = model.getClass(dep);
                 if (d != null) d.addDependent(cls.fullName);
             }
         }
-        for (DomainModel.CalculatedElementInfo pkg : model.getAllPackages().values()) {
-            for (String dep : pkg.dependencies) {
+        for (DomainModel.CalculatedElementInfo pkg :
+                model.getAllPackages().values().stream()
+                    .sorted(Comparator.comparing(p -> p.fullName)).collect(Collectors.toList())) {
+            for (String dep : sorted(pkg.dependencies)) {
                 DomainModel.CalculatedElementInfo d = model.getPackage(dep);
                 if (d != null) d.addDependent(pkg.fullName);
             }

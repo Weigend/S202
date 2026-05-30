@@ -17,8 +17,12 @@ package de.weigend.s202.reader;
 
 import org.objectweb.asm.ClassReader;
 import org.objectweb.asm.ClassVisitor;
+import org.objectweb.asm.FieldVisitor;
 import org.objectweb.asm.MethodVisitor;
 import org.objectweb.asm.Opcodes;
+import org.objectweb.asm.Type;
+import org.objectweb.asm.signature.SignatureReader;
+import org.objectweb.asm.signature.SignatureVisitor;
 
 import java.io.BufferedReader;
 import java.io.IOException;
@@ -235,7 +239,9 @@ public class InputAnalyzer {
             Enumeration<JarEntry> entries = jarFile.entries();
             while (entries.hasMoreElements()) {
                 JarEntry entry = entries.nextElement();
-                if (entry.getName().endsWith(".class") && !entry.isDirectory()) {
+                if (entry.getName().endsWith(".class") && !entry.isDirectory()
+                        && !entry.getName().endsWith("package-info.class")
+                        && !entry.getName().endsWith("module-info.class")) {
                     try {
                         byte[] classBytes = jarFile.getInputStream(entry).readAllBytes();
                         analyzeClass(entry.getName(), classBytes, model);
@@ -257,7 +263,9 @@ public class InputAnalyzer {
                 Enumeration<JarEntry> entries = jarFile.entries();
                 while (entries.hasMoreElements()) {
                     JarEntry entry = entries.nextElement();
-                    if (entry.getName().endsWith(".class") && !entry.isDirectory()) {
+                    if (entry.getName().endsWith(".class") && !entry.isDirectory()
+                            && !entry.getName().endsWith("package-info.class")
+                            && !entry.getName().endsWith("module-info.class")) {
                         total++;
                     }
                 }
@@ -399,19 +407,67 @@ public class InputAnalyzer {
         }
 
         @Override
+        public FieldVisitor visitField(int access, String name, String descriptor,
+                                       String signature, Object value) {
+            if (currentClassInfo != null) {
+                addTypeRefs(descriptor);
+                addSignatureRefs(signature);
+            }
+            return super.visitField(access, name, descriptor, signature, value);
+        }
+
+        @Override
         public MethodVisitor visitMethod(int access, String name, String descriptor,
                                          String signature, String[] exceptions) {
-            // Skip if this is an inner class (currentClassInfo is null)
-            if (currentClassInfo == null) {
+            if (currentClassInfo == null)
                 return null;
-            }
-            
-            // Register method in class info
+
+            // Parameter and return types from descriptor + generic types from signature
+            addTypeRefs(descriptor);
+            addSignatureRefs(signature);
+
             currentClassInfo.addMethod(name, descriptor);
             DependencyModel.MethodInfo methodInfo = currentClassInfo.getMethod(name, descriptor);
-
-            // Return a method visitor to track method calls
             return new MethodCallExtractor(currentClassInfo, methodInfo);
+        }
+
+        /** Adds a USES edge for every non-primitive, non-array-of-primitive class in {@code descriptor}. */
+        private void addTypeRefs(String descriptor) {
+            if (descriptor == null || currentClassInfo == null) return;
+            try {
+                Type type = Type.getType(descriptor);
+                addTypeRef(type);
+            } catch (IllegalArgumentException e) {
+                // method descriptor — parse args + return separately
+                try {
+                    for (Type arg : Type.getArgumentTypes(descriptor)) addTypeRef(arg);
+                    addTypeRef(Type.getReturnType(descriptor));
+                } catch (IllegalArgumentException ignored) { }
+            }
+        }
+
+        private void addTypeRef(Type type) {
+            if (type == null) return;
+            while (type.getSort() == Type.ARRAY) type = type.getElementType();
+            if (type.getSort() != Type.OBJECT) return;
+            String className = type.getClassName();
+            if (!isSelfDependency(className) && !isExternalLibraryClass(className))
+                currentClassInfo.addDependency(className, EdgeKind.USES);
+        }
+
+        /** Visits a generic signature string and adds every referenced class. */
+        private void addSignatureRefs(String signature) {
+            if (signature == null || currentClassInfo == null) return;
+            try {
+                new SignatureReader(signature).accept(new SignatureVisitor(Opcodes.ASM9) {
+                    @Override
+                    public void visitClassType(String name) {
+                        String className = name.replace("/", ".");
+                        if (!isSelfDependency(className) && !isExternalLibraryClass(className))
+                            currentClassInfo.addDependency(className, EdgeKind.USES);
+                    }
+                });
+            } catch (Exception ignored) { }
         }
 
         private String convertClassName(String internalName) {
@@ -451,6 +507,60 @@ public class InputAnalyzer {
             super(Opcodes.ASM9);
             this.classInfo = classInfo;
             this.methodInfo = methodInfo;
+        }
+
+        @Override
+        public void visitLdcInsn(Object value) {
+            // Class literals: Foo.class compiles to LDC with a Type constant
+            if (value instanceof Type t) {
+                if (t.getSort() == Type.OBJECT || t.getSort() == Type.ARRAY) {
+                    Type elem = t;
+                    while (elem.getSort() == Type.ARRAY) elem = elem.getElementType();
+                    if (elem.getSort() == Type.OBJECT) {
+                        String className = getOuterClassName(elem.getClassName());
+                        if (!isExternalLibraryClass(className) && !className.equals(classInfo.fullName))
+                            classInfo.addDependency(className, EdgeKind.USES);
+                    }
+                }
+            }
+            super.visitLdcInsn(value);
+        }
+
+        @Override
+        public void visitTypeInsn(int opcode, String type) {
+            // NEW, CHECKCAST, INSTANCEOF, ANEWARRAY — unwrap array descriptors to element class
+            String className;
+            if (type.startsWith("[")) {
+                try {
+                    Type t = Type.getType(type);
+                    while (t.getSort() == Type.ARRAY) t = t.getElementType();
+                    if (t.getSort() != Type.OBJECT) { super.visitTypeInsn(opcode, type); return; }
+                    className = getOuterClassName(t.getClassName());
+                } catch (IllegalArgumentException ignored) { super.visitTypeInsn(opcode, type); return; }
+            } else {
+                className = getOuterClassName(type.replace("/", "."));
+            }
+            if (!isExternalLibraryClass(className) && !className.equals(classInfo.fullName))
+                classInfo.addDependency(className, EdgeKind.USES);
+            super.visitTypeInsn(opcode, type);
+        }
+
+        @Override
+        public void visitFieldInsn(int opcode, String owner, String name, String descriptor) {
+            // GETSTATIC, PUTSTATIC, GETFIELD, PUTFIELD — track owner AND field type
+            String ownerClass = getOuterClassName(owner.replace("/", "."));
+            if (!isExternalLibraryClass(ownerClass) && !ownerClass.equals(classInfo.fullName))
+                classInfo.addDependency(ownerClass, EdgeKind.USES);
+            try {
+                Type fieldType = Type.getType(descriptor);
+                while (fieldType.getSort() == Type.ARRAY) fieldType = fieldType.getElementType();
+                if (fieldType.getSort() == Type.OBJECT) {
+                    String typeClass = getOuterClassName(fieldType.getClassName());
+                    if (!isExternalLibraryClass(typeClass) && !typeClass.equals(classInfo.fullName))
+                        classInfo.addDependency(typeClass, EdgeKind.USES);
+                }
+            } catch (IllegalArgumentException ignored) { }
+            super.visitFieldInsn(opcode, owner, name, descriptor);
         }
 
         @Override

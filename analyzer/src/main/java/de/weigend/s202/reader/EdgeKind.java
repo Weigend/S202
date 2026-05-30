@@ -31,7 +31,9 @@ public enum EdgeKind {
     /** Constructor invocation — {@code new T(...)} (INVOKESPECIAL on {@code <init>}). */
     INSTANTIATES,
     /** Method invocation on the target class (excluding constructor calls). */
-    CALLS;
+    CALLS,
+    /** Structural reference: field type, method parameter/return type, cast target, or field owner. */
+    USES;
 
     /** Lower-case label suitable for compact UI rendering ("calls", "extends", …). */
     public String label() {

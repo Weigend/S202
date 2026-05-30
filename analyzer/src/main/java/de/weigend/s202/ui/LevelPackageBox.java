@@ -154,6 +154,11 @@ public class LevelPackageBox extends VBox implements GraphSelection.Selectable {
         }
     }
 
+    /** Returns the VBox row-stack that holds this package's child rows. */
+    public VBox getContentContainer() {
+        return contentContainer;
+    }
+
     private void applyBaseStyle() {
         if (transparent) {
             this.setStyle(STYLE_TRANSPARENT);

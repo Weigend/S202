@@ -34,7 +34,7 @@
 \title{Software-Architektur als Schichtendarstellung\\
   \large Analyse von Software-Architektur mit S202}
 \author{Johannes Weigend}
-\date{Finale Fassung, 26.~Mai~2026}
+\date{Finale Fassung, 30.~Mai~2026}
 
 \begin{document}
 
@@ -349,12 +349,22 @@ benutzt mehr, als es selbst benutzt wird; es geh\"ort tendenziell nach oben.
 Ein negativer Rang bedeutet: Das Paket wird eher benutzt und geh\"ort
 tendenziell nach unten.
 
-In einer Paket-SCC wird eine Kante $P \to Q$ erst dann als Back-Edge behandelt,
-wenn $rank(P)$ um mehr als eine Schwelle $\varepsilon$ unter $rank(Q)$ liegt.
-In S202 wird daf\"ur aktuell $\varepsilon = 0{,}1$ verwendet. Liegen zwei
-Pakete zu nah beieinander, bleiben sie konzeptionell Peers und damit auf
-demselben Level. Ein gegenseitiges Aufrufverh\"altnis von $100 : 101$ ist
-deshalb keine belastbare Architekturentscheidung.
+In einer Paket-SCC werden alle Kanten $P \to Q$ als Back-Edges behandelt, f\"ur
+die $rank(P) < rank(Q)$ gilt~-- also alle Kanten, die gegen den
+Abh\"angigkeitsstrom laufen. Es wird kein Schwellwert verwendet: Jede messbare
+Rankdifferenz reicht als Begr\"undung f\"ur einen Schnitt.
+
+Sind alle Ranks innerhalb einer SCC gleich, liefert die Topologie keine
+Richtungsinformation. In diesem Fall werden alle internen Kanten entfernt und
+die Levels der betroffenen Knoten entstehen ausschlie\ss{}lich aus Abh\"angigkeiten
+au\ss{}erhalb der ehemaligen SCC. Gibt es auch dort keine Abh\"angigkeiten,
+bleiben die Knoten auf demselben Level~-- als echte Peers ohne begr\"undbare
+Ordnung.
+
+Die Symmetrieerkennung beruht auf dem Rankma\ss{}, nicht auf einem Gewichtsvergleich.
+Eine SCC, in der alle Kanten dasselbe Gewicht tragen, ist nicht zwingend
+symmetrisch: Unterschiedliche Ein- und Ausgangsgrade erzeugen trotz gleicher
+Gewichte verschiedene Ranks und damit eine klare Schnittrichtung.
 
 Nach dieser Zyklusbehandlung berechnet S202 die Levels auf dem resultierenden
 DAG. Level~0 bilden die Pakete, die im aktuellen Berechnungsgraphen keine
@@ -533,8 +543,11 @@ vorliegen, die diese Position begr\"unden.
   \item \textbf{Paketgraph ableiten:} Aus den Klassenabh\"angigkeiten werden
         Paketabh\"angigkeiten aggregiert und gewichtet.
   \item \textbf{Paketordnung berechnen:} Aus den gewichteten Ein- und Ausg\"angen
-        wird das Rangma\ss{} $rank(P)$ berechnet. Daraus entsteht die vertikale
-        Paketordnung. Kleine Rangunterschiede werden als Peer-Beziehung behandelt.
+        wird das Rangma\ss{} $rank(P)$ berechnet. Alle Kanten, f\"ur die
+        $rank(P) < rank(Q)$ gilt, werden als Back-Edges klassifiziert und in
+        einem Durchlauf geschnitten. Sind alle Ranks innerhalb einer SCC gleich,
+        werden alle internen Kanten entfernt; Levels entstehen dann aus
+        Abh\"angigkeiten au\ss{}erhalb der ehemaligen SCC.
   \item \textbf{Back-Edges bestimmen:} Innerhalb jeder SCC werden die Kanten
         ausgew\"ahlt, die f\"ur die Zyklusentfernung ausreichen. Diese Kanten
         sind Back-Edges f\"ur die Levelberechnung und bleiben zugleich als

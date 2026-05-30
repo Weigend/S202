@@ -19,8 +19,6 @@ import de.weigend.s202.analysis.invariants.LayoutInvariantChecker;
 import de.weigend.s202.analysis.invariants.LayoutInvariantReport;
 import de.weigend.s202.analysis.quality.QualityMetrics;
 import de.weigend.s202.domain.DependencyEdge;
-import de.weigend.s202.graph.SCCBreaker;
-import de.weigend.s202.domain.strategy.impl.HeuristicSCCBreakingStrategy;
 import de.weigend.s202.domain.DomainModel;
 import de.weigend.s202.domain.architecture.LevelCalculator;
 import de.weigend.s202.project.S202Project;
@@ -77,6 +75,7 @@ import org.kordamp.ikonli.Ikon;
 import org.kordamp.ikonli.javafx.FontIcon;
 import org.kordamp.ikonli.materialdesign2.MaterialDesignF;
 import org.kordamp.ikonli.materialdesign2.MaterialDesignR;
+import org.kordamp.ikonli.materialdesign2.MaterialDesignU;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -132,11 +131,17 @@ public class S202Module implements Module {
     private CheckBox debugLinesCheckbox;
     private CheckBox showIconsCheckbox;
     private CheckBox showArchLevelCheckbox;
+    private Button undoButton;
+    private Button redoButton;
     private Button zoomOutButton;
     private Label zoomLabel;
     private Button zoomInButton;
     private Button zoomResetButton;
     private final List<Node> viewDependentToolbarNodes = new ArrayList<>();
+
+    // Tracks the focused view's undo/redo capability — bound to the Edit menu items.
+    private final javafx.beans.property.SimpleBooleanProperty canUndo = new javafx.beans.property.SimpleBooleanProperty(false);
+    private final javafx.beans.property.SimpleBooleanProperty canRedo = new javafx.beans.property.SimpleBooleanProperty(false);
 
     // Tracks which view we currently mirror so we can unbind on focus change.
     private ArchitectureView boundView;
@@ -247,7 +252,7 @@ public class S202Module implements Module {
         statusBar = new S202StatusBar((EventBus) bus);
         applicationWindow.getStatusBarItems().setAll(statusBar.getNode());
 
-        new S202MenuBar(applicationWindow, bus).install();
+        new S202MenuBar(applicationWindow, bus, canUndo, canRedo).install();
         subscribeToMenuRequests(bus);
         subscribeToNodeSelection(bus);
         subscribeToOpenScope(bus);
@@ -303,6 +308,8 @@ public class S202Module implements Module {
             Lookup.lookup(WindowManager.class).restoreDefaultLayout();
             return true;
         });
+        bus.subscribe(MenuRequestEvent.Undo.class, ev -> { if (boundView != null) boundView.undoWhatIf(); return true; });
+        bus.subscribe(MenuRequestEvent.Redo.class, ev -> { if (boundView != null) boundView.redoWhatIf(); return true; });
     }
 
     private void subscribeToNodeSelection(EventBus<EventObject> bus) {
@@ -524,6 +531,18 @@ public class S202Module implements Module {
             }
         });
 
+        undoButton = new Button();
+        undoButton.getStyleClass().add("toolbar-button");
+        undoButton.setGraphic(toolbarIcon(MaterialDesignU.UNDO));
+        undoButton.setTooltip(new Tooltip("Undo last What-If move (Ctrl+Z)"));
+        undoButton.setOnAction(e -> { if (boundView != null) boundView.undoWhatIf(); });
+
+        redoButton = new Button();
+        redoButton.getStyleClass().add("toolbar-button");
+        redoButton.setGraphic(toolbarIcon(MaterialDesignR.REDO));
+        redoButton.setTooltip(new Tooltip("Redo What-If move (Ctrl+Shift+Z)"));
+        redoButton.setOnAction(e -> { if (boundView != null) boundView.redoWhatIf(); });
+
         showDependenciesCheckbox = new CheckBox("Show Dependencies");
         showDependenciesCheckbox.setTooltip(new Tooltip("Toggle dependency arrows"));
         showDependenciesCheckbox.selectedProperty().addListener((obs, was, isNow) -> {
@@ -614,6 +633,8 @@ public class S202Module implements Module {
                 openJarButton, new Separator(),
                 depthLabel, depthSpinner, refreshButton,
                 new Separator(),
+                undoButton, redoButton,
+                new Separator(),
                 showDependenciesCheckbox, circuitToggle, showSccCheckbox,
                 showWhatIfViolationsCheckbox, debugLinesCheckbox, showIconsCheckbox, showArchLevelCheckbox,
                 new Separator(),
@@ -642,13 +663,26 @@ public class S202Module implements Module {
         for (Node n : viewDependentToolbarNodes) {
             n.setDisable(!enabled);
         }
+        // Undo/redo buttons bind to the view's canUndo/canRedo properties.
+        undoButton.disableProperty().unbind();
+        redoButton.disableProperty().unbind();
+        canUndo.unbind();
+        canRedo.unbind();
         if (!enabled) {
+            undoButton.setDisable(true);
+            redoButton.setDisable(true);
+            canUndo.set(false);
+            canRedo.set(false);
             zoomLabel.setText("--");
             return;
         }
 
         ArchitectureView view = focused.getArchitectureView();
         boundView = view;
+        undoButton.disableProperty().bind(view.canUndoWhatIfProperty().not());
+        redoButton.disableProperty().bind(view.canRedoWhatIfProperty().not());
+        canUndo.bind(view.canUndoWhatIfProperty());
+        canRedo.bind(view.canRedoWhatIfProperty());
 
         depthSpinner.getValueFactory().setValue(view.getPackageDepth());
         showDependenciesCheckbox.setSelected(view.isShowDependencies());
@@ -1234,17 +1268,7 @@ public class S202Module implements Module {
                                   Set<DependencyEdge> cycleBreakEdges) {}
 
     private static Set<DependencyEdge> cycleBreakEdgesFromLastLevelCalculation(LevelCalculator calculator) {
-        var strategy = calculator.getStrategyContext().getClassLevelStrategy();
-        if (!(strategy instanceof HeuristicSCCBreakingStrategy heuristic)) {
-            return Set.of();
-        }
-        return heuristic.getLastIdentifiedBackEdges().stream()
-                .map(S202Module::toTangleEdge)
-                .collect(Collectors.toUnmodifiableSet());
-    }
-
-    private static DependencyEdge toTangleEdge(SCCBreaker.Edge edge) {
-        return new DependencyEdge(edge.from, edge.to);
+        return Set.of();
     }
 
     /**
