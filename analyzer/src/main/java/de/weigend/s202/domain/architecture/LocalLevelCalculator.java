@@ -38,20 +38,19 @@ import java.util.TreeMap;
  * only dependencies whose source <em>and</em> target both live inside the parent's
  * direct children contribute to the sibling-only weighted graph.
  *
- * <p>Cycle breaking follows the same two-step deterministic algorithm used for
- * packages in {@link LevelCalculator#calculatePackageLevels}:
+ * <p>Cycle breaking uses the same rank-score algorithm as
+ * {@link LevelCalculator#calculatePackageLevels}:
  * <ol>
- *   <li><b>Asymmetric cycle</b> — one direction carries more weight than the
- *       other.  Cut the single min-weight edge (alphabetically first on ties)
- *       and restart.</li>
- *   <li><b>Symmetric cycle</b> — all internal edges share the same weight; no
- *       architecturally justified direction exists.  Remove <em>all</em> internal
- *       edges.  The local level of each former cycle member is then determined
- *       solely by dependencies outside the cycle; nodes with no such deps stay at
+ *   <li><b>Asymmetric SCC</b> — ranks differ within the SCC.  All edges where
+ *       {@code rank(from) < rank(to)} are cut in one pass; then Tarjan
+ *       restarts.</li>
+ *   <li><b>Symmetric SCC</b> — all ranks are equal; topology gives no direction.
+ *       All internal edges are removed.  Levels are then determined solely by
+ *       dependencies outside the former cycle; nodes with no such deps stay at
  *       the same level.</li>
  * </ol>
  *
- * <p>There are no heuristics, rank scores, or thresholds.
+ * <p>No threshold is used: any measurable rank difference justifies a cut.
  */
 public class LocalLevelCalculator {
 

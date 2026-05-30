@@ -1,107 +1,116 @@
 # S202 Level Calculation
 
-Jeder Klasse und jedem Paket wird ein ganzzahliger **ArchitectureLevel** zugewiesen.
-Niedriger Level = Fundament, hoher Level = Nutzer des Fundaments.
+Every class and package is assigned an integer **ArchitectureLevel**.
+Low level = foundation, high level = consumer of the foundation.
+A separate **LocalLevel** controls the visual position of each element within
+its parent container.
 
 ---
 
-## Das Grundproblem
+## The Core Problem
 
-Ohne Zyklen ist die Lösung trivial: Longest-Path auf dem Abhängigkeitsgraphen.
-Zyklen (SCCs) machen das unmöglich — in einem Zyklus können nicht alle Kanten
-gleichzeitig nach unten zeigen. Irgendwelche Kanten müssen für die
-Levelberechnung ignoriert werden. Die Frage ist: welche, und warum genau diese?
+Without cycles the solution is trivial: longest-path on the dependency graph.
+Cycles (SCCs) make this impossible — within a cycle, not all edges can point
+downward at the same time. Some edges must be ignored for the level
+calculation. The question is: which ones, and why exactly those?
 
-Die Antwort darf nicht willkürlich sein. S202 leitet die Schnittentscheidung
-aus dem **Paketgraphen** ab — der liefert die architektonische Richtung.
+The answer must not be arbitrary. S202 derives the cut decision from the
+**package graph** — it provides the architectural direction.
 
 ---
 
-## Die drei Phasen
+## The Three Phases
 
-### Phase 1 — Paketordnung (lokal, rekursiv)
+### Phase 1 — Global Package ArchitectureLevel
 
-Für jeden Paket-Container: baue einen gewichteten Graphen seiner **direkten
-Kindpakete**. Kantengewicht = aggregierte Methodenaufrufzahl zwischen den
-Subtrees.
+S202 builds a weighted directed graph across **all** packages. Each edge P→Q
+has weight equal to the total method-call count from classes in P's subtree to
+classes in Q's subtree. Where no method-call data exists, a fallback weight of
+1 is used. Weights are propagated up the ancestor chain of the source package:
+a call from `com.a.X` to `com.b.Y` contributes to `com.a→com.b` and also to
+`com→com.b`.
 
-Zyklen in diesem Graphen werden mit dem **Rank-Score** gebrochen:
+Cycles in this graph are broken using the **rank score**:
 
 ```
-rank(P) = (Σ ausgehende Gewichte − Σ eingehende Gewichte)
-          / max(1, Σ ausgehend + Σ eingehend)
+rank(P) = (Σ outgoing weights − Σ incoming weights)
+          / max(1, Σ outgoing + Σ incoming)
 ```
 
-- Hoher Rank → P nutzt mehr als es genutzt wird → gehört nach oben
-- Niedriger Rank → P wird eher genutzt → gehört nach unten
+- High rank → P uses more than it is used → belongs higher
+- Low rank → P is more often used → belongs lower
 
-**Asymmetrische SCC** (Ranks unterscheiden sich): alle Kanten wo
-`rank(from) < rank(to)` werden in einem Pass geschnitten.
+**Asymmetric SCC** (ranks differ): all edges where
+`rank(from) < rank(to)` are cut in one pass.
 
-**Symmetrische SCC** (alle Ranks gleich → Topologie gibt keine Richtung):
-alle internen Kanten entfernen. Level entstehen dann aus externen
-Abhängigkeiten; gibt es keine, bleiben die Knoten auf gleichem Level.
+**Symmetric SCC** (all ranks equal → topology provides no direction):
+all internal edges are removed. Levels then arise from external
+dependencies; if there are none, nodes remain at the same level.
 
-**Wichtig:** Symmetrie wird über den Rank erkannt, nicht über Gewichtsgleichheit.
-Eine SCC mit lauter gleichgewichtigen Kanten kann trotzdem verschiedene Ranks
-haben (wenn In/Out-Grade verschieden sind) — und dann einen klaren Schnitt.
+**Important:** Symmetry is detected via the rank, not via equal weights.
+An SCC with uniformly weighted edges can still have different ranks
+(when in/out-degrees differ) — and therefore a clear cut direction.
 
-Danach: Longest-Path auf dem DAG → `LocalLevel` je Sibling-Gruppe.
-
-Dieser Schritt wird **rekursiv** für jede Paketebene wiederholt.
+After cycle handling: longest-path on the DAG → `architectureLevel` per package.
 
 ---
 
-### Phase 2 — Klassenlevel (geführt durch Paketordnung)
+### Phase 2 — Class ArchitectureLevel (guided by package order)
 
-**Fall A:** Klassen A und B liegen in einer SCC, aber in Paketen mit
-verschiedenen Levels:
+**Case A:** Classes A and B are in the same SCC but in packages with
+different `architectureLevel` values:
 
 ```
-pkgLevel(A) < pkgLevel(B)  →  Kante A→B ist Back-Edge → schneiden
+pkgLevel(A) < pkgLevel(B)  →  edge A→B is a back-edge → cut
 ```
 
-Die Paketordnung aus Phase 1 ist die Entscheidungsgrundlage. Die Klassen-SCC
-wird durch den Paket-DAG aufgebrochen.
+The package `architectureLevel` from Phase 1 is the decision basis. The class
+SCC is broken up by the package DAG.
 
-**Fall B:** Alle SCC-Mitglieder liegen im gleichen Paket-Level — kein
-Paketkontext liefert eine Richtung. Alle internen Kanten entfernen; Level
-entstehen aus externen Abhängigkeiten.
+**Case B:** All SCC members are in the same package level — no package
+context provides a direction. All internal edges are removed; levels arise
+from external dependencies.
 
-Alle entfernten Kanten (Fall A und Fall B) werden als **classBackEdge**
-registriert — sie erscheinen in der UI als gestrichelte Verletzungskanten.
+All removed edges (Case A and Case B) are recorded as **classBackEdge** —
+they appear in the UI as dashed violation edges.
 
-Danach: Longest-Path auf dem bereinigten Graphen → `ArchitectureLevel` je Klasse.
+After cycle handling: longest-path on the cleaned graph → `architectureLevel`
+per class.
 
 ---
 
-### Phase 3 — Lokale Darstellungsposition
+### Phase 3 — Local Display Position (LocalLevelCalculator)
 
-`LocalLevel` (aus Phase 1) bestimmt die visuelle Position innerhalb des
-jeweiligen Eltern-Containers. `ArchitectureLevel` (aus Phase 2) ist der
-globale semantische Level — er steuert die Verletzungserkennung.
+After class levels are computed, S202 runs the **LocalLevelCalculator** over
+every parent container separately. For each container, it builds a weighted
+sibling-only graph of the direct children (packages or classes). Dependencies
+that leave the container or stay within the same child subtree are excluded.
+
+The same rank-score algorithm from Phase 1 is applied to break any cycles
+within each sibling group. The result is a `localLevel` per element.
+
+`localLevel` determines the **visual position** within the parent container.
+`architectureLevel` is the **global semantic level** — it drives violation
+detection.
 
 ---
 
-## Knackpunkte
+## Key Points
 
-**Kein Threshold.** Der alte Algorithmus verwendete ε = 0.1 als Schwellwert
-für den Rank-Score. Das war eine Heuristik: Kanten mit Rankdifferenz < 0.1
-wurden nicht geschnitten, die betroffenen Knoten kollabiert. Ohne Threshold
-schneidet S202 jede Kante, die architektonisch begründbar ist — auch knapp
-asymmetrische Fälle. Ergebnis auf Minecraft 1.12: −6 % Wrong-Direction-Edges.
+**No threshold.** The old algorithm used ε = 0.1 as a cutoff for the rank
+score. Without a threshold, S202 cuts every edge that is architecturally
+justifiable — including marginally asymmetric cases. Result on Minecraft 1.12:
+−6 % wrong-direction edges.
 
-**Rank schlägt Gewicht.** `minWeight == maxWeight` klingt nach Symmetrie,
-ist es aber nicht zwingend. Wenn Knoten unterschiedlich viele Ein- und
-Ausgangskanten haben, entstehen verschiedene Ranks — und damit eine klare
-Richtung. Die symmetrische Behandlung greift nur wenn wirklich alle Ranks
-gleich sind.
+**Rank beats weight.** `minWeight == maxWeight` sounds like symmetry but is
+not necessarily so. If nodes have different numbers of in- and out-edges,
+different ranks emerge — and with them a clear direction. Symmetric treatment
+only applies when all ranks are truly equal.
 
-**Alles in einem Pass.** Innerhalb einer SCC werden alle qualifizierenden
-Kanten gleichzeitig geschnitten (nicht eine nach der anderen mit Neustart).
-Ein-Kante-Schnitt und Neuberechnung kann in Multi-Knoten-SCCs die globale
-Dominanzordnung zerstören.
+**All in one pass.** Within an SCC, all qualifying edges are cut simultaneously
+(not one at a time with a restart). Cutting one edge and recalculating can
+destroy the global dominance order in multi-node SCCs.
 
-**Deterministisch.** Jede Iteration läuft über alphabetisch sortierte
-Knotenlisten. Kein Zufallselement, kein Threshold, kein sizeabhängiger
-Sonderfall — gleiche Eingabe ergibt immer gleiches Ergebnis.
+**Deterministic.** Every iteration runs over alphabetically sorted node lists.
+No random element, no threshold, no size-dependent special case — the same
+input always produces the same result.

@@ -313,43 +313,34 @@ pacotes e derivar delas os n\'iveis posteriores. A representa\c{c}\~ao S202
 vis\'ivel surge depois da estrutura de pacotes e da ordem local dentro dos
 cont\^eineres de pacotes.
 
-A ordem de pacotes surge localmente no contexto de um pacote pai. S202 n\~ao
-compara pacotes arbitr\'arios globalmente; compara sempre os pacotes filhos
-diretos do mesmo cont\^einer. Classes n\~ao s\~ao n\'os de compara\c{c}\~ao
-nessa etapa. Elas fornecem a informa\c{c}\~ao para a agrega\c{c}\~ao: uma
-depend\^encia de classe \'e elevada aos pacotes filhos em cujas sub\'arvores
-est\~ao a origem e o destino.
+A ordem de pacotes surge de um grafo dirigido ponderado que abrange
+\emph{todos} os pacotes. Classes n\~ao s\~ao n\'os de compara\c{c}\~ao nessa
+etapa; elas fornecem a informa\c{c}\~ao para a agrega\c{c}\~ao. Para cada
+depend\^encia de classe, S202 conta as chamadas de m\'etodo da classe de
+origem para a classe de destino e atribui essa contagem \`a aresta de pacote
+correspondente: se uma classe na sub\'arvore do pacote $P$ chama uma classe na
+sub\'arvore do pacote $Q$ via $n$ chamadas de m\'etodo, a aresta $P \to Q$
+recebe peso $n$. Para depend\^encias estruturais sem contagem de chamadas,
+usa-se peso~1.
 
-Para cada pacote pai surge assim um grafo ponderado de irm\~aos de seus
-pacotes filhos. As arestas nesse grafo s\~ao depend\^encias de pacotes
-observadas diretamente entre esses pacotes filhos. Se uma classe na
-sub\'arvore do pacote filho $P$ usa uma classe na sub\'arvore do pacote filho
-$Q$, surge uma aresta $P \to Q$. Seu peso \'e a quantidade de usos concretos
-elevados para essa aresta de pacote; para depend\^encias estruturais sem
-contagem de chamadas, usa-se peso~1. A dire\c{c}\~ao contr\'aria tamb\'em \'e
-contada.
+Para capturar a contribui\c{c}\~ao de pacotes aninhados, cada peso \'e
+propagado pela cadeia de ancestrais do pacote de origem: uma chamada de
+\texttt{com.a.X} para \texttt{com.b.Y} contribui com peso para
+\texttt{com.a}$\to$\texttt{com.b} e tamb\'em para
+\texttt{com}$\to$\texttt{com.b}. A ordem transitiva entre pacotes surge apenas
+no c\'alculo de n\'iveis subsequente~-- nenhuma aresta transitiva adicional
+\'e inserida no grafo.
 
-O grafo de irm\~aos cont\'em apenas essas depend\^encias diretas entre
-pacotes. De $B \to A$ e $C \to B$ n\~ao se cria uma aresta adicional
-$C \to A$. A ordem transitiva surge apenas no c\'alculo posterior dos
-n\'iveis. Depend\^encias dentro do mesmo pacote filho n\~ao alteram a ordem dos
-pacotes filhos; depend\^encias que saem do cont\^einer pai s\~ao tratadas em
-um n\'ivel mais alto da estrutura de pacotes. Essa compara\c{c}\~ao \'e
-repetida recursivamente para todos os cont\^eineres de pacotes. A ordem das
-classes dentro de um cont\^einer de pacote \'e uma etapa posterior.
-
-Antes do c\'alculo dos n\'iveis, o grafo de irm\~aos precisa ser ac\'iclico. Se
-pacotes filhos formam uma SCC, S202 usa uma medida de rank para avaliar se um
-pacote filho, no grafo de irm\~aos atual, tende mais a usar outros pacotes ou
-a ser usado por eles:
+Antes do c\'alculo dos n\'iveis, o grafo de pacotes precisa ser ac\'iclico. Se
+pacotes formam uma SCC, S202 usa uma medida de rank para avaliar se um pacote
+tende mais a usar outros pacotes ou a ser usado por eles:
 
 \[
   rank(P) = \frac{out(P) - in(P)}{\max(1,\; out(P) + in(P))}
 \]
 
-$out(P)$ \'e a soma dos pesos das arestas de $P$ para outros irm\~aos
-considerados no grafo atual, e $in(P)$ \'e a soma dos pesos das arestas desses
-irm\~aos para $P$. Um rank positivo significa: o pacote usa mais do que ele
+$out(P)$ \'e a soma dos pesos das arestas de $P$ para outros membros da mesma
+SCC, e $in(P)$ \'e a soma dos pesos das arestas desses membros para $P$. Um rank positivo significa: o pacote usa mais do que ele
 mesmo \'e usado; ele tende a pertencer mais acima. Um rank negativo significa:
 o pacote \'e mais usado e tende a pertencer mais abaixo.
 
@@ -373,11 +364,21 @@ produzem ranks diferentes apesar de pesos iguais e, assim, indicam uma
 dire\c{c}\~ao clara de corte.
 
 Depois desse tratamento de ciclos, S202 calcula os n\'iveis sobre o DAG
-resultante. O Level~0 cont\'em os pacotes que, no grafo de c\'alculo atual,
-n\~ao usam nenhum outro pacote filho. Todo outro pacote fica um n\'ivel acima
-do pacote mais alto que ele usa diretamente. Assim surge a estratifica\c{c}\~ao
-transitiva: de $B \to A$ e $C \to B$ segue que $A$ fica no Level~0, $B$ no
-Level~1 e $C$ no Level~2, mesmo sem existir uma aresta direta $C \to A$.
+resultante. O Level~0 cont\'em os pacotes que n\~ao usam nenhum outro pacote.
+Todo outro pacote fica um n\'ivel acima do pacote mais alto que ele usa
+diretamente. Assim surge a estratifica\c{c}\~ao transitiva: de $B \to A$ e
+$C \to B$ segue que $A$ fica no Level~0, $B$ no Level~1 e $C$ no Level~2,
+mesmo sem existir uma aresta direta $C \to A$.
+
+Os n\'iveis produzidos aqui s\~ao o \emph{architectureLevel} de cada pacote~--
+a hip\'otese arquitetural que guia o tratamento de SCCs de classes na etapa
+seguinte. Em uma etapa separada, executada ap\'os os n\'iveis de classes serem
+atribu\'idos, S202 aplica o mesmo algoritmo de rank-score de forma independente
+dentro de cada cont\^einer pai. Um grafo ponderado somente entre irm\~aos dos
+filhos diretos \'e constru\'ido e um \emph{localLevel} \'e derivado para cada
+elemento. O localLevel controla o posicionamento visual dentro do cont\^einer
+pai e n\~ao influencia a hip\'otese arquitetural nem a detec\c{c}\~ao de
+viola\c{c}\~oes.
 
 \section{Do Ciclo de Classes \`a Ordem de Pacotes}
 
@@ -403,11 +404,24 @@ encontrar esses componentes \'e o algoritmo de Tarjan.
 No caso c\'iclico, o grafo de classes coloca a pergunta t\'ecnica: qual aresta
 precisa ser ignorada para que a SCC volte a ser um DAG calcul\'avel para a
 forma\c{c}\~ao dos n\'iveis? Mas o grafo de classes sozinho n\~ao fornece um
-crit\'erio arquitetural para isso. Somente a ordem de pacotes fornece esse
-crit\'erio: uma aresta classificada como back edge n\~ao \'e ent\~ao uma aresta
-de corte arbitr\'aria no grafo plano de classes, mas uma depend\^encia concreta
-que corre contra a ordem de pacotes calculada e, assim, torna vis\'ivel a
-quebra na hip\'otese arquitetural.
+crit\'erio arquitetural para isso. A ordem de pacotes fornece esse crit\'erio
+por meio de dois casos.
+
+\textbf{Caso A} abrange SCCs cujos membros est\~ao distribu\'idos por
+diferentes n\'iveis de pacotes. Uma aresta $A \to B$ dentro de tal SCC \'e
+cortada quando $\mathit{pkgLevel}(A) < \mathit{pkgLevel}(B)$ vale~-- ela corre
+de um pacote posicionado mais baixo para um mais alto, contra a dire\c{c}\~ao
+arquitetural.
+
+\textbf{Caso B} abrange SCCs confinadas inteiramente a um \'unico n\'ivel de
+pacote~-- nenhum contexto de pacote fornece uma dire\c{c}\~ao. Todas as arestas
+internas de tal SCC s\~ao removidas. Os n\'iveis de classes dos antigos membros
+do ciclo surgem ent\~ao de suas depend\^encias fora da SCC; n\'os sem tais
+depend\^encias externas ficam no mesmo n\'ivel.
+
+Todas as arestas removidas em ambos os casos s\~ao registradas como achados de
+\emph{classBackEdge} e permanecem vis\'iveis como arestas tracejadas de
+viola\c{c}\~ao.
 
 \begin{figure}[H]
   \centering
@@ -462,13 +476,13 @@ A verifica\c{c}\~ao considera tr\^es n\'iveis:
         deve valer: se $A \to B$, ent\~ao $A$ est\'a em um n\'ivel mais alto
         que $B$. Exce\c{c}\~oes precisam ser classificadas explicitamente, por
         exemplo como back edge ou como aresta dentro de uma SCC.
-  \item \textbf{Grafo de pacotes:} A ordem de pacotes calculada precisa
-        combinar com as depend\^encias ponderadas entre pacotes. Pacotes com
-        rank mais alto precisam ficar acima dos pacotes dos quais dependem com
-        mais for\c{c}a. Arestas cortadas ao quebrar uma SCC de pacotes n\~ao
-        podem ser tratadas nessa verifica\c{c}\~ao como arestas dominantes
-        normais; elas precisam ser classificadas separadamente como back edges
-        de pacotes.
+  \item \textbf{Grafo de pacotes:} A ordem de pacotes calculada precisa ser
+        consistente com as depend\^encias ponderadas entre pacotes. Para cada
+        depend\^encia de pacote $P \to Q$ que n\~ao est\'a classificada como
+        back edge de pacote, $P$ deve ficar estritamente acima de $Q$ na ordem
+        calculada. Arestas cortadas ao quebrar uma SCC de pacotes precisam ser
+        classificadas como back edges de pacotes e est\~ao isentas dessa
+        verifica\c{c}\~ao.
   \item \textbf{Representa\c{c}\~ao vis\'ivel:} A disposi\c{c}\~ao vis\'ivel
         precisa corresponder ao modelo calculado. Cont\^eineres de pacotes,
         posi\c{c}\~oes locais de classes e n\'iveis aninhados n\~ao podem
@@ -551,24 +565,37 @@ estejam dispon\'iveis as informa\c{c}\~oes que justificam essa posi\c{c}\~ao.
         n\~ao \'e um layout, mas a informa\c{c}\~ao de quais classes podem ser
         ordenadas de forma ac\'iclica e quais pertencem a ciclos.
   \item \textbf{Derivar o grafo de pacotes:} A partir das depend\^encias entre
-        classes, depend\^encias entre pacotes s\~ao agregadas e ponderadas.
+        classes, as depend\^encias entre pacotes s\~ao agregadas em um grafo
+        global ponderado de pacotes. Cada chamada de m\'etodo de uma classe no
+        pacote $P$ para uma classe no pacote $Q$ contribui para o peso da
+        aresta $P \to Q$, propagada pela cadeia de ancestrais de $P$. O
+        resultado \'e um \'unico grafo plano abrangendo todos os pacotes.
   \item \textbf{Calcular a ordem de pacotes:} A partir das entradas e sa\'idas
         ponderadas calcula-se a medida de rank $rank(P)$. Todas as arestas para
         as quais $rank(P) < rank(Q)$ vale s\~ao classificadas como back edges e
         cortadas em uma \'unica passagem. Se todos os ranks dentro de uma SCC
         s\~ao iguais, todas as arestas internas s\~ao removidas; os n\'iveis
         surgem ent\~ao de depend\^encias fora da antiga SCC.
-  \item \textbf{Determinar back edges:} Dentro de cada SCC, s\~ao escolhidas
-        as arestas suficientes para remover o ciclo. Essas arestas s\~ao back
-        edges para o c\'alculo dos n\'iveis e permanecem vis\'iveis como
-        viola\c{c}\~oes quando correm para cima depois da ordem calculada.
-        \emph{Cortar} n\~ao significa aqui que a aresta desaparece do modelo.
-        Ela apenas fica de fora do DAG usado para o c\'alculo dos n\'iveis e
-        permanece preservada como achado.
-  \item \textbf{Construir a camada local:} S\'o depois disso a estrutura
-        vis\'ivel em \'arvore \'e criada. Dentro de cada cont\^einer, apenas
-        os filhos diretos s\~ao ordenados. Assim a ordem global de pacotes n\~ao
-        se mistura com n\'iveis locais de classes.
+  \item \textbf{Determinar back edges de classes:} SCCs de classes s\~ao
+        quebradas usando a hip\'otese de pacotes. \emph{Caso A}~-- uma aresta
+        $A \to B$ dentro de uma SCC \'e cortada quando
+        $\mathit{pkgLevel}(A) < \mathit{pkgLevel}(B)$: ela corre contra a
+        dire\c{c}\~ao arquitetural. \emph{Caso B}~-- quando todos os membros
+        da SCC compartilham o mesmo n\'ivel de pacote, nenhum contexto de
+        pacote fornece uma dire\c{c}\~ao; todas as arestas internas s\~ao
+        removidas. Em ambos os casos, \emph{cortar} significa que a aresta fica
+        de fora do DAG de c\'alculo dos n\'iveis mas permanece preservada como
+        achado de \emph{classBackEdge}, vis\'ivel como aresta tracejada de
+        viola\c{c}\~ao.
+  \item \textbf{Atribuir posi\c{c}\~oes locais de exibi\c{c}\~ao:} Ap\'os a
+        atribui\c{c}\~ao dos n\'iveis de classes, o \emph{localLevel} de cada
+        elemento \'e calculado. Dentro de cada cont\^einer pai, um grafo
+        ponderado somente entre irm\~aos dos filhos diretos \'e constru\'ido;
+        o mesmo algoritmo de rank-score quebra eventuais ciclos; o caminho mais
+        longo produz um \emph{localLevel} por filho. O \emph{localLevel}
+        governa o posicionamento visual dentro da caixa pai; o
+        \emph{architectureLevel} \'e o n\'ivel sem\^antico global que aciona a
+        detec\c{c}\~ao de viola\c{c}\~oes.
   \item \textbf{Verificar consist\^encia:} No fim, a representa\c{c}\~ao
         pronta \'e verificada redundantemente contra as regras de
         consist\^encia. Depend\^encias normais, SCCs, back edges e
@@ -578,8 +605,8 @@ estejam dispon\'iveis as informa\c{c}\~oes que justificam essa posi\c{c}\~ao.
 Em resumo:
 
 \begin{lstlisting}
-Bytecode -> grafo de classes -> SCCs -> grafo de pacotes -> ordem de pacotes
-         -> back edges -> camada visivel -> regras de consistencia
+Bytecode -> grafo de classes -> SCCs -> grafo de pacotes -> architectureLevel de pacotes
+         -> architectureLevel de classes -> localLevel -> regras de consistencia
 \end{lstlisting}
 
 \section{Conclus\~ao}

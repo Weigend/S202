@@ -308,43 +308,34 @@ daraus die sp\"ateren Levels abzuleiten. Die sichtbare S202-Grafik entsteht
 danach aus der Paketstruktur und der lokalen Ordnung innerhalb der
 Paketcontainer.
 
-Die Paketordnung entsteht lokal im Kontext eines Parent-Pakets. S202
-vergleicht nicht beliebige Pakete global miteinander, sondern jeweils die
-direkten Kindpakete desselben Containers. Klassen sind in diesem Schritt keine
-eigenen Vergleichsknoten. Sie liefern die Information f\"ur die Aggregation:
-Eine Klassenabh\"angigkeit wird auf die Kindpakete hochgerollt, in deren
-Teilb\"aumen Quelle und Ziel liegen.
+Die Paketordnung entsteht aus einem gewichteten gerichteten Graphen \"uber
+\emph{alle} Pakete. Klassen sind in diesem Schritt keine eigenen
+Vergleichsknoten; sie liefern die Information f\"ur die Aggregation. F\"ur
+jede Klassenabh\"angigkeit z\"ahlt S202 die Methodenaufrufe von der
+Quellklasse zur Zielklasse und ordnet diese Anzahl der entsprechenden
+Paketkante zu: Wenn eine Klasse im Teilbaum von Paket $P$ eine Klasse im
+Teilbaum von Paket $Q$ \"uber $n$ Methodenaufrufe aufruft, erh\"alt die Kante
+$P \to Q$ das Gewicht $n$. F\"ur strukturelle Abh\"angigkeiten ohne
+Aufrufz\"ahlung wird ein Gewicht von~1 verwendet.
 
-F\"ur jedes Parent-Paket entsteht so ein gewichteter Geschwistergraph seiner
-Kindpakete. Die Kanten in diesem Graphen sind direkt beobachtete
-Paketabh\"angigkeiten zwischen diesen Kindpaketen. Wenn eine Klasse im Teilbaum
-von Kindpaket $P$ eine Klasse im Teilbaum von Kindpaket $Q$ benutzt, entsteht
-eine Kante $P \to Q$. Ihr Gewicht ist die Anzahl der konkreten Nutzungen, die
-auf diese Paketkante hochgerollt werden; f\"ur strukturelle Abh\"angigkeiten
-ohne Aufrufz\"ahlung wird ein Gewicht von~1 verwendet. Die Gegenrichtung wird
-ebenfalls gez\"ahlt.
+Um den Beitrag verschachtelter Pakete zu erfassen, wird jedes Gewicht die
+Ahnenkette des Quellpakets hochpropagiert: Ein Aufruf von \texttt{com.a.X}
+nach \texttt{com.b.Y} tr\"agt das Gewicht zu \texttt{com.a}$\to$\texttt{com.b}
+und au\ss{}erdem zu \texttt{com}$\to$\texttt{com.b} bei. Die transitive Ordnung
+der Pakete entsteht erst bei der nachfolgenden Levelberechnung~-- dem Graphen
+werden keine zus\"atzlichen transitiven Kanten hinzugef\"ugt.
 
-Der Geschwistergraph enth\"alt nur solche direkten Paketabh\"angigkeiten. Aus
-$B \to A$ und $C \to B$ wird keine zus\"atzliche Kante $C \to A$ erzeugt. Die
-transitive Ordnung entsteht erst bei der anschlie\ss{}enden Levelberechnung.
-Abh\"angigkeiten innerhalb desselben Kindpakets ver\"andern die Ordnung der
-Kindpakete nicht; Abh\"angigkeiten, die den Parent-Container verlassen, werden
-auf einer h\"oheren Ebene der Paketstruktur behandelt. Dieser Vergleich wird
-rekursiv f\"ur alle Paketcontainer wiederholt. Die Ordnung der Klassen
-innerhalb eines Paketcontainers ist ein nachgelagerter Schritt.
-
-Vor der Levelberechnung muss der Geschwistergraph azyklisch sein. Bilden
-Kindpakete eine SCC, bewertet S202 mit einem Rangma\ss{}, ob ein Kindpaket im
-aktuellen Geschwistergraphen eher andere Pakete nutzt oder eher von ihnen
-genutzt wird:
+Vor der Levelberechnung muss der Paketgraph azyklisch sein. Bilden Pakete
+eine SCC, bewertet S202 mit einem Rangma\ss{}, ob ein Paket eher andere Pakete
+nutzt oder eher von ihnen genutzt wird:
 
 \[
   rank(P) = \frac{out(P) - in(P)}{\max(1,\; out(P) + in(P))}
 \]
 
-$out(P)$ ist die Summe der Kantengewichte von $P$ zu anderen betrachteten
-Geschwistern im aktuellen Graphen, $in(P)$ die Summe der Kantengewichte aus
-diesen Geschwistern nach $P$. Ein positiver Rang bedeutet: Das Paket
+$out(P)$ ist die Summe der Kantengewichte von $P$ zu anderen Mitgliedern
+derselben SCC, $in(P)$ die Summe der Kantengewichte aus diesen Mitgliedern
+nach $P$. Ein positiver Rang bedeutet: Das Paket
 benutzt mehr, als es selbst benutzt wird; es geh\"ort tendenziell nach oben.
 Ein negativer Rang bedeutet: Das Paket wird eher benutzt und geh\"ort
 tendenziell nach unten.
@@ -367,11 +358,21 @@ symmetrisch: Unterschiedliche Ein- und Ausgangsgrade erzeugen trotz gleicher
 Gewichte verschiedene Ranks und damit eine klare Schnittrichtung.
 
 Nach dieser Zyklusbehandlung berechnet S202 die Levels auf dem resultierenden
-DAG. Level~0 bilden die Pakete, die im aktuellen Berechnungsgraphen keine
-weiteren Kindpakete benutzen. Jedes andere Paket liegt eine Ebene \"uber dem
-h\"ochsten Kindpaket, das es direkt benutzt. Dadurch entsteht die transitive
-Schichtung: Aus $B \to A$ und $C \to B$ folgt $A$ auf Level~0, $B$ auf
-Level~1 und $C$ auf Level~2, auch wenn keine direkte Kante $C \to A$ existiert.
+DAG. Level~0 bilden die Pakete, die keine weiteren Pakete benutzen. Jedes
+andere Paket liegt eine Ebene \"uber dem h\"ochsten Paket, das es direkt
+benutzt. Dadurch entsteht die transitive Schichtung: Aus $B \to A$ und
+$C \to B$ folgt $A$ auf Level~0, $B$ auf Level~1 und $C$ auf Level~2, auch
+wenn keine direkte Kante $C \to A$ existiert.
+
+Die hier erzeugten Levels sind das \emph{architectureLevel} jedes Pakets~--
+die Architekturhypothese, die im n\"achsten Schritt die Klassen-SCC-Behandlung
+steuert. In einem separaten Schritt, der nach den Klassenlevels ausgef\"uhrt
+wird, wendet S202 denselben Rank-Score-Algorithmus innerhalb jedes
+Parent-Containers unabh\"angig an. Dabei wird ein geschwistergewichteter Graph
+der direkten Kinder aufgebaut und ein \emph{localLevel} f\"ur jedes Element
+abgeleitet. Das LocalLevel steuert die visuelle Position innerhalb des
+Parent-Containers und hat keinen Einfluss auf die Architekturhypothese oder
+die Verletzungserkennung.
 
 \section{Vom Klassenzyklus zur Paketordnung}
 
@@ -397,11 +398,22 @@ ist der Tarjan-Algorithmus.
 Damit stellt der Klassengraph im Zyklusfall die technische Frage: Welche Kante
 muss man ignorieren, damit aus der SCC wieder ein berechenbarer DAG f\"ur die
 Levelbildung wird? Der Klassengraph allein liefert daf\"ur aber kein fachliches
-Kriterium. Erst die Paketordnung liefert dieses Kriterium: Eine als Back-Edge
-klassifizierte Kante ist dann keine beliebige Schnittkante im flachen
-Klassengraphen, sondern eine konkrete Abh\"angigkeit, die gegen die berechnete
-Paketordnung l\"auft und damit den Bruch in der Architekturhypothese sichtbar
-macht.
+Kriterium. Die Paketordnung liefert dieses Kriterium durch zwei F\"alle.
+
+\textbf{Fall A} betrifft SCCs, deren Mitglieder \"uber verschiedene Paketlevels
+verteilt sind. Eine Kante $A \to B$ innerhalb einer solchen SCC wird
+geschnitten, wenn $\mathit{pkgLevel}(A) < \mathit{pkgLevel}(B)$ gilt~-- sie
+l\"auft von einem tiefer liegenden Paket in ein h\"oher liegendes, gegen die
+architektonische Richtung.
+
+\textbf{Fall B} betrifft SCCs, die vollst\"andig auf einem einzigen Paketlevel
+liegen~-- kein Paketkontext liefert eine Richtung. Alle internen Kanten einer
+solchen SCC werden entfernt. Die Klassenlevels der ehemaligen Zyklusteilnehmer
+entstehen dann aus ihren Abh\"angigkeiten au\ss{}erhalb der SCC; Knoten ohne
+solche externen Abh\"angigkeiten enden auf demselben Level.
+
+Alle in beiden F\"allen entfernten Kanten werden als \emph{classBackEdge}-Befunde
+erfasst und bleiben als gestrichelte Verletzungskanten sichtbar.
 
 \begin{figure}[H]
   \centering
@@ -455,12 +467,13 @@ Die Pr\"ufung betrachtet drei Ebenen:
         gelten: Wenn $A \to B$, dann steht $A$ auf einem h\"oheren Level als
         $B$. Ausnahmen m\"ussen explizit klassifiziert sein, zum Beispiel als
         Back-Edge oder als Kante innerhalb einer SCC.
-  \item \textbf{Paketgraph:} Die berechnete Paketordnung muss zu den
-        gewichteten Paketabh\"angigkeiten passen. Pakete mit h\"oherem Rang
-        m\"ussen oberhalb der Pakete liegen, von denen sie st\"arker abh\"angen.
-        Kanten, die beim Aufbrechen einer Paket-SCC geschnitten werden, d\"urfen
-        in dieser Pr\"ufung nicht wie normale dominante Kanten behandelt werden;
-        sie m\"ussen gesondert als Paket-Back-Edges klassifiziert sein.
+  \item \textbf{Paketgraph:} Die berechnete Paketordnung muss konsistent mit
+        den gewichteten Paketabh\"angigkeiten sein. F\"ur jede
+        Paketabh\"angigkeit $P \to Q$, die nicht als Paket-Back-Edge
+        klassifiziert ist, muss $P$ strikt oberhalb von $Q$ in der berechneten
+        Ordnung liegen. Kanten, die beim Aufbrechen einer Paket-SCC geschnitten
+        werden, m\"ussen als Paket-Back-Edges klassifiziert sein und sind von
+        dieser Pr\"ufung ausgenommen.
   \item \textbf{Sichtbare Darstellung:} Die sichtbare Anordnung muss zum berechneten
         Modell passen. Paketcontainer, lokale Klassenpositionen und
         verschachtelte Levels d\"urfen die berechnete Architekturhypothese nicht
@@ -541,25 +554,36 @@ vorliegen, die diese Position begr\"unden.
         ist noch kein Layout, sondern die Information, welche Klassen azyklisch
         einordenbar sind und welche zu Zyklen geh\"oren.
   \item \textbf{Paketgraph ableiten:} Aus den Klassenabh\"angigkeiten werden
-        Paketabh\"angigkeiten aggregiert und gewichtet.
+        Paketabh\"angigkeiten zu einem gewichteten globalen Paketgraphen
+        aggregiert. Jeder Methodenaufruf von einer Klasse in Paket $P$ zu
+        einer Klasse in Paket $Q$ tr\"agt zum Gewicht der Kante $P \to Q$ bei,
+        propagiert die Ahnenkette von $P$ aufw\"arts. Das Ergebnis ist ein
+        einziger flacher Graph \"uber alle Pakete.
   \item \textbf{Paketordnung berechnen:} Aus den gewichteten Ein- und Ausg\"angen
         wird das Rangma\ss{} $rank(P)$ berechnet. Alle Kanten, f\"ur die
         $rank(P) < rank(Q)$ gilt, werden als Back-Edges klassifiziert und in
         einem Durchlauf geschnitten. Sind alle Ranks innerhalb einer SCC gleich,
         werden alle internen Kanten entfernt; Levels entstehen dann aus
         Abh\"angigkeiten au\ss{}erhalb der ehemaligen SCC.
-  \item \textbf{Back-Edges bestimmen:} Innerhalb jeder SCC werden die Kanten
-        ausgew\"ahlt, die f\"ur die Zyklusentfernung ausreichen. Diese Kanten
-        sind Back-Edges f\"ur die Levelberechnung und bleiben zugleich als
-        Verletzungen sichtbar, wenn sie nach der berechneten Ordnung nach oben
-        laufen.
-        \emph{Geschnitten} bedeutet dabei nicht, dass die Kante aus dem Modell
-        verschwindet. Sie wird nur f\"ur den DAG der Levelberechnung ausgenommen
-        und bleibt als Befund erhalten.
-  \item \textbf{Lokale Schichtung aufbauen:} Erst danach wird die sichtbare
-        Baumstruktur erzeugt. Innerhalb jedes Containers werden nur die direkten
-        Kinder angeordnet. Dadurch wird die globale Paketordnung nicht mit
-        lokalen Klassenlevels vermischt.
+  \item \textbf{Klassen-Back-Edges bestimmen:} Klassen-SCCs werden mithilfe der
+        Pakethypothese aufgebrochen. \emph{Fall A}~-- eine Kante $A \to B$
+        innerhalb einer SCC wird geschnitten, wenn
+        $\mathit{pkgLevel}(A) < \mathit{pkgLevel}(B)$ gilt: Sie l\"auft gegen
+        die architektonische Richtung. \emph{Fall B}~-- wenn alle SCC-Mitglieder
+        dasselbe Paketlevel haben, liefert kein Paketkontext eine Richtung;
+        alle internen Kanten werden entfernt. In beiden F\"allen bedeutet
+        \emph{Schneiden}, dass die Kante vom DAG der Levelberechnung
+        ausgenommen, aber als \emph{classBackEdge}-Befund erhalten bleibt und
+        als gestrichelte Verletzungskante sichtbar ist.
+  \item \textbf{Lokale Darstellungspositionen zuweisen:} Nachdem die
+        Klassenlevels vergeben sind, wird das \emph{localLevel} jedes Elements
+        berechnet. Innerhalb jedes Parent-Containers wird ein
+        geschwistergewichteter Graph der direkten Kinder aufgebaut; derselbe
+        Rank-Score-Algorithmus bricht etwaige Zyklen auf; Longest-Path ergibt
+        dann ein \emph{localLevel} pro Kind. Das \emph{localLevel} bestimmt
+        die visuelle Position innerhalb der Parent-Box; das
+        \emph{architectureLevel} ist das globale semantische Level, das die
+        Verletzungserkennung steuert.
   \item \textbf{Konsistenz pr\"ufen:} Zum Schluss wird die fertige Darstellung
         redundant gegen die Konsistenzregeln gepr\"uft. Normale Abh\"angigkeiten,
         SCCs, Back-Edges und Verletzungen werden unterschieden und klassifiziert.
@@ -568,8 +592,8 @@ vorliegen, die diese Position begr\"unden.
 Kurz gefasst:
 
 \begin{lstlisting}
-Bytecode -> Klassengraph -> SCCs -> Paketgraph -> Paketordnung
-         -> Back-Edges -> sichtbare Schichtung -> Konsistenzregeln
+Bytecode -> Klassengraph -> SCCs -> Paketgraph -> Paket-architectureLevel
+         -> Klassen-architectureLevel -> localLevel -> Konsistenzregeln
 \end{lstlisting}
 
 \section{Fazit}

@@ -32,7 +32,7 @@ import java.util.stream.Collectors;
  *   Step 1  Create class objects       (all levels = 0)
  *   Step 2  Create package objects     (all levels = 0)
  *   Step 3  Compute package levels     weighted inter-package graph → SCC-break → DAG → longest-path
- *   Step 4  Compute class levels       package hypothesis → SCC-break → degree fallback → longest-path
+ *   Step 4  Compute class levels       package hypothesis → Fall-A/B SCC-break → longest-path
  *   Step 5  Set reverse dependencies
  *   Step 6  Assign local layer index   per-parent sibling graph → SCC-break → DAG → longest-path
  *                                      (rendering position within each parent box, no global meaning)
@@ -85,8 +85,8 @@ public class LevelCalculator {
         calculatePackageLevels(model, rawModel);
 
         // Step 4: Compute class levels using the package hypothesis from Step 3.
-        // SCCs whose edges cross package-level boundaries are cut along the hypothesis;
-        // same-level-package SCCs fall back to the degree heuristic.
+        // Fall A: SCCs crossing package-level boundaries are cut along the hypothesis.
+        // Fall B: same-level-package SCCs have all internal edges removed.
         Map<String, Integer> packageLevels = new HashMap<>();
         for (Map.Entry<String, DomainModel.CalculatedElementInfo> e : model.getAllPackages().entrySet()) {
             packageLevels.put(e.getKey(), e.getValue().architectureLevel);
