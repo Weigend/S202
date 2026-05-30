@@ -1,0 +1,63 @@
+body {
+  font-family: "Helvetica Neue", "Liberation Sans", Arial, sans-serif;
+  font-size: 11pt;
+  line-height: 1.55;
+  max-width: 42em;
+  margin: 2.4cm auto;
+  color: #111;
+}
+
+h1, h2, h3 {
+  font-family: "Helvetica Neue", "Liberation Sans", Arial, sans-serif;
+  font-weight: bold;
+  line-height: 1.2;
+}
+
+h1 { font-size: 1.8em; margin-bottom: 0.2em; }
+h2 { font-size: 1.25em; margin-top: 1.6em; }
+h3 { font-size: 1.05em; margin-top: 1.2em; }
+
+p { margin: 0.6em 0; }
+
+code {
+  font-family: "DejaVu Sans Mono", "Liberation Mono", Consolas, monospace;
+  font-size: 0.88em;
+  background: #f4f4f4;
+  padding: 0.1em 0.3em;
+  border-radius: 2px;
+}
+
+pre {
+  font-family: "DejaVu Sans Mono", "Liberation Mono", Consolas, monospace;
+  font-size: 0.85em;
+  background: #f4f4f4;
+  padding: 0.8em 1em;
+  border-radius: 3px;
+  overflow-x: auto;
+  line-height: 1.4;
+}
+
+pre code {
+  background: none;
+  padding: 0;
+}
+
+blockquote {
+  border-left: 3px solid #bbb;
+  margin: 1em 0;
+  padding-left: 1em;
+  color: #444;
+}
+
+img {
+  max-width: 100%;
+  height: auto;
+}
+
+figcaption, p em:only-child {
+  font-size: 0.9em;
+  color: #555;
+  text-align: center;
+  display: block;
+  margin-top: 0.3em;
+}

@@ -6,6 +6,7 @@ pandoc software-architektur-fuer-ai-anwendungen.md \
   -o software-architektur-fuer-ai-anwendungen.html \
   --standalone \
   --embed-resources \
+  --css=style.css \
   -V lang=de \
   --highlight-style=tango
 
