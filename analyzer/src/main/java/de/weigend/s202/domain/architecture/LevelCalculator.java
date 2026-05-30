@@ -42,18 +42,18 @@ import java.util.stream.Collectors;
  * P_A's subtree to classes in P_B, with a fallback weight of 1 for structural references
  * without method-call data.
  *
- * Package SCC-breaking uses a weight-based rank score:
+ * Package SCC-breaking uses a weight-based rank score (no threshold):
  *   rank(P) = (Σ outgoing weights within SCC − Σ incoming weights within SCC)
  *             / max(1, sum of both)
- * Edge P_A→P_B is a back-edge when rank(P_A) < rank(P_B) − 0.1.
- * Equal-rank pairs (symmetric dependency) are left in the same SCC and assigned
- * the same level — they are genuine peers with no dominant dependency direction.
+ * All edges P_A→P_B where rank(P_A) &lt; rank(P_B) are cut in one pass.
+ * When all ranks are equal (topology gives no direction), all internal edges
+ * are removed and levels emerge from dependencies outside the former cycle.
  *
  * Class SCC-breaking (Step 4) uses the package hypothesis computed in Step 3:
- * a class edge A→B is cut when A and B are in an SCC AND pkgLevel(A.pkg) &lt; pkgLevel(B.pkg),
- * i.e. the edge runs against the architecture hypothesis. For SCCs confined to
- * equal-level packages (genuine intra-level tangles), the in/out-degree heuristic
- * is used as a fallback.
+ * Fall A — a class edge A→B is cut when pkgLevel(A.pkg) &lt; pkgLevel(B.pkg)
+ *           (runs against the architecture hypothesis).
+ * Fall B — residual SCCs confined to equal-level packages have all internal
+ *           edges removed; levels emerge from external dependencies.
  */
 public class LevelCalculator {
 

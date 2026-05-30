@@ -125,6 +125,10 @@ public class DomainModel {
         return classBackEdgeKeys.contains(from + "\0" + to);
     }
 
+    public int getClassBackEdgeCount() {
+        return classBackEdgeKeys.size();
+    }
+
     /** Returns the full weighted inter-package graph (unmodifiable). */
     public Map<String, Map<String, Integer>> getPackageEdgeWeights() {
         return Collections.unmodifiableMap(packageEdgeWeights);
