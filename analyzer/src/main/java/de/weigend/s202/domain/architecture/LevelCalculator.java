@@ -16,7 +16,6 @@
 package de.weigend.s202.domain.architecture;
 
 import de.weigend.s202.domain.DomainModel;
-import de.weigend.s202.domain.strategy.LevelCalculationStrategyContext;
 import de.weigend.s202.graph.StronglyConnectedComponent;
 import de.weigend.s202.graph.TarjanSCCFinder;
 import de.weigend.s202.reader.DependencyModel;
@@ -59,17 +58,6 @@ import java.util.stream.Collectors;
 public class LevelCalculator {
 
     private static final Logger LOG = Logger.getLogger(LevelCalculator.class.getName());
-
-    private final LevelCalculationStrategyContext strategyContext;
-
-    public LevelCalculator() {
-        this(LevelCalculationStrategyFactory.createDefault());
-    }
-
-    public LevelCalculator(LevelCalculationStrategyContext strategyContext) {
-        Objects.requireNonNull(strategyContext, "strategyContext cannot be null");
-        this.strategyContext = strategyContext;
-    }
 
     public DomainModel calculate(DependencyModel rawModel) {
         DomainModel model = new DomainModel();
@@ -132,10 +120,6 @@ public class LevelCalculator {
         // ---- END DEMO_ALERT_INJECTION ----
 
         return model;
-    }
-
-    public LevelCalculationStrategyContext getStrategyContext() {
-        return strategyContext;
     }
 
     private static List<String> sorted(Collection<String> c) {
@@ -214,12 +198,47 @@ public class LevelCalculator {
         // Publish all removed edges (Phase 1 + Phase 2) as class back-edges.
         model.setClassBackEdges(hypothesisBackEdgeKeys);
 
-        // Phase 3: longest-path on the (now near-DAG) graph via the configured strategy.
-        Map<String, Integer> levels =
-            strategyContext.getClassLevelStrategy().calculateClassLevels(graph);
-        for (Map.Entry<String, Integer> e : levels.entrySet()) {
-            DomainModel.CalculatedElementInfo info = model.getClass(e.getKey());
-            if (info != null) info.setArchitectureLevel(e.getValue());
+        // Phase 3: SCC-collapsed longest-path on the cleaned DAG.
+        List<StronglyConnectedComponent> classSccs = new TarjanSCCFinder(graph).findSCCs();
+        Map<String, StronglyConnectedComponent> classToScc = new HashMap<>();
+        for (StronglyConnectedComponent scc : classSccs) {
+            for (String m : scc.getMembers()) classToScc.put(m, scc);
+        }
+        Map<Integer, Set<Integer>> sccDeps = new HashMap<>();
+        for (StronglyConnectedComponent scc : classSccs) {
+            sccDeps.put(scc.getId(), new HashSet<>());
+            for (String m : scc.getMembers()) {
+                for (String to : graph.getOrDefault(m, Set.of())) {
+                    StronglyConnectedComponent toScc = classToScc.get(to);
+                    if (toScc != null && toScc.getId() != scc.getId()) {
+                        sccDeps.get(scc.getId()).add(toScc.getId());
+                    }
+                }
+            }
+        }
+        Map<Integer, Integer> sccLevels = new HashMap<>();
+        for (StronglyConnectedComponent scc : classSccs) sccLevels.put(scc.getId(), 0);
+        boolean lvlChanged = true;
+        while (lvlChanged) {
+            lvlChanged = false;
+            for (StronglyConnectedComponent scc : classSccs) {
+                int maxDep = -1;
+                for (int depId : sccDeps.get(scc.getId())) {
+                    maxDep = Math.max(maxDep, sccLevels.get(depId));
+                }
+                int newLevel = maxDep >= 0 ? maxDep + 1 : 0;
+                if (sccLevels.get(scc.getId()) != newLevel) {
+                    sccLevels.put(scc.getId(), newLevel);
+                    lvlChanged = true;
+                }
+            }
+        }
+        for (StronglyConnectedComponent scc : classSccs) {
+            int level = sccLevels.get(scc.getId());
+            for (String m : scc.getMembers()) {
+                DomainModel.CalculatedElementInfo info = model.getClass(m);
+                if (info != null) info.setArchitectureLevel(level);
+            }
         }
     }
 

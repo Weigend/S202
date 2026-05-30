@@ -19,8 +19,6 @@ import de.weigend.s202.analysis.invariants.LayoutInvariantChecker;
 import de.weigend.s202.analysis.invariants.LayoutInvariantReport;
 import de.weigend.s202.analysis.quality.QualityMetrics;
 import de.weigend.s202.domain.DependencyEdge;
-import de.weigend.s202.graph.SCCBreaker;
-import de.weigend.s202.domain.strategy.impl.HeuristicSCCBreakingStrategy;
 import de.weigend.s202.domain.DomainModel;
 import de.weigend.s202.domain.architecture.LevelCalculator;
 import de.weigend.s202.project.S202Project;
@@ -1270,17 +1268,7 @@ public class S202Module implements Module {
                                   Set<DependencyEdge> cycleBreakEdges) {}
 
     private static Set<DependencyEdge> cycleBreakEdgesFromLastLevelCalculation(LevelCalculator calculator) {
-        var strategy = calculator.getStrategyContext().getClassLevelStrategy();
-        if (!(strategy instanceof HeuristicSCCBreakingStrategy heuristic)) {
-            return Set.of();
-        }
-        return heuristic.getLastIdentifiedBackEdges().stream()
-                .map(S202Module::toTangleEdge)
-                .collect(Collectors.toUnmodifiableSet());
-    }
-
-    private static DependencyEdge toTangleEdge(SCCBreaker.Edge edge) {
-        return new DependencyEdge(edge.from, edge.to);
+        return Set.of();
     }
 
     /**

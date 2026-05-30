@@ -1,6 +1,5 @@
 package de.weigend.s202.analysis.domain;
 
-import de.weigend.s202.domain.architecture.LevelCalculationStrategyFactory;
 import de.weigend.s202.domain.architecture.LevelCalculator;
 import de.weigend.s202.reader.DependencyModel;
 import de.weigend.s202.reader.InputAnalyzer;
@@ -27,7 +26,7 @@ public class MinecraftTimingTest {
         long parseMs = System.currentTimeMillis() - t0;
 
         t0 = System.currentTimeMillis();
-        var model = new LevelCalculator(LevelCalculationStrategyFactory.createDefault()).calculate(rawModel);
+        var model = new LevelCalculator().calculate(rawModel);
         long calcMs = System.currentTimeMillis() - t0;
 
         System.out.println();

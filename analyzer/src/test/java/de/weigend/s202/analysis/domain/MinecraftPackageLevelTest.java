@@ -1,7 +1,6 @@
 package de.weigend.s202.analysis.domain;
 
 import de.weigend.s202.domain.DomainModel;
-import de.weigend.s202.domain.architecture.LevelCalculationStrategyFactory;
 import de.weigend.s202.domain.architecture.LevelCalculator;
 import de.weigend.s202.reader.InputAnalyzer;
 import org.junit.jupiter.api.Test;
@@ -21,7 +20,7 @@ public class MinecraftPackageLevelTest {
         if (jarUrl == null) { System.out.println("SKIPPED"); return; }
 
         var rawModel = new InputAnalyzer().analyze(new File(jarUrl.getFile()).getAbsolutePath());
-        var model    = new LevelCalculator(LevelCalculationStrategyFactory.createDefault()).calculate(rawModel);
+        var model    = new LevelCalculator().calculate(rawModel);
 
         var packages = model.getAllPackages().entrySet().stream()
             .filter(e -> e.getKey().startsWith("net.minecraft.") || e.getKey().startsWith("com.mojang."))

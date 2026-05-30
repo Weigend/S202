@@ -16,7 +16,6 @@
 package de.weigend.s202.analysis.invariants;
 
 import de.weigend.s202.domain.DomainModel;
-import de.weigend.s202.domain.architecture.LevelCalculationStrategyFactory;
 import de.weigend.s202.domain.architecture.LevelCalculator;
 import de.weigend.s202.reader.DependencyModel;
 import de.weigend.s202.reader.InputAnalyzer;
@@ -38,7 +37,7 @@ public class MinecraftInvariantCheckTest {
         InputAnalyzer analyzer = new InputAnalyzer();
         DependencyModel rawModel = analyzer.analyze(new File(jarUrl.getFile()).getAbsolutePath());
 
-        LevelCalculator calc = new LevelCalculator(LevelCalculationStrategyFactory.createWithHeuristicSCCBreaking());
+        LevelCalculator calc = new LevelCalculator();
         DomainModel model = calc.calculate(rawModel);
 
         LayoutInvariantChecker checker = new LayoutInvariantChecker();
