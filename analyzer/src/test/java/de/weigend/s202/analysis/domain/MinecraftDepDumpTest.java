@@ -1,7 +1,6 @@
 package de.weigend.s202.analysis.domain;
 
 import de.weigend.s202.domain.DomainModel;
-import de.weigend.s202.domain.architecture.LevelCalculationStrategyFactory;
 import de.weigend.s202.domain.architecture.LevelCalculator;
 import de.weigend.s202.reader.DependencyModel;
 import de.weigend.s202.reader.EdgeKind;
@@ -36,8 +35,7 @@ public class MinecraftDepDumpTest {
         String jarPath = new File(jarUrl.getFile()).getAbsolutePath();
 
         DependencyModel rawModel = new InputAnalyzer().analyze(jarPath);
-        DomainModel model = new LevelCalculator(
-            LevelCalculationStrategyFactory.createDefault()).calculate(rawModel);
+        DomainModel model = new LevelCalculator().calculate(rawModel);
 
         Set<String> knownClasses = model.getAllClasses().keySet();
 

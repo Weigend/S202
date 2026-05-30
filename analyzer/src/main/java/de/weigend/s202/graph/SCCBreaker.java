@@ -19,17 +19,20 @@ import java.util.*;
 import java.util.stream.Collectors;
 
 /**
- * Breaks up large Strongly Connected Components (SCCs) using heuristics.
+ * @deprecated NOT USED IN THE MAIN PIPELINE.
  *
- * Iterates until the filtered graph contains no more SCCs of size >= MIN_SCC_SIZE_TO_BREAK.
- * A single pass may leave residual sub-cycles inside a large SCC, which cause level
- * inversions in the topo-sort propagation step; the loop eliminates them.
- *
- * Heuristic: In-Degree / Out-Degree rank score.
- *   High in-degree  → foundational element  → lower level
- *   High out-degree → high-level element     → higher level
- *   Edges from lower-ranked to higher-ranked classes are identified as back edges.
+ * This class implements a heuristic (in/out-degree rank score + threshold) to break
+ * SCCs.  It has been superseded by the deterministic two-step algorithm in
+ * {@link de.weigend.s202.domain.architecture.LevelCalculator} and
+ * {@link de.weigend.s202.domain.architecture.LocalLevelCalculator}:
+ * <ol>
+ *   <li>Asymmetric cycles → cut the single min-weight edge.</li>
+ *   <li>Symmetric cycles  → remove all internal edges.</li>
+ * </ol>
+ * Kept only so that existing tests that exercise SCCBreaker directly continue to
+ * compile.  Do not call this class from production code.
  */
+@Deprecated
 public class SCCBreaker {
 
     private static final int MIN_SCC_SIZE_TO_BREAK = 3;

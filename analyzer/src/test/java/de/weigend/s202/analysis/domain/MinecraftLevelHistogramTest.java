@@ -2,7 +2,6 @@ package de.weigend.s202.analysis.domain;
 
 import de.weigend.s202.domain.DomainModel;
 import de.weigend.s202.domain.DomainModel.CalculatedElementInfo;
-import de.weigend.s202.domain.architecture.LevelCalculationStrategyFactory;
 import de.weigend.s202.domain.architecture.LevelCalculator;
 import de.weigend.s202.reader.DependencyModel;
 import de.weigend.s202.reader.InputAnalyzer;
@@ -38,7 +37,7 @@ public class MinecraftLevelHistogramTest {
         InputAnalyzer analyzer = new InputAnalyzer();
         DependencyModel rawModel = analyzer.analyze(jarPath);
 
-        LevelCalculator calc = new LevelCalculator(LevelCalculationStrategyFactory.createDefault());
+        LevelCalculator calc = new LevelCalculator();
         DomainModel model = calc.calculate(rawModel);
 
         Map<String, CalculatedElementInfo> classes = model.getAllClasses();

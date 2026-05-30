@@ -34,7 +34,7 @@
 \title{Arquitetura de Software como Representa\c{c}\~ao em Camadas\\
   \large An\'alise de Arquitetura de Software com S202}
 \author{Johannes Weigend}
-\date{Vers\~ao final, 26~de maio de~2026}
+\date{Vers\~ao final, 30~de maio de~2026}
 
 \begin{document}
 
@@ -353,12 +353,24 @@ irm\~aos para $P$. Um rank positivo significa: o pacote usa mais do que ele
 mesmo \'e usado; ele tende a pertencer mais acima. Um rank negativo significa:
 o pacote \'e mais usado e tende a pertencer mais abaixo.
 
-Em uma SCC de pacotes, uma aresta $P \to Q$ s\'o \'e tratada como back edge
-quando $rank(P)$ fica abaixo de $rank(Q)$ por mais que uma toler\^ancia
-$\varepsilon$. Atualmente, S202 usa $\varepsilon = 0{,}1$ para isso. Se dois
-pacotes ficam pr\'oximos demais, eles permanecem conceitualmente como pares e
-portanto no mesmo n\'ivel. Uma rela\c{c}\~ao rec\'iproca de chamadas de
-$100 : 101$ n\~ao \'e, por isso, uma decis\~ao arquitetural robusta.
+Em uma SCC de pacotes, todas as arestas $P \to Q$ para as quais
+$rank(P) < rank(Q)$ vale s\~ao tratadas como back edges~-- ou seja, todas as
+arestas que correm contra o fluxo de depend\^encias. Nenhuma toler\^ancia \'e
+utilizada: qualquer diferen\c{c}a mensur\'avel de rank \'e justificativa
+suficiente para um corte.
+
+Se todos os ranks dentro de uma SCC s\~ao iguais, a topologia n\~ao fornece
+informa\c{c}\~ao de dire\c{c}\~ao. Nesse caso, todas as arestas internas s\~ao
+removidas e os n\'iveis dos n\'os afetados surgem exclusivamente de
+depend\^encias fora da antiga SCC. Se tampouco h\'a essas depend\^encias, os
+n\'os permanecem no mesmo n\'ivel~-- como pares genuinos sem ordem
+justific\'avel.
+
+A detec\c{c}\~ao de simetria baseia-se na medida de rank, n\~ao na
+compara\c{c}\~ao de pesos. Uma SCC em que todas as arestas t\^em o mesmo peso
+n\~ao \'e necessariamente sim\'etrica: graus de entrada e sa\'ida diferentes
+produzem ranks diferentes apesar de pesos iguais e, assim, indicam uma
+dire\c{c}\~ao clara de corte.
 
 Depois desse tratamento de ciclos, S202 calcula os n\'iveis sobre o DAG
 resultante. O Level~0 cont\'em os pacotes que, no grafo de c\'alculo atual,
@@ -541,9 +553,11 @@ estejam dispon\'iveis as informa\c{c}\~oes que justificam essa posi\c{c}\~ao.
   \item \textbf{Derivar o grafo de pacotes:} A partir das depend\^encias entre
         classes, depend\^encias entre pacotes s\~ao agregadas e ponderadas.
   \item \textbf{Calcular a ordem de pacotes:} A partir das entradas e sa\'idas
-        ponderadas calcula-se a medida de rank $rank(P)$. Dela surge a ordem
-        vertical de pacotes. Pequenas diferen\c{c}as de rank s\~ao tratadas
-        como rela\c{c}\~ao entre pares.
+        ponderadas calcula-se a medida de rank $rank(P)$. Todas as arestas para
+        as quais $rank(P) < rank(Q)$ vale s\~ao classificadas como back edges e
+        cortadas em uma \'unica passagem. Se todos os ranks dentro de uma SCC
+        s\~ao iguais, todas as arestas internas s\~ao removidas; os n\'iveis
+        surgem ent\~ao de depend\^encias fora da antiga SCC.
   \item \textbf{Determinar back edges:} Dentro de cada SCC, s\~ao escolhidas
         as arestas suficientes para remover o ciclo. Essas arestas s\~ao back
         edges para o c\'alculo dos n\'iveis e permanecem vis\'iveis como
