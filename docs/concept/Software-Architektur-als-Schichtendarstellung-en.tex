@@ -34,7 +34,7 @@
 \title{Software Architecture as a Layered Representation\\
   \large Analyzing Software Architecture with S202}
 \author{Johannes Weigend}
-\date{Final version, May~26,~2026}
+\date{Final version, May~30,~2026}
 
 \begin{document}
 
@@ -331,12 +331,21 @@ siblings to $P$. A positive rank means that the package uses more than it is
 used; it therefore tends to belong higher up. A negative rank means that the
 package is more often used and tends to belong lower down.
 
-In a package SCC, an edge $P \to Q$ is treated as a back edge only if
-$rank(P)$ is lower than $rank(Q)$ by more than a threshold $\varepsilon$.
-S202 currently uses $\varepsilon = 0.1$ for this. If two packages are too close
-to each other, they conceptually remain peers and therefore stay on the same
-level. A reciprocal invocation ratio of $100 : 101$ is therefore not a robust
-architectural decision.
+In a package SCC, all edges $P \to Q$ for which $rank(P) < rank(Q)$ holds are
+treated as back edges~-- that is, all edges that run against the dependency
+flow. No threshold is used: any measurable rank difference is sufficient
+justification for a cut.
+
+If all ranks within an SCC are equal, the topology provides no directional
+information. In this case, all internal edges are removed and the levels of the
+affected nodes are determined solely by dependencies outside the former SCC. If
+no such dependencies exist either, the nodes remain at the same level~-- as
+genuine peers with no justifiable ordering.
+
+Symmetry detection is based on the rank measure, not on weight comparison. An
+SCC in which all edges carry the same weight is not necessarily symmetric:
+different in- and out-degrees produce different ranks despite equal weights and
+thereby yield a clear cut direction.
 
 After this cycle handling, S202 computes levels on the resulting DAG. Level~0
 contains the packages that do not use any other child packages in the current
@@ -509,9 +518,10 @@ information that justifies this position is available.
   \item \textbf{Derive the package graph:} Package dependencies are aggregated
         and weighted from the class dependencies.
   \item \textbf{Compute package ordering:} The rank measure $rank(P)$ is
-        computed from the weighted incoming and outgoing edges. This yields the
-        vertical package order. Small rank differences are treated as peer
-        relationships.
+        computed from the weighted incoming and outgoing edges. All edges for
+        which $rank(P) < rank(Q)$ holds are classified as back edges and cut in
+        one pass. If all ranks within an SCC are equal, all internal edges are
+        removed; levels then arise from dependencies outside the former SCC.
   \item \textbf{Determine back edges:} Within each SCC, the edges sufficient
         for cycle removal are selected. These edges are back edges for level
         computation and remain visible as violations if they run upward after
