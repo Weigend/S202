@@ -77,8 +77,8 @@ Das klingt nach einer reinen Layoutfrage, ist aber eine fachliche Entscheidung. 
 S202 trennt deshalb mehrere Sichten:
 
 ```text
-Bytecode -> Klassengraph -> SCCs -> Paketgraph -> Paketordnung
-         -> Back-Edges -> UI-Schichtung -> Konsistenzregeln
+Bytecode -> Klassengraph -> SCCs -> Paketgraph -> Paket-/Klassenlevels
+         -> lokale Darstellungsposition -> Konsistenzregeln
 ```
 
 Der Klassengraph bleibt das Rohmodell der tatsächlichen Abhängigkeiten. Daraus werden stark zusammenhängende Komponenten, Paketgewichte, lokale Ebenen und sichtbare Verletzungen abgeleitet. Das Rohmodell wird nicht beschönigt, nur weil die Darstellung eine Schichtung braucht.
@@ -95,7 +95,7 @@ rank(P) = (out(P) - in(P)) / max(1, out(P) + in(P))
 
 `out(P)` ist die Summe der ausgehenden Abhängigkeiten, `in(P)` die Summe der eingehenden. Ein Paket mit vielen ausgehenden und wenigen eingehenden Abhängigkeiten nutzt andere stark und liegt tendenziell höher. Ein Paket, das von vielen anderen genutzt wird, ist eher Fundament und liegt tendenziell tiefer.
 
-Wichtig ist die Schwelle zwischen echter Richtung und zufälliger Asymmetrie. Wenn zwei Pakete sich fast gleich stark gegenseitig benutzen, ist daraus keine belastbare Architekturentscheidung ableitbar. S202 behandelt solche Pakete als Peers. Das verhindert, dass ein Verhältnis von `100 : 101` plötzlich eine harte Schichtung erzeugt.
+S202 verwendet dabei keinen Schwellwert: jede messbare Rankdifferenz reicht als Begründung für einen Schnitt. Nur wenn alle Ranks innerhalb einer SCC tatsächlich gleich sind — die Topologie also keinerlei Richtung vorgibt — werden alle internen Kanten entfernt und die betroffenen Pakete als echte Peers ohne begründbare Ordnung behandelt.
 
 ## Zyklen sind Befunde, keine Layoutstörung
 
