@@ -1,0 +1,809 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>LevelCalculator – Evolution History</title>
+  <style>
+    :root {
+      --bg: #0f1117;
+      --card: #1a1d27;
+      --border: #2d3148;
+      --accent: #6c8ebf;
+      --accent2: #f0a500;
+      --green: #4caf7d;
+      --red: #e05c5c;
+      --text: #e0e4f0;
+      --muted: #7a7f99;
+      --tag-bg: #252840;
+      --tag-date: #1e3050;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: 'Segoe UI', system-ui, sans-serif;
+      font-size: 15px;
+      line-height: 1.6;
+      padding: 40px 20px 80px;
+    }
+
+    /* ── Title slide ── */
+    .title-slide {
+      max-width: 900px;
+      margin: 0 auto 60px;
+      text-align: center;
+      border: 1px solid var(--border);
+      background: var(--card);
+      border-radius: 16px;
+      padding: 60px 40px 50px;
+    }
+    .title-slide h1 {
+      font-size: 2.4em;
+      font-weight: 700;
+      color: var(--accent2);
+      letter-spacing: -0.5px;
+    }
+    .title-slide .subtitle {
+      font-size: 1.15em;
+      color: var(--muted);
+      margin-top: 12px;
+    }
+    .title-slide .meta {
+      margin-top: 28px;
+      font-size: 0.9em;
+      color: var(--muted);
+    }
+
+    /* ── Timeline spine ── */
+    .timeline {
+      max-width: 900px;
+      margin: 0 auto;
+      position: relative;
+      padding-left: 40px;
+    }
+    .timeline::before {
+      content: '';
+      position: absolute;
+      left: 12px;
+      top: 0;
+      bottom: 0;
+      width: 2px;
+      background: linear-gradient(to bottom, var(--accent), var(--accent2));
+      opacity: 0.35;
+    }
+
+    /* ── Slide card ── */
+    .slide {
+      position: relative;
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 28px 32px 24px;
+      margin-bottom: 36px;
+      transition: border-color 0.2s;
+    }
+    .slide:hover { border-color: var(--accent); }
+
+    /* dot on spine */
+    .slide::before {
+      content: '';
+      position: absolute;
+      left: -34px;
+      top: 32px;
+      width: 12px;
+      height: 12px;
+      border-radius: 50%;
+      background: var(--accent2);
+      border: 2px solid var(--bg);
+    }
+
+    /* ── Header row ── */
+    .slide-header {
+      display: flex;
+      align-items: flex-start;
+      gap: 16px;
+      margin-bottom: 18px;
+      flex-wrap: wrap;
+    }
+    .version-badge {
+      background: var(--accent);
+      color: #fff;
+      font-weight: 700;
+      font-size: 0.85em;
+      padding: 3px 10px;
+      border-radius: 20px;
+      white-space: nowrap;
+      flex-shrink: 0;
+    }
+    .version-badge.final { background: var(--accent2); color: #1a1a1a; }
+    .date-badge {
+      background: var(--tag-date);
+      color: var(--muted);
+      font-size: 0.82em;
+      padding: 3px 10px;
+      border-radius: 20px;
+      white-space: nowrap;
+      flex-shrink: 0;
+    }
+    .slide-title {
+      font-size: 1.25em;
+      font-weight: 700;
+      color: #fff;
+      flex: 1;
+    }
+
+    /* ── Key Fact ── */
+    .key-fact {
+      background: var(--tag-bg);
+      border-left: 3px solid var(--accent2);
+      padding: 10px 16px;
+      border-radius: 0 8px 8px 0;
+      font-size: 0.95em;
+      color: #d0d8f0;
+      margin-bottom: 20px;
+    }
+    .key-fact strong { color: var(--accent2); }
+
+    /* ── Two-column pros/cons ── */
+    .pros-cons {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 16px;
+    }
+    @media (max-width: 640px) {
+      .pros-cons { grid-template-columns: 1fr; }
+    }
+    .pros, .cons {
+      background: #14172066;
+      border-radius: 8px;
+      padding: 14px 16px;
+    }
+    .pros h4 { color: var(--green); font-size: 0.82em; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 8px; }
+    .cons h4 { color: var(--red);   font-size: 0.82em; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 8px; }
+    .pros ul, .cons ul { list-style: none; padding: 0; }
+    .pros li, .cons li { font-size: 0.91em; padding: 3px 0; color: var(--text); }
+    .pros li::before { content: '+ '; color: var(--green); font-weight: 700; }
+    .cons li::before { content: '− '; color: var(--red);   font-weight: 700; }
+
+    /* ── Commit chips ── */
+    .commits {
+      margin-top: 14px;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+    }
+    .commit {
+      font-family: monospace;
+      font-size: 0.78em;
+      background: #12152200;
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      padding: 2px 8px;
+      color: var(--muted);
+    }
+
+    /* ── Classes introduced ── */
+    .classes {
+      margin-top: 14px;
+      font-size: 0.85em;
+      color: var(--muted);
+    }
+    .classes span {
+      display: inline-block;
+      background: var(--tag-bg);
+      border-radius: 4px;
+      padding: 1px 8px;
+      margin: 2px 3px 2px 0;
+      color: #a0b0d0;
+      font-family: monospace;
+      font-size: 0.92em;
+    }
+
+    /* ── Summary slide ── */
+    .summary-slide {
+      max-width: 900px;
+      margin: 0 auto;
+      background: var(--card);
+      border: 1px solid var(--accent);
+      border-radius: 12px;
+      padding: 32px 36px;
+    }
+    .summary-slide h2 { color: var(--accent2); margin-bottom: 20px; font-size: 1.4em; }
+    .summary-table { width: 100%; border-collapse: collapse; font-size: 0.9em; }
+    .summary-table th {
+      text-align: left; padding: 6px 12px;
+      border-bottom: 1px solid var(--border);
+      color: var(--muted); font-weight: 600; font-size: 0.82em; text-transform: uppercase;
+    }
+    .summary-table td { padding: 8px 12px; border-bottom: 1px solid #1e2130; }
+    .summary-table tr:last-child td { border-bottom: none; }
+    .summary-table .v { color: var(--accent); font-weight: 700; font-family: monospace; }
+    .summary-table .c { font-family: monospace; font-size: 0.88em; color: #8090b0; }
+  </style>
+</head>
+<body>
+
+<!-- ===== TITLE ===== -->
+<div class="title-slide">
+  <h1>LevelCalculator – Evolution History</h1>
+  <div class="subtitle">From the first level view to the deterministic algorithm</div>
+  <div class="meta">Structure202 · January – May 2026 · 11 conceptual iterations</div>
+</div>
+
+<!-- ===== TIMELINE ===== -->
+<div class="timeline">
+
+
+  <!-- ─── v0.1 ─── -->
+  <div class="slide">
+    <div class="slide-header">
+      <span class="version-badge">v 0.1</span>
+      <span class="date-badge">2026-01-18</span>
+      <span class="slide-title">SCCDAG Foundation — Tarjan, LayerAssigner, SCCDAGBuilder</span>
+    </div>
+    <div class="key-fact">
+      <strong>Key Fact:</strong> First complete SCC infrastructure in Java —
+      <code>TarjanSCCFinder</code>, <code>StronglyConnectedComponent</code>,
+      <code>SCCDAGBuilder</code> and <code>LayerAssigner</code> are established as
+      core building blocks. Cycles are detected, the SCC-DAG is constructed,
+      and levels are assigned to DAG nodes via longest-path.
+    </div>
+    <div class="pros-cons">
+      <div class="pros">
+        <h4>Advantages</h4>
+        <ul>
+          <li>Solid algorithmic foundation (Tarjan O(V+E))</li>
+          <li>Cycles are explicitly modelled as SCCs</li>
+          <li>DAG longest-path yields correct layering depth</li>
+        </ul>
+      </div>
+      <div class="cons">
+        <h4>Limitations / Open</h4>
+        <ul>
+          <li>Analysis infrastructure only — no UI integration yet</li>
+          <li>Cycles are not broken — all SCC nodes land on the same level</li>
+          <li>No concept for packages vs. classes</li>
+        </ul>
+      </div>
+    </div>
+    <div class="classes"><strong>New classes:</strong>
+      <span>TarjanSCCFinder</span>
+      <span>SCCDAGBuilder</span>
+      <span>LayerAssigner</span>
+      <span>StronglyConnectedComponent</span>
+      <span>EdgeClassification</span>
+    </div>
+    <div class="commits">
+      <span class="commit">5af9fa45 SCCDAG intermediate state</span>
+    </div>
+  </div>
+
+
+  <!-- ─── v0.2 ─── -->
+  <div class="slide">
+    <div class="slide-header">
+      <span class="version-badge">v 0.2</span>
+      <span class="date-badge">2026-01-19 – 22</span>
+      <span class="slide-title">Level-Based Layout View — LevelBasedLayoutView, first working visualization</span>
+    </div>
+    <div class="key-fact">
+      <strong>Key Fact:</strong> First real UI integration: classes and packages are
+      displayed in horizontal rows according to their computed level
+      (level = row). Blue borders for classes, orange for packages.
+      Replaces the old PackageTreeView.
+    </div>
+    <div class="pros-cons">
+      <div class="pros">
+        <h4>Advantages</h4>
+        <ul>
+          <li>Layered architecture view usable for the first time</li>
+          <li>Uniform treatment of classes and packages</li>
+          <li>81 tests green</li>
+        </ul>
+      </div>
+      <div class="cons">
+        <h4>Limitations / Open</h4>
+        <ul>
+          <li>Cycles unresolved — all SCC members placed on the same row</li>
+          <li>Purely global: no concept of local ordering within a package</li>
+          <li>Several level bug-fixes still needed (multiple commits Jan 22)</li>
+        </ul>
+      </div>
+    </div>
+    <div class="classes"><strong>New classes:</strong>
+      <span>LevelBasedLayoutView</span>
+      <span>LevelCalculator (first version)</span>
+    </div>
+    <div class="commits">
+      <span class="commit">17357c53 feat: level-based layout view</span>
+      <span class="commit">08cff68c fully working, no level errors</span>
+      <span class="commit">f4be61a7 Level bugfix. Refactoring.</span>
+    </div>
+  </div>
+
+
+  <!-- ─── v0.3 ─── -->
+  <div class="slide">
+    <div class="slide-header">
+      <span class="version-badge">v 0.3</span>
+      <span class="date-badge">2026-01-23 – 26</span>
+      <span class="slide-title">SCC Visualization + Heuristic SCC Breaker (In/Out-Degree)</span>
+    </div>
+    <div class="key-fact">
+      <strong>Key Fact:</strong> Cycles are broken for the first time:
+      <code>HeuristicSCCBreakingStrategy</code> selects back-edges based on
+      in/out-degree scores. SCCs are highlighted in orange. A new strategy
+      factory makes the breaking method pluggable.
+    </div>
+    <div class="pros-cons">
+      <div class="pros">
+        <h4>Advantages</h4>
+        <ul>
+          <li>Cycles now yield a meaningful hierarchy instead of a flat world</li>
+          <li>Strategy pattern: breaking method is interchangeable</li>
+          <li>SCC visualization with back-edge highlighting</li>
+          <li>Zoom support (2–300 %)</li>
+        </ul>
+      </div>
+      <div class="cons">
+        <h4>Limitations / Open</h4>
+        <ul>
+          <li>Heuristic: equal scores → non-deterministic results</li>
+          <li>Purely class-based — package topology ignored</li>
+          <li>No formal rule set for violations</li>
+        </ul>
+      </div>
+    </div>
+    <div class="classes"><strong>New classes:</strong>
+      <span>SCCBreaker</span>
+      <span>HeuristicSCCBreakingStrategy</span>
+      <span>LevelCalculationStrategyFactory</span>
+      <span>SCCRenderer</span>
+    </div>
+    <div class="commits">
+      <span class="commit">7a4563a5 scc visualization</span>
+      <span class="commit">30b00ea4 SCC breaking strategy + zoom</span>
+    </div>
+  </div>
+
+
+  <!-- ─── v0.4 ─── -->
+  <div class="slide">
+    <div class="slide-header">
+      <span class="version-badge">v 0.4</span>
+      <span class="date-badge">2026-02-18</span>
+      <span class="slide-title">Local UI Levels — DistrictRowLevelCalculator (2-phase pipeline)</span>
+    </div>
+    <div class="key-fact">
+      <strong>Key Fact:</strong> Introduction of <strong>local levels per package</strong>:
+      siblings (classes + sub-packages) within a package receive their own
+      local levels from their sibling graph. Global levels remain for analysis,
+      local levels drive the layout position. First 2-phase pipeline.
+    </div>
+    <div class="pros-cons">
+      <div class="pros">
+        <h4>Advantages</h4>
+        <ul>
+          <li>Visual ordering within a package significantly improved</li>
+          <li>Sibling dependencies determine local row position</li>
+          <li>Concept established: analysis level ≠ layout position</li>
+        </ul>
+      </div>
+      <div class="cons">
+        <h4>Limitations / Open</h4>
+        <ul>
+          <li>Local SCC re-topology silently contradicts the DomainModel</li>
+          <li>Invariant checker cannot see the local reordering</li>
+          <li>Later recognized as a conceptual problem and removed</li>
+        </ul>
+      </div>
+    </div>
+    <div class="classes"><strong>New classes:</strong>
+      <span>DistrictRowLevelCalculator</span>
+    </div>
+    <div class="commits">
+      <span class="commit">20a3dee2 feat: DistrictRowLevelCalculator</span>
+      <span class="commit">f25e8f30 remove dead steps 6-7</span>
+    </div>
+  </div>
+
+
+  <!-- ─── v1.0 ─── -->
+  <div class="slide">
+    <div class="slide-header">
+      <span class="version-badge">v 1.0</span>
+      <span class="date-badge">2026-05-01</span>
+      <span class="slide-title">Layout Invariant Checker — Formal Rules R1–R5, Maven/Gradle Multi-Project</span>
+    </div>
+    <div class="key-fact">
+      <strong>Key Fact:</strong> Introduction of <code>LayoutInvariantChecker</code> with
+      formal rules: R1 (class level inversion on non-back-edges), R2 (package SCCs
+      at equal level), R3 (container ≥ content), R5 (type-flag drift). Simultaneously:
+      Maven/Gradle loader for multi-project builds.
+    </div>
+    <div class="pros-cons">
+      <div class="pros">
+        <h4>Advantages</h4>
+        <ul>
+          <li>Violations are now automatically measurable and reproducible</li>
+          <li>InvariantReportDialog shows findings with a Copy button</li>
+          <li>Maven/Gradle loader opens real projects (software-ekg-7, Structure202)</li>
+        </ul>
+      </div>
+      <div class="cons">
+        <h4>Limitations / Open</h4>
+        <ul>
+          <li>R2 finding on software-ekg-7 exposes a missing equalize step in LevelCalculator</li>
+          <li>Rules operate on level integers — no coordinate dependency</li>
+        </ul>
+      </div>
+    </div>
+    <div class="classes"><strong>New classes:</strong>
+      <span>LayoutInvariantChecker</span>
+      <span>LayoutInvariantReport</span>
+      <span>InvariantFinding</span>
+      <span>MavenProjectScanner</span>
+      <span>GradleProjectScanner</span>
+    </div>
+    <div class="commits">
+      <span class="commit">ca2ce329 Maven/Gradle loader + LayoutInvariantChecker</span>
+    </div>
+  </div>
+
+
+  <!-- ─── v1.1 ─── -->
+  <div class="slide">
+    <div class="slide-header">
+      <span class="version-badge">v 1.1</span>
+      <span class="date-badge">2026-05-07</span>
+      <span class="slide-title">Weighted Package Graph + Architecture-Anchored SCC Breaker</span>
+    </div>
+    <div class="key-fact">
+      <strong>Key Fact:</strong> Package levels are now computed from a <strong>weighted
+      inter-package graph</strong>: edge weight = number of classes in P_A's subtree
+      that depend on at least one class in P_B (method-call counts). Ancestor propagation.
+      SCC breaking uses weight-based rank scores instead of a pure degree heuristic.
+      Simultaneously: <code>ArchitectureAnchoredSCCBreakingStrategy</code> uses external
+      SCC-DAG anchors instead of internal degree scores.
+    </div>
+    <div class="pros-cons">
+      <div class="pros">
+        <h4>Advantages</h4>
+        <ul>
+          <li>Package levels semantically grounded in real usage intensity</li>
+          <li>Ancestor propagation: parent packages inherit sub-package dependencies</li>
+          <li>SCC breaking guided by architectural context rather than topological chance</li>
+          <li>R3 rewritten: checks weighted package edge instead of container level</li>
+        </ul>
+      </div>
+      <div class="cons">
+        <h4>Limitations / Open</h4>
+        <ul>
+          <li>Two competing strategies (heuristic vs. arch-anchored) in production</li>
+          <li>Threshold (0.1) for symmetry detection still present → non-deterministic</li>
+          <li>DistrictRowLevelCalculator removed — was silently contradicting DomainModel</li>
+        </ul>
+      </div>
+    </div>
+    <div class="classes"><strong>New / changed classes:</strong>
+      <span>WeightedPackageGraph</span>
+      <span>ArchitectureAnchoredSCCBreakingStrategy</span>
+      <span>LevelCalculationMode (UI toggle)</span>
+    </div>
+    <div class="commits">
+      <span class="commit">751f3121 weighted package graph</span>
+      <span class="commit">86aafbdc method-call counts as weights</span>
+      <span class="commit">8ac08fe4 architecture-anchored SCC breaking</span>
+    </div>
+  </div>
+
+
+  <!-- ─── v1.2 ─── -->
+  <div class="slide">
+    <div class="slide-header">
+      <span class="version-badge">v 1.2</span>
+      <span class="date-badge">2026-05-12 – 13</span>
+      <span class="slide-title">What-If Mode + Central Domain Model for Violations and Levels</span>
+    </div>
+    <div class="key-fact">
+      <strong>Key Fact:</strong> Two parallel conceptual leaps: (1) <strong>What-If</strong>
+      — drag &amp; drop of packages with live level recomputation via
+      <code>VirtualPackageGraph</code>; (2) <strong>central domain model</strong> —
+      <code>HierarchicalLayeredArchitecture</code> makes violations and levels
+      first-class concepts in the domain layer (no UI dependency).
+    </div>
+    <div class="pros-cons">
+      <div class="pros">
+        <h4>Advantages</h4>
+        <ul>
+          <li>What-If: architect immediately sees whether a package move resolves violations</li>
+          <li>Violations and levels in the domain layer — testable without JavaFX</li>
+          <li>HierarchicalLayeredArchitecture established as a linguistic concept</li>
+          <li>LevelCalculator moved from UI into the analysis domain</li>
+        </ul>
+      </div>
+      <div class="cons">
+        <h4>Limitations / Open</h4>
+        <ul>
+          <li>VirtualPackageGraph and DomainModel levels not yet fully synchronized</li>
+          <li>Violation detection in What-If uses scene-Y coordinates, not level integers</li>
+        </ul>
+      </div>
+    </div>
+    <div class="classes"><strong>New classes:</strong>
+      <span>VirtualIdentity</span>
+      <span>VirtualPackageGraph</span>
+      <span>PackageAggregator</span>
+      <span>HierarchicalLayeredArchitecture</span>
+      <span>HierarchicalLayeredArchitectureBuilder</span>
+      <span>WhatIfArchitecture</span>
+    </div>
+    <div class="commits">
+      <span class="commit">65b739ef override store + VirtualPackageGraph</span>
+      <span class="commit">6f91a274 Dependencies-View + SCC diff</span>
+      <span class="commit">eaabd74f HierarchicalLayeredArchitecture (C2)</span>
+      <span class="commit">b75df818 LevelCalculator → analysis domain</span>
+    </div>
+  </div>
+
+
+  <!-- ─── v1.3 ─── -->
+  <div class="slide">
+    <div class="slide-header">
+      <span class="version-badge">v 1.3</span>
+      <span class="date-badge">2026-05-15</span>
+      <span class="slide-title">Split: architectureLevel vs. localLayerIndex — ADR, 7-step migration</span>
+    </div>
+    <div class="key-fact">
+      <strong>Key Fact:</strong> The single <code>level</code> field previously meant two
+      completely different things. An ADR formalises the split:
+      <strong>architectureLevel</strong> = global dependency-chain depth (analysis, violations),
+      <strong>localLayerIndex</strong> = local sort key within the parent package (layout).
+      7-step migration completed in one day.
+    </div>
+    <div class="pros-cons">
+      <div class="pros">
+        <h4>Advantages</h4>
+        <ul>
+          <li>Conceptual clarity: analysis and layout are separate concerns</li>
+          <li>childPkgUsedLevel lift and ContainmentEdge workaround eliminated</li>
+          <li>ArchitectureView rendering bug (view rendered below its renderers) fixed</li>
+          <li>Violations check architectureLevel; renderer uses localLayerIndex</li>
+        </ul>
+      </div>
+      <div class="cons">
+        <h4>Limitations / Open</h4>
+        <ul>
+          <li>Two level concepts require mental discipline to keep separate</li>
+          <li>localLayerIndex not yet wired into the invariant checker (added in step 7)</li>
+        </ul>
+      </div>
+    </div>
+    <div class="classes"><strong>Renamed / new fields:</strong>
+      <span>CalculatedElementInfo.architectureLevel</span>
+      <span>CalculatedElementInfo.localLayerIndex</span>
+      <span>LocalLayerCalculator</span>
+    </div>
+    <div class="commits">
+      <span class="commit">37fcbbba ADR: ArchitectureLevel vs. LocalLayerIndex</span>
+      <span class="commit">5a6c6c8f rename level → architectureLevel (step 2)</span>
+      <span class="commit">326ebebd LocalLayerCalculator fills localLayerIndex (step 4)</span>
+      <span class="commit">0836c899 violation detection on localLayerIndex (step 7)</span>
+    </div>
+  </div>
+
+
+  <!-- ─── v1.4 ─── -->
+  <div class="slide">
+    <div class="slide-header">
+      <span class="version-badge">v 1.4</span>
+      <span class="date-badge">2026-05-19</span>
+      <span class="slide-title">Global Level Visible in UI — G:n label next to L:n</span>
+    </div>
+    <div class="key-fact">
+      <strong>Key Fact:</strong> The global <code>architectureLevel</code> is optionally
+      shown as <strong>G:n</strong> in every package/class box label (via toolbar checkbox).
+      A class at local level 0 inside its parent package may still sit at
+      architecture level N globally — this difference is now visible.
+    </div>
+    <div class="pros-cons">
+      <div class="pros">
+        <h4>Advantages</h4>
+        <ul>
+          <li>Difference between global context and local layout immediately apparent</li>
+          <li>Aids debugging of violations and SCC-breaking results</li>
+          <li>Simple toggle — no layout rebuild required</li>
+        </ul>
+      </div>
+      <div class="cons">
+        <h4>Limitations / Open</h4>
+        <ul>
+          <li>Purely informational — no algorithmic change</li>
+        </ul>
+      </div>
+    </div>
+    <div class="commits">
+      <span class="commit">3f7dee16 Show G:n in package/class box labels</span>
+    </div>
+  </div>
+
+
+  <!-- ─── v1.5 ─── -->
+  <div class="slide">
+    <div class="slide-header">
+      <span class="version-badge">v 1.5</span>
+      <span class="date-badge">2026-05-24</span>
+      <span class="slide-title">SCC Breaking Along the Package Architecture — hypothesis drives class ordering</span>
+    </div>
+    <div class="key-fact">
+      <strong>Key Fact:</strong> Pipeline order reversed:
+      <strong>package levels are now computed first</strong>, then used to guide
+      class SCC breaking. An edge A→B inside a class SCC is cut when
+      <code>pkgLevel(A.pkg) &lt; pkgLevel(B.pkg)</code> — it runs against the
+      package flow. Same-package SCCs fall back to the degree heuristic.
+    </div>
+    <div class="pros-cons">
+      <div class="pros">
+        <h4>Advantages</h4>
+        <ul>
+          <li>Class hierarchy follows the package architecture — conceptually correct</li>
+          <li>Back-edges are architecturally motivated, not topologically accidental</li>
+          <li>classBackEdgeKeys stored in DomainModel for R1 consistency</li>
+        </ul>
+      </div>
+      <div class="cons">
+        <h4>Limitations / Open</h4>
+        <ul>
+          <li>Degree fallback for same-package SCCs still heuristic</li>
+          <li>Threshold (0.1) in package SCC breaking not yet removed</li>
+        </ul>
+      </div>
+    </div>
+    <div class="commits">
+      <span class="commit">c5599d07 package levels first, then guide class SCC-breaking</span>
+      <span class="commit">da12adeb align concept doc with implementation; R5→R4</span>
+    </div>
+  </div>
+
+
+  <!-- ─── v2.0 ─── -->
+  <div class="slide">
+    <div class="slide-header">
+      <span class="version-badge final">v 2.0</span>
+      <span class="date-badge">2026-05-29 – 31</span>
+      <span class="slide-title">Deterministic Algorithm — no heuristics, no threshold, −6 % wrong-direction edges</span>
+    </div>
+    <div class="key-fact">
+      <strong>Key Fact:</strong> The threshold (0.1) for symmetry detection and the entire
+      <code>SCCBreaker</code> rank-score approach are replaced by a
+      <strong>fully deterministic, threshold-free procedure</strong>:
+      all edges running against the dependency flow are cut in a single pass.
+      Symmetry is detected topologically (equal ranks). Case B (equal package level):
+      all internal SCC edges are removed; levels emerge from external dependencies.
+      Cross-platform verified on Minecraft 1.19.2 (Java ↔ .NET: 100 % identical levels).
+      <br><br>
+      <strong>Result on Minecraft 1.12.2: 3842 instead of ~4100 wrong-direction edges (−6 %)</strong>
+    </div>
+    <div class="pros-cons">
+      <div class="pros">
+        <h4>Advantages</h4>
+        <ul>
+          <li>Fully deterministic — same input yields identical levels on Java and .NET</li>
+          <li>No magic threshold constant</li>
+          <li>~380 lines of heuristic code removed (LocalLevelCalculator)</li>
+          <li>Performance: 60 s → 3–4 s on Minecraft input</li>
+          <li>SCCBreaker @Deprecated — Strategy pattern no longer needed</li>
+          <li>−6 % wrong-direction edges on Minecraft compared to v1.x</li>
+        </ul>
+      </div>
+      <div class="cons">
+        <h4>Limitations / Open</h4>
+        <ul>
+        </ul>
+      </div>
+    </div>
+    <div class="classes"><strong>Removed / deprecated:</strong>
+      <span>SCCBreaker @Deprecated</span>
+      <span>HeuristicSCCBreakingStrategy removed</span>
+      <span>ArchitectureAnchoredSCCBreakingStrategy removed</span>
+      <span>LevelCalculationMode removed</span>
+      <span>BreakMode / EdgeCutCandidate removed</span>
+    </div>
+    <div class="commits">
+      <span class="commit">74c46de5 deterministic — SccBreaker tie-breaking, Tarjan sort, LocalLevelCalculator</span>
+      <span class="commit">659624e7 deterministic algorithm without heuristics</span>
+      <span class="commit">a955ebeb SCCBreaker removed, dead code cleaned up</span>
+      <span class="commit">e55d82e7 LocalLevelCalculator excludes classBackEdges from step 4</span>
+      <span class="commit">2f1cfdec fix+docs: LevelCalculator corrections</span>
+    </div>
+  </div>
+
+
+</div><!-- /timeline -->
+
+<!-- ===== SUMMARY TABLE ===== -->
+<div class="summary-slide" style="max-width:900px; margin: 40px auto 0;">
+  <h2>All Iterations at a Glance</h2>
+  <table class="summary-table">
+    <thead>
+      <tr>
+        <th>Version</th>
+        <th>Date</th>
+        <th>Concept</th>
+        <th>Core classes</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td class="v">v0.1</td>
+        <td>Jan 18</td>
+        <td>SCCDAG foundation (Tarjan, LayerAssigner)</td>
+        <td class="c">TarjanSCCFinder, SCCDAGBuilder</td>
+      </tr>
+      <tr>
+        <td class="v">v0.2</td>
+        <td>Jan 19–22</td>
+        <td>Level-based layout (level = row)</td>
+        <td class="c">LevelBasedLayoutView, LevelCalculator</td>
+      </tr>
+      <tr>
+        <td class="v">v0.3</td>
+        <td>Jan 23–26</td>
+        <td>Heuristic SCC breaker (in/out-degree)</td>
+        <td class="c">SCCBreaker, HeuristicSCCBreakingStrategy</td>
+      </tr>
+      <tr>
+        <td class="v">v0.4</td>
+        <td>Feb 18</td>
+        <td>Local UI levels (DistrictRowLevelCalculator)</td>
+        <td class="c">DistrictRowLevelCalculator</td>
+      </tr>
+      <tr>
+        <td class="v">v1.0</td>
+        <td>May 01</td>
+        <td>Layout invariant checker (R1–R5)</td>
+        <td class="c">LayoutInvariantChecker, InvariantFinding</td>
+      </tr>
+      <tr>
+        <td class="v">v1.1</td>
+        <td>May 07</td>
+        <td>Weighted package graph + arch-anchored SCC breaking</td>
+        <td class="c">WeightedPackageGraph, ArchitectureAnchoredSCCBreakingStrategy</td>
+      </tr>
+      <tr>
+        <td class="v">v1.2</td>
+        <td>May 12–13</td>
+        <td>What-If mode + central domain model</td>
+        <td class="c">VirtualPackageGraph, HierarchicalLayeredArchitecture</td>
+      </tr>
+      <tr>
+        <td class="v">v1.3</td>
+        <td>May 15</td>
+        <td>architectureLevel vs. localLayerIndex (ADR)</td>
+        <td class="c">LocalLayerCalculator, CalculatedElementInfo +2 fields</td>
+      </tr>
+      <tr>
+        <td class="v">v1.4</td>
+        <td>May 19</td>
+        <td>Global level visible in UI (G:n label)</td>
+        <td class="c">ArchitectureView: SHOW_ARCH_LEVEL toggle</td>
+      </tr>
+      <tr>
+        <td class="v">v1.5</td>
+        <td>May 24</td>
+        <td>SCC breaking along package architecture hypothesis</td>
+        <td class="c">LevelCalculator (pipeline order)</td>
+      </tr>
+      <tr>
+        <td class="v" style="color:var(--accent2)">v2.0</td>
+        <td>May 29–31</td>
+        <td>Deterministic algorithm, no threshold, −6 % wrong-direction edges</td>
+        <td class="c">LocalLevelCalculator (new), SCCBreaker @Deprecated</td>
+      </tr>
+    </tbody>
+  </table>
+</div>
+
+</body>
+</html>
