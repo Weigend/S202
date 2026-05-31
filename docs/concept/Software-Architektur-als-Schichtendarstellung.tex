@@ -325,6 +325,22 @@ und au\ss{}erdem zu \texttt{com}$\to$\texttt{com.b} bei. Die transitive Ordnung
 der Pakete entsteht erst bei der nachfolgenden Levelberechnung~-- dem Graphen
 werden keine zus\"atzlichen transitiven Kanten hinzugef\"ugt.
 
+Ein konkretes Zahlenbeispiel: Die Klassenabh\"angigkeiten
+\texttt{com.a.A}$\to$\texttt{net.b.B} und \texttt{com.a.B}$\to$\texttt{net.b.B}
+erzeugen im Paketgraphen:
+
+\begin{lstlisting}
+com.a -(2)-> net.b
+com   -(2)-> net.b
+\end{lstlisting}
+
+Nur die Quellseite wird die Ahnenkette aufw\"arts propagiert; die Zielseite
+bleibt beim direkten Elternpaket der Zielklasse. \texttt{net.b} wird nicht
+weiter zu \texttt{net} hochgezogen. W\"urde man auch den Zielpfad propagieren,
+entstünde f\"ur jede Klassenbeziehung ein Kreuzprodukt aus Quell- und
+Zielvorfahren: Die Kantenzahl w\"achst quadratisch mit der Pakettiefe, ohne
+Informationsgewinn f\"ur die Ordnungsberechnung.
+
 Vor der Levelberechnung muss der Paketgraph azyklisch sein. Bilden Pakete
 eine SCC, bewertet S202 mit einem Rangma\ss{}, ob ein Paket eher andere Pakete
 nutzt oder eher von ihnen genutzt wird:

@@ -309,6 +309,22 @@ also to \texttt{com}$\to$\texttt{com.b}. The transitive order among packages
 emerges from the subsequent longest-path computation — no additional transitive
 edges are added to the graph.
 
+A concrete numerical example: the class dependencies
+\texttt{com.a.A}$\to$\texttt{net.b.B} and \texttt{com.a.B}$\to$\texttt{net.b.B}
+produce the following edges in the package graph:
+
+\begin{lstlisting}
+com.a -(2)-> net.b
+com   -(2)-> net.b
+\end{lstlisting}
+
+Only the source side is propagated up the ancestor chain; the target side stays
+at the direct parent package of the target class. \texttt{net.b} is not further
+propagated to \texttt{net}. Propagating the target side as well would produce a
+cross-product of source and target ancestors for every class dependency: the
+number of edges grows quadratically with package depth, without any information
+gain for the ordering computation.
+
 Before level computation, the package graph must be acyclic. If packages form
 an SCC, S202 uses a rank measure to evaluate whether a package tends more to
 use other packages or to be used by them:

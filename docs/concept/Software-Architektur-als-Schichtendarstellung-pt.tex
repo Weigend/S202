@@ -331,6 +331,23 @@ propagado pela cadeia de ancestrais do pacote de origem: uma chamada de
 no c\'alculo de n\'iveis subsequente~-- nenhuma aresta transitiva adicional
 \'e inserida no grafo.
 
+Um exemplo num\'erico concreto: as depend\^encias de classe
+\texttt{com.a.A}$\to$\texttt{net.b.B} e \texttt{com.a.B}$\to$\texttt{net.b.B}
+geram as seguintes arestas no grafo de pacotes:
+
+\begin{lstlisting}
+com.a -(2)-> net.b
+com   -(2)-> net.b
+\end{lstlisting}
+
+Apenas o lado da origem \'e propagado pela cadeia de ancestrais; o lado do
+destino permanece no pacote pai direto da classe alvo. \texttt{net.b} n\~ao
+\'e propagado adiante para \texttt{net}. Propagar tamb\'em o lado do destino
+geraria um produto cartesiano de ancestrais de origem e destino para cada
+depend\^encia de classe: o n\'umero de arestas cresce quadraticamente com a
+profundidade dos pacotes, sem ganho de informa\c{c}\~ao para o c\'alculo da
+ordem.
+
 Antes do c\'alculo dos n\'iveis, o grafo de pacotes precisa ser ac\'iclico. Se
 pacotes formam uma SCC, S202 usa uma medida de rank para avaliar se um pacote
 tende mais a usar outros pacotes ou a ser usado por eles:
