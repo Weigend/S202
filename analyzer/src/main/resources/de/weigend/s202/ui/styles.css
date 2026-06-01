@@ -622,6 +622,7 @@
     -fx-padding: 1 3;
     -fx-background-color: #e6f0ff;
     -fx-text-fill: #000000;
+    -fx-min-width: 40px;
 }
 
 .class-box-selected {
@@ -631,6 +632,7 @@
     -fx-padding: 1 3;
     -fx-background-color: #ffe6cc;
     -fx-text-fill: #000000;
+    -fx-min-width: 40px;
 }
 
 /* Architecture-graph icons (package / class / interface).

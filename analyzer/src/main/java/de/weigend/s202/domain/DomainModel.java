@@ -129,6 +129,17 @@ public class DomainModel {
         return classBackEdgeKeys.size();
     }
 
+    public Set<DependencyEdge> getClassBackEdges() {
+        Set<DependencyEdge> result = new LinkedHashSet<>();
+        for (String key : classBackEdgeKeys) {
+            int sep = key.indexOf('\0');
+            if (sep > 0) {
+                result.add(new DependencyEdge(key.substring(0, sep), key.substring(sep + 1)));
+            }
+        }
+        return Collections.unmodifiableSet(result);
+    }
+
     /** Returns the full weighted inter-package graph (unmodifiable). */
     public Map<String, Map<String, Integer>> getPackageEdgeWeights() {
         return Collections.unmodifiableMap(packageEdgeWeights);

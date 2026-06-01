@@ -76,8 +76,6 @@ public class TangleEdgeRenderer {
     private static final double LANE_WIDTH      = 0.7;
     /** Minimum lanes per channel even when no edges cross it (fallback capacity). */
     private static final int MIN_LANE_COUNT = 3;
-    /** Maximum lanes per channel regardless of edge density (prevents visual clutter). */
-    private static final int MAX_LANE_COUNT = 15;
     /** Fixed distance between adjacent potential lanes in both X and Y direction. */
     private static final double LANE_SPACING_PX = 6.0;
     private static final double LANE_EDGE_PADDING_PX = ARROW_SIZE + 2.0;
@@ -86,6 +84,8 @@ public class TangleEdgeRenderer {
     private static final double BRIDGE_RADIUS = LANE_SPACING_PX / 2.5;
     /** Nodes within this Y-distance belong to the same layout row. */
     private static final double ROW_CLUSTER_PX  = 20.0;
+    /** Left/right margin for bypass routes that detour around all class boxes. */
+    private static final double BYPASS_MARGIN   = 24.0;
 
     private final Pane pane;
     private final Map<String, Node> elementRegistry;
@@ -107,8 +107,14 @@ public class TangleEdgeRenderer {
     private static final int INITIAL_SETTLE_REDRAWS = 3;
     private boolean layoutPending;
 
+    // Coalesces rapid layout-bounds changes (e.g. CSS border-width flips on
+    // selection) into a single deferred redraw so edges are drawn after the
+    // layout pass has settled, not synchronously mid-CSS-change.
+    private final de.weigend.s202.ui.PulseCoalescer layoutCoalescer =
+            new de.weigend.s202.ui.PulseCoalescer(javafx.application.Platform::runLater, this::redraw);
+
     private final javafx.beans.value.ChangeListener<Bounds> layoutListener =
-            (obs, was, isNow) -> redraw();
+            (obs, was, isNow) -> layoutCoalescer.markDirty();
 
     private java.util.function.BiConsumer<String, String> onEdgeClicked = (a, b) -> {};
     private java.util.function.BiConsumer<String, String> onEdgeCut = (a, b) -> {};
@@ -289,7 +295,7 @@ public class TangleEdgeRenderer {
 
         List<HorizontalTrack> horizontalTracks = new ArrayList<>();
         // Lane count per gap scales with the number of edges whose endpoints
-        // straddle that gap, clamped to [MIN_LANE_COUNT, MAX_LANE_COUNT].
+        // straddle that gap, bounded below by MIN_LANE_COUNT.
         for (double[] gap : gaps) {
             double top    = gap[0];
             double bottom = gap[1];
@@ -301,7 +307,7 @@ public class TangleEdgeRenderer {
         }
 
         Map<Bounds, List<VerticalTrack>> verticalTracks = drawVerticalDebugLanes(classBounds, classBoundsByName, cb.getMinY(), cb.getMaxY());
-        return new LaneLayout(horizontalTracks, verticalTracks, classBoundsByName, classBounds);
+        return new LaneLayout(horizontalTracks, verticalTracks, classBoundsByName, classBounds, xLeft, xRight);
     }
 
     static List<Double> lanePositions(double min, double max, int count) {
@@ -327,7 +333,7 @@ public class TangleEdgeRenderer {
         int count = 0;
         for (DependencyEdge edge : edges) {
             Bounds s = classBoundsByName.get(edge.from());
-            Bounds t = classBoundsByName.get(edge.to());
+            Bounds t = classBoundsByName.get(targetClassOf(edge.to()));
             if (s == null || t == null) continue;
             double sY = s.getCenterY();
             double tY = t.getCenterY();
@@ -339,7 +345,18 @@ public class TangleEdgeRenderer {
     }
 
     private static int clampLaneCount(int count) {
-        return Math.max(MIN_LANE_COUNT, Math.min(MAX_LANE_COUNT, count));
+        return Math.max(MIN_LANE_COUNT, count);
+    }
+
+    /**
+     * Extracts the class FQN from a dependency edge {@code to} value.
+     * Method-level edges encode the target as {@code "com.example.B|methodName"};
+     * class-level edges are plain FQNs. The {@code |} separator is safe because
+     * it never appears in Java class or method names.
+     */
+    static String targetClassOf(String to) {
+        int pipe = to.indexOf('|');
+        return pipe >= 0 ? to.substring(0, pipe) : to;
     }
 
     private Map<Bounds, List<VerticalTrack>> drawVerticalDebugLanes(List<Bounds> classBounds,
@@ -349,7 +366,7 @@ public class TangleEdgeRenderer {
         Map<Bounds, Integer> degreeMap = new IdentityHashMap<>();
         for (DependencyEdge edge : edges) {
             Bounds s = classBoundsByName.get(edge.from());
-            Bounds t = classBoundsByName.get(edge.to());
+            Bounds t = classBoundsByName.get(targetClassOf(edge.to()));
             if (s != null) degreeMap.merge(s, 1, Integer::sum);
             if (t != null) degreeMap.merge(t, 1, Integer::sum);
         }
@@ -407,9 +424,17 @@ public class TangleEdgeRenderer {
     private RoutingResult routeEdges(LaneLayout laneLayout) {
         List<RoutedTangleEdge> routed = new ArrayList<>();
         boolean anyRendered = false;
+        // Use the actual class-box extents as the bypass anchor, not the full
+        // content bounds. The content padding provides space between classXLeft
+        // and xLeft (or xRight) so routes stay within the visible area.
+        double classXLeft  = laneLayout.classBounds.isEmpty() ? laneLayout.xLeft
+                : laneLayout.classBounds.stream().mapToDouble(Bounds::getMinX).min().orElse(laneLayout.xLeft);
+        double classXRight = laneLayout.classBounds.isEmpty() ? laneLayout.xRight
+                : laneLayout.classBounds.stream().mapToDouble(Bounds::getMaxX).max().orElse(laneLayout.xRight);
+        BypassAllocator bypass = new BypassAllocator(classXLeft, classXRight);
         for (DependencyEdge edge : edges) {
             Bounds source = laneLayout.classBoundsByName.get(edge.from());
-            Bounds target = laneLayout.classBoundsByName.get(edge.to());
+            Bounds target = laneLayout.classBoundsByName.get(targetClassOf(edge.to()));
             if (source == null || target == null) {
                 if (hasVisibleEndpointWaitingForLayout(edge)) {
                     layoutPending = true;
@@ -424,7 +449,7 @@ public class TangleEdgeRenderer {
                 routed.add(routedEdge);
                 anyRendered = true;
             } else {
-                if (renderFallbackEdge(edge, source, target, laneLayout)) {
+                if (renderFallbackEdge(edge, source, target, laneLayout, bypass)) {
                     anyRendered = true;
                 }
             }
@@ -570,13 +595,14 @@ public class TangleEdgeRenderer {
         pane.getChildren().addAll(path, arrow);
     }
 
-    private boolean renderFallbackEdge(DependencyEdge edge, Bounds source, Bounds target, LaneLayout laneLayout) {
+    private boolean renderFallbackEdge(DependencyEdge edge, Bounds source, Bounds target,
+                                        LaneLayout laneLayout, BypassAllocator bypass) {
         FallbackPath fallback = findFallbackPath(source, target, laneLayout);
         if (fallback == null) {
             fallback = findFallbackPathForced(source, target, laneLayout);
         }
         if (fallback == null) {
-            return renderEdge(edge);
+            return renderBypassEdge(edge, source, target, bypass);
         }
 
         Color color = edgeColor(edge);
@@ -601,6 +627,55 @@ public class TangleEdgeRenderer {
         double arrowDx = fallback.targetDock.x - fallback.targetX;
         double arrowDy = Math.abs(arrowDx) < 0.0001 ? fallback.targetDock.y - fallback.y : 0.0;
         Polygon arrow = makeArrow(fallback.targetDock.x, fallback.targetDock.y, arrowDx, arrowDy, color);
+
+        path.setOnMouseEntered(e -> {
+            if (!isSelected(edge)) path.setStroke(EDGE_HOVER);
+            path.setCursor(Cursor.HAND);
+        });
+        path.setOnMouseExited(e -> {
+            path.setStroke(edgeColor(edge));
+            path.setCursor(Cursor.DEFAULT);
+        });
+        installEdgeInteractions(path, edge);
+
+        pane.getChildren().addAll(path, arrow);
+        return true;
+    }
+
+    /**
+     * Routes an edge around all class boxes via an outer bypass column to the left or right
+     * of the entire layout. Used when Z-shaped routing finds no valid path (e.g. source and
+     * target are separated by intermediate classes in the same column).
+     */
+    private boolean renderBypassEdge(DependencyEdge edge, Bounds source, Bounds target, BypassAllocator bypass) {
+        double srcCX = source.getCenterX();
+        double tgtCX = target.getCenterX();
+        boolean useLeft = (srcCX + tgtCX) / 2.0 < (bypass.xLeft + bypass.xRight) / 2.0;
+
+        double outerX = useLeft ? bypass.nextLeft() : bypass.nextRight();
+
+        Point sourceDock = new Point(useLeft ? source.getMinX() : source.getMaxX(), source.getCenterY());
+        Point targetDock = new Point(useLeft ? target.getMinX() : target.getMaxX(), target.getCenterY());
+
+        Color color = edgeColor(edge);
+        double width = edgeWidth(edge);
+
+        Path path = new Path();
+        path.setStroke(color);
+        path.setStrokeWidth(width);
+        path.setStrokeLineCap(StrokeLineCap.ROUND);
+        path.setStrokeLineJoin(StrokeLineJoin.MITER);
+        path.setFill(null);
+        path.setCursor(Cursor.HAND);
+        applyEdgeDash(path, edge);
+
+        path.getElements().add(new MoveTo(sourceDock.x, sourceDock.y));
+        path.getElements().add(new LineTo(outerX, sourceDock.y));
+        path.getElements().add(new LineTo(outerX, targetDock.y));
+        path.getElements().add(new LineTo(targetDock.x, targetDock.y));
+
+        double arrowDx = targetDock.x - outerX;
+        Polygon arrow = makeArrow(targetDock.x, targetDock.y, arrowDx, 0.0, color);
 
         path.setOnMouseEntered(e -> {
             if (!isSelected(edge)) path.setStroke(EDGE_HOVER);
@@ -771,15 +846,21 @@ public class TangleEdgeRenderer {
         final Map<Bounds, List<VerticalTrack>> verticalTracks;
         final Map<String, Bounds> classBoundsByName;
         final List<Bounds> classBounds;
+        final double xLeft;
+        final double xRight;
 
         LaneLayout(List<HorizontalTrack> horizontalTracks,
                    Map<Bounds, List<VerticalTrack>> verticalTracks,
                    Map<String, Bounds> classBoundsByName,
-                   List<Bounds> classBounds) {
+                   List<Bounds> classBounds,
+                   double xLeft,
+                   double xRight) {
             this.horizontalTracks = horizontalTracks;
             this.verticalTracks = verticalTracks;
             this.classBoundsByName = classBoundsByName;
             this.classBounds = classBounds;
+            this.xLeft = xLeft;
+            this.xRight = xRight;
         }
     }
 
@@ -937,6 +1018,22 @@ public class TangleEdgeRenderer {
         }
     }
 
+    /** Allocates outer-column X positions for bypass routes, one per render pass. */
+    private static final class BypassAllocator {
+        private final double xLeft;
+        private final double xRight;
+        private int leftCount = 0;
+        private int rightCount = 0;
+
+        BypassAllocator(double xLeft, double xRight) {
+            this.xLeft = xLeft;
+            this.xRight = xRight;
+        }
+
+        double nextLeft()  { return xLeft  - BYPASS_MARGIN - leftCount++  * LANE_SPACING_PX; }
+        double nextRight() { return xRight + BYPASS_MARGIN + rightCount++ * LANE_SPACING_PX; }
+    }
+
     record Point(double x, double y) {}
 
     /**
@@ -947,7 +1044,7 @@ public class TangleEdgeRenderer {
      */
     private boolean renderEdge(DependencyEdge edge) {
         Node source = elementRegistry.get(edge.from());
-        Node target = elementRegistry.get(edge.to());
+        Node target = elementRegistry.get(targetClassOf(edge.to()));
         if (source == null || target == null) return false;
         if (!isVisible(source) || !isVisible(target)) return false;
 
@@ -1020,7 +1117,7 @@ public class TangleEdgeRenderer {
             onEdgeClicked.accept(null, null);
             return;
         }
-        String label = simple(edge.from()) + " \u2192 " + simple(edge.to());
+        String label = simple(edge.from()) + " \u2192 " + simple(targetClassOf(edge.to()));
         if (isAppliedCutEdge(edge)) {
             statusCallback.accept("Refactoring Preview: " + label);
         } else {
@@ -1065,11 +1162,14 @@ public class TangleEdgeRenderer {
     }
 
     private boolean isCycleBreakEdge(DependencyEdge edge) {
-        return cycleBreakEdges.contains(edge);
+        // cycleBreakEdges are always class-level; normalise method-level to() before lookup.
+        return cycleBreakEdges.contains(new DependencyEdge(edge.from(), targetClassOf(edge.to())));
     }
 
     private boolean isAppliedCutEdge(DependencyEdge edge) {
-        return appliedCutEdges.contains(edge);
+        // Accept an exact method-level cut OR a coarser class-level cut of the same pair.
+        return appliedCutEdges.contains(edge)
+                || appliedCutEdges.contains(new DependencyEdge(edge.from(), targetClassOf(edge.to())));
     }
 
     private boolean isActiveTangleEdge(DependencyEdge edge) {
@@ -1079,10 +1179,11 @@ public class TangleEdgeRenderer {
     private void recomputeActiveTangleEdges() {
         Map<String, Set<String>> graph = new HashMap<>();
         for (DependencyEdge edge : edges) {
+            String toClass = targetClassOf(edge.to());
             graph.computeIfAbsent(edge.from(), k -> new java.util.HashSet<>());
-            graph.computeIfAbsent(edge.to(), k -> new java.util.HashSet<>());
-            if (!appliedCutEdges.contains(edge)) {
-                graph.get(edge.from()).add(edge.to());
+            graph.computeIfAbsent(toClass, k -> new java.util.HashSet<>());
+            if (!isAppliedCutEdge(edge)) {
+                graph.get(edge.from()).add(toClass);
             }
         }
 
@@ -1091,9 +1192,10 @@ public class TangleEdgeRenderer {
                 .toList();
 
         activeTangleEdges = edges.stream()
-                .filter(edge -> !appliedCutEdges.contains(edge))
+                .filter(edge -> !isAppliedCutEdge(edge))
                 .filter(edge -> activeComponents.stream()
-                        .anyMatch(component -> component.contains(edge.from()) && component.contains(edge.to())))
+                        .anyMatch(component -> component.contains(edge.from())
+                                && component.contains(targetClassOf(edge.to()))))
                 .collect(java.util.stream.Collectors.toUnmodifiableSet());
     }
 
@@ -1151,7 +1253,7 @@ public class TangleEdgeRenderer {
 
     private boolean hasVisibleEndpointWaitingForLayout(DependencyEdge edge) {
         Node source = elementRegistry.get(edge.from());
-        Node target = elementRegistry.get(edge.to());
+        Node target = elementRegistry.get(targetClassOf(edge.to()));
         if (source == null || target == null) {
             return false;
         }

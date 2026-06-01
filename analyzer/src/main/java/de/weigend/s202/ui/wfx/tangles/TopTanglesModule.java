@@ -472,6 +472,9 @@ public class TopTanglesModule implements Module {
     static List<TopTanglesView.HotspotEntryRow> computeHotspots(List<TopTanglesView.Tangle> tangles, int topN) {
         // Collect distinct (from→to) edge pairs per called method across all tangles.
         // Two callers of the same method in the same tangle each count as a separate edge.
+        // The map value encodes method-level to: "targetClass|methodName" so that a
+        // Cut All for this hotspot only removes that specific method's contribution to
+        // the dependency, leaving other method calls on the same class pair intact.
         Map<String, Set<Map.Entry<String, String>>> methodToEdges = new HashMap<>();
         for (TopTanglesView.Tangle tangle : tangles) {
             for (TopTanglesView.TangleEdge edge : tangle.edges()) {
@@ -479,8 +482,13 @@ public class TopTanglesModule implements Module {
                 for (TopTanglesView.KindEntry entry : edge.entries()) {
                     if (entry.kind() == EdgeKind.CALLS && entry.detail() != null) {
                         String label = simple(edge.to()) + "." + methodLabel(entry.detail());
+                        // Extract simple method name (strip descriptor) for the cut key.
+                        String detail = entry.detail();
+                        int paren = detail.indexOf('(');
+                        String methodName = paren > 0 ? detail.substring(0, paren) : detail;
+                        String methodLevelTo = edge.to() + "|" + methodName;
                         methodToEdges.computeIfAbsent(label, k -> new HashSet<>())
-                                .add(Map.entry(edge.from(), edge.to()));
+                                .add(Map.entry(edge.from(), methodLevelTo));
                     }
                 }
             }

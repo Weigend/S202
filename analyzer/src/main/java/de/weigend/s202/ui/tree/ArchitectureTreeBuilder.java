@@ -22,6 +22,7 @@ import de.weigend.s202.ui.layout.horizontal.HorizontalLayoutOrdering;
 import de.weigend.s202.ui.model.ArchitectureNode;
 import de.weigend.s202.ui.model.ArchitectureNode.NodeType;
 import javafx.geometry.Insets;
+import javafx.geometry.Pos;
 import javafx.application.Platform;
 import javafx.scene.Node;
 import javafx.scene.layout.HBox;
@@ -53,7 +54,9 @@ import java.util.function.Consumer;
  */
 public class ArchitectureTreeBuilder {
 
-    private static final double TOP_LEVEL_HORIZONTAL_PADDING = 10.0;
+    // 60px gives enough room for up to 6 bypass lanes (24 base + 5×6px) before
+    // they leave the visible content area.
+    private static final double TOP_LEVEL_HORIZONTAL_PADDING = 60.0;
     // Seven 6px-spaced tangle lanes need 36px span plus arrow-head clearance.
     private static final double TOP_LEVEL_VERTICAL_PADDING = 52.0;
     private static final int ASYNC_BATCH_SIZE = 120;
@@ -135,6 +138,7 @@ public class ArchitectureTreeBuilder {
             HBox levelRow = topLevelRows.computeIfAbsent(level, l -> {
                 HBox hbox = new HBox(8);
                 hbox.setMaxWidth(Double.MAX_VALUE);
+                hbox.setAlignment(Pos.CENTER);
                 VBox.setVgrow(hbox, Priority.ALWAYS);
                 ArchitectureDragController.markAsRow(hbox);
                 topLevelContainer.getChildren().add(hbox);
@@ -238,6 +242,7 @@ public class ArchitectureTreeBuilder {
         HBox levelRow = topLevelRows.computeIfAbsent(level, l -> {
             HBox hbox = new HBox(8);
             hbox.setMaxWidth(Double.MAX_VALUE);
+            hbox.setAlignment(Pos.CENTER);
             VBox.setVgrow(hbox, Priority.ALWAYS);
             topLevelContainer.getChildren().add(hbox);
             return hbox;

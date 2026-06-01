@@ -61,7 +61,7 @@ public class S202MenuBar {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(S202MenuBar.class);
 
-    private static final String STRUCTURE202_REPO_URL = "https://github.com/jweigend/Structure202";
+    private static final String STRUCTURE202_REPO_URL = "https://github.com/weigend/S202";
     private static final String WFX_REPO_URL = "https://github.com/jweigend/wfx";
 
     private final ApplicationWindow applicationWindow;

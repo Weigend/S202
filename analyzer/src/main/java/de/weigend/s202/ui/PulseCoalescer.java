@@ -26,18 +26,18 @@ import java.util.function.Consumer;
  * The scheduler is injected so the policy is testable without a JavaFX
  * runtime; in production the architecture view passes {@code Platform::runLater}.
  */
-final class PulseCoalescer {
+public final class PulseCoalescer {
 
     private final Consumer<Runnable> scheduler;
     private final Runnable flush;
     private boolean pending;
 
-    PulseCoalescer(Consumer<Runnable> scheduler, Runnable flush) {
+    public PulseCoalescer(Consumer<Runnable> scheduler, Runnable flush) {
         this.scheduler = scheduler;
         this.flush = flush;
     }
 
-    void markDirty() {
+    public void markDirty() {
         if (pending) {
             return;
         }
