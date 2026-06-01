@@ -125,7 +125,6 @@ public class S202Module implements Module {
     private Spinner<Integer> depthSpinner;
     private Button refreshButton;
     private CheckBox showDependenciesCheckbox;
-    private CheckBox circuitToggle;
     private CheckBox showSccCheckbox;
     private CheckBox showWhatIfViolationsCheckbox;
     private CheckBox debugLinesCheckbox;
@@ -551,14 +550,6 @@ public class S202Module implements Module {
             }
         });
 
-        circuitToggle = new CheckBox("Leiterbahn");
-        circuitToggle.setTooltip(new Tooltip("Dependency style: classic vs. circuit-board routing"));
-        circuitToggle.selectedProperty().addListener((obs, was, isNow) -> {
-            if (boundView != null) {
-                boundView.setCircuitMode(isNow);
-            }
-        });
-
         showSccCheckbox = new CheckBox("Show SCCs");
         showSccCheckbox.setTooltip(new Tooltip("Toggle cycle highlighting (Strongly Connected Components)"));
         showSccCheckbox.selectedProperty().addListener((obs, was, isNow) -> {
@@ -625,7 +616,7 @@ public class S202Module implements Module {
         // Everything except the Open JAR button is view-dependent.
         viewDependentToolbarNodes.addAll(List.of(
                 depthLabel, depthSpinner, refreshButton,
-                showDependenciesCheckbox, circuitToggle, showSccCheckbox, showWhatIfViolationsCheckbox,
+                showDependenciesCheckbox, showSccCheckbox, showWhatIfViolationsCheckbox,
                 debugLinesCheckbox, showIconsCheckbox, showArchLevelCheckbox,
                 zoomOutButton, zoomLabel, zoomInButton, zoomResetButton));
 
@@ -635,7 +626,7 @@ public class S202Module implements Module {
                 new Separator(),
                 undoButton, redoButton,
                 new Separator(),
-                showDependenciesCheckbox, circuitToggle, showSccCheckbox,
+                showDependenciesCheckbox, showSccCheckbox,
                 showWhatIfViolationsCheckbox, debugLinesCheckbox, showIconsCheckbox, showArchLevelCheckbox,
                 new Separator(),
                 zoomGroup, zoomResetButton);
@@ -686,7 +677,6 @@ public class S202Module implements Module {
 
         depthSpinner.getValueFactory().setValue(view.getPackageDepth());
         showDependenciesCheckbox.setSelected(view.isShowDependencies());
-        circuitToggle.setSelected(view.isCircuitMode());
         showSccCheckbox.setSelected(view.isShowScc());
         showWhatIfViolationsCheckbox.setSelected(view.isShowWhatIfViolations());
         debugLinesCheckbox.setSelected(view.isShowTangleDebugLines());
