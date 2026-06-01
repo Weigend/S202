@@ -24,7 +24,6 @@ import de.weigend.s202.domain.architecture.HierarchicalLayeredArchitectureBuilde
 import de.weigend.s202.domain.architecture.WhatIfArchitecture;
 import de.weigend.s202.reader.DependencyModel;
 import de.weigend.s202.ui.model.ArchitectureNode;
-import de.weigend.s202.ui.rendering.CircuitBoardRenderer;
 import de.weigend.s202.ui.rendering.DependencyRenderer;
 import de.weigend.s202.ui.rendering.DependencyRendererStrategy;
 import de.weigend.s202.ui.rendering.SCCRenderer;
@@ -84,7 +83,6 @@ public class ArchitectureView extends BorderPane {
     // Renderers and builders
     private DependencyRendererStrategy dependencyRenderer;
     private DependencyRenderer classicRenderer;
-    private CircuitBoardRenderer circuitRenderer;
     private SCCRenderer sccRenderer;
     private WhatIfUpwardEdgeRenderer whatIfRenderer;
     private TangleEdgeRenderer tangleRenderer;
@@ -138,7 +136,6 @@ public class ArchitectureView extends BorderPane {
     // Externally bindable settings.
     private final IntegerProperty packageDepth = new SimpleIntegerProperty(3);
     private final BooleanProperty showDependencies = new SimpleBooleanProperty(false);
-    private final BooleanProperty circuitMode = new SimpleBooleanProperty(false);
     private final BooleanProperty showScc = new SimpleBooleanProperty(false);
     private final BooleanProperty showWhatIfViolations = new SimpleBooleanProperty(false);
     private final BooleanProperty showTangleDebugLines = new SimpleBooleanProperty(false);
@@ -232,7 +229,6 @@ public class ArchitectureView extends BorderPane {
         showDependencies.addListener((obs, was, isNow) -> applyShowDependencies(isNow));
         showScc.addListener((obs, was, isNow) -> applyShowScc(isNow));
         showWhatIfViolations.addListener((obs, was, isNow) -> applyShowWhatIfViolations(isNow));
-        circuitMode.addListener((obs, was, isNow) -> applyCircuitMode());
         showTangleDebugLines.addListener((obs, was, isNow) -> applyShowTangleDebugLines(isNow));
     }
 
@@ -274,17 +270,6 @@ public class ArchitectureView extends BorderPane {
             arrowsCoalescer.markDirty();
         } else if (whatIfRenderer != null) {
             whatIfRenderer.clear();
-        }
-    }
-
-    private void applyCircuitMode() {
-        if (classicRenderer == null || circuitRenderer == null) {
-            return;
-        }
-        dependencyRenderer = circuitMode.get() ? circuitRenderer : classicRenderer;
-        if (showDependencies.get() && currentRootNode != null) {
-            dependencyPane.setVisible(true);
-            arrowsCoalescer.markDirty();
         }
     }
 
@@ -419,9 +404,7 @@ public class ArchitectureView extends BorderPane {
 
         classicRenderer = new DependencyRenderer(dependencyPane, elementRegistry, zoomController, this::setStatus);
         classicRenderer.setCoordinateContext(zoomableContent, overlayPane, scrollPane);
-        circuitRenderer = new CircuitBoardRenderer(dependencyPane, elementRegistry, this::setStatus);
-        circuitRenderer.setCoordinateContext(zoomableContent, overlayPane, scrollPane);
-        dependencyRenderer = circuitMode.get() ? circuitRenderer : classicRenderer;
+        dependencyRenderer = classicRenderer;
 
         sccRenderer = new SCCRenderer(sccPane, elementRegistry, this::setStatus);
         sccRenderer.setCoordinateContext(zoomableContent, overlayPane, scrollPane);
@@ -882,12 +865,24 @@ public class ArchitectureView extends BorderPane {
         if (currentRootNode == null) {
             return;
         }
+        // finishArchitectureRootBuild resets overlay toggles to false so that the
+        // toolbar syncs correctly when a new JAR is loaded.  For a depth-change
+        // refresh we want to keep whatever the user had enabled, so save and
+        // restore them around the rebuild.
+        boolean depsSave = showDependencies.get();
+        boolean sccSave  = showScc.get();
+        boolean wifSave  = showWhatIfViolations.get();
+
         WhatIfArchitecture wif = whatIfArchitecture.get();
         if (wif != null) {
             wif.reset();
         }
         movedFqns.clear();
         setArchitectureRoot(currentRootNode);
+
+        showDependencies.set(depsSave);
+        showScc.set(sccSave);
+        showWhatIfViolations.set(wifSave);
     }
 
     public void undoWhatIf() {
@@ -1028,18 +1023,6 @@ public class ArchitectureView extends BorderPane {
 
     public void setShowDependencies(boolean show) {
         showDependencies.set(show);
-    }
-
-    public BooleanProperty circuitModeProperty() {
-        return circuitMode;
-    }
-
-    public boolean isCircuitMode() {
-        return circuitMode.get();
-    }
-
-    public void setCircuitMode(boolean circuit) {
-        circuitMode.set(circuit);
     }
 
     public BooleanProperty showSccProperty() {
