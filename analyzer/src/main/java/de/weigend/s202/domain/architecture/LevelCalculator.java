@@ -262,6 +262,15 @@ public class LevelCalculator {
             graph.get(entry.getKey()).addAll(entry.getValue().keySet());
         }
 
+        // Collect tangles from the original graph (before any edges are removed),
+        // so consumers (e.g. HierarchicalLayeredArchitectureBuilder) can read
+        // SCC membership without re-running Tarjan.
+        List<Set<String>> tangles = new TarjanSCCFinder(graph).findSCCs().stream()
+                .filter(StronglyConnectedComponent::isTangle)
+                .map(StronglyConnectedComponent::getMembers)
+                .collect(Collectors.toList());
+        model.setPackageTangles(tangles);
+
         // Two-step deterministic cycle breaking — no heuristics, no thresholds:
         //
         // Step 1 (asymmetric): find the min-weight edge in the SCC and cut it, then

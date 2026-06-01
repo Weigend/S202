@@ -17,8 +17,6 @@ package de.weigend.s202.domain.architecture;
 
 import de.weigend.s202.domain.DomainModel;
 import de.weigend.s202.domain.DomainModel.CalculatedElementInfo;
-import de.weigend.s202.graph.StronglyConnectedComponent;
-import de.weigend.s202.graph.TarjanSCCFinder;
 
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -211,46 +209,10 @@ public final class HierarchicalLayeredArchitectureBuilder {
         return violations;
     }
 
-    /**
-     * Group-level cycle detection. Runs Tarjan on the package adjacency
-     * derived from raw class-to-class dependencies and emits one
-     * {@link Tangle} per SCC of size {@literal >} 1. This is
-     * intentionally <em>different</em> from the
-     * {@link DomainModel#isPackageBackEdge} list: that one reports the
-     * back-edges the {@code LevelCalculator} picked to break each SCC,
-     * one per breakage, not one per cycle. The UI displays cycles, so the
-     * model speaks the same vocabulary.
-     */
     private List<Tangle> detectTangles(DomainModel domain) {
-        Map<String, Set<String>> pkgAdjacency = new HashMap<>();
-        for (CalculatedElementInfo cls : domain.getAllClasses().values()) {
-            String srcPkg = parentOf(cls.fullName);
-            if (srcPkg.isEmpty()) {
-                continue;
-            }
-            pkgAdjacency.computeIfAbsent(srcPkg, k -> new HashSet<>());
-            for (String dep : cls.dependencies) {
-                CalculatedElementInfo tgt = domain.getClass(dep);
-                if (tgt == null) {
-                    continue;
-                }
-                String tgtPkg = parentOf(tgt.fullName);
-                if (tgtPkg.isEmpty() || srcPkg.equals(tgtPkg)) {
-                    continue;
-                }
-                pkgAdjacency.computeIfAbsent(srcPkg, k -> new HashSet<>()).add(tgtPkg);
-                pkgAdjacency.computeIfAbsent(tgtPkg, k -> new HashSet<>());
-            }
-        }
-        TarjanSCCFinder finder = new TarjanSCCFinder(pkgAdjacency);
-        List<StronglyConnectedComponent> sccs = finder.findSCCs();
-        List<Tangle> tangles = new ArrayList<>();
-        for (StronglyConnectedComponent scc : sccs) {
-            if (scc.isTangle()) {
-                tangles.add(new Tangle(scc.getMembers()));
-            }
-        }
-        return tangles;
+        return domain.getPackageTangles().stream()
+                .map(Tangle::new)
+                .toList();
     }
 
     /**

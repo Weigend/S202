@@ -50,6 +50,13 @@ public class DomainModel {
     private Set<String> classBackEdgeKeys = new LinkedHashSet<>();
 
     /**
+     * Package-level SCCs of size ≥ 2 found on the original (pre-cycle-breaking)
+     * package graph. Populated by LevelCalculator so consumers do not need to
+     * re-run Tarjan.
+     */
+    private List<Set<String>> packageTangles = new ArrayList<>();
+
+    /**
      * Information about a calculated element (class or package) with its level.
      */
     public static class CalculatedElementInfo {
@@ -138,6 +145,14 @@ public class DomainModel {
             }
         }
         return Collections.unmodifiableSet(result);
+    }
+
+    public void setPackageTangles(List<Set<String>> tangles) {
+        packageTangles = new ArrayList<>(tangles);
+    }
+
+    public List<Set<String>> getPackageTangles() {
+        return Collections.unmodifiableList(packageTangles);
     }
 
     /** Returns the full weighted inter-package graph (unmodifiable). */

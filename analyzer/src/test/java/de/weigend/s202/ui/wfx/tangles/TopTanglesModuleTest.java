@@ -117,8 +117,8 @@ class TopTanglesModuleTest {
         assertEquals("B.work()", hotspots.get(0).label());
         assertEquals(2, hotspots.get(0).edgeCount());
         assertEquals(List.of(
-                new TopTanglesView.HotspotCallerRow("a.A", "a.B"),
-                new TopTanglesView.HotspotCallerRow("a.C", "a.B")),
+                new TopTanglesView.HotspotCallerRow("a.A", "a.B|work"),
+                new TopTanglesView.HotspotCallerRow("a.C", "a.B|work")),
                 hotspots.get(0).callerRows());
     }
 }
