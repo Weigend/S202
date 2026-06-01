@@ -155,6 +155,7 @@ class HierarchicalLayeredArchitectureBuilderTest {
                 "a", Map.of("b", 1),
                 "b", Map.of("a", 1)));
         domain.setPackageBackEdges(Set.of("b\0a"));
+        domain.setPackageTangles(List.of(Set.of("a", "b")));
 
         HierarchicalLayeredArchitecture arch =
                 (HierarchicalLayeredArchitecture) new HierarchicalLayeredArchitectureBuilder().build(domain);

@@ -151,7 +151,7 @@ public class ArchitectureTreeBuilderTest {
                 "Top gap should fit seven tangle lanes");
         assertEquals(52.0, topLevel.getPadding().getBottom(), 0.0001,
                 "Bottom gap should fit seven tangle lanes");
-        assertEquals(10.0, topLevel.getPadding().getLeft(), 0.0001);
-        assertEquals(10.0, topLevel.getPadding().getRight(), 0.0001);
+        assertEquals(60.0, topLevel.getPadding().getLeft(), 0.0001);
+        assertEquals(60.0, topLevel.getPadding().getRight(), 0.0001);
     }
 }
