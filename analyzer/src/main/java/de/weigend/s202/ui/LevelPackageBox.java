@@ -227,6 +227,10 @@ public class LevelPackageBox extends VBox implements GraphSelection.Selectable {
         this.getChildren().add(0, header);
     }
 
+    public boolean isExpanded() {
+        return isExpanded;
+    }
+
     public void setExpanded(boolean expanded) {
         if (this.isExpanded != expanded) {
             toggleExpanded();
