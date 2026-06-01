@@ -865,12 +865,24 @@ public class ArchitectureView extends BorderPane {
         if (currentRootNode == null) {
             return;
         }
+        // finishArchitectureRootBuild resets overlay toggles to false so that the
+        // toolbar syncs correctly when a new JAR is loaded.  For a depth-change
+        // refresh we want to keep whatever the user had enabled, so save and
+        // restore them around the rebuild.
+        boolean depsSave = showDependencies.get();
+        boolean sccSave  = showScc.get();
+        boolean wifSave  = showWhatIfViolations.get();
+
         WhatIfArchitecture wif = whatIfArchitecture.get();
         if (wif != null) {
             wif.reset();
         }
         movedFqns.clear();
         setArchitectureRoot(currentRootNode);
+
+        showDependencies.set(depsSave);
+        showScc.set(sccSave);
+        showWhatIfViolations.set(wifSave);
     }
 
     public void undoWhatIf() {
