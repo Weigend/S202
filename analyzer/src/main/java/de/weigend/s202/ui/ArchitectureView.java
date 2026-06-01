@@ -338,18 +338,21 @@ public class ArchitectureView extends BorderPane {
 
         // Selection (class OR package) is owned by GraphSelection. Mirror it
         // onto our selectedFullName property and trigger overlay redraws.
-        GraphSelection.setOnSelectionChange(fqn -> {
-            selectedFullName.set(fqn);
-            if (showDependencies.get()) {
-                dependencyRenderer.drawDependencyArrows(currentRootNode);
-            }
-            if (showScc.get()) {
-                sccRenderer.drawSccLines(currentRootNode);
-            }
-            if (!suppressSelectionSink && fqn != null) {
-                nodeSelectionSink.accept(fqn);
-            }
-        });
+        // Only main (scope-owner) views install the global handler — satellite
+        // views like TangleView must not overwrite it, or the main view loses
+        // its dependency/SCC overlay updates when a selection happens.
+        if (topTanglesScopeOwner) {
+            GraphSelection.setOnSelectionChange(fqn -> {
+                selectedFullName.set(fqn);
+                // Defer arrow redraw via the coalescer so the CSS layout pass
+                // (border-width change on the selected box) finishes first —
+                // direct drawDependencyArrows() here uses stale bounds.
+                arrowsCoalescer.markDirty();
+                if (!suppressSelectionSink && fqn != null) {
+                    nodeSelectionSink.accept(fqn);
+                }
+            });
+        }
 
         // Node selection is now a single-click action. Keep the legacy
         // double-click callback disconnected to avoid duplicate selection

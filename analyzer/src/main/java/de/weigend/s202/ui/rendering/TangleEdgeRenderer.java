@@ -107,8 +107,14 @@ public class TangleEdgeRenderer {
     private static final int INITIAL_SETTLE_REDRAWS = 3;
     private boolean layoutPending;
 
+    // Coalesces rapid layout-bounds changes (e.g. CSS border-width flips on
+    // selection) into a single deferred redraw so edges are drawn after the
+    // layout pass has settled, not synchronously mid-CSS-change.
+    private final de.weigend.s202.ui.PulseCoalescer layoutCoalescer =
+            new de.weigend.s202.ui.PulseCoalescer(javafx.application.Platform::runLater, this::redraw);
+
     private final javafx.beans.value.ChangeListener<Bounds> layoutListener =
-            (obs, was, isNow) -> redraw();
+            (obs, was, isNow) -> layoutCoalescer.markDirty();
 
     private java.util.function.BiConsumer<String, String> onEdgeClicked = (a, b) -> {};
     private java.util.function.BiConsumer<String, String> onEdgeCut = (a, b) -> {};
