@@ -975,7 +975,7 @@ public class S202Module implements Module {
                 publishProgress("Calculating architectural levels...", 0.75);
                 LevelCalculator calculator = new LevelCalculator();
                 DomainModel calculated = calculator.calculate(rawModel);
-                Set<DependencyEdge> cycleBreakEdges = cycleBreakEdgesFromLastLevelCalculation(calculator);
+                Set<DependencyEdge> cycleBreakEdges = calculated.getClassBackEdges();
 
                 publishProgress("Building architecture tree...", 0.85);
                 ArchitectureNode root = architectureNodeBuilder.build(calculated);
@@ -1257,10 +1257,6 @@ public class S202Module implements Module {
                                   LayoutInvariantReport invariants,
                                   Set<DependencyEdge> cycleBreakEdges) {}
 
-    private static Set<DependencyEdge> cycleBreakEdgesFromLastLevelCalculation(LevelCalculator calculator) {
-        return Set.of();
-    }
-
     /**
      * Open the Tangle tab focused on a specific tangle. Each tangle entry gets
      * one tab, reused on later double-clicks of that same entry.
@@ -1290,7 +1286,7 @@ public class S202Module implements Module {
         }
 
         java.util.List<DependencyEdge> edges =
-                collectInternalEdges(filteredRoot, members);
+                collectInternalEdges(filteredRoot, members, sourceView.getRawDependencyModel());
 
         WindowManager wm = Lookup.lookup(WindowManager.class);
         String key = tangleKey == null || tangleKey.isBlank()
@@ -1527,9 +1523,10 @@ public class S202Module implements Module {
      * sorted alphabetically for stable rendering.
      */
     private static java.util.List<DependencyEdge>
-            collectInternalEdges(ArchitectureNode root, java.util.Set<String> members) {
+            collectInternalEdges(ArchitectureNode root, java.util.Set<String> members,
+                                 DependencyModel rawModel) {
         java.util.Set<DependencyEdge> seen = new java.util.LinkedHashSet<>();
-        collectInternalEdgesRec(root, members, seen);
+        collectInternalEdgesRec(root, members, rawModel, seen);
         java.util.List<DependencyEdge> sorted = new ArrayList<>(seen);
         sorted.sort((a, b) -> {
             int c = a.from().compareTo(b.from());
@@ -1540,17 +1537,45 @@ public class S202Module implements Module {
 
     private static void collectInternalEdgesRec(ArchitectureNode node,
                                                 java.util.Set<String> members,
+                                                DependencyModel rawModel,
                                                 java.util.Set<DependencyEdge> out) {
         if (node.getType() == ArchitectureNode.NodeType.CLASS && members.contains(node.getFullName())) {
+            String fromClass = node.getFullName();
             for (String dep : node.getDependencies()) {
-                if (members.contains(dep) && !dep.equals(node.getFullName())) {
-                    out.add(new DependencyEdge(node.getFullName(), dep));
+                if (!members.contains(dep) || dep.equals(fromClass)) continue;
+                // Replace CALLS dependencies with method-level edges so individual
+                // method cuts don't silently remove unrelated calls on the same pair.
+                java.util.Set<DependencyEdge> methodEdges = collectMethodLevelEdges(rawModel, fromClass, dep);
+                if (methodEdges.isEmpty()) {
+                    out.add(new DependencyEdge(fromClass, dep));  // non-CALLS (EXTENDS etc.)
+                } else {
+                    out.addAll(methodEdges);
                 }
             }
         }
         for (ArchitectureNode child : node.getChildren()) {
-            collectInternalEdgesRec(child, members, out);
+            collectInternalEdgesRec(child, members, rawModel, out);
         }
+    }
+
+    private static java.util.Set<DependencyEdge> collectMethodLevelEdges(
+            DependencyModel rawModel, String fromClass, String toClass) {
+        if (rawModel == null) return java.util.Set.of();
+        DependencyModel.ClassInfo info = rawModel.getClass(fromClass);
+        if (info == null) return java.util.Set.of();
+        java.util.Set<DependencyEdge> result = new java.util.LinkedHashSet<>();
+        for (DependencyModel.MethodInfo m : info.methods.values()) {
+            for (String call : m.methodCalls.keySet()) {
+                int dot = call.lastIndexOf('.');
+                if (dot <= 0) continue;
+                String owner = call.substring(0, dot);
+                String methodName = call.substring(dot + 1);
+                if (!toClass.equals(owner)) continue;
+                if ("<init>".equals(methodName) || "<clinit>".equals(methodName)) continue;
+                result.add(new DependencyEdge(fromClass, toClass + "|" + methodName));
+            }
+        }
+        return result;
     }
 
     /** Pick a non-tangle architecture tab to use as the source for tangle filtering. */
