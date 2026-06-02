@@ -17,6 +17,7 @@ package de.weigend.s202.ui.rendering;
 
 import de.weigend.s202.ui.LevelClassBox;
 import de.weigend.s202.ui.LevelPackageBox;
+import de.weigend.s202.ui.component.ComponentBox;
 import de.weigend.s202.ui.model.ArchitectureNode;
 import de.weigend.s202.ui.zoom.ZoomController;
 import javafx.geometry.Bounds;
@@ -186,19 +187,21 @@ public class DependencyRenderer implements DependencyRendererStrategy {
                         continue;
                     }
                     boolean isIncoming = isTargetSelected && !isSourceSelected;
-                    String targetName = (targetElement instanceof LevelPackageBox lpb)
-                            ? lpb.getFullName() : depName;
+                    String targetName = fqnOf(targetElement);
+                    if (targetName.isEmpty()) {
+                        targetName = depName;
+                    }
                     createDependencyLine(sourceElement, targetElement,
                             child.getFullName(), targetName, isIncoming);
                 }
 
             } else if (child.getType() == ArchitectureNode.NodeType.PACKAGE) {
                 Node uiElement = elementRegistry.get(child.getFullName());
-                if (uiElement instanceof LevelPackageBox packageBox
-                        && isNodeActuallyVisible(packageBox)
+                if ((uiElement instanceof LevelPackageBox || uiElement instanceof ComponentBox)
+                        && isNodeActuallyVisible(uiElement)
                         && isPackageCollapsed(child)) {
                     // Closed source: draw aggregated or class-level arrows from the package
-                    drawCollapsedPackageArrows(child, packageBox, selectedClass);
+                    drawCollapsedPackageArrows(child, uiElement, selectedClass);
                 } else {
                     // Open source: recurse so class-level arrows are drawn
                     drawDependencyArrowsRecursive(child);
@@ -211,8 +214,9 @@ public class DependencyRenderer implements DependencyRendererStrategy {
      * Finds the visible UI node to use as the arrow target for {@code targetFqn}.
      * <ul>
      *   <li>If the element itself is visible → return it directly.</li>
-     *   <li>If it is hidden (inside a collapsed package) → walk up the JavaFX
-     *       parent chain and return the nearest visible {@link LevelPackageBox}.</li>
+     *   <li>If it is hidden (inside a collapsed package/component) → walk up
+     *       the JavaFX parent chain and return the nearest visible
+     *       {@link LevelPackageBox} or {@link ComponentBox}.</li>
      * </ul>
      */
     private Node findVisibleTarget(String targetFqn) {
@@ -220,11 +224,14 @@ public class DependencyRenderer implements DependencyRendererStrategy {
         if (element == null) return null;
         if (isNodeActuallyVisible(element)) return element;
 
-        // Target is inside a collapsed package — roll up to the visible package box.
+        // Target is inside a collapsed package/component — roll up to the nearest visible box.
         Parent parent = element.getParent();
         while (parent != null) {
             if (parent instanceof LevelPackageBox lpb && isNodeActuallyVisible(lpb)) {
                 return lpb;
+            }
+            if (parent instanceof ComponentBox component && isNodeActuallyVisible(component)) {
+                return component;
             }
             parent = parent.getParent();
         }
@@ -284,7 +291,9 @@ public class DependencyRenderer implements DependencyRendererStrategy {
 
             boolean isIncoming = isTargetSelected && !isSourceSelected;
             // Always show count badge; for class-level targets only when > 1.
-            int badge = (targetElement instanceof LevelPackageBox || count > 1) ? count : 0;
+            int badge = (targetElement instanceof LevelPackageBox
+                    || targetElement instanceof ComponentBox
+                    || count > 1) ? count : 0;
             createCurvedDependencyLine(sourceElement, targetElement, srcFqn, targetFqn, isIncoming, badge);
         }
     }
@@ -310,9 +319,10 @@ public class DependencyRenderer implements DependencyRendererStrategy {
         }
     }
 
-    /** Returns the FQN of a {@link LevelPackageBox} or {@link LevelClassBox}. */
+    /** Returns the FQN of a visible architecture box. */
     private static String fqnOf(Node node) {
         if (node instanceof LevelPackageBox lpb) return lpb.getFullName();
+        if (node instanceof ComponentBox component) return component.getFullName();
         if (node instanceof LevelClassBox  lcb) return lcb.getFullName();
         return "";
     }

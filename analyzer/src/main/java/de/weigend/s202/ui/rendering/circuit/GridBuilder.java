@@ -17,6 +17,7 @@ package de.weigend.s202.ui.rendering.circuit;
 
 import de.weigend.s202.ui.LevelClassBox;
 import de.weigend.s202.ui.LevelPackageBox;
+import de.weigend.s202.ui.component.ComponentBox;
 import javafx.geometry.Bounds;
 import javafx.scene.Node;
 import javafx.scene.Parent;
@@ -326,6 +327,18 @@ public final class GridBuilder {
                 expandedPackages.add(pkg);
             } else {
                 collapsedPackages.add(pkg);
+            }
+            return;
+        }
+        if (node instanceof ComponentBox component) {
+            int beforeClasses = classBoxes.size();
+            if (node instanceof Parent p) {
+                for (Node child : p.getChildrenUnmodifiable()) {
+                    collect(child, classBoxes, collapsedPackages, expandedPackages, classChains, stack);
+                }
+            }
+            if (classBoxes.size() == beforeClasses) {
+                collapsedPackages.add(component);
             }
             return;
         }

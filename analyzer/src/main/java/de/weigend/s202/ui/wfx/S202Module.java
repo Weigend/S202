@@ -29,6 +29,7 @@ import de.weigend.s202.reader.GradleProjectScanner;
 import de.weigend.s202.reader.InputAnalyzer;
 import de.weigend.s202.reader.MavenProjectScanner;
 import de.weigend.s202.ui.ArchitectureView;
+import de.weigend.s202.ui.ArchitectureViewStyle;
 import de.weigend.s202.ui.layout.horizontal.HorizontalRowLayoutOptimizer;
 import de.weigend.s202.ui.model.ArchitectureNode;
 import de.weigend.s202.ui.model.ArchitectureNodeBuilder;
@@ -302,6 +303,7 @@ public class S202Module implements Module {
         bus.subscribe(MenuRequestEvent.CloseProject.class, ev -> { closeProject(); return true; });
         bus.subscribe(MenuRequestEvent.Exit.class, ev -> { Platform.exit(); return true; });
         bus.subscribe(MenuRequestEvent.NewView.class, ev -> { newArchitectureWindow(); return true; });
+        bus.subscribe(MenuRequestEvent.OpenComponentView.class, ev -> { openComponentView(); return true; });
         bus.subscribe(MenuRequestEvent.CloseFocusedView.class, ev -> { closeFocusedView(); return true; });
         bus.subscribe(MenuRequestEvent.CloseAllViews.class, ev -> { closeAllViews(); return true; });
         bus.subscribe(MenuRequestEvent.RestoreDefaultLayout.class, ev -> {
@@ -346,6 +348,43 @@ public class S202Module implements Module {
     private void newArchitectureWindow() {
         ArchitectureWfxView wrapper = createArchitectureView();
         registerArchitectureView(wrapper);
+    }
+
+    private void openComponentView() {
+        ArchitectureWfxView sourceWrapper = focusedSourceArchitectureView();
+        if (sourceWrapper == null) {
+            publishProgress("No architecture view available for component projection", 1);
+            return;
+        }
+
+        ArchitectureView sourceView = sourceWrapper.getArchitectureView();
+        ArchitectureNode sourceRoot = sourceView.getArchitectureRoot();
+        if (sourceRoot == null) {
+            publishProgress("No architecture loaded for component projection", 1);
+            return;
+        }
+
+        WindowManager wm = Lookup.lookup(WindowManager.class);
+        ArchitectureWfxView wrapper = createArchitectureView("Component View");
+        ArchitectureView componentView = wrapper.getArchitectureView();
+        componentView.setViewStyle(ArchitectureViewStyle.COMPONENT);
+        componentView.setDomainModel(sourceView.getDomainModel());
+        componentView.setRawDependencyModel(sourceView.getRawDependencyModel());
+        componentView.setCycleBreakEdges(sourceView.getCycleBreakEdges());
+        componentView.setAppliedTangleCutEdges(refactoringPreviewCuts);
+        viewSources.put(componentView, viewSources.get(sourceView));
+        viewInvariantReports.put(componentView, viewInvariantReports.get(sourceView));
+
+        registerArchitectureView(wrapper);
+        wm.showView(wrapper);
+
+        componentView.setArchitectureRootAsync(
+                sourceRoot,
+                progress -> publishJavaFxBuildProgress("Building JavaFX component view", progress),
+                () -> {
+                    componentView.setQualityMetrics(sourceView.getQualityMetrics());
+                    publishProgress("Opened component view", 1);
+                });
     }
 
     /**

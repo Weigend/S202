@@ -148,6 +148,10 @@ public class S202MenuBar {
                 "windows.new", "New", e -> publish(new MenuRequestEvent.NewView(this)));
         newItem.setAccelerator(new KeyCodeCombination(KeyCode.N, KeyCombination.SHORTCUT_DOWN));
 
+        MenuItem componentViewItem = MenuUtil.createMenuItem(
+                "windows.componentView", "Component View",
+                e -> publish(new MenuRequestEvent.OpenComponentView(this)));
+
         MenuItem closeItem = MenuUtil.createMenuItem(
                 "windows.close", "Close", e -> publish(new MenuRequestEvent.CloseFocusedView(this)));
         closeItem.setAccelerator(new KeyCodeCombination(KeyCode.W, KeyCombination.SHORTCUT_DOWN));
@@ -162,7 +166,8 @@ public class S202MenuBar {
                 e -> publish(new MenuRequestEvent.RestoreDefaultLayout(this)));
 
         Menu windowsMenu = MenuUtil.createMenu("windows", "Windows");
-        windowsMenu.getItems().addAll(newItem, closeItem, closeAllItem,
+        windowsMenu.getItems().addAll(newItem, componentViewItem,
+                new SeparatorMenuItem(), closeItem, closeAllItem,
                 new SeparatorMenuItem(), defaultLayoutItem);
 
         applicationWindow.getMenu().add(windowsMenu);

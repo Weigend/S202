@@ -18,6 +18,7 @@ package de.weigend.s202.ui.rendering;
 import de.weigend.s202.domain.architecture.Architecture;
 import de.weigend.s202.domain.architecture.EndpointPair;
 import de.weigend.s202.ui.LevelClassBox;
+import de.weigend.s202.ui.component.ComponentBox;
 import de.weigend.s202.ui.whatif.ClassEdge;
 import javafx.geometry.Bounds;
 import javafx.scene.Node;
@@ -150,9 +151,9 @@ public final class WhatIfUpwardEdgeRenderer {
 
     /**
      * Class FQN → FQN of the closest currently-visible
-     * {@link de.weigend.s202.ui.LevelPackageBox} (or the class itself if
-     * visible). Returns {@code null} when the class isn't reachable
-     * through a visible ancestor — the architecture drops those
+     * {@link de.weigend.s202.ui.LevelPackageBox}, {@link ComponentBox}
+     * (or the class itself if visible). Returns {@code null} when the
+     * class isn't reachable through a visible ancestor — the architecture drops those
      * violations from the aggregation.
      */
     private String visibleEndpointFqn(String fqcn) {
@@ -167,6 +168,9 @@ public final class WhatIfUpwardEdgeRenderer {
         while (n != null) {
             if (n instanceof de.weigend.s202.ui.LevelPackageBox lpb && isActuallyVisible(n)) {
                 return lpb.getFullName();
+            }
+            if (n instanceof ComponentBox component && isActuallyVisible(n)) {
+                return component.getFullName();
             }
             n = n.getParent();
         }
