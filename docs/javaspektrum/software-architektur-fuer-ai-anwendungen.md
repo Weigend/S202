@@ -1,9 +1,10 @@
+![](figures/intro.png)
+
 # Wer räumt nach der KI auf?
 *Software-Architektur als Arbeitsmodell für generierte Java-Systeme*
 
 Johannes Weigend
 
-![S202: 2D-Abhängigkeitsgraph und 3D-Schichtendarstellung einer Java-Anwendung.](figures/image.png)
 
 ## Zusammenfassung
 
@@ -45,6 +46,8 @@ Schon klassische Werkzeuge zeigen diesen Zusammenhang. `jdeps` kann aus einem JA
 *Abbildung 1: Ein azyklischer Ausschnitt aus einem Beispiel-JAR. Die Pfeile zeigen von der nutzenden zur genutzten Klasse; die horizontalen Linien markieren Schichten.*
 
 Eine solche Grafik ist für kleine Beispiele nützlich. In realen Anwendungen wird sie schnell unübersichtlich. Viele Pfeile überlagern sich, Paketgrenzen verschwinden, und bei Zyklen ist unklar, welche Kante für eine Schichtendarstellung gesondert behandelt werden soll. Das ist der Punkt, an dem reine Graphvisualisierung nicht mehr reicht.
+
+![S202 - Eine neue Open Source Loesung fuer Software Architekten](figures/image.png)
 
 ## Das Vorbild: Containment und Levelization
 
