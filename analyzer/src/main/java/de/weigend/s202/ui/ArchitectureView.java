@@ -24,6 +24,7 @@ import de.weigend.s202.domain.architecture.HierarchicalLayeredArchitectureBuilde
 import de.weigend.s202.domain.architecture.WhatIfArchitecture;
 import de.weigend.s202.reader.DependencyModel;
 import de.weigend.s202.ui.model.ArchitectureNode;
+import de.weigend.s202.ui.model.ScopeExtensionModel;
 import de.weigend.s202.ui.rendering.DependencyRenderer;
 import de.weigend.s202.ui.rendering.DependencyRendererStrategy;
 import de.weigend.s202.ui.rendering.SCCRenderer;
@@ -31,6 +32,9 @@ import de.weigend.s202.ui.rendering.TangleEdgeRenderer;
 import de.weigend.s202.ui.rendering.WhatIfUpwardEdgeRenderer;
 import de.weigend.s202.ui.tree.ArchitectureTreeBuilder;
 import de.weigend.s202.ui.zoom.ZoomController;
+import javafx.collections.FXCollections;
+import javafx.collections.ObservableList;
+import javafx.collections.transformation.FilteredList;
 import javafx.beans.property.BooleanProperty;
 import javafx.beans.property.IntegerProperty;
 import javafx.beans.property.ReadOnlyDoubleProperty;
@@ -41,7 +45,17 @@ import javafx.beans.property.ReadOnlyStringWrapper;
 import javafx.beans.property.SimpleBooleanProperty;
 import javafx.beans.property.SimpleIntegerProperty;
 import javafx.geometry.Pos;
+import javafx.scene.control.ButtonBar;
+import javafx.scene.control.ButtonType;
+import javafx.scene.control.ContextMenu;
+import javafx.scene.control.Dialog;
+import javafx.scene.control.DialogPane;
+import javafx.scene.control.ListCell;
+import javafx.scene.control.ListView;
+import javafx.scene.control.MenuItem;
 import javafx.scene.control.ScrollPane;
+import javafx.scene.control.TextField;
+import javafx.scene.input.MouseButton;
 import javafx.scene.layout.BorderPane;
 import javafx.scene.layout.HBox;
 import javafx.scene.layout.Pane;
@@ -53,8 +67,10 @@ import java.util.Collection;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.Set;
 import java.util.function.BiConsumer;
 import java.util.function.Consumer;
@@ -156,6 +172,8 @@ public class ArchitectureView extends BorderPane {
     private final ReadOnlyStringWrapper selectedFullName = new ReadOnlyStringWrapper(null);
     private String preferredTopTanglesScope;
     private boolean topTanglesScopeOwner = true;
+    private boolean skipTransparentTopLevelPackages = true;
+    private ArchitectureNode scopeExtensionSourceRoot;
 
     public ArchitectureView() {
         setupUI();
@@ -304,7 +322,8 @@ public class ArchitectureView extends BorderPane {
 
         treeBuilder = new ArchitectureTreeBuilder(elementRegistry);
         int maxDepth = packageDepth.get();
-        javafx.scene.layout.VBox topLevelContainer = treeBuilder.buildTree(rootNode, maxDepth);
+        javafx.scene.layout.VBox topLevelContainer =
+                treeBuilder.buildTree(rootNode, maxDepth, skipTransparentTopLevelPackages);
         finishArchitectureRootBuild(rootNode, topLevelContainer);
     }
 
@@ -317,6 +336,7 @@ public class ArchitectureView extends BorderPane {
         treeBuilder = new ArchitectureTreeBuilder(elementRegistry);
         int maxDepth = packageDepth.get();
         treeBuilder.buildTreeAsync(rootNode, maxDepth,
+                skipTransparentTopLevelPackages,
                 (processed, total, current) -> {
                     if (progressSink != null) {
                         progressSink.accept(new BuildProgress(processed, total, current));
@@ -378,6 +398,7 @@ public class ArchitectureView extends BorderPane {
 
         StackPane contentWithOverlay = new StackPane();
         contentWithOverlay.getChildren().addAll(topLevelContainer, overlayPane);
+        installScopeExtensionContextMenu(contentWithOverlay);
 
         this.zoomableContent = contentWithOverlay;
 
@@ -447,6 +468,108 @@ public class ArchitectureView extends BorderPane {
         // Notify external observers (e.g. Outline Explorer) last, so the registry
         // is fully populated before listeners run lookups.
         architectureRoot.set(rootNode);
+    }
+
+    private void installScopeExtensionContextMenu(javafx.scene.Node target) {
+        if (scopeExtensionSourceRoot == null) {
+            target.setOnContextMenuRequested(null);
+            return;
+        }
+
+        target.setOnContextMenuRequested(event -> {
+            ContextMenu menu = new ContextMenu();
+            MenuItem addToScope = new MenuItem("Add to Scope...");
+            addToScope.setOnAction(action -> showScopeExtensionDialog());
+            menu.getItems().setAll(addToScope);
+            menu.show(target, event.getScreenX(), event.getScreenY());
+            event.consume();
+        });
+    }
+
+    private void showScopeExtensionDialog() {
+        if (scopeExtensionSourceRoot == null || currentRootNode == null) {
+            return;
+        }
+
+        List<ScopeExtensionModel.Candidate> candidates =
+                ScopeExtensionModel.candidates(scopeExtensionSourceRoot, currentRootNode);
+        if (candidates.isEmpty()) {
+            setStatus("Scope already contains all packages and classes");
+            return;
+        }
+
+        Dialog<ScopeExtensionModel.Candidate> dialog = new Dialog<>();
+        dialog.setTitle("Add to Scope");
+        dialog.setHeaderText("Select a package or class");
+        if (getScene() != null && getScene().getWindow() != null) {
+            dialog.initOwner(getScene().getWindow());
+        }
+
+        ButtonType addButtonType = new ButtonType("Add", ButtonBar.ButtonData.OK_DONE);
+        DialogPane dialogPane = dialog.getDialogPane();
+        dialogPane.getButtonTypes().addAll(addButtonType, ButtonType.CANCEL);
+
+        TextField filterField = new TextField();
+        filterField.setPromptText("Filter packages/classes");
+
+        ObservableList<ScopeExtensionModel.Candidate> items = FXCollections.observableArrayList(candidates);
+        FilteredList<ScopeExtensionModel.Candidate> filteredItems = new FilteredList<>(items, item -> true);
+        filterField.textProperty().addListener((obs, oldValue, newValue) -> {
+            String query = newValue == null ? "" : newValue.trim().toLowerCase(Locale.ROOT);
+            filteredItems.setPredicate(item -> query.isEmpty()
+                    || item.fullName().toLowerCase(Locale.ROOT).contains(query)
+                    || item.kind().toLowerCase(Locale.ROOT).contains(query));
+        });
+
+        ListView<ScopeExtensionModel.Candidate> candidateList = new ListView<>(filteredItems);
+        candidateList.setPrefWidth(620);
+        candidateList.setPrefHeight(420);
+        candidateList.setCellFactory(view -> new ListCell<>() {
+            @Override
+            protected void updateItem(ScopeExtensionModel.Candidate item, boolean empty) {
+                super.updateItem(item, empty);
+                setText(empty || item == null ? null : item.label());
+            }
+        });
+        candidateList.setOnMouseClicked(event -> {
+            if (event.getButton() == MouseButton.PRIMARY
+                    && event.getClickCount() == 2
+                    && candidateList.getSelectionModel().getSelectedItem() != null) {
+                dialog.setResult(candidateList.getSelectionModel().getSelectedItem());
+                dialog.close();
+            }
+        });
+
+        javafx.scene.Node addButton = dialogPane.lookupButton(addButtonType);
+        addButton.disableProperty().bind(candidateList.getSelectionModel().selectedItemProperty().isNull());
+
+        VBox content = new VBox(8, filterField, candidateList);
+        dialogPane.setContent(content);
+        dialog.setResultConverter(button -> button == addButtonType
+                ? candidateList.getSelectionModel().getSelectedItem()
+                : null);
+
+        Optional<ScopeExtensionModel.Candidate> selected = dialog.showAndWait();
+        selected.ifPresent(this::addScopeCandidate);
+    }
+
+    private void addScopeCandidate(ScopeExtensionModel.Candidate candidate) {
+        if (candidate == null || currentRootNode == null || scopeExtensionSourceRoot == null) {
+            return;
+        }
+
+        boolean added = ScopeExtensionModel.addToScope(
+                currentRootNode,
+                scopeExtensionSourceRoot,
+                candidate.fullName());
+        if (!added) {
+            setStatus("Scope already contains " + candidate.fullName());
+            return;
+        }
+
+        setArchitectureRoot(currentRootNode);
+        selectByFullName(candidate.fullName());
+        setStatus("Scope extended: " + candidate.fullName());
     }
 
     /**
@@ -671,6 +794,28 @@ public class ArchitectureView extends BorderPane {
 
     public void setPreferredTopTanglesScope(String scope) {
         preferredTopTanglesScope = scope == null || scope.isBlank() ? null : scope;
+    }
+
+    /**
+     * Regular full-project views hide top-level namespace wrapper packages
+     * such as {@code de -> weigend -> s202}. Scoped views disable that skip so
+     * the package the user opened from the outline remains visible.
+     */
+    public void setSkipTransparentTopLevelPackages(boolean skip) {
+        skipTransparentTopLevelPackages = skip;
+    }
+
+    /**
+     * Enables right-click scope extension for this view. The current root stays
+     * filtered, while {@code sourceRoot} remains the complete candidate source.
+     */
+    public void enableScopeExtensionFrom(ArchitectureNode sourceRoot) {
+        scopeExtensionSourceRoot = Objects.requireNonNull(sourceRoot, "sourceRoot cannot be null");
+        setSkipTransparentTopLevelPackages(false);
+    }
+
+    public ArchitectureNode getScopeExtensionSourceRoot() {
+        return scopeExtensionSourceRoot;
     }
 
     /**

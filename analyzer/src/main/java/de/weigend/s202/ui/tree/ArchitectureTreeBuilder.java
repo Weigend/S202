@@ -90,6 +90,21 @@ public class ArchitectureTreeBuilder {
      * @return VBox containing the complete UI hierarchy
      */
     public VBox buildTree(ArchitectureNode rootNode, int maxDepth) {
+        return buildTree(rootNode, maxDepth, true);
+    }
+
+    /**
+     * Builds the UI tree from an architecture model.
+     *
+     * @param rootNode Root of the architecture tree
+     * @param maxDepth Maximum depth to expand (counted from first real package)
+     * @param skipTransparentTopLevelPackages Whether chains of single-child top-level
+     *        packages should be skipped. Regular architecture views use this to hide
+     *        namespace wrappers; scope views disable it so the selected package remains
+     *        visible as the root of the scoped chart.
+     * @return VBox containing the complete UI hierarchy
+     */
+    public VBox buildTree(ArchitectureNode rootNode, int maxDepth, boolean skipTransparentTopLevelPackages) {
         if (rootNode == null) {
             throw new IllegalArgumentException("rootNode cannot be null");
         }
@@ -114,7 +129,7 @@ public class ArchitectureTreeBuilder {
         // Skip transparent top-level packages (de, weigend, s202, etc.)
         // Follow the chain of single-child packages until we reach the first "real" package
         ArchitectureNode effectiveRoot = rootNode;
-        while (shouldChildrenBeTransparent(effectiveRoot)) {
+        while (skipTransparentTopLevelPackages && shouldChildrenBeTransparent(effectiveRoot)) {
             ArchitectureNode singleChild = effectiveRoot.getChildren().stream()
                     .filter(c -> c.getType() == NodeType.PACKAGE)
                     .findFirst().orElse(null);
@@ -176,6 +191,14 @@ public class ArchitectureTreeBuilder {
                                int maxDepth,
                                ProgressSink progressSink,
                                Consumer<VBox> onComplete) {
+        buildTreeAsync(rootNode, maxDepth, true, progressSink, onComplete);
+    }
+
+    public void buildTreeAsync(ArchitectureNode rootNode,
+                               int maxDepth,
+                               boolean skipTransparentTopLevelPackages,
+                               ProgressSink progressSink,
+                               Consumer<VBox> onComplete) {
         if (rootNode == null) {
             throw new IllegalArgumentException("rootNode cannot be null");
         }
@@ -189,7 +212,7 @@ public class ArchitectureTreeBuilder {
             BuildProgressCounter counter = new BuildProgressCounter(Math.max(1, rootNode.getTotalNodeCount()));
 
             VBox topLevelContainer = createTopLevelContainer();
-            ArchitectureNode effectiveRoot = effectiveRoot(rootNode, topLevelContainer);
+            ArchitectureNode effectiveRoot = effectiveRoot(rootNode, topLevelContainer, skipTransparentTopLevelPackages);
 
             List<ArchitectureNode> sortedChildren = HorizontalLayoutOrdering.childrenInLayoutOrder(effectiveRoot);
 
@@ -382,9 +405,11 @@ public class ArchitectureTreeBuilder {
         return topLevelContainer;
     }
 
-    private ArchitectureNode effectiveRoot(ArchitectureNode rootNode, VBox topLevelContainer) {
+    private ArchitectureNode effectiveRoot(ArchitectureNode rootNode,
+                                           VBox topLevelContainer,
+                                           boolean skipTransparentTopLevelPackages) {
         ArchitectureNode effectiveRoot = rootNode;
-        while (shouldChildrenBeTransparent(effectiveRoot)) {
+        while (skipTransparentTopLevelPackages && shouldChildrenBeTransparent(effectiveRoot)) {
             ArchitectureNode singleChild = effectiveRoot.getChildren().stream()
                     .filter(c -> c.getType() == NodeType.PACKAGE)
                     .findFirst().orElse(null);

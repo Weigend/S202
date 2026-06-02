@@ -32,6 +32,7 @@ import de.weigend.s202.ui.ArchitectureView;
 import de.weigend.s202.ui.layout.horizontal.HorizontalRowLayoutOptimizer;
 import de.weigend.s202.ui.model.ArchitectureNode;
 import de.weigend.s202.ui.model.ArchitectureNodeBuilder;
+import de.weigend.s202.ui.model.ArchitectureNodeCloner;
 import de.weigend.s202.ui.rendering.TangleEdgeRenderer;
 import de.weigend.s202.ui.wfx.events.CutTangleEdgeEvent;
 import de.weigend.s202.ui.wfx.events.CutTangleEdgesEvent;
@@ -374,7 +375,10 @@ public class S202Module implements Module {
             return;
         }
         ArchitectureView finalSourceView = sourceView;
-        ArchitectureNode sourceRoot = sourceView.getArchitectureRoot();
+        ArchitectureNode sourceRoot = sourceView.getScopeExtensionSourceRoot();
+        if (sourceRoot == null) {
+            sourceRoot = sourceView.getArchitectureRoot();
+        }
         if (sourceRoot == null) {
             return;
         }
@@ -388,6 +392,7 @@ public class S202Module implements Module {
         ArchitectureWfxView wrapper = createArchitectureView("Scope " + simple(scope));
         ArchitectureView scopeView = wrapper.getArchitectureView();
         scopeView.setPreferredTopTanglesScope(scope);
+        scopeView.enableScopeExtensionFrom(sourceRoot);
         scopeView.setDomainModel(sourceView.getDomainModel());
         scopeView.setRawDependencyModel(sourceView.getRawDependencyModel());
         scopeView.setCycleBreakEdges(sourceView.getCycleBreakEdges());
@@ -413,8 +418,8 @@ public class S202Module implements Module {
         if (scopeNode == null) {
             return null;
         }
-        ArchitectureNode root = cloneShallow(sourceRoot);
-        root.addChild(cloneTree(scopeNode));
+        ArchitectureNode root = ArchitectureNodeCloner.cloneShallow(sourceRoot);
+        root.addChild(ArchitectureNodeCloner.cloneTree(scopeNode));
         return root;
     }
 
@@ -430,27 +435,6 @@ public class S202Module implements Module {
             }
         }
         return null;
-    }
-
-    private static ArchitectureNode cloneTree(ArchitectureNode source) {
-        ArchitectureNode clone = cloneShallow(source);
-        for (ArchitectureNode child : source.getChildren()) {
-            clone.addChild(cloneTree(child));
-        }
-        return clone;
-    }
-
-    private static ArchitectureNode cloneShallow(ArchitectureNode source) {
-        ArchitectureNode clone = new ArchitectureNode(
-                source.getFullName(),
-                source.getSimpleName(),
-                source.getType(),
-                source.isAutoExpanded(),
-                source.getLevel(),
-                source.isInterfaceType());
-        clone.setDependencies(source.getDependencies());
-        clone.setDependents(source.getDependents());
-        return clone;
     }
 
     private static String simple(String fqn) {

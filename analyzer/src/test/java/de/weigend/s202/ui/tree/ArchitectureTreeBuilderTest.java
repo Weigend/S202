@@ -15,6 +15,7 @@
  */
 package de.weigend.s202.ui.tree;
 
+import de.weigend.s202.ui.LevelPackageBox;
 import de.weigend.s202.ui.model.ArchitectureNode;
 import de.weigend.s202.ui.model.ArchitectureNode.NodeType;
 import javafx.application.Platform;
@@ -153,5 +154,31 @@ public class ArchitectureTreeBuilderTest {
                 "Bottom gap should fit seven tangle lanes");
         assertEquals(60.0, topLevel.getPadding().getLeft(), 0.0001);
         assertEquals(60.0, topLevel.getPadding().getRight(), 0.0001);
+    }
+
+    @Test
+    public void testScopeRootPackageCanRemainVisible() {
+        ArchitectureNode root = new ArchitectureNode("root", "root", NodeType.PACKAGE, true, 0);
+        ArchitectureNode scope = new ArchitectureNode("com.example", "example", NodeType.PACKAGE, true, 1);
+        scope.addChild(new ArchitectureNode("com.example.internal", "internal", NodeType.PACKAGE, true, 0));
+        root.addChild(scope);
+
+        Map<String, Node> registry = new HashMap<>();
+        ArchitectureTreeBuilder builder = new ArchitectureTreeBuilder(registry);
+        VBox topLevel = builder.buildTree(root, 3, false);
+
+        List<HBox> rows = new ArrayList<>();
+        for (Node child : topLevel.getChildren()) {
+            if (child instanceof HBox hbox) {
+                rows.add(hbox);
+            }
+        }
+
+        assertEquals(1, rows.size(), "scope root should be the single top-level row");
+        assertEquals(1, rows.get(0).getChildren().size(), "scope root should be the visible top-level package");
+        assertTrue(rows.get(0).getChildren().get(0) instanceof LevelPackageBox,
+                "scope root should render as a package box, not be skipped as transparent");
+        assertSame(rows.get(0).getChildren().get(0), registry.get("com.example"),
+                "registry should point the scope package at its visible box");
     }
 }
