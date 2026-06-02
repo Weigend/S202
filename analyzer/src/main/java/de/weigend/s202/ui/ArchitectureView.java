@@ -24,6 +24,7 @@ import de.weigend.s202.domain.architecture.HierarchicalLayeredArchitectureBuilde
 import de.weigend.s202.domain.architecture.WhatIfArchitecture;
 import de.weigend.s202.reader.DependencyModel;
 import de.weigend.s202.ui.model.ArchitectureNode;
+import de.weigend.s202.ui.model.ArchitectureNodeCloner;
 import de.weigend.s202.ui.model.ScopeExtensionModel;
 import de.weigend.s202.ui.rendering.DependencyRenderer;
 import de.weigend.s202.ui.rendering.DependencyRendererStrategy;
@@ -144,6 +145,7 @@ public class ArchitectureView extends BorderPane {
     private javafx.scene.layout.Pane zoomableContent;
     private Consumer<String> statusSink = msg -> { /* no-op default */ };
     private Consumer<String> nodeSelectionSink = fqn -> { /* no-op default */ };
+    private final Consumer<String> graphSelectionSink = this::handleGraphSelectionChanged;
     private boolean suppressSelectionSink = false;
     private BiConsumer<String, String> tangleEdgeClickedSink = (a, b) -> { /* no-op default */ };
     private BiConsumer<String, String> tangleEdgeCutSink = (a, b) -> { /* no-op default */ };
@@ -320,7 +322,7 @@ public class ArchitectureView extends BorderPane {
         Objects.requireNonNull(rootNode, "rootNode cannot be null");
         beginArchitectureRootBuild(rootNode);
 
-        treeBuilder = new ArchitectureTreeBuilder(elementRegistry);
+        treeBuilder = new ArchitectureTreeBuilder(elementRegistry, graphSelectionSink);
         int maxDepth = packageDepth.get();
         javafx.scene.layout.VBox topLevelContainer =
                 treeBuilder.buildTree(rootNode, maxDepth, skipTransparentTopLevelPackages);
@@ -333,7 +335,7 @@ public class ArchitectureView extends BorderPane {
         Objects.requireNonNull(rootNode, "rootNode cannot be null");
         beginArchitectureRootBuild(rootNode);
 
-        treeBuilder = new ArchitectureTreeBuilder(elementRegistry);
+        treeBuilder = new ArchitectureTreeBuilder(elementRegistry, graphSelectionSink);
         int maxDepth = packageDepth.get();
         treeBuilder.buildTreeAsync(rootNode, maxDepth,
                 skipTransparentTopLevelPackages,
@@ -356,28 +358,21 @@ public class ArchitectureView extends BorderPane {
 
         LevelPackageBox.setOnExpandChangeCallback(arrowsCoalescer::markDirty);
 
-        // Selection (class OR package) is owned by GraphSelection. Mirror it
-        // onto our selectedFullName property and trigger overlay redraws.
-        // Only main (scope-owner) views install the global handler — satellite
-        // views like TangleView must not overwrite it, or the main view loses
-        // its dependency/SCC overlay updates when a selection happens.
-        if (topTanglesScopeOwner) {
-            GraphSelection.setOnSelectionChange(fqn -> {
-                selectedFullName.set(fqn);
-                // Defer arrow redraw via the coalescer so the CSS layout pass
-                // (border-width change on the selected box) finishes first —
-                // direct drawDependencyArrows() here uses stale bounds.
-                arrowsCoalescer.markDirty();
-                if (!suppressSelectionSink && fqn != null) {
-                    nodeSelectionSink.accept(fqn);
-                }
-            });
-        }
-
         // Node selection is now a single-click action. Keep the legacy
         // double-click callback disconnected to avoid duplicate selection
         // events when users double-click out of habit.
         GraphSelection.setOnDoubleClick(fqn -> {});
+    }
+
+    private void handleGraphSelectionChanged(String fqn) {
+        selectedFullName.set(fqn);
+        // Defer arrow redraw via the coalescer so the CSS layout pass
+        // (border-width change on the selected box) finishes first —
+        // direct drawDependencyArrows() here uses stale bounds.
+        arrowsCoalescer.markDirty();
+        if (!suppressSelectionSink && fqn != null) {
+            nodeSelectionSink.accept(fqn);
+        }
     }
 
     private void finishArchitectureRootBuild(ArchitectureNode rootNode,
@@ -558,8 +553,9 @@ public class ArchitectureView extends BorderPane {
             return;
         }
 
+        ArchitectureNode extendedRoot = ArchitectureNodeCloner.cloneTree(currentRootNode);
         boolean added = ScopeExtensionModel.addToScope(
-                currentRootNode,
+                extendedRoot,
                 scopeExtensionSourceRoot,
                 candidate.fullName());
         if (!added) {
@@ -567,7 +563,7 @@ public class ArchitectureView extends BorderPane {
             return;
         }
 
-        setArchitectureRoot(currentRootNode);
+        setArchitectureRoot(extendedRoot);
         selectByFullName(candidate.fullName());
         setStatus("Scope extended: " + candidate.fullName());
     }

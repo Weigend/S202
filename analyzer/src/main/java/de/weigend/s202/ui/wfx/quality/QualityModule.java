@@ -18,6 +18,7 @@ package de.weigend.s202.ui.wfx.quality;
 import de.weigend.s202.analysis.quality.QualityMetrics;
 import de.weigend.s202.domain.DomainModel;
 import de.weigend.s202.ui.ArchitectureView;
+import de.weigend.s202.ui.model.ArchitectureNode;
 import de.weigend.s202.ui.wfx.ArchitectureWfxView;
 import de.weigend.s202.ui.wfx.outline.OutlineExplorerView;
 import io.softwareecg.wfx.lookup.Lookup;
@@ -29,6 +30,9 @@ import jakarta.annotation.Priority;
 import jakarta.inject.Singleton;
 import javafx.beans.value.ChangeListener;
 
+import java.util.HashSet;
+import java.util.Set;
+
 /**
  * WFX module providing the Quality view — a 2D fat-vs-tangled plot rendered
  * below the outline explorer in the LEFT dock area.
@@ -36,8 +40,9 @@ import javafx.beans.value.ChangeListener;
  * Tracks {@link WindowManager#focusedViewProperty()}: when an
  * {@link ArchitectureWfxView} gains focus, the plot mirrors that view's
  * metrics. When the user selects a package in the chart, the plot scopes its
- * metrics to that package's classes; selecting a class or clearing falls back
- * to JAR-level metrics.
+ * metrics to that package's classes. In scope views, class selection or no
+ * selection falls back to the currently displayed scope; regular views fall
+ * back to JAR-level metrics.
  */
 @Singleton
 @Priority(20)
@@ -48,6 +53,7 @@ public class QualityModule implements Module {
     private ArchitectureView boundView;
     private ChangeListener<QualityMetrics> metricsListener;
     private ChangeListener<String> selectionListener;
+    private ChangeListener<ArchitectureNode> rootListener;
 
     @Override
     public String getName() {
@@ -113,14 +119,17 @@ public class QualityModule implements Module {
 
         metricsListener = (obs, was, isNow) -> applyCurrentScope();
         selectionListener = (obs, was, isNow) -> applyCurrentScope();
+        rootListener = (obs, was, isNow) -> applyCurrentScope();
         newBound.qualityMetricsProperty().addListener(metricsListener);
         newBound.selectedFullNameProperty().addListener(selectionListener);
+        newBound.architectureRootProperty().addListener(rootListener);
     }
 
     /**
      * Pick the right scope based on the current selection and push it to the
      * view. Package selection ⇒ recompute on the package's class subset.
-     * Class selection or no selection ⇒ JAR-level metrics from the chart.
+     * Scope views otherwise use the displayed class subset; regular views
+     * fall back to JAR-level metrics from the chart.
      */
     private void applyCurrentScope() {
         if (boundView == null) {
@@ -133,8 +142,30 @@ public class QualityModule implements Module {
             // Selection is not a known class → treat as a package scope.
             QualityMetrics scoped = QualityMetrics.computeForPackage(model, selected);
             qualityView.setMetrics(scoped, selected);
+        } else if (model != null && boundView.getScopeExtensionSourceRoot() != null) {
+            Set<String> scopedClasses = collectClassNames(boundView.getArchitectureRoot());
+            QualityMetrics scoped = QualityMetrics.computeForClasses(model, scopedClasses);
+            qualityView.setMetrics(scoped, "Current view");
         } else {
             qualityView.setMetrics(boundView.getQualityMetrics(), null);
+        }
+    }
+
+    private static Set<String> collectClassNames(ArchitectureNode root) {
+        Set<String> classNames = new HashSet<>();
+        collectClassNames(root, classNames);
+        return classNames;
+    }
+
+    private static void collectClassNames(ArchitectureNode node, Set<String> classNames) {
+        if (node == null) {
+            return;
+        }
+        if (node.getType() == ArchitectureNode.NodeType.CLASS) {
+            classNames.add(node.getFullName());
+        }
+        for (ArchitectureNode child : node.getChildren()) {
+            collectClassNames(child, classNames);
         }
     }
 
@@ -146,10 +177,14 @@ public class QualityModule implements Module {
             if (selectionListener != null) {
                 boundView.selectedFullNameProperty().removeListener(selectionListener);
             }
+            if (rootListener != null) {
+                boundView.architectureRootProperty().removeListener(rootListener);
+            }
         }
         boundView = null;
         metricsListener = null;
         selectionListener = null;
+        rootListener = null;
     }
 
     private ArchitectureWfxView focusedArchitectureView() {

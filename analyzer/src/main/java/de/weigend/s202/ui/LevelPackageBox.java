@@ -32,6 +32,7 @@ import org.kordamp.ikonli.materialdesign2.MaterialDesignP;
 import java.util.Map;
 import java.util.Objects;
 import java.util.TreeMap;
+import java.util.function.Consumer;
 
 /**
  * Reusable architecture level containing 4 rows with 1, 2, 3, 4 elements.
@@ -66,6 +67,7 @@ public class LevelPackageBox extends VBox implements GraphSelection.Selectable {
     private final boolean transparent;
     private boolean selected;
     private boolean virtuallyMoved;
+    private Consumer<String> selectionChangeSink;
 
     // Static callback for notifying when expand/collapse changes
     private static Runnable onExpandChangeCallback = null;
@@ -306,6 +308,15 @@ public class LevelPackageBox extends VBox implements GraphSelection.Selectable {
     @Override
     public String getFullName() {
         return fullName;
+    }
+
+    public void setSelectionChangeSink(Consumer<String> sink) {
+        selectionChangeSink = sink;
+    }
+
+    @Override
+    public Consumer<String> selectionChangeSink() {
+        return selectionChangeSink;
     }
 
     @Override

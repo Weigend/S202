@@ -81,6 +81,13 @@ public final class QualityMetrics {
         return computeForScope(model, name -> name.equals(packageFullName) || name.startsWith(prefix));
     }
 
+    public static QualityMetrics computeForClasses(DomainModel model, Set<String> classNames) {
+        if (classNames == null || classNames.isEmpty()) {
+            return new QualityMetrics(0, 0, 0, 0, 0);
+        }
+        return computeForScope(model, classNames::contains);
+    }
+
     private static QualityMetrics computeForScope(DomainModel model,
                                                   java.util.function.Predicate<String> classFilter) {
         if (model == null) {
