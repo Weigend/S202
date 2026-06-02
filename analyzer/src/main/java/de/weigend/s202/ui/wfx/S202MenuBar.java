@@ -236,10 +236,19 @@ public class S202MenuBar {
         TextFlow builtOn = new TextFlow(builtPrefix, wfxLink, builtSuffix);
         builtOn.setMaxWidth(420);
 
+        Text creditsText = new Text(
+                "Lead Architect: Johannes Weigend\n"
+              + "Advise and Programming: Claude and Codex\n"
+              + "QS: Johannes Weigend\n"
+              + "License: Apache License 2.0");
+        creditsText.getStyleClass().add("about-meta");
+        TextFlow credits = new TextFlow(creditsText);
+        credits.setMaxWidth(420);
+
         Separator divider = new Separator();
         divider.getStyleClass().add("about-divider");
 
-        VBox body = new VBox(14, header, divider, description, builtOn);
+        VBox body = new VBox(14, header, divider, description, builtOn, credits);
         body.setPadding(new Insets(22, 26, 18, 26));
         body.setMinWidth(Region.USE_PREF_SIZE);
 
