@@ -1,6 +1,9 @@
+![S202 Teaser](docs/s202-teaser.png)
+
 # S202 Code Analyzer
 
 A JavaFX-based tool for analyzing Java bytecode and visualizing code architecture.
+
 
 ![UI Screenshot](docs/image1.png)
 
