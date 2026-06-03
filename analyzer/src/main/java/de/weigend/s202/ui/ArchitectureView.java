@@ -19,11 +19,14 @@ import de.weigend.s202.analysis.quality.QualityMetrics;
 import de.weigend.s202.domain.DependencyEdge;
 import de.weigend.s202.domain.DomainModel;
 import de.weigend.s202.domain.architecture.Architecture;
+import de.weigend.s202.domain.architecture.ArchitectureAnnotations;
+import de.weigend.s202.domain.architecture.ArchitectureContext;
+import de.weigend.s202.domain.architecture.ComponentArchitectureBuilder;
 import de.weigend.s202.domain.architecture.HierarchicalLayeredArchitecture;
 import de.weigend.s202.domain.architecture.HierarchicalLayeredArchitectureBuilder;
+import de.weigend.s202.domain.architecture.ViolationKind;
 import de.weigend.s202.domain.architecture.WhatIfArchitecture;
 import de.weigend.s202.reader.DependencyModel;
-import de.weigend.s202.ui.component.ComponentApiSelection;
 import de.weigend.s202.ui.component.ComponentBox;
 import de.weigend.s202.ui.model.ArchitectureNode;
 import de.weigend.s202.ui.model.ArchitectureNodeCloner;
@@ -41,6 +44,7 @@ import javafx.collections.ObservableList;
 import javafx.collections.transformation.FilteredList;
 import javafx.beans.property.BooleanProperty;
 import javafx.beans.property.IntegerProperty;
+import javafx.beans.property.ObjectProperty;
 import javafx.beans.property.ReadOnlyDoubleProperty;
 import javafx.beans.property.ReadOnlyObjectProperty;
 import javafx.beans.property.ReadOnlyObjectWrapper;
@@ -48,6 +52,7 @@ import javafx.beans.property.ReadOnlyStringProperty;
 import javafx.beans.property.ReadOnlyStringWrapper;
 import javafx.beans.property.SimpleBooleanProperty;
 import javafx.beans.property.SimpleIntegerProperty;
+import javafx.beans.property.SimpleObjectProperty;
 import javafx.geometry.Pos;
 import javafx.scene.control.ButtonBar;
 import javafx.scene.control.ButtonType;
@@ -171,6 +176,8 @@ public class ArchitectureView extends BorderPane {
     private final ReadOnlyObjectWrapper<ArchitectureNode> architectureRoot = new ReadOnlyObjectWrapper<>(null);
     private final ReadOnlyObjectWrapper<QualityMetrics> qualityMetrics = new ReadOnlyObjectWrapper<>(null);
     private final ReadOnlyObjectWrapper<DomainModel> domainModel = new ReadOnlyObjectWrapper<>(null);
+    private final SimpleObjectProperty<ArchitectureAnnotations> architectureAnnotations =
+            new SimpleObjectProperty<>(ArchitectureAnnotations.empty());
     private final ReadOnlyObjectWrapper<Architecture> architecture = new ReadOnlyObjectWrapper<>(null);
     private final ReadOnlyObjectWrapper<WhatIfArchitecture> whatIfArchitecture = new ReadOnlyObjectWrapper<>(null);
     private final ReadOnlyObjectWrapper<DependencyModel> rawDependencyModel = new ReadOnlyObjectWrapper<>(null);
@@ -180,7 +187,13 @@ public class ArchitectureView extends BorderPane {
     private boolean skipTransparentTopLevelPackages = true;
     private ArchitectureNode scopeExtensionSourceRoot;
     private ArchitectureViewStyle viewStyle = ArchitectureViewStyle.LAYERED;
-    private final ComponentApiSelection componentApiSelection = new ComponentApiSelection();
+    private static final Set<ViolationKind> LAYERED_VIOLATION_OVERLAY_KINDS =
+            Set.of(ViolationKind.UPWARD);
+    private static final Set<ViolationKind> COMPONENT_VIOLATION_OVERLAY_KINDS =
+            Set.of(
+                    ViolationKind.COMPONENT_API_BYPASS,
+                    ViolationKind.COMPONENT_API_LEAKS_IMPLEMENTATION,
+                    ViolationKind.COMPONENT_INTERNAL_LAYER_BREAK);
 
     public ArchitectureView() {
         setupUI();
@@ -359,7 +372,7 @@ public class ArchitectureView extends BorderPane {
                     new ComponentArchitectureTreeBuilder(
                             elementRegistry,
                             graphSelectionSink,
-                            componentApiSelection,
+                            getArchitectureAnnotations(),
                             this::handleComponentApiChanged);
             return componentBuilder.buildTree(rootNode, maxDepth);
         }
@@ -377,7 +390,7 @@ public class ArchitectureView extends BorderPane {
                     new ComponentArchitectureTreeBuilder(
                             elementRegistry,
                             graphSelectionSink,
-                            componentApiSelection,
+                            getArchitectureAnnotations(),
                             this::handleComponentApiChanged);
             componentBuilder.buildTreeAsync(rootNode, maxDepth, progressSink, onComplete);
             return;
@@ -414,7 +427,8 @@ public class ArchitectureView extends BorderPane {
         }
     }
 
-    private void handleComponentApiChanged(String message) {
+    private void handleComponentApiChanged(ArchitectureAnnotations nextAnnotations, String message) {
+        setArchitectureAnnotations(nextAnnotations);
         refreshComponentProjection(message);
     }
 
@@ -676,16 +690,7 @@ public class ArchitectureView extends BorderPane {
     public void setDomainModel(DomainModel model) {
         domainModel.set(model);
         undoManager.clear();
-        if (model == null) {
-            architecture.set(null);
-            whatIfArchitecture.set(null);
-            return;
-        }
-        Architecture original = new HierarchicalLayeredArchitectureBuilder().build(model);
-        architecture.set(original);
-        whatIfArchitecture.set(original instanceof HierarchicalLayeredArchitecture hla
-                ? new WhatIfArchitecture(hla, model)
-                : null);
+        rebuildArchitectureProjection();
     }
 
     /**
@@ -716,6 +721,42 @@ public class ArchitectureView extends BorderPane {
 
     public WhatIfArchitecture getWhatIfArchitecture() {
         return whatIfArchitecture.get();
+    }
+
+    public ObjectProperty<ArchitectureAnnotations> architectureAnnotationsProperty() {
+        return architectureAnnotations;
+    }
+
+    public ArchitectureAnnotations getArchitectureAnnotations() {
+        ArchitectureAnnotations annotations = architectureAnnotations.get();
+        return annotations == null ? ArchitectureAnnotations.empty() : annotations;
+    }
+
+    public void setArchitectureAnnotations(ArchitectureAnnotations annotations) {
+        architectureAnnotations.set(annotations == null ? ArchitectureAnnotations.empty() : annotations);
+        rebuildArchitectureProjection();
+    }
+
+    private void rebuildArchitectureProjection() {
+        DomainModel model = domainModel.get();
+        if (model == null) {
+            architecture.set(null);
+            whatIfArchitecture.set(null);
+            return;
+        }
+        Architecture original;
+        if (viewStyle == ArchitectureViewStyle.COMPONENT) {
+            original = new ComponentArchitectureBuilder().build(new ArchitectureContext(
+                    rawDependencyModel.get(),
+                    model,
+                    getArchitectureAnnotations()));
+        } else {
+            original = new HierarchicalLayeredArchitectureBuilder().build(model);
+        }
+        architecture.set(original);
+        whatIfArchitecture.set(original instanceof HierarchicalLayeredArchitecture hla
+                ? new WhatIfArchitecture(hla, model)
+                : null);
     }
 
     /**
@@ -809,10 +850,10 @@ public class ArchitectureView extends BorderPane {
             return true;
         }
         if (apiDestination) {
-            componentApiSelection.include(movedFqcn);
+            setArchitectureAnnotations(getArchitectureAnnotations().withComponentApiIncluded(movedFqcn));
             refreshComponentProjection("Added to API: " + movedFqcn);
         } else {
-            componentApiSelection.exclude(movedFqcn);
+            setArchitectureAnnotations(getArchitectureAnnotations().withComponentApiExcluded(movedFqcn));
             refreshComponentProjection("Removed from API: " + movedFqcn);
         }
         return true;
@@ -896,6 +937,7 @@ public class ArchitectureView extends BorderPane {
 
     public void setViewStyle(ArchitectureViewStyle style) {
         viewStyle = style == null ? ArchitectureViewStyle.LAYERED : style;
+        rebuildArchitectureProjection();
     }
 
     /**
@@ -1050,14 +1092,27 @@ public class ArchitectureView extends BorderPane {
             sccRenderer.drawSccLines(currentRootNode);
         }
         if (whatIfRenderer != null) {
-            Architecture source = whatIfArchitecture.get() != null ? whatIfArchitecture.get() : architecture.get();
+            Architecture source = violationOverlayArchitecture();
             if (showWhatIfViolations.get() && source != null) {
-                whatIfRenderer.redraw(source);
+                whatIfRenderer.redraw(source, violationOverlayKinds());
             } else {
                 whatIfRenderer.clear();
             }
         }
         applyVirtuallyMovedDecorations();
+    }
+
+    private Architecture violationOverlayArchitecture() {
+        if (viewStyle == ArchitectureViewStyle.COMPONENT) {
+            return architecture.get();
+        }
+        return whatIfArchitecture.get() != null ? whatIfArchitecture.get() : architecture.get();
+    }
+
+    private Set<ViolationKind> violationOverlayKinds() {
+        return viewStyle == ArchitectureViewStyle.COMPONENT
+                ? COMPONENT_VIOLATION_OVERLAY_KINDS
+                : LAYERED_VIOLATION_OVERLAY_KINDS;
     }
 
     private void applyVirtuallyMovedDecorations() {

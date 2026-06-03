@@ -55,12 +55,18 @@ public class ComponentBox extends VBox implements GraphSelection.Selectable {
     private static final String STYLE_SELECTED =
             "-fx-background-color: #f7fbff; -fx-border-color: #ff8a00; -fx-border-width: 3;"
           + " -fx-background-radius: 7; -fx-border-radius: 7;";
+    private static final String API_STYLE_NORMAL =
+            "-fx-background-color: #d9ecff; -fx-border-color: #9bc5ef;"
+          + " -fx-border-width: 1; -fx-background-radius: 5; -fx-border-radius: 5;";
+    private static final String API_STYLE_SELECTED =
+            "-fx-background-color: #e9f4ff; -fx-border-color: #ff8a00;"
+          + " -fx-border-width: 2; -fx-background-radius: 5; -fx-border-radius: 5;";
 
     private final String fullName;
     private Label componentToggleIcon;
     private Label apiToggleIcon;
     private final VBox componentContentContainer = new VBox(8);
-    private final VBox apiContainer = new VBox(6);
+    private final ApiSurfaceBox apiContainer;
     private final VBox apiRowsContainer = new VBox(6);
     private final Map<Integer, HBox> apiRows = new TreeMap<>(Comparator.reverseOrder());
     private final VBox implementationContainer = new VBox(6);
@@ -76,6 +82,7 @@ public class ComponentBox extends VBox implements GraphSelection.Selectable {
 
     public ComponentBox(String displayName, String fullName, int apiCount) {
         this.fullName = fullName;
+        this.apiContainer = new ApiSurfaceBox(fullName);
 
         setSpacing(8);
         setPadding(new Insets(8));
@@ -106,8 +113,6 @@ public class ComponentBox extends VBox implements GraphSelection.Selectable {
         componentContentContainer.setMaxWidth(Double.MAX_VALUE);
 
         apiContainer.setPadding(new Insets(8));
-        apiContainer.setStyle("-fx-background-color: #d9ecff; -fx-border-color: #9bc5ef;"
-                + " -fx-border-width: 1; -fx-background-radius: 5; -fx-border-radius: 5;");
         apiContainer.getProperties().put(API_DROP_TARGET_TAG, Boolean.TRUE);
         ArchitectureDragController.markAsRowStack(apiContainer);
         Label apiLabel = new Label("API");
@@ -202,6 +207,7 @@ public class ComponentBox extends VBox implements GraphSelection.Selectable {
 
     public void setSelectionChangeSink(Consumer<String> sink) {
         selectionChangeSink = sink;
+        apiContainer.setSelectionChangeSink(sink);
     }
 
     @Override
@@ -295,5 +301,55 @@ public class ComponentBox extends VBox implements GraphSelection.Selectable {
         holder.setMinSize(18, 26);
         holder.setPrefSize(18, 26);
         return holder;
+    }
+
+    private static final class ApiSurfaceBox extends VBox implements GraphSelection.Selectable {
+
+        private final String fullName;
+        private Consumer<String> selectionChangeSink;
+
+        private ApiSurfaceBox(String fullName) {
+            super(6);
+            this.fullName = fullName;
+            setMaxWidth(Double.MAX_VALUE);
+            setStyle(API_STYLE_NORMAL);
+            setCursor(Cursor.HAND);
+            addEventHandler(javafx.scene.input.MouseEvent.MOUSE_CLICKED, event -> {
+                if (event.getButton() != MouseButton.PRIMARY) {
+                    return;
+                }
+                if (event.getClickCount() == 2) {
+                    GraphSelection.ensureSelected(this);
+                    GraphSelection.fireDoubleClick(fullName);
+                } else {
+                    GraphSelection.select(this);
+                }
+                event.consume();
+            });
+        }
+
+        private void setSelectionChangeSink(Consumer<String> sink) {
+            selectionChangeSink = sink;
+        }
+
+        @Override
+        public String getFullName() {
+            return fullName;
+        }
+
+        @Override
+        public void applySelectedStyle() {
+            setStyle(API_STYLE_SELECTED);
+        }
+
+        @Override
+        public void applyUnselectedStyle() {
+            setStyle(API_STYLE_NORMAL);
+        }
+
+        @Override
+        public Consumer<String> selectionChangeSink() {
+            return selectionChangeSink;
+        }
     }
 }

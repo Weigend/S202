@@ -15,10 +15,11 @@
  */
 package de.weigend.s202.ui.tree;
 
+import de.weigend.s202.domain.architecture.ArchitectureAnnotations;
+import de.weigend.s202.domain.architecture.ComponentApiClassifier;
 import de.weigend.s202.ui.ArchitectureDragController;
 import de.weigend.s202.ui.LevelClassBox;
 import de.weigend.s202.ui.LevelPackageBox;
-import de.weigend.s202.ui.component.ComponentApiSelection;
 import de.weigend.s202.ui.component.ComponentBox;
 import de.weigend.s202.ui.layout.horizontal.HorizontalLayoutOrdering;
 import de.weigend.s202.ui.model.ArchitectureNode;
@@ -56,22 +57,24 @@ public class ComponentArchitectureTreeBuilder {
 
     private final Map<String, Node> elementRegistry;
     private final Consumer<String> selectionChangeSink;
-    private final ComponentApiSelection apiSelection;
-    private final Consumer<String> apiChangeSink;
+    private final ArchitectureAnnotations annotations;
+    private final ComponentApiClassifier apiClassifier;
+    private final java.util.function.BiConsumer<ArchitectureAnnotations, String> apiChangeSink;
 
     public ComponentArchitectureTreeBuilder(Map<String, Node> elementRegistry,
                                             Consumer<String> selectionChangeSink) {
-        this(elementRegistry, selectionChangeSink, new ComponentApiSelection(), null);
+        this(elementRegistry, selectionChangeSink, ArchitectureAnnotations.empty(), null);
     }
 
     public ComponentArchitectureTreeBuilder(Map<String, Node> elementRegistry,
                                             Consumer<String> selectionChangeSink,
-                                            ComponentApiSelection apiSelection,
-                                            Consumer<String> apiChangeSink) {
+                                            ArchitectureAnnotations annotations,
+                                            java.util.function.BiConsumer<ArchitectureAnnotations, String> apiChangeSink) {
         this.elementRegistry = Objects.requireNonNull(elementRegistry, "elementRegistry cannot be null");
         this.selectionChangeSink = selectionChangeSink;
-        this.apiSelection = Objects.requireNonNull(apiSelection, "apiSelection cannot be null");
-        this.apiChangeSink = apiChangeSink != null ? apiChangeSink : message -> {};
+        this.annotations = annotations == null ? ArchitectureAnnotations.empty() : annotations;
+        this.apiClassifier = new ComponentApiClassifier(this.annotations);
+        this.apiChangeSink = apiChangeSink != null ? apiChangeSink : (next, message) -> {};
     }
 
     public VBox buildTree(ArchitectureNode rootNode, int maxDepth) {
@@ -246,11 +249,11 @@ public class ComponentArchitectureTreeBuilder {
     }
 
     private boolean isSelectedApiClass(ArchitectureNode node, boolean inApiPackage) {
-        Boolean explicit = apiSelection.explicitDecision(node.getFullName());
-        if (explicit != null) {
-            return explicit;
-        }
-        return inApiPackage || isApiClass(node);
+        return apiClassifier.isSelectedApiClass(
+                node.getFullName(),
+                node.getSimpleName(),
+                node.isInterfaceType(),
+                inApiPackage);
     }
 
     private void installApiMenus(Map<String, Node> registry) {
@@ -266,14 +269,16 @@ public class ComponentArchitectureTreeBuilder {
         target.setOnContextMenuRequested(event -> {
             MenuItem addToApi = new MenuItem("Add To Api");
             addToApi.setOnAction(action -> {
-                apiSelection.include(fullName);
-                apiChangeSink.accept("Added to API: " + fullName);
+                apiChangeSink.accept(
+                        annotations.withComponentApiIncluded(fullName),
+                        "Added to API: " + fullName);
             });
 
             MenuItem removeFromApi = new MenuItem("Remove From Api");
             removeFromApi.setOnAction(action -> {
-                apiSelection.exclude(fullName);
-                apiChangeSink.accept("Removed from API: " + fullName);
+                apiChangeSink.accept(
+                        annotations.withComponentApiExcluded(fullName),
+                        "Removed from API: " + fullName);
             });
 
             ContextMenu menu = new ContextMenu(addToApi, removeFromApi);
@@ -366,16 +371,11 @@ public class ComponentArchitectureTreeBuilder {
         if (node.getType() != NodeType.CLASS) {
             return false;
         }
-        String simpleName = node.getSimpleName();
-        return node.isInterfaceType()
-                || simpleName.endsWith("Api")
-                || simpleName.endsWith("API");
+        return ComponentApiClassifier.isHeuristicApiClass(node.getSimpleName(), node.isInterfaceType());
     }
 
     private static boolean isApiPackageName(String simpleName) {
-        String normalized = simpleName == null ? "" : simpleName.toLowerCase();
-        return normalized.equals("api") || normalized.equals("apis") || normalized.equals("port")
-                || normalized.equals("ports");
+        return ComponentApiClassifier.isApiPackageName(simpleName);
     }
 
     static ArchitectureNode cloneImplementation(ArchitectureNode node,

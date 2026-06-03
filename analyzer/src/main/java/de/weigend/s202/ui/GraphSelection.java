@@ -131,7 +131,7 @@ public final class GraphSelection {
         onDoubleClick = callback;
     }
 
-    static void fireDoubleClick(String fullName) {
+    public static void fireDoubleClick(String fullName) {
         if (onDoubleClick != null && fullName != null) {
             onDoubleClick.accept(fullName);
         }

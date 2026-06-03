@@ -179,9 +179,27 @@ public class WhatIfDependenciesModule implements Module {
         if (focused != null) {
             return focused;
         }
+
+        ArchitectureWfxView current = wrapperFor(boundView);
+        if (current != null) {
+            return current;
+        }
+
         return wm.getRegisteredViews().stream()
                 .filter(ArchitectureWfxView.class::isInstance)
                 .map(ArchitectureWfxView.class::cast)
+                .findFirst()
+                .orElse(null);
+    }
+
+    private ArchitectureWfxView wrapperFor(ArchitectureView view) {
+        if (view == null) {
+            return null;
+        }
+        return Lookup.lookup(WindowManager.class).getRegisteredViews().stream()
+                .filter(ArchitectureWfxView.class::isInstance)
+                .map(ArchitectureWfxView.class::cast)
+                .filter(wrapper -> wrapper.getArchitectureView() == view)
                 .findFirst()
                 .orElse(null);
     }

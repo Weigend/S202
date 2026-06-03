@@ -19,6 +19,7 @@ import de.weigend.s202.analysis.invariants.InvariantFinding;
 import de.weigend.s202.analysis.invariants.LayoutInvariantReport;
 import de.weigend.s202.domain.DependencyEdge;
 import de.weigend.s202.domain.DomainModel;
+import de.weigend.s202.domain.architecture.ArchitectureAnnotations;
 import de.weigend.s202.reader.DependencyModel;
 import de.weigend.s202.reader.EdgeKind;
 import java.time.Instant;
@@ -45,6 +46,17 @@ public final class S202ProjectMapper {
                                  DomainModel domainModel,
                                  LayoutInvariantReport invariantReport,
                                  Set<DependencyEdge> cycleBreakEdges) {
+        return toProject(appVersion, source, rawModel, domainModel,
+                ArchitectureAnnotations.empty(), invariantReport, cycleBreakEdges);
+    }
+
+    public S202Project toProject(String appVersion,
+                                 S202Project.Source source,
+                                 DependencyModel rawModel,
+                                 DomainModel domainModel,
+                                 ArchitectureAnnotations annotations,
+                                 LayoutInvariantReport invariantReport,
+                                 Set<DependencyEdge> cycleBreakEdges) {
         return new S202Project(
                 S202Project.FORMAT,
                 S202Project.FORMAT_VERSION,
@@ -52,6 +64,7 @@ public final class S202ProjectMapper {
                 source,
                 toDependencyModelDto(rawModel),
                 toDomainModelDto(domainModel),
+                toArchitectureAnnotationsDto(annotations),
                 toCycleBreakEdgeDtos(cycleBreakEdges),
                 toLayoutInvariantReportDto(invariantReport),
                 Instant.now().toString());
@@ -130,6 +143,37 @@ public final class S202ProjectMapper {
         return model;
     }
 
+    public ArchitectureAnnotations toArchitectureAnnotations(S202Project.ArchitectureAnnotationsDto dto) {
+        if (dto == null) {
+            return ArchitectureAnnotations.empty();
+        }
+        List<ArchitectureAnnotations.ComponentSpec> components = dto.components() == null ? List.of()
+                : dto.components().stream()
+                        .filter(c -> c.id() != null && c.rootPackageFqn() != null)
+                        .map(c -> new ArchitectureAnnotations.ComponentSpec(
+                                c.id(), c.displayName(), c.rootPackageFqn()))
+                        .toList();
+        Set<String> includes = toComponentApiMarkSet(dto.componentApiIncludes());
+        Set<String> excludes = toComponentApiMarkSet(dto.componentApiExcludes());
+        List<ArchitectureAnnotations.PortSpec> ports = dto.ports() == null ? List.of()
+                : dto.ports().stream()
+                        .filter(p -> p.id() != null && p.classFqn() != null)
+                        .map(p -> new ArchitectureAnnotations.PortSpec(
+                                p.id(),
+                                p.componentOrSegmentId(),
+                                p.classFqn(),
+                                parsePortDirection(p.direction())))
+                        .toList();
+        List<ArchitectureAnnotations.ElementRoleMark> roles = dto.roles() == null ? List.of()
+                : dto.roles().stream()
+                        .filter(r -> r.elementFqn() != null)
+                        .map(r -> new ArchitectureAnnotations.ElementRoleMark(
+                                r.elementFqn(),
+                                parseElementRole(r.role())))
+                        .toList();
+        return new ArchitectureAnnotations(components, includes, excludes, ports, roles);
+    }
+
     public LayoutInvariantReport toLayoutInvariantReport(S202Project.LayoutInvariantReportDto dto) {
         if (dto == null) {
             return null;
@@ -201,6 +245,34 @@ public final class S202ProjectMapper {
             packages.put(entry.getKey(), toCalculatedElementDto(entry.getValue()));
         }
         return new S202Project.DomainModelDto(classes, packages);
+    }
+
+    private S202Project.ArchitectureAnnotationsDto toArchitectureAnnotationsDto(
+            ArchitectureAnnotations annotations) {
+        ArchitectureAnnotations effective =
+                annotations == null ? ArchitectureAnnotations.empty() : annotations;
+        return new S202Project.ArchitectureAnnotationsDto(
+                effective.components().stream()
+                        .sorted(Comparator.comparing(ArchitectureAnnotations.ComponentSpec::id))
+                        .map(c -> new S202Project.ComponentSpecDto(
+                                c.id(), c.displayName(), c.rootPackageFqn()))
+                        .toList(),
+                toComponentApiMarkDtos(effective.componentApiIncludes()),
+                toComponentApiMarkDtos(effective.componentApiExcludes()),
+                effective.ports().stream()
+                        .sorted(Comparator.comparing(ArchitectureAnnotations.PortSpec::id))
+                        .map(p -> new S202Project.PortSpecDto(
+                                p.id(),
+                                p.componentOrSegmentId(),
+                                p.classFqn(),
+                                p.direction().name()))
+                        .toList(),
+                effective.roles().stream()
+                        .sorted(Comparator.comparing(ArchitectureAnnotations.ElementRoleMark::elementFqn))
+                        .map(r -> new S202Project.ElementRoleMarkDto(
+                                r.elementFqn(),
+                                r.role().name()))
+                        .toList());
     }
 
     private Map<String, List<EdgeKind>> toDependencyKindsDto(Map<String, EnumSet<EdgeKind>> dependencyKinds) {
@@ -302,6 +374,48 @@ public final class S202ProjectMapper {
             return List.of();
         }
         return values.stream().sorted().toList();
+    }
+
+    private static List<S202Project.ComponentApiMarkDto> toComponentApiMarkDtos(Set<String> fqns) {
+        if (fqns == null || fqns.isEmpty()) {
+            return List.of();
+        }
+        return fqns.stream()
+                .sorted()
+                .map(fqn -> new S202Project.ComponentApiMarkDto(null, fqn))
+                .toList();
+    }
+
+    private static Set<String> toComponentApiMarkSet(List<S202Project.ComponentApiMarkDto> marks) {
+        if (marks == null || marks.isEmpty()) {
+            return Set.of();
+        }
+        return marks.stream()
+                .map(S202Project.ComponentApiMarkDto::elementFqn)
+                .filter(fqn -> fqn != null && !fqn.isBlank())
+                .collect(Collectors.toCollection(java.util.LinkedHashSet::new));
+    }
+
+    private static ArchitectureAnnotations.PortDirection parsePortDirection(String value) {
+        if (value == null || value.isBlank()) {
+            return ArchitectureAnnotations.PortDirection.GENERIC;
+        }
+        try {
+            return ArchitectureAnnotations.PortDirection.valueOf(value);
+        } catch (IllegalArgumentException ex) {
+            return ArchitectureAnnotations.PortDirection.GENERIC;
+        }
+    }
+
+    private static ArchitectureAnnotations.ElementRole parseElementRole(String value) {
+        if (value == null || value.isBlank()) {
+            return ArchitectureAnnotations.ElementRole.NONE;
+        }
+        try {
+            return ArchitectureAnnotations.ElementRole.valueOf(value);
+        } catch (IllegalArgumentException ex) {
+            return ArchitectureAnnotations.ElementRole.NONE;
+        }
     }
 
     private static <T> List<T> nullToList(List<T> values) {

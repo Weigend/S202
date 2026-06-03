@@ -19,6 +19,7 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.function.Function;
 
 /**
@@ -28,15 +29,11 @@ import java.util.function.Function;
  * rows) and the {@link Violation}s that are defined for the chosen
  * architectural style.
  *
- * <p>Sealed to {@link HierarchicalLayeredArchitecture} (immutable,
- * built directly from analysis) and {@link WhatIfArchitecture}
- * (mutable, starts as a deep copy and reflects user rearrangements).
- * Additional styles (e.g. interface-above-implementation) plug in by
- * implementing this interface with their own structural payload and
- * their own definition of what counts as a violation.
+ * <p>Open by design: architecture styles plug in by implementing this
+ * interface with their own structural payload and their own definition
+ * of what counts as a violation.
  */
-public sealed interface Architecture
-        permits HierarchicalLayeredArchitecture, WhatIfArchitecture {
+public interface Architecture {
 
     /**
      * Edge-level architectural violations the chosen style detected on
@@ -67,9 +64,19 @@ public sealed interface Architecture
      * function lives in the UI.
      */
     default Map<EndpointPair, List<Violation>> groupUpwardViolations(Function<String, String> rollup) {
+        return groupViolations(rollup, Set.of(ViolationKind.UPWARD));
+    }
+
+    /**
+     * Aggregate selected violation kinds into endpoint groups using a caller
+     * supplied rollup function. The architecture keeps the grouping semantics
+     * central; the UI supplies only the current visibility mapping.
+     */
+    default Map<EndpointPair, List<Violation>> groupViolations(Function<String, String> rollup,
+                                                              Set<ViolationKind> kinds) {
         Map<EndpointPair, List<Violation>> grouped = new LinkedHashMap<>();
         for (Violation v : violations()) {
-            if (v.kind() != ViolationKind.UPWARD) {
+            if (kinds != null && !kinds.isEmpty() && !kinds.contains(v.kind())) {
                 continue;
             }
             String src = rollup.apply(v.sourceFqn());
