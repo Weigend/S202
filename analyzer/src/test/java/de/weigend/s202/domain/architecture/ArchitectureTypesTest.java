@@ -109,7 +109,20 @@ class ArchitectureTypesTest {
     }
 
     @Test
-    void architectureIsSealedToHierarchicalLayered() {
+    void elementRoleMarksKeepInheritedParentRolesWhenClassRoleIsAdded() {
+        ArchitectureAnnotations annotations = ArchitectureAnnotations.empty()
+                .withElementRole("com.acme.web", ArchitectureAnnotations.ElementRole.ADAPTER)
+                .withElementRole("com.acme.web.OrderController",
+                        ArchitectureAnnotations.ElementRole.INBOUND_PORT);
+
+        assertEquals(ArchitectureAnnotations.ElementRole.ADAPTER,
+                annotations.explicitElementRole("com.acme.web.OtherController"));
+        assertEquals(ArchitectureAnnotations.ElementRole.INBOUND_PORT,
+                annotations.explicitElementRole("com.acme.web.OrderController"));
+    }
+
+    @Test
+    void architectureContractSupportsHierarchicalLayeredProjection() {
         Architecture a = new HierarchicalLayeredArchitecture(List.of(), List.of(), List.of());
         assertTrue(a instanceof HierarchicalLayeredArchitecture);
         assertSame(List.of(), a.violations());

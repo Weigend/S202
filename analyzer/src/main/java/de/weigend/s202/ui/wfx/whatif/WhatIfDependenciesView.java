@@ -18,6 +18,7 @@ package de.weigend.s202.ui.wfx.whatif;
 import de.weigend.s202.domain.architecture.Architecture;
 import de.weigend.s202.domain.architecture.ComponentArchitecture;
 import de.weigend.s202.domain.architecture.EndpointPair;
+import de.weigend.s202.domain.architecture.HexagonalArchitecture;
 import de.weigend.s202.domain.architecture.Tangle;
 import de.weigend.s202.domain.architecture.Violation;
 import de.weigend.s202.domain.architecture.ViolationKind;
@@ -57,8 +58,8 @@ import java.util.Set;
  *       package. Independent of the chart's package-depth setting so the
  *       count is stable across expand/collapse operations.
  *       Drilldown: aggregate → class-to-class edges → method calls.</li>
- *   <li><b>Component violations</b> — shown only for the component
- *       architecture projection and sourced from its style-specific
+ *   <li><b>Component/Hexagonal violations</b> — shown only for the active
+ *       style projection and sourced from its style-specific
  *       {@link Architecture#violations()}.</li>
  *   <li><b>Package tangles</b> — static package SCCs from the analyzer.
  *       Independent of any visual rearrangement.</li>
@@ -86,6 +87,9 @@ public final class WhatIfDependenciesView implements View {
             ViolationKind.COMPONENT_API_BYPASS,
             ViolationKind.COMPONENT_API_LEAKS_IMPLEMENTATION,
             ViolationKind.COMPONENT_INTERNAL_LAYER_BREAK);
+    private static final Set<ViolationKind> HEXAGONAL_VIOLATION_KINDS = Set.of(
+            ViolationKind.HEXAGON_OUTWARD_DEPENDENCY,
+            ViolationKind.HEXAGON_PORT_BYPASS);
 
     private static final String PANEL_BG = "#f5f5f0";
     private static final String PANEL_STYLE =
@@ -146,12 +150,13 @@ public final class WhatIfDependenciesView implements View {
         upwardHeader.setText("Wrong-direction edges — " + totalClassEdges + " class edge"
                 + (totalClassEdges == 1 ? "" : "s"));
 
-        boolean componentView = architecture instanceof ComponentArchitecture;
-        updateComponentSection(componentView);
-        Map<EndpointPair, List<Violation>> componentGrouped = aggregatedComponentViolations();
+        boolean styleView = architecture instanceof ComponentArchitecture
+                || architecture instanceof HexagonalArchitecture;
+        updateComponentSection(styleView);
+        Map<EndpointPair, List<Violation>> componentGrouped = aggregatedStyleViolations();
         componentTree.setRoot(buildComponentViolationTree(componentGrouped));
         int totalComponentEdges = componentGrouped.values().stream().mapToInt(List::size).sum();
-        componentHeader.setText("Component violations — " + totalComponentEdges + " class edge"
+        componentHeader.setText(styleViolationHeader() + " — " + totalComponentEdges + " class edge"
                 + (totalComponentEdges == 1 ? "" : "s"));
 
         ObservableList<String> sccItems = buildSccList();
@@ -171,11 +176,14 @@ public final class WhatIfDependenciesView implements View {
         return architecture.groupUpwardViolations(WhatIfDependenciesView::parentOf);
     }
 
-    private Map<EndpointPair, List<Violation>> aggregatedComponentViolations() {
-        if (!(architecture instanceof ComponentArchitecture)) {
-            return Map.of();
+    private Map<EndpointPair, List<Violation>> aggregatedStyleViolations() {
+        if (architecture instanceof ComponentArchitecture) {
+            return architecture.groupViolations(WhatIfDependenciesView::parentOf, COMPONENT_VIOLATION_KINDS);
         }
-        return architecture.groupViolations(WhatIfDependenciesView::parentOf, COMPONENT_VIOLATION_KINDS);
+        if (architecture instanceof HexagonalArchitecture) {
+            return architecture.groupViolations(WhatIfDependenciesView::parentOf, HEXAGONAL_VIOLATION_KINDS);
+        }
+        return Map.of();
     }
 
     private void updateComponentSection(boolean visible) {
@@ -304,8 +312,17 @@ public final class WhatIfDependenciesView implements View {
             case COMPONENT_API_BYPASS -> "API bypass";
             case COMPONENT_API_LEAKS_IMPLEMENTATION -> "API leaks implementation";
             case COMPONENT_INTERNAL_LAYER_BREAK -> "Internal layer break";
+            case HEXAGON_OUTWARD_DEPENDENCY -> "Outward dependency";
+            case HEXAGON_PORT_BYPASS -> "Port bypass";
             default -> kind.name();
         };
+    }
+
+    private String styleViolationHeader() {
+        if (architecture instanceof HexagonalArchitecture) {
+            return "Hexagonal violations";
+        }
+        return "Component violations";
     }
 
     private static String parentOf(String fqcn) {
@@ -330,7 +347,7 @@ public final class WhatIfDependenciesView implements View {
 
     @Override
     public String getToolTipInfo() {
-        return "Wrong-direction class edges, component violations, and package tangles for the focused architecture";
+        return "Wrong-direction class edges, style violations, and package tangles for the focused architecture";
     }
 
     @Override

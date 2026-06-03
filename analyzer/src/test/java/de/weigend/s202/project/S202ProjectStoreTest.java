@@ -46,7 +46,9 @@ class S202ProjectStoreTest {
                 Set.of("com.example.A"),
                 Set.of("com.example.internal"),
                 List.of(),
-                List.of());
+                List.of())
+                .withPort("com.example.A", ArchitectureAnnotations.PortDirection.INBOUND, "com.example")
+                .withElementRole("com.example.internal", ArchitectureAnnotations.ElementRole.ADAPTER);
         LayoutInvariantReport report = invariantReport();
         Set<DependencyEdge> cycleBreakEdges = Set.of(
                 new DependencyEdge("com.example.A", "com.example.B"));
@@ -102,6 +104,11 @@ class S202ProjectStoreTest {
         assertEquals(Set.of("com.example.C"), loadedElement.dependents);
         assertEquals(Set.of("com.example.A"), loadedAnnotations.componentApiIncludes());
         assertEquals(Set.of("com.example.internal"), loadedAnnotations.componentApiExcludes());
+        assertEquals(1, loadedAnnotations.ports().size());
+        assertEquals("com.example.A", loadedAnnotations.ports().get(0).classFqn());
+        assertEquals(ArchitectureAnnotations.PortDirection.INBOUND, loadedAnnotations.ports().get(0).direction());
+        assertEquals(ArchitectureAnnotations.ElementRole.ADAPTER,
+                loadedAnnotations.explicitElementRole("com.example.internal.Repository"));
 
         assertNotNull(loadedReport);
         assertEquals(1, loadedReport.findings().size());

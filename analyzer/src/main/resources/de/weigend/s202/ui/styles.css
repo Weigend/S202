@@ -635,6 +635,17 @@
     -fx-min-width: 40px;
 }
 
+/* ===== Hexagonal Architecture View ===== */
+.hexagonal-segment-header {
+    -fx-font-size: 11px;
+    -fx-text-fill: #172033;
+}
+
+.hexagonal-port-box {
+    -fx-font-size: 9px;
+    -fx-min-width: 64px;
+}
+
 /* Architecture-graph icons (package / class / interface).
    Pinned to the Material Design Icons font so the global
    .root { -fx-font-family: "System" } cascade can't replace
