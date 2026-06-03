@@ -36,7 +36,8 @@ public class ArchitectureViewLevelTest {
         System.err.println("\n[TEST] testPackageLevelDisplayInArchitectureView");
         
         // Load test JAR
-        String testJarPath = "/home/johannes/Programieren/Structure202/test-example/target/test-example-1.0.0.jar";
+        String testJarPath = System.getProperty("user.dir")
+                + "/../test-example/target/test-example-1.0.0.jar";
         
         // Step 1: Analyze
         InputAnalyzer inputAnalyzer = new InputAnalyzer();
