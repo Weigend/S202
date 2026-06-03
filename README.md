@@ -22,15 +22,30 @@ A JavaFX-based tool for analyzing Java bytecode and visualizing code architectur
 
 ## Quick Start
 
+**First time setup** — WFX (the UI platform dependency) is not on Maven Central.
+Run the bootstrap script once; it clones WFX, builds it, then builds S202:
+
+**Linux / macOS**
 ```bash
-# Build
-mvn clean install
+chmod +x build-all.sh && ./build-all.sh
+# then start with:
+./run-ui.sh
+# or pass a JAR directly:
+./run-ui.sh path/to/your.jar
+```
 
-# Start application
-mvn javafx:run
+**Windows** (cmd or double-click)
+```
+build-all.bat
+rem then start with:
+run-ui.bat
+```
 
-# Run tests
-mvn test
+After the initial bootstrap, the standard Maven commands also work:
+```bash
+mvn clean install        # build
+mvn javafx:run -pl analyzer  # start
+mvn test                 # tests
 ```
 
 Then use the **File** menu:
