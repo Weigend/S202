@@ -82,6 +82,17 @@ class S202ProjectStoreTest {
 
         assertEquals(1, loadedRaw.getPackageCount());
         assertTrue(loadedRaw.getPackage("com.example").classNames.contains("com.example.A"));
+        assertEquals(1, loadedRaw.getModuleCount());
+        DependencyModel.ModuleInfo loadedModule = loadedRaw.getModule("com.example.module");
+        assertNotNull(loadedModule);
+        assertTrue(loadedModule.exportedPackages.stream()
+                .anyMatch(access -> access.packageName().equals("com.example")
+                        && access.targetModules().isEmpty()));
+        assertTrue(loadedModule.exportedPackages.stream()
+                .anyMatch(access -> access.packageName().equals("com.example.internal")
+                        && access.targetModules().equals(Set.of("com.friend"))));
+        assertTrue(loadedModule.openedPackages.stream()
+                .anyMatch(access -> access.packageName().equals("com.example.reflect")));
 
         DomainModel.CalculatedElementInfo loadedElement = loadedDomain.getClass("com.example.A");
         assertNotNull(loadedElement);
@@ -145,6 +156,12 @@ class S202ProjectStoreTest {
         DependencyModel.PackageInfo packageInfo = new DependencyModel.PackageInfo("com.example", "example");
         packageInfo.classNames.add("com.example.A");
         model.setPackages(Map.of(packageInfo.fullName, packageInfo));
+
+        DependencyModel.ModuleInfo moduleInfo = new DependencyModel.ModuleInfo("com.example.module", "1.0");
+        moduleInfo.addExportedPackage("com.example", Set.of());
+        moduleInfo.addExportedPackage("com.example.internal", Set.of("com.friend"));
+        moduleInfo.addOpenedPackage("com.example.reflect", Set.of());
+        model.addModule(moduleInfo);
         return model;
     }
 

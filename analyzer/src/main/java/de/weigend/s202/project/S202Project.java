@@ -38,7 +38,7 @@ public record S202Project(
 
     public static final String FORMAT = "structure202-project";
     public static final int MIN_SUPPORTED_FORMAT_VERSION = 1;
-    public static final int FORMAT_VERSION = 2;
+    public static final int FORMAT_VERSION = 3;
 
     public record CreatedWith(String app, String version) {}
 
@@ -46,7 +46,8 @@ public record S202Project(
 
     public record DependencyModelDto(
             Map<String, ClassInfoDto> classes,
-            Map<String, PackageInfoDto> packages) {}
+            Map<String, PackageInfoDto> packages,
+            List<ModuleInfoDto> modules) {}
 
     public record ClassInfoDto(
             String fullName,
@@ -68,6 +69,16 @@ public record S202Project(
             String simpleName,
             List<String> childPackages,
             List<String> classNames) {}
+
+    public record ModuleInfoDto(
+            String name,
+            String version,
+            List<ModulePackageAccessDto> exportedPackages,
+            List<ModulePackageAccessDto> openedPackages) {}
+
+    public record ModulePackageAccessDto(
+            String packageName,
+            List<String> targetModules) {}
 
     public record DomainModelDto(
             Map<String, CalculatedElementDto> classes,

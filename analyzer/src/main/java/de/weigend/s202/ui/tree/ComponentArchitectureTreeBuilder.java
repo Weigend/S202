@@ -17,6 +17,7 @@ package de.weigend.s202.ui.tree;
 
 import de.weigend.s202.domain.architecture.ArchitectureAnnotations;
 import de.weigend.s202.domain.architecture.ComponentApiClassifier;
+import de.weigend.s202.reader.DependencyModel;
 import de.weigend.s202.ui.ArchitectureDragController;
 import de.weigend.s202.ui.LevelClassBox;
 import de.weigend.s202.ui.LevelPackageBox;
@@ -63,17 +64,26 @@ public class ComponentArchitectureTreeBuilder {
 
     public ComponentArchitectureTreeBuilder(Map<String, Node> elementRegistry,
                                             Consumer<String> selectionChangeSink) {
-        this(elementRegistry, selectionChangeSink, ArchitectureAnnotations.empty(), null);
+        this(elementRegistry, selectionChangeSink, ArchitectureAnnotations.empty(),
+                (java.util.function.BiConsumer<ArchitectureAnnotations, String>) null);
     }
 
     public ComponentArchitectureTreeBuilder(Map<String, Node> elementRegistry,
                                             Consumer<String> selectionChangeSink,
                                             ArchitectureAnnotations annotations,
                                             java.util.function.BiConsumer<ArchitectureAnnotations, String> apiChangeSink) {
+        this(elementRegistry, selectionChangeSink, annotations, null, apiChangeSink);
+    }
+
+    public ComponentArchitectureTreeBuilder(Map<String, Node> elementRegistry,
+                                            Consumer<String> selectionChangeSink,
+                                            ArchitectureAnnotations annotations,
+                                            DependencyModel rawModel,
+                                            java.util.function.BiConsumer<ArchitectureAnnotations, String> apiChangeSink) {
         this.elementRegistry = Objects.requireNonNull(elementRegistry, "elementRegistry cannot be null");
         this.selectionChangeSink = selectionChangeSink;
         this.annotations = annotations == null ? ArchitectureAnnotations.empty() : annotations;
-        this.apiClassifier = new ComponentApiClassifier(this.annotations);
+        this.apiClassifier = new ComponentApiClassifier(this.annotations, rawModel);
         this.apiChangeSink = apiChangeSink != null ? apiChangeSink : (next, message) -> {};
     }
 
@@ -227,7 +237,7 @@ public class ComponentArchitectureTreeBuilder {
                 && !selectedApiClasses(node).isEmpty();
     }
 
-    private List<ArchitectureNode> selectedApiClasses(ArchitectureNode component) {
+    List<ArchitectureNode> selectedApiClasses(ArchitectureNode component) {
         List<ArchitectureNode> api = new ArrayList<>();
         collectSelectedApiClasses(component, api, false);
         api.sort(Comparator.comparing(ArchitectureNode::getFullName, String.CASE_INSENSITIVE_ORDER));

@@ -373,6 +373,7 @@ public class ArchitectureView extends BorderPane {
                             elementRegistry,
                             graphSelectionSink,
                             getArchitectureAnnotations(),
+                            rawDependencyModel.get(),
                             this::handleComponentApiChanged);
             return componentBuilder.buildTree(rootNode, maxDepth);
         }
@@ -391,6 +392,7 @@ public class ArchitectureView extends BorderPane {
                             elementRegistry,
                             graphSelectionSink,
                             getArchitectureAnnotations(),
+                            rawDependencyModel.get(),
                             this::handleComponentApiChanged);
             componentBuilder.buildTreeAsync(rootNode, maxDepth, progressSink, onComplete);
             return;
@@ -777,6 +779,9 @@ public class ArchitectureView extends BorderPane {
     public void setRawDependencyModel(DependencyModel model) {
         rawDependencyModel.set(model);
         movedFqns.clear();
+        if (viewStyle == ArchitectureViewStyle.COMPONENT && domainModel.get() != null) {
+            rebuildArchitectureProjection();
+        }
         ensureWhatIfDropListenerRegistered();
         arrowsCoalescer.markDirty();
     }

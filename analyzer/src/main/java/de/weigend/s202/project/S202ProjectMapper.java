@@ -122,6 +122,26 @@ public final class S202ProjectMapper {
             }
         }
         model.setPackages(packages);
+        if (dto.modules() != null) {
+            for (S202Project.ModuleInfoDto moduleDto : dto.modules()) {
+                if (moduleDto.name() == null || moduleDto.name().isBlank()) {
+                    continue;
+                }
+                DependencyModel.ModuleInfo moduleInfo = new DependencyModel.ModuleInfo(
+                        moduleDto.name(), moduleDto.version());
+                for (S202Project.ModulePackageAccessDto access : nullToList(moduleDto.exportedPackages())) {
+                    if (access.packageName() != null && !access.packageName().isBlank()) {
+                        moduleInfo.addExportedPackage(access.packageName(), nullToList(access.targetModules()));
+                    }
+                }
+                for (S202Project.ModulePackageAccessDto access : nullToList(moduleDto.openedPackages())) {
+                    if (access.packageName() != null && !access.packageName().isBlank()) {
+                        moduleInfo.addOpenedPackage(access.packageName(), nullToList(access.targetModules()));
+                    }
+                }
+                model.addModule(moduleInfo);
+            }
+        }
         return model;
     }
 
@@ -205,7 +225,7 @@ public final class S202ProjectMapper {
 
     private S202Project.DependencyModelDto toDependencyModelDto(DependencyModel model) {
         if (model == null) {
-            return new S202Project.DependencyModelDto(Map.of(), Map.of());
+            return new S202Project.DependencyModelDto(Map.of(), Map.of(), List.of());
         }
         Map<String, S202Project.ClassInfoDto> classes = new TreeMap<>();
         for (Map.Entry<String, DependencyModel.ClassInfo> entry : model.getAllClasses().entrySet()) {
@@ -229,7 +249,36 @@ public final class S202ProjectMapper {
                     sorted(info.childPackages),
                     sorted(info.classNames)));
         }
-        return new S202Project.DependencyModelDto(classes, packages);
+        return new S202Project.DependencyModelDto(classes, packages, toModuleInfoDtos(model));
+    }
+
+    private List<S202Project.ModuleInfoDto> toModuleInfoDtos(DependencyModel model) {
+        if (model == null || model.getAllModules().isEmpty()) {
+            return List.of();
+        }
+        return model.getAllModules().values().stream()
+                .sorted(Comparator.comparing(module -> module.name))
+                .map(module -> new S202Project.ModuleInfoDto(
+                        module.name,
+                        module.version,
+                        toModulePackageAccessDtos(module.exportedPackages),
+                        toModulePackageAccessDtos(module.openedPackages)))
+                .toList();
+    }
+
+    private List<S202Project.ModulePackageAccessDto> toModulePackageAccessDtos(
+            Set<DependencyModel.ModulePackageAccess> accessSet) {
+        if (accessSet == null || accessSet.isEmpty()) {
+            return List.of();
+        }
+        return accessSet.stream()
+                .sorted(Comparator
+                        .comparing(DependencyModel.ModulePackageAccess::packageName)
+                        .thenComparing(access -> String.join(",", sorted(access.targetModules()))))
+                .map(access -> new S202Project.ModulePackageAccessDto(
+                        access.packageName(),
+                        sorted(access.targetModules())))
+                .toList();
     }
 
     private S202Project.DomainModelDto toDomainModelDto(DomainModel model) {

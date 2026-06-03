@@ -371,8 +371,8 @@ public class S202Module implements Module {
         ArchitectureView componentView = wrapper.getArchitectureView();
         componentView.setViewStyle(ArchitectureViewStyle.COMPONENT);
         componentView.setArchitectureAnnotations(sourceView.getArchitectureAnnotations());
-        componentView.setDomainModel(sourceView.getDomainModel());
         componentView.setRawDependencyModel(sourceView.getRawDependencyModel());
+        componentView.setDomainModel(sourceView.getDomainModel());
         componentView.setCycleBreakEdges(sourceView.getCycleBreakEdges());
         componentView.setAppliedTangleCutEdges(refactoringPreviewCuts);
         viewSources.put(componentView, viewSources.get(sourceView));

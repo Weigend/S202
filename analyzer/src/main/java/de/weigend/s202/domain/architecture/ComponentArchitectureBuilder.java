@@ -17,6 +17,7 @@ package de.weigend.s202.domain.architecture;
 
 import de.weigend.s202.domain.DomainModel;
 import de.weigend.s202.domain.DomainModel.CalculatedElementInfo;
+import de.weigend.s202.reader.DependencyModel;
 
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -45,14 +46,20 @@ public final class ComponentArchitectureBuilder implements ArchitectureStyle {
     @Override
     public ComponentArchitecture build(ArchitectureContext context) {
         Objects.requireNonNull(context, "context cannot be null");
-        return build(context.domainModel(), context.annotations());
+        return build(context.domainModel(), context.annotations(), context.rawModel());
     }
 
     public ComponentArchitecture build(DomainModel domain, ArchitectureAnnotations annotations) {
+        return build(domain, annotations, null);
+    }
+
+    public ComponentArchitecture build(DomainModel domain,
+                                       ArchitectureAnnotations annotations,
+                                       DependencyModel rawModel) {
         Objects.requireNonNull(domain, "domain cannot be null");
         ArchitectureAnnotations effectiveAnnotations =
                 annotations == null ? ArchitectureAnnotations.empty() : annotations;
-        ComponentApiClassifier classifier = new ComponentApiClassifier(effectiveAnnotations);
+        ComponentApiClassifier classifier = new ComponentApiClassifier(effectiveAnnotations, rawModel);
         ModelIndex index = ModelIndex.of(domain);
 
         List<ComponentRoot> roots = componentRoots(index, effectiveAnnotations, classifier);

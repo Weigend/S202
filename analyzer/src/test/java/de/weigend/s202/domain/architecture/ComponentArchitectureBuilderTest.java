@@ -17,6 +17,7 @@ package de.weigend.s202.domain.architecture;
 
 import de.weigend.s202.domain.DomainModel;
 import de.weigend.s202.domain.DomainModel.CalculatedElementInfo;
+import de.weigend.s202.reader.DependencyModel;
 import org.junit.jupiter.api.Test;
 
 import java.util.LinkedHashMap;
@@ -100,6 +101,40 @@ class ComponentArchitectureBuilderTest {
     }
 
     @Test
+    void jpmsExportsMarkExactPackageClassesAsApi() {
+        DomainModel domain = jpmsDomainModel();
+        DependencyModel rawModel = jpmsRawModel();
+
+        ComponentArchitecture architecture = new ComponentArchitectureBuilder()
+                .build(new ArchitectureContext(rawModel, domain, ArchitectureAnnotations.empty()));
+
+        Set<String> apiFqns = apiFqns(architecture, "com.acme.payment");
+        assertTrue(apiFqns.contains("com.acme.payment.contract.PaymentFacade"));
+        assertTrue(apiFqns.contains("com.acme.payment.PaymentApi"));
+        assertFalse(apiFqns.contains("com.acme.payment.contract.internal.InternalDto"));
+        assertFalse(apiFqns.contains("com.acme.payment.reflect.ReflectionHook"));
+    }
+
+    @Test
+    void manualApiExcludesOverrideJpmsExports() {
+        DomainModel domain = jpmsDomainModel();
+        DependencyModel rawModel = jpmsRawModel();
+        ArchitectureAnnotations annotations = new ArchitectureAnnotations(
+                List.of(),
+                Set.of(),
+                Set.of("com.acme.payment.contract.PaymentFacade"),
+                List.of(),
+                List.of());
+
+        ComponentArchitecture architecture = new ComponentArchitectureBuilder()
+                .build(new ArchitectureContext(rawModel, domain, annotations));
+
+        Set<String> apiFqns = apiFqns(architecture, "com.acme.payment");
+        assertFalse(apiFqns.contains("com.acme.payment.contract.PaymentFacade"));
+        assertTrue(apiFqns.contains("com.acme.payment.PaymentApi"));
+    }
+
+    @Test
     void componentProjectionDoesNotMutateCalculatedLevels() {
         DomainModel domain = domainModel();
         Map<String, Integer> before = classLevels(domain);
@@ -125,6 +160,16 @@ class ComponentArchitectureBuilderTest {
                 .anyMatch(v -> v.sourceFqn().equals(source)
                         && v.targetFqn().equals(target)
                         && v.kind() == kind);
+    }
+
+    private static Set<String> apiFqns(ComponentArchitecture architecture, String rootPackageFqn) {
+        ComponentArchitecture.ComponentElement component = architecture.components().stream()
+                .filter(c -> c.rootPackageFqn().equals(rootPackageFqn))
+                .findFirst()
+                .orElseThrow();
+        return component.api().stream()
+                .map(Element::fqn)
+                .collect(Collectors.toSet());
     }
 
     private static Map<String, Integer> classLevels(DomainModel domain) {
@@ -157,6 +202,35 @@ class ComponentArchitectureBuilderTest {
         cls(model, "com.acme.web.Controller", false, 3,
                 Set.of("com.acme.payment.internal.PaymentService"));
 
+        return model;
+    }
+
+    private static DomainModel jpmsDomainModel() {
+        DomainModel model = new DomainModel();
+
+        pkg(model, "com", 0);
+        pkg(model, "com.acme", 0);
+        pkg(model, "com.acme.payment", 1);
+        pkg(model, "com.acme.payment.contract", 1);
+        pkg(model, "com.acme.payment.contract.internal", 0);
+        pkg(model, "com.acme.payment.reflect", 0);
+        pkg(model, "com.acme.web", 2);
+
+        cls(model, "com.acme.payment.PaymentApi", true, 2, Set.of());
+        cls(model, "com.acme.payment.contract.PaymentFacade", false, 2, Set.of());
+        cls(model, "com.acme.payment.contract.internal.InternalDto", false, 1, Set.of());
+        cls(model, "com.acme.payment.reflect.ReflectionHook", false, 1, Set.of());
+        cls(model, "com.acme.web.Controller", false, 3, Set.of());
+
+        return model;
+    }
+
+    private static DependencyModel jpmsRawModel() {
+        DependencyModel model = new DependencyModel();
+        DependencyModel.ModuleInfo module = new DependencyModel.ModuleInfo("com.acme.payment", null);
+        module.addExportedPackage("com.acme.payment.contract", Set.of());
+        module.addOpenedPackage("com.acme.payment.reflect", Set.of());
+        model.addModule(module);
         return model;
     }
 

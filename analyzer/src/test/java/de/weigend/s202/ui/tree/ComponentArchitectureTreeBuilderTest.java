@@ -15,10 +15,13 @@
  */
 package de.weigend.s202.ui.tree;
 
+import de.weigend.s202.domain.architecture.ArchitectureAnnotations;
+import de.weigend.s202.reader.DependencyModel;
 import de.weigend.s202.ui.model.ArchitectureNode;
 import de.weigend.s202.ui.model.ArchitectureNode.NodeType;
 import org.junit.jupiter.api.Test;
 
+import java.util.HashMap;
 import java.util.List;
 import java.util.Set;
 
@@ -58,6 +61,33 @@ class ComponentArchitectureTreeBuilderTest {
     }
 
     @Test
+    void instanceApiSelectionUsesJpmsExports() {
+        ArchitectureNode component = find(sourceRoot(), "com.acme.payment");
+        DependencyModel rawModel = new DependencyModel();
+        DependencyModel.ModuleInfo module = new DependencyModel.ModuleInfo("com.acme.payment", null);
+        module.addExportedPackage("com.acme.payment.contract", Set.of());
+        rawModel.addModule(module);
+
+        ComponentArchitectureTreeBuilder builder = new ComponentArchitectureTreeBuilder(
+                new HashMap<>(),
+                null,
+                ArchitectureAnnotations.empty(),
+                rawModel,
+                null);
+
+        List<String> api = builder.selectedApiClasses(component).stream()
+                .map(ArchitectureNode::getFullName)
+                .sorted()
+                .toList();
+
+        assertEquals(List.of(
+                "com.acme.payment.PaymentApi",
+                "com.acme.payment.api.PaymentDto",
+                "com.acme.payment.api.PaymentPort",
+                "com.acme.payment.contract.PaymentFacade"), api);
+    }
+
+    @Test
     void implementationCloneExcludesApiClassesButKeepsNestedPackages() {
         ArchitectureNode component = find(sourceRoot(), "com.acme.payment");
 
@@ -82,16 +112,19 @@ class ComponentArchitectureTreeBuilderTest {
         ArchitectureNode acme = pkg("com.acme", "acme");
         ArchitectureNode payment = pkg("com.acme.payment", "payment");
         ArchitectureNode api = pkg("com.acme.payment.api", "api");
+        ArchitectureNode contract = pkg("com.acme.payment.contract", "contract");
         ArchitectureNode internal = pkg("com.acme.payment.internal", "internal");
         ArchitectureNode shipping = pkg("com.acme.shipping", "shipping");
 
         payment.addChild(cls("com.acme.payment.PaymentApi", "PaymentApi", false));
         api.addChild(cls("com.acme.payment.api.PaymentDto", "PaymentDto", false));
         api.addChild(cls("com.acme.payment.api.PaymentPort", "PaymentPort", true));
+        contract.addChild(cls("com.acme.payment.contract.PaymentFacade", "PaymentFacade", false));
         internal.addChild(cls("com.acme.payment.internal.PaymentService", "PaymentService", false));
         shipping.addChild(cls("com.acme.shipping.ShippingService", "ShippingService", false));
 
         payment.addChild(api);
+        payment.addChild(contract);
         payment.addChild(internal);
         acme.addChild(payment);
         acme.addChild(shipping);

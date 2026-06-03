@@ -15,17 +15,28 @@
  */
 package de.weigend.s202.domain.architecture;
 
+import de.weigend.s202.reader.DependencyModel;
+
+import java.util.Set;
+
 /**
  * Shared component-API classification. Manual annotations have priority;
- * naming/interface heuristics remain a fallback so existing projects get a
- * useful first projection without changing the underlying dependency model.
+ * JPMS exports are treated as analyzed API metadata; naming/interface
+ * heuristics remain a fallback so existing projects get a useful first
+ * projection without changing the underlying dependency model.
  */
 public final class ComponentApiClassifier {
 
     private final ArchitectureAnnotations annotations;
+    private final Set<String> exportedPackages;
 
     public ComponentApiClassifier(ArchitectureAnnotations annotations) {
+        this(annotations, null);
+    }
+
+    public ComponentApiClassifier(ArchitectureAnnotations annotations, DependencyModel rawModel) {
         this.annotations = annotations == null ? ArchitectureAnnotations.empty() : annotations;
+        this.exportedPackages = rawModel == null ? Set.of() : Set.copyOf(rawModel.getExportedPackageNames());
     }
 
     public boolean isSelectedApiClass(String fqn,
@@ -36,11 +47,18 @@ public final class ComponentApiClassifier {
         if (explicit != null) {
             return explicit;
         }
+        if (isJpmsExportedClass(fqn)) {
+            return true;
+        }
         return inApiPackage || isHeuristicApiClass(simpleName, interfaceType);
     }
 
     public Boolean explicitDecision(String fqn) {
         return annotations.explicitComponentApiDecision(fqn);
+    }
+
+    public boolean isJpmsExportedClass(String fqn) {
+        return exportedPackages.contains(packageNameOf(fqn));
     }
 
     public static boolean isHeuristicApiClass(String simpleName, boolean interfaceType) {
@@ -54,5 +72,12 @@ public final class ComponentApiClassifier {
                 || normalized.equals("apis")
                 || normalized.equals("port")
                 || normalized.equals("ports");
+    }
+
+    private static String packageNameOf(String fqn) {
+        if (fqn == null || !fqn.contains(".")) {
+            return "";
+        }
+        return fqn.substring(0, fqn.lastIndexOf('.'));
     }
 }
