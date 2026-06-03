@@ -71,6 +71,7 @@ public class S202MenuBar {
     private static final String VIEW_MENU_ID = "view";
     private static final String VIEW_MENU_TITLE = "View";
     private static final String COMPONENT_VIEW_ITEM_ID = "view.componentView";
+    private static final String HEXAGONAL_VIEW_ITEM_ID = "view.hexagonalView";
 
     private final ApplicationWindow applicationWindow;
     private final EventBus<EventObject> eventBus;
@@ -181,12 +182,12 @@ public class S202MenuBar {
 
     private void installViewMenu() {
         applicationWindow.getMenu().addListener((ListChangeListener<Menu>) change ->
-                Platform.runLater(this::ensureComponentViewMenuItem));
-        ensureComponentViewMenuItem();
-        Platform.runLater(this::ensureComponentViewMenuItem);
+                Platform.runLater(this::ensureArchitectureViewMenuItems));
+        ensureArchitectureViewMenuItems();
+        Platform.runLater(this::ensureArchitectureViewMenuItems);
     }
 
-    private void ensureComponentViewMenuItem() {
+    private void ensureArchitectureViewMenuItems() {
         Menu viewMenu = findMenu(VIEW_MENU_ID, VIEW_MENU_TITLE);
         if (viewMenu == null) {
             viewMenu = MenuUtil.createMenu(VIEW_MENU_ID, VIEW_MENU_TITLE);
@@ -194,14 +195,18 @@ public class S202MenuBar {
         }
 
         watchViewMenuItems(viewMenu);
-        if (containsMenuItem(viewMenu, COMPONENT_VIEW_ITEM_ID)) {
-            return;
+        if (!containsMenuItem(viewMenu, COMPONENT_VIEW_ITEM_ID)) {
+            MenuItem componentViewItem = MenuUtil.createMenuItem(
+                    COMPONENT_VIEW_ITEM_ID, "Component View",
+                    e -> publish(new MenuRequestEvent.OpenComponentView(this)));
+            viewMenu.getItems().add(componentViewItem);
         }
-
-        MenuItem componentViewItem = MenuUtil.createMenuItem(
-                COMPONENT_VIEW_ITEM_ID, "Component View",
-                e -> publish(new MenuRequestEvent.OpenComponentView(this)));
-        viewMenu.getItems().add(componentViewItem);
+        if (!containsMenuItem(viewMenu, HEXAGONAL_VIEW_ITEM_ID)) {
+            MenuItem hexagonalViewItem = MenuUtil.createMenuItem(
+                    HEXAGONAL_VIEW_ITEM_ID, "Hexagonal View",
+                    e -> publish(new MenuRequestEvent.OpenHexagonalView(this)));
+            viewMenu.getItems().add(hexagonalViewItem);
+        }
     }
 
     private void watchViewMenuItems(Menu viewMenu) {
@@ -210,8 +215,9 @@ public class S202MenuBar {
         }
 
         viewMenu.getItems().addListener((ListChangeListener<MenuItem>) change -> {
-            if (!containsMenuItem(viewMenu, COMPONENT_VIEW_ITEM_ID)) {
-                Platform.runLater(this::ensureComponentViewMenuItem);
+            if (!containsMenuItem(viewMenu, COMPONENT_VIEW_ITEM_ID)
+                    || !containsMenuItem(viewMenu, HEXAGONAL_VIEW_ITEM_ID)) {
+                Platform.runLater(this::ensureArchitectureViewMenuItems);
             }
         });
     }

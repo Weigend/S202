@@ -20,5 +20,6 @@ package de.weigend.s202.ui;
  */
 public enum ArchitectureViewStyle {
     LAYERED,
-    COMPONENT
+    COMPONENT,
+    HEXAGONAL
 }

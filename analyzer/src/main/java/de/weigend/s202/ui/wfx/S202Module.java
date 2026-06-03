@@ -306,6 +306,7 @@ public class S202Module implements Module {
         bus.subscribe(MenuRequestEvent.Exit.class, ev -> { Platform.exit(); return true; });
         bus.subscribe(MenuRequestEvent.NewView.class, ev -> { newArchitectureWindow(); return true; });
         bus.subscribe(MenuRequestEvent.OpenComponentView.class, ev -> { openComponentView(); return true; });
+        bus.subscribe(MenuRequestEvent.OpenHexagonalView.class, ev -> { openHexagonalView(); return true; });
         bus.subscribe(MenuRequestEvent.CloseFocusedView.class, ev -> { closeFocusedView(); return true; });
         bus.subscribe(MenuRequestEvent.CloseAllViews.class, ev -> { closeAllViews(); return true; });
         bus.subscribe(MenuRequestEvent.RestoreDefaultLayout.class, ev -> {
@@ -390,6 +391,44 @@ public class S202Module implements Module {
                 });
     }
 
+    private void openHexagonalView() {
+        ArchitectureWfxView sourceWrapper = focusedSourceArchitectureView();
+        if (sourceWrapper == null) {
+            publishProgress("No architecture view available for hexagonal projection", 1);
+            return;
+        }
+
+        ArchitectureView sourceView = sourceWrapper.getArchitectureView();
+        ArchitectureNode sourceRoot = sourceView.getArchitectureRoot();
+        if (sourceRoot == null) {
+            publishProgress("No architecture loaded for hexagonal projection", 1);
+            return;
+        }
+
+        WindowManager wm = Lookup.lookup(WindowManager.class);
+        ArchitectureWfxView wrapper = createArchitectureView("Hexagonal View");
+        ArchitectureView hexagonalView = wrapper.getArchitectureView();
+        hexagonalView.setViewStyle(ArchitectureViewStyle.HEXAGONAL);
+        hexagonalView.setArchitectureAnnotations(sourceView.getArchitectureAnnotations());
+        hexagonalView.setRawDependencyModel(sourceView.getRawDependencyModel());
+        hexagonalView.setDomainModel(sourceView.getDomainModel());
+        hexagonalView.setCycleBreakEdges(sourceView.getCycleBreakEdges());
+        hexagonalView.setAppliedTangleCutEdges(refactoringPreviewCuts);
+        viewSources.put(hexagonalView, viewSources.get(sourceView));
+        viewInvariantReports.put(hexagonalView, viewInvariantReports.get(sourceView));
+
+        registerArchitectureView(wrapper);
+        wm.showView(wrapper);
+
+        hexagonalView.setArchitectureRootAsync(
+                sourceRoot,
+                progress -> publishJavaFxBuildProgress("Building JavaFX hexagonal view", progress),
+                () -> {
+                    hexagonalView.setQualityMetrics(sourceView.getQualityMetrics());
+                    publishProgress("Opened hexagonal view", 1);
+                });
+    }
+
     /**
      * Register an architecture wrapper with the {@link WindowManager} and,
      * on first call, dock the What-If Dependencies panel under it. Every
@@ -426,7 +465,8 @@ public class S202Module implements Module {
                     continue;
                 }
                 target.setArchitectureAnnotations(effective);
-                if (target.getViewStyle() == ArchitectureViewStyle.COMPONENT
+                if ((target.getViewStyle() == ArchitectureViewStyle.COMPONENT
+                        || target.getViewStyle() == ArchitectureViewStyle.HEXAGONAL)
                         && target.hasRoot()) {
                     target.refreshLayout();
                 }
@@ -619,7 +659,7 @@ public class S202Module implements Module {
 
         showWhatIfViolationsCheckbox = new CheckBox("Show Violations");
         showWhatIfViolationsCheckbox.setTooltip(new Tooltip(
-                "Toggle dashed arrows for wrong-direction dependencies introduced by moves"));
+                "Toggle dashed arrows for active architecture violations"));
         showWhatIfViolationsCheckbox.selectedProperty().addListener((obs, was, isNow) -> {
             if (boundView != null) {
                 boundView.setShowWhatIfViolations(isNow);
