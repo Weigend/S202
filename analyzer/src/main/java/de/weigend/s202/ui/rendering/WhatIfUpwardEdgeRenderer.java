@@ -17,7 +17,9 @@ package de.weigend.s202.ui.rendering;
 
 import de.weigend.s202.domain.architecture.Architecture;
 import de.weigend.s202.domain.architecture.EndpointPair;
+import de.weigend.s202.domain.architecture.ViolationKind;
 import de.weigend.s202.ui.LevelClassBox;
+import de.weigend.s202.ui.component.ComponentBox;
 import de.weigend.s202.ui.whatif.ClassEdge;
 import javafx.geometry.Bounds;
 import javafx.scene.Node;
@@ -39,16 +41,12 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Set;
 
 /**
- * Phase 4 renderer for "wrong-direction" dependency edges in the
- * architecture view. The visual layout itself encodes the architecture
- * direction — sources are placed above their dependencies. A class edge is
- * a violation precisely when its source box is now positioned <i>below</i>
- * its target box (larger scene-Y). After every DnD move or layout pulse
- * the renderer iterates the static class-edge list, rolls each endpoint up
- * to the closest currently-visible ancestor box, and paints an orange
- * arrow for any edge whose source-Y is greater than its target-Y.
+ * Renderer for style-specific dependency violations in the architecture view.
+ * The default is the layered/What-If UPWARD overlay; component views pass their
+ * own violation kinds while reusing the same visible-endpoint rollup.
  *
  * <p>Class-to-class edges with both endpoints expanded render as single
  * lines. Edges that roll up to a package on either side aggregate into a
@@ -96,11 +94,15 @@ public final class WhatIfUpwardEdgeRenderer {
     }
 
     public void redraw(Architecture arch) {
+        redraw(arch, Set.of(ViolationKind.UPWARD));
+    }
+
+    public void redraw(Architecture arch, Set<ViolationKind> kinds) {
         clear();
         if (arch == null || zoomableContent == null || overlayPane == null) {
             return;
         }
-        for (Violation violation : groupByVisibleEndpoint(arch)) {
+        for (Violation violation : groupByVisibleEndpoint(arch, kinds)) {
             boolean bothClasses = violation.source() instanceof LevelClassBox
                     && violation.target() instanceof LevelClassBox;
             String badge = bothClasses ? null : Integer.toString(violation.classEdges().size());
@@ -116,19 +118,21 @@ public final class WhatIfUpwardEdgeRenderer {
     }
 
     /**
-     * Resolve every UPWARD violation in {@code arch} to a pair of
-     * currently-visible scene-graph nodes and group the violations by
-     * that pair. The aggregation itself runs in the domain via
-     * {@link Architecture#groupUpwardViolations(java.util.function.Function)};
-     * this method only contributes the UI-specific rollup function
-     * (class FQN → currently-visible box FQN) and the FQN→Node lookup.
+     * Resolve style-specific violations in {@code arch} to currently-visible
+     * scene-graph endpoint pairs. The aggregation itself runs in the domain;
+     * this method only contributes the UI-specific rollup function and
+     * FQN-to-Node lookup.
      */
     public List<Violation> groupByVisibleEndpoint(Architecture arch) {
+        return groupByVisibleEndpoint(arch, Set.of(ViolationKind.UPWARD));
+    }
+
+    public List<Violation> groupByVisibleEndpoint(Architecture arch, Set<ViolationKind> kinds) {
         if (arch == null || zoomableContent == null) {
             return List.of();
         }
         Map<EndpointPair, List<de.weigend.s202.domain.architecture.Violation>> grouped =
-                arch.groupUpwardViolations(this::visibleEndpointFqn);
+                arch.groupViolations(this::visibleEndpointFqn, kinds);
         List<Violation> result = new ArrayList<>(grouped.size());
         for (Map.Entry<EndpointPair, List<de.weigend.s202.domain.architecture.Violation>> entry
                 : grouped.entrySet()) {
@@ -150,9 +154,9 @@ public final class WhatIfUpwardEdgeRenderer {
 
     /**
      * Class FQN → FQN of the closest currently-visible
-     * {@link de.weigend.s202.ui.LevelPackageBox} (or the class itself if
-     * visible). Returns {@code null} when the class isn't reachable
-     * through a visible ancestor — the architecture drops those
+     * {@link de.weigend.s202.ui.LevelPackageBox}, {@link ComponentBox}
+     * (or the class itself if visible). Returns {@code null} when the
+     * class isn't reachable through a visible ancestor — the architecture drops those
      * violations from the aggregation.
      */
     private String visibleEndpointFqn(String fqcn) {
@@ -167,6 +171,9 @@ public final class WhatIfUpwardEdgeRenderer {
         while (n != null) {
             if (n instanceof de.weigend.s202.ui.LevelPackageBox lpb && isActuallyVisible(n)) {
                 return lpb.getFullName();
+            }
+            if (n instanceof ComponentBox component && isActuallyVisible(n)) {
+                return component.getFullName();
             }
             n = n.getParent();
         }
@@ -242,11 +249,17 @@ public final class WhatIfUpwardEdgeRenderer {
         if (srcBounds == null || tgtBounds == null) {
             return;
         }
-        // Source: centre-X at top edge (smaller Y). Target: centre-X at bottom edge.
+        double sourceCenterY = (srcBounds[1] + srcBounds[3]) / 2.0;
+        double targetCenterY = (tgtBounds[1] + tgtBounds[3]) / 2.0;
+        boolean sourceAboveTarget = sourceCenterY <= targetCenterY;
+
+        // Direction follows the actual visual order: down-going dependencies
+        // leave the source bottom and enter the target top; up-going
+        // violations leave the source top and enter the target bottom.
         double startX = (srcBounds[0] + srcBounds[2]) / 2.0;
-        double startY = srcBounds[1];
+        double startY = sourceAboveTarget ? srcBounds[3] : srcBounds[1];
         double endX = (tgtBounds[0] + tgtBounds[2]) / 2.0;
-        double endY = tgtBounds[3];
+        double endY = sourceAboveTarget ? tgtBounds[1] : tgtBounds[3];
 
         // Quadratic control point: midway vertically, bowed slightly to the
         // right so multiple arrows between the same lane stay distinguishable.

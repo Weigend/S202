@@ -50,7 +50,8 @@ public final class S202ProjectStore {
         if (!S202Project.FORMAT.equals(project.format())) {
             throw new IOException("Unsupported project format: " + project.format());
         }
-        if (project.formatVersion() != S202Project.FORMAT_VERSION) {
+        if (project.formatVersion() < S202Project.MIN_SUPPORTED_FORMAT_VERSION
+                || project.formatVersion() > S202Project.FORMAT_VERSION) {
             throw new IOException("Unsupported project format version: " + project.formatVersion());
         }
         if (project.dependencyModel() == null || project.domainModel() == null) {

@@ -19,6 +19,7 @@ import org.objectweb.asm.ClassReader;
 import org.objectweb.asm.ClassVisitor;
 import org.objectweb.asm.FieldVisitor;
 import org.objectweb.asm.MethodVisitor;
+import org.objectweb.asm.ModuleVisitor;
 import org.objectweb.asm.Opcodes;
 import org.objectweb.asm.Type;
 import org.objectweb.asm.signature.SignatureReader;
@@ -239,17 +240,22 @@ public class InputAnalyzer {
             Enumeration<JarEntry> entries = jarFile.entries();
             while (entries.hasMoreElements()) {
                 JarEntry entry = entries.nextElement();
-                if (entry.getName().endsWith(".class") && !entry.isDirectory()
-                        && !entry.getName().endsWith("package-info.class")
-                        && !entry.getName().endsWith("module-info.class")) {
-                    try {
-                        byte[] classBytes = jarFile.getInputStream(entry).readAllBytes();
+                if (!entry.getName().endsWith(".class") || entry.isDirectory()
+                        || entry.getName().endsWith("package-info.class")) {
+                    continue;
+                }
+
+                try {
+                    byte[] classBytes = jarFile.getInputStream(entry).readAllBytes();
+                    if (entry.getName().endsWith("module-info.class")) {
+                        analyzeModule(entry.getName(), classBytes, model);
+                    } else {
                         analyzeClass(entry.getName(), classBytes, model);
-                    } catch (Exception e) {
-                        System.err.println("Warning: Could not analyze " + entry.getName() + ": " + e.getMessage());
+                        processedClasses++;
+                        progress.accept(new AnalysisProgress(jarPath, entry.getName(), processedClasses, totalClasses));
                     }
-                    processedClasses++;
-                    progress.accept(new AnalysisProgress(jarPath, entry.getName(), processedClasses, totalClasses));
+                } catch (Exception e) {
+                    System.err.println("Warning: Could not analyze " + entry.getName() + ": " + e.getMessage());
                 }
             }
         }
@@ -284,6 +290,21 @@ public class InputAnalyzer {
             reader.accept(extractor, ClassReader.SKIP_FRAMES);
         } catch (Exception e) {
             System.err.println("Error analyzing class: " + e.getMessage());
+        }
+    }
+
+    /**
+     * Reads Java Platform Module System descriptors without adding module-info
+     * as a normal class. Module exports are architectural metadata, not
+     * dependency edges.
+     */
+    private void analyzeModule(String classPath, byte[] bytecode, DependencyModel model) {
+        try {
+            ClassReader reader = new ClassReader(bytecode);
+            ModuleDescriptorExtractor extractor = new ModuleDescriptorExtractor(model);
+            reader.accept(extractor, ClassReader.SKIP_CODE | ClassReader.SKIP_DEBUG | ClassReader.SKIP_FRAMES);
+        } catch (Exception e) {
+            System.err.println("Error analyzing module descriptor " + classPath + ": " + e.getMessage());
         }
     }
 
@@ -328,6 +349,52 @@ public class InputAnalyzer {
 
         // Store packages in model
         model.setPackages(packages);
+    }
+
+    /**
+     * ASM visitor for module-info.class. Stores exports and opens as raw
+     * metadata; consumers decide which descriptor entries are policy-relevant.
+     */
+    private static class ModuleDescriptorExtractor extends ClassVisitor {
+        private final DependencyModel model;
+
+        ModuleDescriptorExtractor(DependencyModel model) {
+            super(Opcodes.ASM9);
+            this.model = model;
+        }
+
+        @Override
+        public ModuleVisitor visitModule(String name, int access, String version) {
+            DependencyModel.ModuleInfo moduleInfo = model.getOrCreateModule(name, version);
+            return new ModuleVisitor(Opcodes.ASM9) {
+                @Override
+                public void visitExport(String packaze, int access, String... modules) {
+                    moduleInfo.addExportedPackage(convertPackageName(packaze), moduleTargets(modules));
+                }
+
+                @Override
+                public void visitOpen(String packaze, int access, String... modules) {
+                    moduleInfo.addOpenedPackage(convertPackageName(packaze), moduleTargets(modules));
+                }
+            };
+        }
+
+        private static String convertPackageName(String internalName) {
+            return internalName == null ? "" : internalName.replace("/", ".");
+        }
+
+        private static Set<String> moduleTargets(String[] modules) {
+            if (modules == null || modules.length == 0) {
+                return Set.of();
+            }
+            Set<String> result = new LinkedHashSet<>();
+            for (String module : modules) {
+                if (module != null && !module.isBlank()) {
+                    result.add(module);
+                }
+            }
+            return result;
+        }
     }
 
     /**

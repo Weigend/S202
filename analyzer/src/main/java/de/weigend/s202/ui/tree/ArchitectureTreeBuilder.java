@@ -62,6 +62,7 @@ public class ArchitectureTreeBuilder {
     private static final int ASYNC_BATCH_SIZE = 120;
 
     private final Map<String, Node> elementRegistry;
+    private final Consumer<String> selectionChangeSink;
 
     /**
      * Creates a new ArchitectureTreeBuilder.
@@ -69,7 +70,12 @@ public class ArchitectureTreeBuilder {
      * @param elementRegistry Shared registry for element lookup (will be cleared and populated)
      */
     public ArchitectureTreeBuilder(Map<String, Node> elementRegistry) {
+        this(elementRegistry, null);
+    }
+
+    public ArchitectureTreeBuilder(Map<String, Node> elementRegistry, Consumer<String> selectionChangeSink) {
         this.elementRegistry = Objects.requireNonNull(elementRegistry, "elementRegistry cannot be null");
+        this.selectionChangeSink = selectionChangeSink;
     }
 
     /**
@@ -90,6 +96,21 @@ public class ArchitectureTreeBuilder {
      * @return VBox containing the complete UI hierarchy
      */
     public VBox buildTree(ArchitectureNode rootNode, int maxDepth) {
+        return buildTree(rootNode, maxDepth, true);
+    }
+
+    /**
+     * Builds the UI tree from an architecture model.
+     *
+     * @param rootNode Root of the architecture tree
+     * @param maxDepth Maximum depth to expand (counted from first real package)
+     * @param skipTransparentTopLevelPackages Whether chains of single-child top-level
+     *        packages should be skipped. Regular architecture views use this to hide
+     *        namespace wrappers; scope views disable it so the selected package remains
+     *        visible as the root of the scoped chart.
+     * @return VBox containing the complete UI hierarchy
+     */
+    public VBox buildTree(ArchitectureNode rootNode, int maxDepth, boolean skipTransparentTopLevelPackages) {
         if (rootNode == null) {
             throw new IllegalArgumentException("rootNode cannot be null");
         }
@@ -114,7 +135,7 @@ public class ArchitectureTreeBuilder {
         // Skip transparent top-level packages (de, weigend, s202, etc.)
         // Follow the chain of single-child packages until we reach the first "real" package
         ArchitectureNode effectiveRoot = rootNode;
-        while (shouldChildrenBeTransparent(effectiveRoot)) {
+        while (skipTransparentTopLevelPackages && shouldChildrenBeTransparent(effectiveRoot)) {
             ArchitectureNode singleChild = effectiveRoot.getChildren().stream()
                     .filter(c -> c.getType() == NodeType.PACKAGE)
                     .findFirst().orElse(null);
@@ -146,7 +167,7 @@ public class ArchitectureTreeBuilder {
             });
 
             if (child.getType() == NodeType.PACKAGE) {
-                LevelPackageBox packageBox = new LevelPackageBox(child.getSimpleName(), child.getLevel(), false, child.getFullName(), child.getArchitectureLevel());
+                LevelPackageBox packageBox = createPackageBox(child);
                 packageContainers.put(child.getFullName(), packageBox);
                 elementRegistry.put(child.getFullName(), packageBox);
 
@@ -162,7 +183,7 @@ public class ArchitectureTreeBuilder {
 
                 processArchitectureNode(child, packageContainers, packageBox, elementsAddedToParent, effectiveRoot, false, 1, maxDepth);
             } else if (child.getType() == NodeType.CLASS) {
-                LevelClassBox classBox = new LevelClassBox(child.getSimpleName(), child.getLevel(), child.getFullName(), child.isInterfaceType(), child.getArchitectureLevel());
+                LevelClassBox classBox = createClassBox(child);
                 elementRegistry.put(child.getFullName(), classBox);
                 levelRow.getChildren().add(classBox);
             }
@@ -174,6 +195,14 @@ public class ArchitectureTreeBuilder {
 
     public void buildTreeAsync(ArchitectureNode rootNode,
                                int maxDepth,
+                               ProgressSink progressSink,
+                               Consumer<VBox> onComplete) {
+        buildTreeAsync(rootNode, maxDepth, true, progressSink, onComplete);
+    }
+
+    public void buildTreeAsync(ArchitectureNode rootNode,
+                               int maxDepth,
+                               boolean skipTransparentTopLevelPackages,
                                ProgressSink progressSink,
                                Consumer<VBox> onComplete) {
         if (rootNode == null) {
@@ -189,7 +218,7 @@ public class ArchitectureTreeBuilder {
             BuildProgressCounter counter = new BuildProgressCounter(Math.max(1, rootNode.getTotalNodeCount()));
 
             VBox topLevelContainer = createTopLevelContainer();
-            ArchitectureNode effectiveRoot = effectiveRoot(rootNode, topLevelContainer);
+            ArchitectureNode effectiveRoot = effectiveRoot(rootNode, topLevelContainer, skipTransparentTopLevelPackages);
 
             List<ArchitectureNode> sortedChildren = HorizontalLayoutOrdering.childrenInLayoutOrder(effectiveRoot);
 
@@ -249,7 +278,7 @@ public class ArchitectureTreeBuilder {
         });
 
         if (child.getType() == NodeType.PACKAGE) {
-            LevelPackageBox packageBox = new LevelPackageBox(child.getSimpleName(), child.getLevel(), false, child.getFullName(), child.getArchitectureLevel());
+            LevelPackageBox packageBox = createPackageBox(child);
             packageContainers.put(child.getFullName(), packageBox);
             elementRegistry.put(child.getFullName(), packageBox);
 
@@ -265,7 +294,7 @@ public class ArchitectureTreeBuilder {
             enqueueChildren(child, packageContainers, packageBox, elementsAddedToParent,
                     effectiveRoot, 1, maxDepth, queue, counter, progressSink);
         } else if (child.getType() == NodeType.CLASS) {
-            LevelClassBox classBox = new LevelClassBox(child.getSimpleName(), child.getLevel(), child.getFullName(), child.isInterfaceType(), child.getArchitectureLevel());
+            LevelClassBox classBox = createClassBox(child);
             elementRegistry.put(child.getFullName(), classBox);
             levelRow.getChildren().add(classBox);
         }
@@ -317,7 +346,7 @@ public class ArchitectureTreeBuilder {
 
         if (child.getType() == NodeType.PACKAGE) {
             if (!packageContainers.containsKey(child.getFullName())) {
-                LevelPackageBox packageBox = new LevelPackageBox(child.getSimpleName(), child.getLevel(), false, child.getFullName(), child.getArchitectureLevel());
+                LevelPackageBox packageBox = createPackageBox(child);
                 packageContainers.put(child.getFullName(), packageBox);
                 elementRegistry.put(child.getFullName(), packageBox);
                 parentContainer.addToLevel(child.getLevel(), packageBox);
@@ -330,7 +359,7 @@ public class ArchitectureTreeBuilder {
             enqueueChildren(child, packageContainers, packageBox == null ? rootLevel : packageBox,
                     elementsAddedToParent, archRoot, currentDepth + 1, maxDepth, queue, counter, progressSink);
         } else if (child.getType() == NodeType.CLASS) {
-            LevelClassBox classBox = new LevelClassBox(child.getSimpleName(), child.getLevel(), child.getFullName(), child.isInterfaceType(), child.getArchitectureLevel());
+            LevelClassBox classBox = createClassBox(child);
             elementRegistry.put(child.getFullName(), classBox);
             parentContainer.addToLevel(child.getLevel(), classBox);
         }
@@ -382,9 +411,11 @@ public class ArchitectureTreeBuilder {
         return topLevelContainer;
     }
 
-    private ArchitectureNode effectiveRoot(ArchitectureNode rootNode, VBox topLevelContainer) {
+    private ArchitectureNode effectiveRoot(ArchitectureNode rootNode,
+                                           VBox topLevelContainer,
+                                           boolean skipTransparentTopLevelPackages) {
         ArchitectureNode effectiveRoot = rootNode;
-        while (shouldChildrenBeTransparent(effectiveRoot)) {
+        while (skipTransparentTopLevelPackages && shouldChildrenBeTransparent(effectiveRoot)) {
             ArchitectureNode singleChild = effectiveRoot.getChildren().stream()
                     .filter(c -> c.getType() == NodeType.PACKAGE)
                     .findFirst().orElse(null);
@@ -438,7 +469,7 @@ public class ArchitectureTreeBuilder {
             if (child.getType() == NodeType.PACKAGE) {
                 // Create package container if not already created
                 if (!packageContainers.containsKey(child.getFullName())) {
-                    LevelPackageBox packageBox = new LevelPackageBox(child.getSimpleName(), child.getLevel(), false, child.getFullName(), child.getArchitectureLevel());
+                    LevelPackageBox packageBox = createPackageBox(child);
                     packageContainers.put(child.getFullName(), packageBox);
                     elementRegistry.put(child.getFullName(), packageBox);
                     parentContainer.addToLevel(child.getLevel(), packageBox);
@@ -452,13 +483,37 @@ public class ArchitectureTreeBuilder {
                 processArchitectureNode(child, packageContainers, rootLevel, elementsAddedToParent, archRoot, false, currentDepth + 1, maxDepth);
             } else if (child.getType() == NodeType.CLASS) {
                 // Create class element
-                LevelClassBox classBox = new LevelClassBox(child.getSimpleName(), child.getLevel(), child.getFullName(), child.isInterfaceType(), child.getArchitectureLevel());
+                LevelClassBox classBox = createClassBox(child);
                 elementRegistry.put(child.getFullName(), classBox);
                 parentContainer.addToLevel(child.getLevel(), classBox);
             }
 
             elementsAddedToParent.add(child.getFullName());
         }
+    }
+
+    private LevelPackageBox createPackageBox(ArchitectureNode node) {
+        return createPackageBox(node.getSimpleName(), node.getLevel(), node.getFullName(), node.getArchitectureLevel());
+    }
+
+    private LevelPackageBox createPackageBox(String simpleName,
+                                             int level,
+                                             String fullName,
+                                             int architectureLevel) {
+        LevelPackageBox packageBox = new LevelPackageBox(simpleName, level, false, fullName, architectureLevel);
+        packageBox.setSelectionChangeSink(selectionChangeSink);
+        return packageBox;
+    }
+
+    private LevelClassBox createClassBox(ArchitectureNode node) {
+        LevelClassBox classBox = new LevelClassBox(
+                node.getSimpleName(),
+                node.getLevel(),
+                node.getFullName(),
+                node.isInterfaceType(),
+                node.getArchitectureLevel());
+        classBox.setSelectionChangeSink(selectionChangeSink);
+        return classBox;
     }
 
     /**
@@ -491,7 +546,7 @@ public class ArchitectureTreeBuilder {
                 int packageLevel = pkgNode != null ? pkgNode.getLevel() : 0;
                 int packageArchLevel = pkgNode != null ? pkgNode.getArchitectureLevel() : -1;
 
-                LevelPackageBox packageBox = new LevelPackageBox(part, packageLevel, false, currentPkg, packageArchLevel);
+                LevelPackageBox packageBox = createPackageBox(part, packageLevel, currentPkg, packageArchLevel);
                 packageContainers.put(currentPkg, packageBox);
                 elementRegistry.put(currentPkg, packageBox);
 

@@ -16,9 +16,9 @@
 package de.weigend.s202.ui.wfx;
 
 import de.weigend.s202.ui.ArchitectureView;
-import io.softwareecg.wfx.windowmtg.api.Position;
-import io.softwareecg.wfx.windowmtg.api.View;
-import io.softwareecg.wfx.windowmtg.api.ViewKind;
+import io.softwareecg.wfx.windowmanager.api.Position;
+import io.softwareecg.wfx.windowmanager.api.View;
+import io.softwareecg.wfx.windowmanager.api.ViewKind;
 import javafx.scene.Parent;
 
 import java.net.URL;

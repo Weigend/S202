@@ -17,11 +17,13 @@ package de.weigend.s202.ui.wfx;
 
 import de.weigend.s202.ui.wfx.events.MenuRequestEvent;
 import io.softwareecg.wfx.extension.uiutils.MenuUtil;
-import io.softwareecg.wfx.lookup.Lookup;
+import io.softwareecg.wfx.lookup.api.Lookup;
 import io.softwareecg.wfx.platform.api.EventBus;
-import io.softwareecg.wfx.windowmtg.api.ApplicationWindow;
-import io.softwareecg.wfx.windowmtg.api.ShutdownConfirmation;
+import io.softwareecg.wfx.windowmanager.api.ApplicationWindow;
+import io.softwareecg.wfx.windowmanager.api.ShutdownConfirmation;
+import javafx.application.Platform;
 import javafx.beans.property.BooleanProperty;
+import javafx.collections.ListChangeListener;
 import javafx.geometry.Insets;
 import javafx.geometry.Pos;
 import javafx.scene.control.ButtonType;
@@ -49,10 +51,13 @@ import org.slf4j.LoggerFactory;
 
 import java.awt.Desktop;
 import java.net.URI;
+import java.util.Collections;
 import java.util.EventObject;
+import java.util.IdentityHashMap;
+import java.util.Set;
 
 /**
- * Builds the application menu bar (File, Windows, Help) and publishes
+ * Builds the application menu bar (File, Edit, View, Windows, Help) and publishes
  * {@link MenuRequestEvent}s when the user picks a command. Owns purely
  * presentational concerns (About dialog, opening URLs in the browser) so the
  * application module does not need to know about them.
@@ -63,11 +68,15 @@ public class S202MenuBar {
 
     private static final String STRUCTURE202_REPO_URL = "https://github.com/weigend/S202";
     private static final String WFX_REPO_URL = "https://github.com/jweigend/wfx";
+    private static final String VIEW_MENU_ID = "view";
+    private static final String VIEW_MENU_TITLE = "View";
+    private static final String COMPONENT_VIEW_ITEM_ID = "view.componentView";
 
     private final ApplicationWindow applicationWindow;
     private final EventBus<EventObject> eventBus;
     private final BooleanProperty canUndo;
     private final BooleanProperty canRedo;
+    private final Set<Menu> watchedViewMenus = Collections.newSetFromMap(new IdentityHashMap<>());
 
     public S202MenuBar(ApplicationWindow applicationWindow, EventBus<EventObject> eventBus,
                        BooleanProperty canUndo, BooleanProperty canRedo) {
@@ -80,6 +89,7 @@ public class S202MenuBar {
     public void install() {
         installFileMenu();
         installEditMenu();
+        installViewMenu();
         installWindowsMenu();
         installHelpMenu();
     }
@@ -162,10 +172,88 @@ public class S202MenuBar {
                 e -> publish(new MenuRequestEvent.RestoreDefaultLayout(this)));
 
         Menu windowsMenu = MenuUtil.createMenu("windows", "Windows");
-        windowsMenu.getItems().addAll(newItem, closeItem, closeAllItem,
+        windowsMenu.getItems().addAll(newItem,
+                new SeparatorMenuItem(), closeItem, closeAllItem,
                 new SeparatorMenuItem(), defaultLayoutItem);
 
         applicationWindow.getMenu().add(windowsMenu);
+    }
+
+    private void installViewMenu() {
+        applicationWindow.getMenu().addListener((ListChangeListener<Menu>) change ->
+                Platform.runLater(this::ensureComponentViewMenuItem));
+        ensureComponentViewMenuItem();
+        Platform.runLater(this::ensureComponentViewMenuItem);
+    }
+
+    private void ensureComponentViewMenuItem() {
+        Menu viewMenu = findMenu(VIEW_MENU_ID, VIEW_MENU_TITLE);
+        if (viewMenu == null) {
+            viewMenu = MenuUtil.createMenu(VIEW_MENU_ID, VIEW_MENU_TITLE);
+            applicationWindow.getMenu().add(viewMenuInsertIndex(), viewMenu);
+        }
+
+        watchViewMenuItems(viewMenu);
+        if (containsMenuItem(viewMenu, COMPONENT_VIEW_ITEM_ID)) {
+            return;
+        }
+
+        MenuItem componentViewItem = MenuUtil.createMenuItem(
+                COMPONENT_VIEW_ITEM_ID, "Component View",
+                e -> publish(new MenuRequestEvent.OpenComponentView(this)));
+        viewMenu.getItems().add(componentViewItem);
+    }
+
+    private void watchViewMenuItems(Menu viewMenu) {
+        if (!watchedViewMenus.add(viewMenu)) {
+            return;
+        }
+
+        viewMenu.getItems().addListener((ListChangeListener<MenuItem>) change -> {
+            if (!containsMenuItem(viewMenu, COMPONENT_VIEW_ITEM_ID)) {
+                Platform.runLater(this::ensureComponentViewMenuItem);
+            }
+        });
+    }
+
+    private boolean containsMenuItem(Menu menu, String id) {
+        for (MenuItem item : menu.getItems()) {
+            if (id.equals(item.getId())) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private Menu findMenu(String id, String text) {
+        for (Menu menu : applicationWindow.getMenu()) {
+            if (id.equals(menu.getId()) || text.equals(menu.getText())) {
+                return menu;
+            }
+        }
+        return null;
+    }
+
+    private int viewMenuInsertIndex() {
+        int windowsIndex = menuIndex("windows", "Windows");
+        if (windowsIndex >= 0) {
+            return windowsIndex;
+        }
+        int helpIndex = menuIndex("help", "Help");
+        if (helpIndex >= 0) {
+            return helpIndex;
+        }
+        return applicationWindow.getMenu().size();
+    }
+
+    private int menuIndex(String id, String text) {
+        for (int i = 0; i < applicationWindow.getMenu().size(); i++) {
+            Menu menu = applicationWindow.getMenu().get(i);
+            if (id.equals(menu.getId()) || text.equals(menu.getText())) {
+                return i;
+            }
+        }
+        return -1;
     }
 
     private void installHelpMenu() {
@@ -236,10 +324,19 @@ public class S202MenuBar {
         TextFlow builtOn = new TextFlow(builtPrefix, wfxLink, builtSuffix);
         builtOn.setMaxWidth(420);
 
+        Text creditsText = new Text(
+                "Lead Architect: Johannes Weigend\n"
+              + "Advise and Programming: Claude and Codex\n"
+              + "QS: Johannes Weigend\n"
+              + "License: Apache License 2.0");
+        creditsText.getStyleClass().add("about-meta");
+        TextFlow credits = new TextFlow(creditsText);
+        credits.setMaxWidth(420);
+
         Separator divider = new Separator();
         divider.getStyleClass().add("about-divider");
 
-        VBox body = new VBox(14, header, divider, description, builtOn);
+        VBox body = new VBox(14, header, divider, description, builtOn, credits);
         body.setPadding(new Insets(22, 26, 18, 26));
         body.setMinWidth(Region.USE_PREF_SIZE);
 

@@ -25,6 +25,8 @@ import javafx.scene.paint.Color;
 import org.kordamp.ikonli.javafx.FontIcon;
 import org.kordamp.ikonli.materialdesign2.MaterialDesignA;
 
+import java.util.function.Consumer;
+
 /**
  * Reusable box representing a single class element in the architecture
  * hierarchy. Selection is delegated to {@link GraphSelection} so packages and
@@ -40,6 +42,7 @@ public class LevelClassBox extends HBox implements GraphSelection.Selectable {
     private final int level;
     private final int architectureLevel;
     private final Label nameLabel;
+    private Consumer<String> selectionChangeSink;
 
     public LevelClassBox(String name) {
         this(name, -1, null, false, -1);
@@ -130,6 +133,15 @@ public class LevelClassBox extends HBox implements GraphSelection.Selectable {
     @Override
     public String getFullName() {
         return fullClassName;
+    }
+
+    public void setSelectionChangeSink(Consumer<String> sink) {
+        selectionChangeSink = sink;
+    }
+
+    @Override
+    public Consumer<String> selectionChangeSink() {
+        return selectionChangeSink;
     }
 
     @Override

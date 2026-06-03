@@ -19,20 +19,32 @@ import de.weigend.s202.analysis.quality.QualityMetrics;
 import de.weigend.s202.domain.DependencyEdge;
 import de.weigend.s202.domain.DomainModel;
 import de.weigend.s202.domain.architecture.Architecture;
+import de.weigend.s202.domain.architecture.ArchitectureAnnotations;
+import de.weigend.s202.domain.architecture.ArchitectureContext;
+import de.weigend.s202.domain.architecture.ComponentArchitectureBuilder;
 import de.weigend.s202.domain.architecture.HierarchicalLayeredArchitecture;
 import de.weigend.s202.domain.architecture.HierarchicalLayeredArchitectureBuilder;
+import de.weigend.s202.domain.architecture.ViolationKind;
 import de.weigend.s202.domain.architecture.WhatIfArchitecture;
 import de.weigend.s202.reader.DependencyModel;
+import de.weigend.s202.ui.component.ComponentBox;
 import de.weigend.s202.ui.model.ArchitectureNode;
+import de.weigend.s202.ui.model.ArchitectureNodeCloner;
+import de.weigend.s202.ui.model.ScopeExtensionModel;
 import de.weigend.s202.ui.rendering.DependencyRenderer;
 import de.weigend.s202.ui.rendering.DependencyRendererStrategy;
 import de.weigend.s202.ui.rendering.SCCRenderer;
 import de.weigend.s202.ui.rendering.TangleEdgeRenderer;
 import de.weigend.s202.ui.rendering.WhatIfUpwardEdgeRenderer;
 import de.weigend.s202.ui.tree.ArchitectureTreeBuilder;
+import de.weigend.s202.ui.tree.ComponentArchitectureTreeBuilder;
 import de.weigend.s202.ui.zoom.ZoomController;
+import javafx.collections.FXCollections;
+import javafx.collections.ObservableList;
+import javafx.collections.transformation.FilteredList;
 import javafx.beans.property.BooleanProperty;
 import javafx.beans.property.IntegerProperty;
+import javafx.beans.property.ObjectProperty;
 import javafx.beans.property.ReadOnlyDoubleProperty;
 import javafx.beans.property.ReadOnlyObjectProperty;
 import javafx.beans.property.ReadOnlyObjectWrapper;
@@ -40,8 +52,19 @@ import javafx.beans.property.ReadOnlyStringProperty;
 import javafx.beans.property.ReadOnlyStringWrapper;
 import javafx.beans.property.SimpleBooleanProperty;
 import javafx.beans.property.SimpleIntegerProperty;
+import javafx.beans.property.SimpleObjectProperty;
 import javafx.geometry.Pos;
+import javafx.scene.control.ButtonBar;
+import javafx.scene.control.ButtonType;
+import javafx.scene.control.ContextMenu;
+import javafx.scene.control.Dialog;
+import javafx.scene.control.DialogPane;
+import javafx.scene.control.ListCell;
+import javafx.scene.control.ListView;
+import javafx.scene.control.MenuItem;
 import javafx.scene.control.ScrollPane;
+import javafx.scene.control.TextField;
+import javafx.scene.input.MouseButton;
 import javafx.scene.layout.BorderPane;
 import javafx.scene.layout.HBox;
 import javafx.scene.layout.Pane;
@@ -53,8 +76,10 @@ import java.util.Collection;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.Set;
 import java.util.function.BiConsumer;
 import java.util.function.Consumer;
@@ -128,6 +153,7 @@ public class ArchitectureView extends BorderPane {
     private javafx.scene.layout.Pane zoomableContent;
     private Consumer<String> statusSink = msg -> { /* no-op default */ };
     private Consumer<String> nodeSelectionSink = fqn -> { /* no-op default */ };
+    private final Consumer<String> graphSelectionSink = this::handleGraphSelectionChanged;
     private boolean suppressSelectionSink = false;
     private BiConsumer<String, String> tangleEdgeClickedSink = (a, b) -> { /* no-op default */ };
     private BiConsumer<String, String> tangleEdgeCutSink = (a, b) -> { /* no-op default */ };
@@ -150,12 +176,24 @@ public class ArchitectureView extends BorderPane {
     private final ReadOnlyObjectWrapper<ArchitectureNode> architectureRoot = new ReadOnlyObjectWrapper<>(null);
     private final ReadOnlyObjectWrapper<QualityMetrics> qualityMetrics = new ReadOnlyObjectWrapper<>(null);
     private final ReadOnlyObjectWrapper<DomainModel> domainModel = new ReadOnlyObjectWrapper<>(null);
+    private final SimpleObjectProperty<ArchitectureAnnotations> architectureAnnotations =
+            new SimpleObjectProperty<>(ArchitectureAnnotations.empty());
     private final ReadOnlyObjectWrapper<Architecture> architecture = new ReadOnlyObjectWrapper<>(null);
     private final ReadOnlyObjectWrapper<WhatIfArchitecture> whatIfArchitecture = new ReadOnlyObjectWrapper<>(null);
     private final ReadOnlyObjectWrapper<DependencyModel> rawDependencyModel = new ReadOnlyObjectWrapper<>(null);
     private final ReadOnlyStringWrapper selectedFullName = new ReadOnlyStringWrapper(null);
     private String preferredTopTanglesScope;
     private boolean topTanglesScopeOwner = true;
+    private boolean skipTransparentTopLevelPackages = true;
+    private ArchitectureNode scopeExtensionSourceRoot;
+    private ArchitectureViewStyle viewStyle = ArchitectureViewStyle.LAYERED;
+    private static final Set<ViolationKind> LAYERED_VIOLATION_OVERLAY_KINDS =
+            Set.of(ViolationKind.UPWARD);
+    private static final Set<ViolationKind> COMPONENT_VIOLATION_OVERLAY_KINDS =
+            Set.of(
+                    ViolationKind.COMPONENT_API_BYPASS,
+                    ViolationKind.COMPONENT_API_LEAKS_IMPLEMENTATION,
+                    ViolationKind.COMPONENT_INTERNAL_LAYER_BREAK);
 
     public ArchitectureView() {
         setupUI();
@@ -302,9 +340,8 @@ public class ArchitectureView extends BorderPane {
         Objects.requireNonNull(rootNode, "rootNode cannot be null");
         beginArchitectureRootBuild(rootNode);
 
-        treeBuilder = new ArchitectureTreeBuilder(elementRegistry);
         int maxDepth = packageDepth.get();
-        javafx.scene.layout.VBox topLevelContainer = treeBuilder.buildTree(rootNode, maxDepth);
+        javafx.scene.layout.VBox topLevelContainer = buildTree(rootNode, maxDepth);
         finishArchitectureRootBuild(rootNode, topLevelContainer);
     }
 
@@ -314,9 +351,8 @@ public class ArchitectureView extends BorderPane {
         Objects.requireNonNull(rootNode, "rootNode cannot be null");
         beginArchitectureRootBuild(rootNode);
 
-        treeBuilder = new ArchitectureTreeBuilder(elementRegistry);
         int maxDepth = packageDepth.get();
-        treeBuilder.buildTreeAsync(rootNode, maxDepth,
+        buildTreeAsync(rootNode, maxDepth,
                 (processed, total, current) -> {
                     if (progressSink != null) {
                         progressSink.accept(new BuildProgress(processed, total, current));
@@ -330,34 +366,92 @@ public class ArchitectureView extends BorderPane {
                 });
     }
 
+    private javafx.scene.layout.VBox buildTree(ArchitectureNode rootNode, int maxDepth) {
+        if (viewStyle == ArchitectureViewStyle.COMPONENT) {
+            ComponentArchitectureTreeBuilder componentBuilder =
+                    new ComponentArchitectureTreeBuilder(
+                            elementRegistry,
+                            graphSelectionSink,
+                            getArchitectureAnnotations(),
+                            rawDependencyModel.get(),
+                            this::handleComponentApiChanged);
+            return componentBuilder.buildTree(rootNode, maxDepth);
+        }
+
+        treeBuilder = new ArchitectureTreeBuilder(elementRegistry, graphSelectionSink);
+        return treeBuilder.buildTree(rootNode, maxDepth, skipTransparentTopLevelPackages);
+    }
+
+    private void buildTreeAsync(ArchitectureNode rootNode,
+                                int maxDepth,
+                                ArchitectureTreeBuilder.ProgressSink progressSink,
+                                Consumer<javafx.scene.layout.VBox> onComplete) {
+        if (viewStyle == ArchitectureViewStyle.COMPONENT) {
+            ComponentArchitectureTreeBuilder componentBuilder =
+                    new ComponentArchitectureTreeBuilder(
+                            elementRegistry,
+                            graphSelectionSink,
+                            getArchitectureAnnotations(),
+                            rawDependencyModel.get(),
+                            this::handleComponentApiChanged);
+            componentBuilder.buildTreeAsync(rootNode, maxDepth, progressSink, onComplete);
+            return;
+        }
+
+        treeBuilder = new ArchitectureTreeBuilder(elementRegistry, graphSelectionSink);
+        treeBuilder.buildTreeAsync(rootNode, maxDepth,
+                skipTransparentTopLevelPackages,
+                progressSink,
+                onComplete);
+    }
+
     private void beginArchitectureRootBuild(ArchitectureNode rootNode) {
         this.currentRootNode = rootNode;
         this.elementRegistry.clear();
 
         LevelPackageBox.setOnExpandChangeCallback(arrowsCoalescer::markDirty);
-
-        // Selection (class OR package) is owned by GraphSelection. Mirror it
-        // onto our selectedFullName property and trigger overlay redraws.
-        // Only main (scope-owner) views install the global handler — satellite
-        // views like TangleView must not overwrite it, or the main view loses
-        // its dependency/SCC overlay updates when a selection happens.
-        if (topTanglesScopeOwner) {
-            GraphSelection.setOnSelectionChange(fqn -> {
-                selectedFullName.set(fqn);
-                // Defer arrow redraw via the coalescer so the CSS layout pass
-                // (border-width change on the selected box) finishes first —
-                // direct drawDependencyArrows() here uses stale bounds.
-                arrowsCoalescer.markDirty();
-                if (!suppressSelectionSink && fqn != null) {
-                    nodeSelectionSink.accept(fqn);
-                }
-            });
-        }
+        ComponentBox.setOnExpandChangeCallback(arrowsCoalescer::markDirty);
 
         // Node selection is now a single-click action. Keep the legacy
         // double-click callback disconnected to avoid duplicate selection
         // events when users double-click out of habit.
         GraphSelection.setOnDoubleClick(fqn -> {});
+    }
+
+    private void handleGraphSelectionChanged(String fqn) {
+        selectedFullName.set(fqn);
+        // Defer arrow redraw via the coalescer so the CSS layout pass
+        // (border-width change on the selected box) finishes first —
+        // direct drawDependencyArrows() here uses stale bounds.
+        arrowsCoalescer.markDirty();
+        if (!suppressSelectionSink && fqn != null) {
+            nodeSelectionSink.accept(fqn);
+        }
+    }
+
+    private void handleComponentApiChanged(ArchitectureAnnotations nextAnnotations, String message) {
+        setArchitectureAnnotations(nextAnnotations);
+        refreshComponentProjection(message);
+    }
+
+    private void refreshComponentProjection(String statusMessage) {
+        if (currentRootNode == null) {
+            return;
+        }
+        String selected = selectedFullName.get();
+        boolean depsSave = showDependencies.get();
+        boolean sccSave = showScc.get();
+        boolean wifSave = showWhatIfViolations.get();
+        setArchitectureRoot(currentRootNode);
+        showDependencies.set(depsSave);
+        showScc.set(sccSave);
+        showWhatIfViolations.set(wifSave);
+        if (selected != null) {
+            selectByFullName(selected);
+        }
+        if (statusMessage != null && !statusMessage.isBlank()) {
+            setStatus(statusMessage);
+        }
     }
 
     private void finishArchitectureRootBuild(ArchitectureNode rootNode,
@@ -378,6 +472,7 @@ public class ArchitectureView extends BorderPane {
 
         StackPane contentWithOverlay = new StackPane();
         contentWithOverlay.getChildren().addAll(topLevelContainer, overlayPane);
+        installScopeExtensionContextMenu(contentWithOverlay);
 
         this.zoomableContent = contentWithOverlay;
 
@@ -449,6 +544,109 @@ public class ArchitectureView extends BorderPane {
         architectureRoot.set(rootNode);
     }
 
+    private void installScopeExtensionContextMenu(javafx.scene.Node target) {
+        if (scopeExtensionSourceRoot == null) {
+            target.setOnContextMenuRequested(null);
+            return;
+        }
+
+        target.setOnContextMenuRequested(event -> {
+            ContextMenu menu = new ContextMenu();
+            MenuItem addToScope = new MenuItem("Add to Scope...");
+            addToScope.setOnAction(action -> showScopeExtensionDialog());
+            menu.getItems().setAll(addToScope);
+            menu.show(target, event.getScreenX(), event.getScreenY());
+            event.consume();
+        });
+    }
+
+    private void showScopeExtensionDialog() {
+        if (scopeExtensionSourceRoot == null || currentRootNode == null) {
+            return;
+        }
+
+        List<ScopeExtensionModel.Candidate> candidates =
+                ScopeExtensionModel.candidates(scopeExtensionSourceRoot, currentRootNode);
+        if (candidates.isEmpty()) {
+            setStatus("Scope already contains all packages and classes");
+            return;
+        }
+
+        Dialog<ScopeExtensionModel.Candidate> dialog = new Dialog<>();
+        dialog.setTitle("Add to Scope");
+        dialog.setHeaderText("Select a package or class");
+        if (getScene() != null && getScene().getWindow() != null) {
+            dialog.initOwner(getScene().getWindow());
+        }
+
+        ButtonType addButtonType = new ButtonType("Add", ButtonBar.ButtonData.OK_DONE);
+        DialogPane dialogPane = dialog.getDialogPane();
+        dialogPane.getButtonTypes().addAll(addButtonType, ButtonType.CANCEL);
+
+        TextField filterField = new TextField();
+        filterField.setPromptText("Filter packages/classes");
+
+        ObservableList<ScopeExtensionModel.Candidate> items = FXCollections.observableArrayList(candidates);
+        FilteredList<ScopeExtensionModel.Candidate> filteredItems = new FilteredList<>(items, item -> true);
+        filterField.textProperty().addListener((obs, oldValue, newValue) -> {
+            String query = newValue == null ? "" : newValue.trim().toLowerCase(Locale.ROOT);
+            filteredItems.setPredicate(item -> query.isEmpty()
+                    || item.fullName().toLowerCase(Locale.ROOT).contains(query)
+                    || item.kind().toLowerCase(Locale.ROOT).contains(query));
+        });
+
+        ListView<ScopeExtensionModel.Candidate> candidateList = new ListView<>(filteredItems);
+        candidateList.setPrefWidth(620);
+        candidateList.setPrefHeight(420);
+        candidateList.setCellFactory(view -> new ListCell<>() {
+            @Override
+            protected void updateItem(ScopeExtensionModel.Candidate item, boolean empty) {
+                super.updateItem(item, empty);
+                setText(empty || item == null ? null : item.label());
+            }
+        });
+        candidateList.setOnMouseClicked(event -> {
+            if (event.getButton() == MouseButton.PRIMARY
+                    && event.getClickCount() == 2
+                    && candidateList.getSelectionModel().getSelectedItem() != null) {
+                dialog.setResult(candidateList.getSelectionModel().getSelectedItem());
+                dialog.close();
+            }
+        });
+
+        javafx.scene.Node addButton = dialogPane.lookupButton(addButtonType);
+        addButton.disableProperty().bind(candidateList.getSelectionModel().selectedItemProperty().isNull());
+
+        VBox content = new VBox(8, filterField, candidateList);
+        dialogPane.setContent(content);
+        dialog.setResultConverter(button -> button == addButtonType
+                ? candidateList.getSelectionModel().getSelectedItem()
+                : null);
+
+        Optional<ScopeExtensionModel.Candidate> selected = dialog.showAndWait();
+        selected.ifPresent(this::addScopeCandidate);
+    }
+
+    private void addScopeCandidate(ScopeExtensionModel.Candidate candidate) {
+        if (candidate == null || currentRootNode == null || scopeExtensionSourceRoot == null) {
+            return;
+        }
+
+        ArchitectureNode extendedRoot = ArchitectureNodeCloner.cloneTree(currentRootNode);
+        boolean added = ScopeExtensionModel.addToScope(
+                extendedRoot,
+                scopeExtensionSourceRoot,
+                candidate.fullName());
+        if (!added) {
+            setStatus("Scope already contains " + candidate.fullName());
+            return;
+        }
+
+        setArchitectureRoot(extendedRoot);
+        selectByFullName(candidate.fullName());
+        setStatus("Scope extended: " + candidate.fullName());
+    }
+
     /**
      * Read-only handle to the currently displayed architecture root. Fires when
      * a new JAR is loaded or {@link #refreshLayout()} runs.
@@ -494,16 +692,7 @@ public class ArchitectureView extends BorderPane {
     public void setDomainModel(DomainModel model) {
         domainModel.set(model);
         undoManager.clear();
-        if (model == null) {
-            architecture.set(null);
-            whatIfArchitecture.set(null);
-            return;
-        }
-        Architecture original = new HierarchicalLayeredArchitectureBuilder().build(model);
-        architecture.set(original);
-        whatIfArchitecture.set(original instanceof HierarchicalLayeredArchitecture hla
-                ? new WhatIfArchitecture(hla, model)
-                : null);
+        rebuildArchitectureProjection();
     }
 
     /**
@@ -536,6 +725,42 @@ public class ArchitectureView extends BorderPane {
         return whatIfArchitecture.get();
     }
 
+    public ObjectProperty<ArchitectureAnnotations> architectureAnnotationsProperty() {
+        return architectureAnnotations;
+    }
+
+    public ArchitectureAnnotations getArchitectureAnnotations() {
+        ArchitectureAnnotations annotations = architectureAnnotations.get();
+        return annotations == null ? ArchitectureAnnotations.empty() : annotations;
+    }
+
+    public void setArchitectureAnnotations(ArchitectureAnnotations annotations) {
+        architectureAnnotations.set(annotations == null ? ArchitectureAnnotations.empty() : annotations);
+        rebuildArchitectureProjection();
+    }
+
+    private void rebuildArchitectureProjection() {
+        DomainModel model = domainModel.get();
+        if (model == null) {
+            architecture.set(null);
+            whatIfArchitecture.set(null);
+            return;
+        }
+        Architecture original;
+        if (viewStyle == ArchitectureViewStyle.COMPONENT) {
+            original = new ComponentArchitectureBuilder().build(new ArchitectureContext(
+                    rawDependencyModel.get(),
+                    model,
+                    getArchitectureAnnotations()));
+        } else {
+            original = new HierarchicalLayeredArchitectureBuilder().build(model);
+        }
+        architecture.set(original);
+        whatIfArchitecture.set(original instanceof HierarchicalLayeredArchitecture hla
+                ? new WhatIfArchitecture(hla, model)
+                : null);
+    }
+
     /**
      * Read-only handle to the raw bytecode-analysis result. Carries per-edge
      * relationship kinds (extends / implements / calls / instantiates) that
@@ -554,6 +779,9 @@ public class ArchitectureView extends BorderPane {
     public void setRawDependencyModel(DependencyModel model) {
         rawDependencyModel.set(model);
         movedFqns.clear();
+        if (viewStyle == ArchitectureViewStyle.COMPONENT && domainModel.get() != null) {
+            rebuildArchitectureProjection();
+        }
         ensureWhatIfDropListenerRegistered();
         arrowsCoalescer.markDirty();
     }
@@ -577,6 +805,10 @@ public class ArchitectureView extends BorderPane {
         }
         String movedFqcn = selectable.getFullName();
         if (movedFqcn == null || movedFqcn.isEmpty()) {
+            return;
+        }
+        if (viewStyle == ArchitectureViewStyle.COMPONENT
+                && handleComponentApiDrop(movedSource, movedFqcn, destinationRow)) {
             return;
         }
         String destinationContainerFqcn = resolveDestinationContainer(destinationRow);
@@ -608,6 +840,28 @@ public class ArchitectureView extends BorderPane {
         movedFqns.add(movedFqcn);
         arrowsCoalescer.markDirty();
         setStatus(buildWhatIfStatusMessage(movedFqcn, destinationContainerFqcn));
+    }
+
+    private boolean handleComponentApiDrop(javafx.scene.Node movedSource,
+                                           String movedFqcn,
+                                           javafx.scene.layout.HBox destinationRow) {
+        boolean apiDestination = ComponentBox.isApiDropTarget(destinationRow);
+        boolean apiSource = ComponentBox.isApiElement(movedSource);
+        if (!apiDestination && !apiSource) {
+            return false;
+        }
+        if (apiDestination && apiSource) {
+            arrowsCoalescer.markDirty();
+            return true;
+        }
+        if (apiDestination) {
+            setArchitectureAnnotations(getArchitectureAnnotations().withComponentApiIncluded(movedFqcn));
+            refreshComponentProjection("Added to API: " + movedFqcn);
+        } else {
+            setArchitectureAnnotations(getArchitectureAnnotations().withComponentApiExcluded(movedFqcn));
+            refreshComponentProjection("Removed from API: " + movedFqcn);
+        }
+        return true;
     }
 
     private boolean isInsideThisView(javafx.scene.Node node) {
@@ -671,6 +925,37 @@ public class ArchitectureView extends BorderPane {
 
     public void setPreferredTopTanglesScope(String scope) {
         preferredTopTanglesScope = scope == null || scope.isBlank() ? null : scope;
+    }
+
+    /**
+     * Regular full-project views hide top-level namespace wrapper packages
+     * such as {@code de -> weigend -> s202}. Scoped views disable that skip so
+     * the package the user opened from the outline remains visible.
+     */
+    public void setSkipTransparentTopLevelPackages(boolean skip) {
+        skipTransparentTopLevelPackages = skip;
+    }
+
+    public ArchitectureViewStyle getViewStyle() {
+        return viewStyle;
+    }
+
+    public void setViewStyle(ArchitectureViewStyle style) {
+        viewStyle = style == null ? ArchitectureViewStyle.LAYERED : style;
+        rebuildArchitectureProjection();
+    }
+
+    /**
+     * Enables right-click scope extension for this view. The current root stays
+     * filtered, while {@code sourceRoot} remains the complete candidate source.
+     */
+    public void enableScopeExtensionFrom(ArchitectureNode sourceRoot) {
+        scopeExtensionSourceRoot = Objects.requireNonNull(sourceRoot, "sourceRoot cannot be null");
+        setSkipTransparentTopLevelPackages(false);
+    }
+
+    public ArchitectureNode getScopeExtensionSourceRoot() {
+        return scopeExtensionSourceRoot;
     }
 
     /**
@@ -812,14 +1097,27 @@ public class ArchitectureView extends BorderPane {
             sccRenderer.drawSccLines(currentRootNode);
         }
         if (whatIfRenderer != null) {
-            Architecture source = whatIfArchitecture.get() != null ? whatIfArchitecture.get() : architecture.get();
+            Architecture source = violationOverlayArchitecture();
             if (showWhatIfViolations.get() && source != null) {
-                whatIfRenderer.redraw(source);
+                whatIfRenderer.redraw(source, violationOverlayKinds());
             } else {
                 whatIfRenderer.clear();
             }
         }
         applyVirtuallyMovedDecorations();
+    }
+
+    private Architecture violationOverlayArchitecture() {
+        if (viewStyle == ArchitectureViewStyle.COMPONENT) {
+            return architecture.get();
+        }
+        return whatIfArchitecture.get() != null ? whatIfArchitecture.get() : architecture.get();
+    }
+
+    private Set<ViolationKind> violationOverlayKinds() {
+        return viewStyle == ArchitectureViewStyle.COMPONENT
+                ? COMPONENT_VIOLATION_OVERLAY_KINDS
+                : LAYERED_VIOLATION_OVERLAY_KINDS;
     }
 
     private void applyVirtuallyMovedDecorations() {

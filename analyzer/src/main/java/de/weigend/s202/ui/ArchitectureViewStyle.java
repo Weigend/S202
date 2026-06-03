@@ -13,18 +13,12 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package de.weigend.s202.ui.wfx;
-
-import io.softwareecg.wfx.main.Main;
-import javafx.application.Application;
+package de.weigend.s202.ui;
 
 /**
- * Entry point for the S202 Code Analyzer running on the WFX rich-client platform
- * using the lookup strategy provided by the WFX launcher.
+ * Visual projection used by {@link ArchitectureView}.
  */
-public class S202Main extends Main {
-
-    public static void main(String[] args) {
-        Application.launch(S202Main.class, args);
-    }
+public enum ArchitectureViewStyle {
+    LAYERED,
+    COMPONENT
 }

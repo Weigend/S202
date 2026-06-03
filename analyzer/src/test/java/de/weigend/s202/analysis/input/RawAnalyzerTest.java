@@ -17,13 +17,20 @@ package de.weigend.s202.analysis.input;
 
 import de.weigend.s202.reader.DependencyModel;
 import de.weigend.s202.reader.InputAnalyzer;
+import org.junit.jupiter.api.io.TempDir;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.objectweb.asm.ClassWriter;
+import org.objectweb.asm.ModuleVisitor;
+import org.objectweb.asm.Opcodes;
 
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.util.Set;
+import java.util.jar.JarEntry;
+import java.util.jar.JarOutputStream;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -35,6 +42,9 @@ class InputAnalyzerTest {
     
     private InputAnalyzer analyzer;
     private String testJarPath;
+
+    @TempDir
+    Path tempDir;
 
     @BeforeEach
     void setUp() {
@@ -212,6 +222,39 @@ class InputAnalyzerTest {
     }
 
     @Test
+    void testAnalyzeReadsJavaModuleDescriptor() throws IOException {
+        Path jar = tempDir.resolve("modular.jar");
+        try (JarOutputStream out = new JarOutputStream(Files.newOutputStream(jar))) {
+            writeEntry(out, "module-info.class", moduleInfoBytes());
+            writeEntry(out, "com/acme/payment/PublicApi.class",
+                    classBytes("com/acme/payment/PublicApi"));
+            writeEntry(out, "com/acme/payment/internal/InternalService.class",
+                    classBytes("com/acme/payment/internal/InternalService"));
+            writeEntry(out, "com/acme/reflection/ReflectiveAdapter.class",
+                    classBytes("com/acme/reflection/ReflectiveAdapter"));
+        }
+
+        DependencyModel model = analyzer.analyze(jar.toString());
+
+        assertEquals(3, model.getClassCount());
+        assertNull(model.getClass("module-info"));
+        assertEquals(1, model.getModuleCount());
+
+        DependencyModel.ModuleInfo module = model.getModule("com.acme.app");
+        assertNotNull(module);
+        assertTrue(model.isPackageExported("com.acme.payment"));
+        assertTrue(module.exportedPackages.stream()
+                .anyMatch(access -> access.packageName().equals("com.acme.payment")
+                        && access.targetModules().isEmpty()));
+        assertTrue(module.exportedPackages.stream()
+                .anyMatch(access -> access.packageName().equals("com.acme.payment.internal")
+                        && access.targetModules().equals(Set.of("com.friend"))));
+        assertTrue(module.openedPackages.stream()
+                .anyMatch(access -> access.packageName().equals("com.acme.reflection")));
+        assertFalse(model.isPackageExported("com.acme.reflection"));
+    }
+
+    @Test
     void testAnalyzeDependencyConsistency() throws IOException {
         DependencyModel model = analyzer.analyze(testJarPath);
         
@@ -224,6 +267,31 @@ class InputAnalyzerTest {
                 !depClassName.startsWith("com.example"));  // External dependencies OK
         
         assertTrue(dependenciesConsistent, "All dependencies should be consistent");
+    }
+
+    private static byte[] moduleInfoBytes() {
+        ClassWriter writer = new ClassWriter(0);
+        writer.visit(Opcodes.V9, Opcodes.ACC_MODULE, "module-info", null, null, null);
+        ModuleVisitor module = writer.visitModule("com.acme.app", 0, null);
+        module.visitExport("com/acme/payment", 0);
+        module.visitExport("com/acme/payment/internal", 0, "com.friend");
+        module.visitOpen("com/acme/reflection", 0);
+        module.visitEnd();
+        writer.visitEnd();
+        return writer.toByteArray();
+    }
+
+    private static byte[] classBytes(String internalName) {
+        ClassWriter writer = new ClassWriter(0);
+        writer.visit(Opcodes.V17, Opcodes.ACC_PUBLIC, internalName, null, "java/lang/Object", null);
+        writer.visitEnd();
+        return writer.toByteArray();
+    }
+
+    private static void writeEntry(JarOutputStream out, String name, byte[] bytes) throws IOException {
+        out.putNextEntry(new JarEntry(name));
+        out.write(bytes);
+        out.closeEntry();
     }
 
 }

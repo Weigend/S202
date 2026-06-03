@@ -31,12 +31,14 @@ public record S202Project(
         Source source,
         DependencyModelDto dependencyModel,
         DomainModelDto domainModel,
+        ArchitectureAnnotationsDto architectureAnnotations,
         List<CycleBreakEdgeDto> cycleBreakEdges,
         LayoutInvariantReportDto layoutInvariantReport,
         String savedAt) {
 
     public static final String FORMAT = "structure202-project";
-    public static final int FORMAT_VERSION = 1;
+    public static final int MIN_SUPPORTED_FORMAT_VERSION = 1;
+    public static final int FORMAT_VERSION = 3;
 
     public record CreatedWith(String app, String version) {}
 
@@ -44,7 +46,8 @@ public record S202Project(
 
     public record DependencyModelDto(
             Map<String, ClassInfoDto> classes,
-            Map<String, PackageInfoDto> packages) {}
+            Map<String, PackageInfoDto> packages,
+            List<ModuleInfoDto> modules) {}
 
     public record ClassInfoDto(
             String fullName,
@@ -67,9 +70,45 @@ public record S202Project(
             List<String> childPackages,
             List<String> classNames) {}
 
+    public record ModuleInfoDto(
+            String name,
+            String version,
+            List<ModulePackageAccessDto> exportedPackages,
+            List<ModulePackageAccessDto> openedPackages) {}
+
+    public record ModulePackageAccessDto(
+            String packageName,
+            List<String> targetModules) {}
+
     public record DomainModelDto(
             Map<String, CalculatedElementDto> classes,
             Map<String, CalculatedElementDto> packages) {}
+
+    public record ArchitectureAnnotationsDto(
+            List<ComponentSpecDto> components,
+            List<ComponentApiMarkDto> componentApiIncludes,
+            List<ComponentApiMarkDto> componentApiExcludes,
+            List<PortSpecDto> ports,
+            List<ElementRoleMarkDto> roles) {}
+
+    public record ComponentSpecDto(
+            String id,
+            String displayName,
+            String rootPackageFqn) {}
+
+    public record ComponentApiMarkDto(
+            String componentId,
+            String elementFqn) {}
+
+    public record PortSpecDto(
+            String id,
+            String componentOrSegmentId,
+            String classFqn,
+            String direction) {}
+
+    public record ElementRoleMarkDto(
+            String elementFqn,
+            String role) {}
 
     public record CalculatedElementDto(
             String fullName,

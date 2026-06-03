@@ -22,23 +22,74 @@
         <javafx.version>21.0.5</javafx.version>
         <wfx.version>1.0.1</wfx.version>
         <avaje.version>11.4</avaje.version>
+        <slf4j.version>2.0.13</slf4j.version>
     </properties>
 
     <dependencies>
-        <!-- WFX Rich Client Platform (provides JavaFX, Avaje, SLF4J, Commons Lang3) -->
+        <!-- WFX Rich Client Platform modules.
+             Keep these explicit so migrated windowmanager modules are not mixed
+             with the legacy windowmtg packages still present in older wfx-all jars. -->
         <dependency>
             <groupId>io.softwareecg.wfx</groupId>
-            <artifactId>wfx-all</artifactId>
+            <artifactId>lookup-api</artifactId>
             <version>${wfx.version}</version>
         </dependency>
-
-        <!-- Auto-built top-level "View" menu listing all TOOL views.
-             Opt-in: not bundled into wfx-all so apps can choose. -->
+        <dependency>
+            <groupId>io.softwareecg.wfx</groupId>
+            <artifactId>platform-api</artifactId>
+            <version>${wfx.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>io.softwareecg.wfx</groupId>
+            <artifactId>launcher</artifactId>
+            <version>${wfx.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>io.softwareecg.wfx</groupId>
+            <artifactId>windowmanager-api</artifactId>
+            <version>${wfx.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>io.softwareecg.wfx</groupId>
+            <artifactId>ui-utils</artifactId>
+            <version>${wfx.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>io.softwareecg.wfx</groupId>
+            <artifactId>lookup-avaje</artifactId>
+            <version>${wfx.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>io.softwareecg.wfx</groupId>
+            <artifactId>platform-core</artifactId>
+            <version>${wfx.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>io.softwareecg.wfx</groupId>
+            <artifactId>windowmanager-core</artifactId>
+            <version>${wfx.version}</version>
+        </dependency>
         <dependency>
             <groupId>io.softwareecg.wfx</groupId>
             <artifactId>view-menu</artifactId>
             <version>${wfx.version}</version>
-            <scope>runtime</scope>
+        </dependency>
+
+        <!-- APIs used directly by S202 modules; no longer supplied by wfx-all on the compile classpath. -->
+        <dependency>
+            <groupId>io.avaje</groupId>
+            <artifactId>avaje-inject</artifactId>
+            <version>${avaje.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>jakarta.annotation</groupId>
+            <artifactId>jakarta.annotation-api</artifactId>
+            <version>2.1.1</version>
+        </dependency>
+        <dependency>
+            <groupId>org.slf4j</groupId>
+            <artifactId>slf4j-api</artifactId>
+            <version>${slf4j.version}</version>
         </dependency>
 
         <!-- Logging runtime -->

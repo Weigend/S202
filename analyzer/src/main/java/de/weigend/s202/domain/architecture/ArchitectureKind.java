@@ -13,18 +13,25 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package de.weigend.s202.ui.wfx;
-
-import io.softwareecg.wfx.main.Main;
-import javafx.application.Application;
+package de.weigend.s202.domain.architecture;
 
 /**
- * Entry point for the S202 Code Analyzer running on the WFX rich-client platform
- * using the lookup strategy provided by the WFX launcher.
+ * Stable ids for architecture styles. These ids are intentionally independent
+ * from UI view names so project data and style policies can outlive a renderer.
  */
-public class S202Main extends Main {
+public enum ArchitectureKind {
+    LAYERED("layered"),
+    COMPONENT("component"),
+    HEXAGONAL("hexagonal"),
+    WHAT_IF_LAYERED("what-if-layered");
 
-    public static void main(String[] args) {
-        Application.launch(S202Main.class, args);
+    private final String id;
+
+    ArchitectureKind(String id) {
+        this.id = id;
+    }
+
+    public String id() {
+        return id;
     }
 }

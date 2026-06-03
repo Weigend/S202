@@ -20,6 +20,7 @@ import de.weigend.s202.analysis.invariants.LayoutInvariantReport;
 import de.weigend.s202.analysis.quality.QualityMetrics;
 import de.weigend.s202.domain.DependencyEdge;
 import de.weigend.s202.domain.DomainModel;
+import de.weigend.s202.domain.architecture.ArchitectureAnnotations;
 import de.weigend.s202.domain.architecture.LevelCalculator;
 import de.weigend.s202.project.S202Project;
 import de.weigend.s202.project.S202ProjectMapper;
@@ -29,9 +30,11 @@ import de.weigend.s202.reader.GradleProjectScanner;
 import de.weigend.s202.reader.InputAnalyzer;
 import de.weigend.s202.reader.MavenProjectScanner;
 import de.weigend.s202.ui.ArchitectureView;
+import de.weigend.s202.ui.ArchitectureViewStyle;
 import de.weigend.s202.ui.layout.horizontal.HorizontalRowLayoutOptimizer;
 import de.weigend.s202.ui.model.ArchitectureNode;
 import de.weigend.s202.ui.model.ArchitectureNodeBuilder;
+import de.weigend.s202.ui.model.ArchitectureNodeCloner;
 import de.weigend.s202.ui.rendering.TangleEdgeRenderer;
 import de.weigend.s202.ui.wfx.events.CutTangleEdgeEvent;
 import de.weigend.s202.ui.wfx.events.CutTangleEdgesEvent;
@@ -42,15 +45,15 @@ import de.weigend.s202.ui.wfx.events.OpenScopeEvent;
 import de.weigend.s202.ui.wfx.events.OpenTangleEvent;
 import de.weigend.s202.ui.wfx.events.RestoreTangleEdgeEvent;
 import de.weigend.s202.ui.wfx.tangles.TangleFilter;
-import io.softwareecg.wfx.lookup.Lookup;
+import io.softwareecg.wfx.lookup.api.Lookup;
 import io.softwareecg.wfx.platform.api.EventBus;
 import io.softwareecg.wfx.platform.api.Module;
 import io.softwareecg.wfx.platform.api.events.ProgressEvent;
 import io.softwareecg.wfx.platform.api.exceptions.PlatformException;
-import io.softwareecg.wfx.windowmtg.api.ApplicationWindow;
-import io.softwareecg.wfx.windowmtg.api.View;
-import io.softwareecg.wfx.windowmtg.api.ViewKind;
-import io.softwareecg.wfx.windowmtg.api.WindowManager;
+import io.softwareecg.wfx.windowmanager.api.ApplicationWindow;
+import io.softwareecg.wfx.windowmanager.api.View;
+import io.softwareecg.wfx.windowmanager.api.ViewKind;
+import io.softwareecg.wfx.windowmanager.api.WindowManager;
 import jakarta.inject.Singleton;
 import javafx.animation.PauseTransition;
 import javafx.application.Platform;
@@ -153,6 +156,7 @@ public class S202Module implements Module {
     private final Map<ArchitectureView, S202Project.Source> viewSources = new HashMap<>();
     private final Map<ArchitectureView, LayoutInvariantReport> viewInvariantReports = new HashMap<>();
     private final Set<DependencyEdge> refactoringPreviewCuts = new HashSet<>();
+    private boolean propagatingArchitectureAnnotations;
 
     public S202Module(ApplicationWindow applicationWindow) {
         this.applicationWindow = applicationWindow;
@@ -301,6 +305,7 @@ public class S202Module implements Module {
         bus.subscribe(MenuRequestEvent.CloseProject.class, ev -> { closeProject(); return true; });
         bus.subscribe(MenuRequestEvent.Exit.class, ev -> { Platform.exit(); return true; });
         bus.subscribe(MenuRequestEvent.NewView.class, ev -> { newArchitectureWindow(); return true; });
+        bus.subscribe(MenuRequestEvent.OpenComponentView.class, ev -> { openComponentView(); return true; });
         bus.subscribe(MenuRequestEvent.CloseFocusedView.class, ev -> { closeFocusedView(); return true; });
         bus.subscribe(MenuRequestEvent.CloseAllViews.class, ev -> { closeAllViews(); return true; });
         bus.subscribe(MenuRequestEvent.RestoreDefaultLayout.class, ev -> {
@@ -347,6 +352,44 @@ public class S202Module implements Module {
         registerArchitectureView(wrapper);
     }
 
+    private void openComponentView() {
+        ArchitectureWfxView sourceWrapper = focusedSourceArchitectureView();
+        if (sourceWrapper == null) {
+            publishProgress("No architecture view available for component projection", 1);
+            return;
+        }
+
+        ArchitectureView sourceView = sourceWrapper.getArchitectureView();
+        ArchitectureNode sourceRoot = sourceView.getArchitectureRoot();
+        if (sourceRoot == null) {
+            publishProgress("No architecture loaded for component projection", 1);
+            return;
+        }
+
+        WindowManager wm = Lookup.lookup(WindowManager.class);
+        ArchitectureWfxView wrapper = createArchitectureView("Component View");
+        ArchitectureView componentView = wrapper.getArchitectureView();
+        componentView.setViewStyle(ArchitectureViewStyle.COMPONENT);
+        componentView.setArchitectureAnnotations(sourceView.getArchitectureAnnotations());
+        componentView.setRawDependencyModel(sourceView.getRawDependencyModel());
+        componentView.setDomainModel(sourceView.getDomainModel());
+        componentView.setCycleBreakEdges(sourceView.getCycleBreakEdges());
+        componentView.setAppliedTangleCutEdges(refactoringPreviewCuts);
+        viewSources.put(componentView, viewSources.get(sourceView));
+        viewInvariantReports.put(componentView, viewInvariantReports.get(sourceView));
+
+        registerArchitectureView(wrapper);
+        wm.showView(wrapper);
+
+        componentView.setArchitectureRootAsync(
+                sourceRoot,
+                progress -> publishJavaFxBuildProgress("Building JavaFX component view", progress),
+                () -> {
+                    componentView.setQualityMetrics(sourceView.getQualityMetrics());
+                    publishProgress("Opened component view", 1);
+                });
+    }
+
     /**
      * Register an architecture wrapper with the {@link WindowManager} and,
      * on first call, dock the What-If Dependencies panel under it. Every
@@ -357,8 +400,40 @@ public class S202Module implements Module {
      */
     private void registerArchitectureView(ArchitectureWfxView wrapper) {
         Lookup.lookup(WindowManager.class).register(wrapper);
+        ArchitectureView view = wrapper.getArchitectureView();
+        view.architectureAnnotationsProperty().addListener((obs, oldValue, newValue) ->
+                propagateArchitectureAnnotations(view, newValue));
         Lookup.lookup(de.weigend.s202.ui.wfx.whatif.WhatIfDependenciesModule.class)
                 .dockUnder(wrapper);
+    }
+
+    private void propagateArchitectureAnnotations(ArchitectureView source,
+                                                  ArchitectureAnnotations annotations) {
+        if (propagatingArchitectureAnnotations || source == null || source.getDomainModel() == null) {
+            return;
+        }
+        propagatingArchitectureAnnotations = true;
+        try {
+            ArchitectureAnnotations effective =
+                    annotations == null ? ArchitectureAnnotations.empty() : annotations;
+            WindowManager wm = Lookup.lookup(WindowManager.class);
+            for (View registered : wm.getRegisteredViews()) {
+                if (!(registered instanceof ArchitectureWfxView wrapper)) {
+                    continue;
+                }
+                ArchitectureView target = wrapper.getArchitectureView();
+                if (target == source || target.getDomainModel() != source.getDomainModel()) {
+                    continue;
+                }
+                target.setArchitectureAnnotations(effective);
+                if (target.getViewStyle() == ArchitectureViewStyle.COMPONENT
+                        && target.hasRoot()) {
+                    target.refreshLayout();
+                }
+            }
+        } finally {
+            propagatingArchitectureAnnotations = false;
+        }
     }
 
     private void openScopeView(String scope, ArchitectureView requestedSourceView) {
@@ -374,7 +449,10 @@ public class S202Module implements Module {
             return;
         }
         ArchitectureView finalSourceView = sourceView;
-        ArchitectureNode sourceRoot = sourceView.getArchitectureRoot();
+        ArchitectureNode sourceRoot = sourceView.getScopeExtensionSourceRoot();
+        if (sourceRoot == null) {
+            sourceRoot = sourceView.getArchitectureRoot();
+        }
         if (sourceRoot == null) {
             return;
         }
@@ -388,6 +466,8 @@ public class S202Module implements Module {
         ArchitectureWfxView wrapper = createArchitectureView("Scope " + simple(scope));
         ArchitectureView scopeView = wrapper.getArchitectureView();
         scopeView.setPreferredTopTanglesScope(scope);
+        scopeView.enableScopeExtensionFrom(sourceRoot);
+        scopeView.setArchitectureAnnotations(sourceView.getArchitectureAnnotations());
         scopeView.setDomainModel(sourceView.getDomainModel());
         scopeView.setRawDependencyModel(sourceView.getRawDependencyModel());
         scopeView.setCycleBreakEdges(sourceView.getCycleBreakEdges());
@@ -413,8 +493,8 @@ public class S202Module implements Module {
         if (scopeNode == null) {
             return null;
         }
-        ArchitectureNode root = cloneShallow(sourceRoot);
-        root.addChild(cloneTree(scopeNode));
+        ArchitectureNode root = ArchitectureNodeCloner.cloneShallow(sourceRoot);
+        root.addChild(ArchitectureNodeCloner.cloneTree(scopeNode));
         return root;
     }
 
@@ -430,27 +510,6 @@ public class S202Module implements Module {
             }
         }
         return null;
-    }
-
-    private static ArchitectureNode cloneTree(ArchitectureNode source) {
-        ArchitectureNode clone = cloneShallow(source);
-        for (ArchitectureNode child : source.getChildren()) {
-            clone.addChild(cloneTree(child));
-        }
-        return clone;
-    }
-
-    private static ArchitectureNode cloneShallow(ArchitectureNode source) {
-        ArchitectureNode clone = new ArchitectureNode(
-                source.getFullName(),
-                source.getSimpleName(),
-                source.getType(),
-                source.isAutoExpanded(),
-                source.getLevel(),
-                source.isInterfaceType());
-        clone.setDependencies(source.getDependencies());
-        clone.setDependents(source.getDependents());
-        return clone;
     }
 
     private static String simple(String fqn) {
@@ -1112,6 +1171,7 @@ public class S202Module implements Module {
                 source,
                 view.getRawDependencyModel(),
                 view.getDomainModel(),
+                view.getArchitectureAnnotations(),
                 viewInvariantReports.get(view),
                 view.getCycleBreakEdges());
 
@@ -1139,6 +1199,8 @@ public class S202Module implements Module {
                 S202Project project = projectStore.load(file.toPath());
                 DependencyModel rawModel = projectMapper.toDependencyModel(project.dependencyModel());
                 DomainModel domainModel = projectMapper.toDomainModel(project.domainModel());
+                ArchitectureAnnotations annotations =
+                        projectMapper.toArchitectureAnnotations(project.architectureAnnotations());
                 ArchitectureNode root = architectureNodeBuilder.build(domainModel);
                 new HorizontalRowLayoutOptimizer().assignHorizontalLayoutOrders(root);
                 de.weigend.s202.ui.consistency.ArchitectureConsistencyDevHook
@@ -1147,7 +1209,7 @@ public class S202Module implements Module {
                 LayoutInvariantReport invariants = projectMapper.toLayoutInvariantReport(project.layoutInvariantReport());
                 Set<DependencyEdge> cycleBreakEdges =
                         projectMapper.toCycleBreakEdges(project.cycleBreakEdges());
-                return new LoadedProject(project, rawModel, domainModel, root, metrics, invariants, cycleBreakEdges);
+                return new LoadedProject(project, rawModel, domainModel, annotations, root, metrics, invariants, cycleBreakEdges);
             }
         };
         task.setOnSucceeded(e -> applyLoadedProject(file.toPath(), task.getValue()));
@@ -1170,6 +1232,7 @@ public class S202Module implements Module {
         ArchitectureWfxView target = createArchitectureView();
         registerArchitectureView(target);
         ArchitectureView view = target.getArchitectureView();
+        view.setArchitectureAnnotations(loaded.annotations());
         view.setDomainModel(loaded.domainModel());
         view.setRawDependencyModel(loaded.rawModel());
         view.setCycleBreakEdges(loaded.cycleBreakEdges());
@@ -1248,7 +1311,8 @@ public class S202Module implements Module {
     }
 
     private record LoadedProject(S202Project project, DependencyModel rawModel,
-                                 DomainModel domainModel, ArchitectureNode rootNode,
+                                 DomainModel domainModel, ArchitectureAnnotations annotations,
+                                 ArchitectureNode rootNode,
                                  QualityMetrics metrics, LayoutInvariantReport invariants,
                                  Set<DependencyEdge> cycleBreakEdges) {}
 

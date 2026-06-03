@@ -24,6 +24,7 @@ import java.util.*;
 public class DependencyModel {
     private final Map<String, ClassInfo> classes = new HashMap<>();
     private final Set<String> allClassNames = new HashSet<>();
+    private final Map<String, ModuleInfo> modules = new HashMap<>();
     private Map<String, PackageInfo> packages = new HashMap<>();
 
     /**
@@ -108,6 +109,49 @@ public class DependencyModel {
         }
     }
 
+    /**
+     * Java Platform Module System descriptor information from module-info.class.
+     */
+    public static class ModuleInfo {
+        public final String name;
+        public final String version;
+        public final Set<ModulePackageAccess> exportedPackages = new HashSet<>();
+        public final Set<ModulePackageAccess> openedPackages = new HashSet<>();
+
+        public ModuleInfo(String name, String version) {
+            if (name == null || name.isBlank()) {
+                throw new IllegalArgumentException("module name must be non-empty");
+            }
+            this.name = name;
+            this.version = version;
+        }
+
+        public void addExportedPackage(String packageName, Collection<String> targetModules) {
+            exportedPackages.add(new ModulePackageAccess(packageName, targetModules));
+        }
+
+        public void addOpenedPackage(String packageName, Collection<String> targetModules) {
+            openedPackages.add(new ModulePackageAccess(packageName, targetModules));
+        }
+    }
+
+    /**
+     * Package access declared by exports/opens. Empty targetModules means the
+     * package is exported/opened unqualified.
+     */
+    public record ModulePackageAccess(String packageName, Set<String> targetModules) {
+        public ModulePackageAccess(String packageName, Collection<String> targetModules) {
+            this(packageName, targetModules == null ? Set.of() : Set.copyOf(targetModules));
+        }
+
+        public ModulePackageAccess {
+            if (packageName == null || packageName.isBlank()) {
+                throw new IllegalArgumentException("packageName must be non-empty");
+            }
+            targetModules = targetModules == null ? Set.of() : Set.copyOf(targetModules);
+        }
+    }
+
     // ===== Public API =====
 
     public void addClass(String className, ClassInfo classInfo) {
@@ -141,6 +185,45 @@ public class DependencyModel {
 
     public int getPackageCount() {
         return packages.size();
+    }
+
+    public ModuleInfo getOrCreateModule(String moduleName, String version) {
+        return modules.computeIfAbsent(moduleName, name -> new ModuleInfo(name, version));
+    }
+
+    public void addModule(ModuleInfo moduleInfo) {
+        if (moduleInfo == null) {
+            return;
+        }
+        ModuleInfo existing = getOrCreateModule(moduleInfo.name, moduleInfo.version);
+        existing.exportedPackages.addAll(moduleInfo.exportedPackages);
+        existing.openedPackages.addAll(moduleInfo.openedPackages);
+    }
+
+    public ModuleInfo getModule(String moduleName) {
+        return modules.get(moduleName);
+    }
+
+    public int getModuleCount() {
+        return modules.size();
+    }
+
+    public Map<String, ModuleInfo> getAllModules() {
+        return new HashMap<>(modules);
+    }
+
+    public Set<String> getExportedPackageNames() {
+        Set<String> exported = new HashSet<>();
+        for (ModuleInfo module : modules.values()) {
+            for (ModulePackageAccess access : module.exportedPackages) {
+                exported.add(access.packageName());
+            }
+        }
+        return exported;
+    }
+
+    public boolean isPackageExported(String packageName) {
+        return packageName != null && getExportedPackageNames().contains(packageName);
     }
 
     public Map<String, ClassInfo> getAllClasses() {

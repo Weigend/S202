@@ -15,6 +15,7 @@
  */
 package de.weigend.s202.ui.tree;
 
+import de.weigend.s202.ui.LevelPackageBox;
 import de.weigend.s202.ui.model.ArchitectureNode;
 import de.weigend.s202.ui.model.ArchitectureNode.NodeType;
 import javafx.application.Platform;
@@ -22,30 +23,135 @@ import javafx.scene.Node;
 import javafx.scene.layout.HBox;
 import javafx.scene.layout.VBox;
 import org.junit.jupiter.api.AfterAll;
+import org.junit.jupiter.api.Assumptions;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 
+import java.time.Duration;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.FutureTask;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
+import java.util.concurrent.atomic.AtomicReference;
 
 import static org.junit.jupiter.api.Assertions.*;
 
 public class ArchitectureTreeBuilderTest {
 
+    private static final Duration FX_TIMEOUT = Duration.ofSeconds(10);
+    private static boolean javaFxStarted;
+    private static Throwable javaFxStartupFailure;
+
     @BeforeAll
     static void initJavaFX() {
-        try {
-            Platform.startup(() -> {});
-        } catch (Exception e) {
-            // JavaFX already started
-        }
+        startJavaFx();
     }
 
     @AfterAll
     static void stopJavaFX() {
-        Platform.exit();
+        if (!javaFxStarted) {
+            return;
+        }
+        CountDownLatch requested = new CountDownLatch(1);
+        try {
+            Platform.runLater(() -> {
+                try {
+                    Platform.setImplicitExit(true);
+                    Platform.exit();
+                } finally {
+                    requested.countDown();
+                }
+            });
+            requested.await(FX_TIMEOUT.toMillis(), TimeUnit.MILLISECONDS);
+        } catch (IllegalStateException ignored) {
+            // JavaFX was already shut down.
+        } catch (InterruptedException ignored) {
+            Thread.currentThread().interrupt();
+        }
+    }
+
+    private static boolean startJavaFx() {
+        CountDownLatch ready = new CountDownLatch(1);
+        AtomicReference<Throwable> failure = new AtomicReference<>();
+        Thread starter = new Thread(() -> {
+            try {
+                Platform.startup(() -> {
+                    Platform.setImplicitExit(false);
+                    ready.countDown();
+                });
+            } catch (IllegalStateException alreadyStarted) {
+                try {
+                    Platform.runLater(ready::countDown);
+                } catch (IllegalStateException e) {
+                    failure.set(e);
+                    ready.countDown();
+                }
+            } catch (Throwable t) {
+                failure.set(t);
+                ready.countDown();
+            }
+        }, "javafx-test-starter");
+        starter.setDaemon(true);
+        starter.start();
+
+        boolean started;
+        try {
+            started = ready.await(FX_TIMEOUT.toMillis(), TimeUnit.MILLISECONDS);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            return false;
+        }
+        if (!started) {
+            return false;
+        }
+        if (failure.get() != null) {
+            javaFxStartupFailure = failure.get();
+            return false;
+        }
+        javaFxStarted = true;
+        return true;
+    }
+
+    private static void runOnFxThread(FxAssertion assertion) {
+        Assumptions.assumeTrue(javaFxStarted, () -> javaFxStartupFailure == null
+                ? "JavaFX toolkit did not start within " + FX_TIMEOUT
+                : "JavaFX toolkit is unavailable: " + javaFxStartupFailure.getMessage());
+        if (Platform.isFxApplicationThread()) {
+            assertion.run();
+            return;
+        }
+        FutureTask<Void> task = new FutureTask<>(() -> {
+            assertion.run();
+            return null;
+        });
+        Platform.runLater(task);
+        try {
+            task.get(FX_TIMEOUT.toMillis(), TimeUnit.MILLISECONDS);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            fail("Interrupted while waiting for JavaFX test execution", e);
+        } catch (TimeoutException e) {
+            fail("Timed out while waiting for JavaFX test execution", e);
+        } catch (ExecutionException e) {
+            Throwable cause = e.getCause();
+            if (cause instanceof AssertionError assertionError) {
+                throw assertionError;
+            }
+            if (cause instanceof RuntimeException runtimeException) {
+                throw runtimeException;
+            }
+            throw new AssertionError(cause);
+        }
+    }
+
+    @FunctionalInterface
+    private interface FxAssertion {
+        void run();
     }
 
     /**
@@ -54,35 +160,32 @@ public class ArchitectureTreeBuilderTest {
      */
     @Test
     public void testSameLevelTopPackagesAreSideBySide() {
-        // Build tree: root -> analysis(L:0), reader(L:0), domain(L:1), ui(L:2)
-        ArchitectureNode root = new ArchitectureNode("root", "root", NodeType.PACKAGE, true, 0);
-        root.addChild(new ArchitectureNode("analysis", "analysis", NodeType.PACKAGE, true, 0));
-        root.addChild(new ArchitectureNode("reader", "reader", NodeType.PACKAGE, true, 0));
-        root.addChild(new ArchitectureNode("domain", "domain", NodeType.PACKAGE, true, 1));
-        root.addChild(new ArchitectureNode("ui", "ui", NodeType.PACKAGE, true, 2));
+        runOnFxThread(() -> {
+            // Build tree: root -> analysis(L:0), reader(L:0), domain(L:1), ui(L:2)
+            ArchitectureNode root = new ArchitectureNode("root", "root", NodeType.PACKAGE, true, 0);
+            root.addChild(new ArchitectureNode("analysis", "analysis", NodeType.PACKAGE, true, 0));
+            root.addChild(new ArchitectureNode("reader", "reader", NodeType.PACKAGE, true, 0));
+            root.addChild(new ArchitectureNode("domain", "domain", NodeType.PACKAGE, true, 1));
+            root.addChild(new ArchitectureNode("ui", "ui", NodeType.PACKAGE, true, 2));
 
-        Map<String, Node> registry = new HashMap<>();
-        ArchitectureTreeBuilder builder = new ArchitectureTreeBuilder(registry);
-        VBox topLevel = builder.buildTree(root);
+            Map<String, Node> registry = new HashMap<>();
+            ArchitectureTreeBuilder builder = new ArchitectureTreeBuilder(registry);
+            VBox topLevel = builder.buildTree(root);
 
-        // topLevel should have 3 HBox rows: L2, L1, L0
-        List<HBox> rows = new ArrayList<>();
-        for (Node child : topLevel.getChildren()) {
-            if (child instanceof HBox) {
-                rows.add((HBox) child);
-            }
-        }
-        assertEquals(3, rows.size(), "Should have 3 level rows (L2, L1, L0)");
+            // topLevel should have 3 HBox rows: L2, L1, L0
+            List<HBox> rows = rows(topLevel);
+            assertEquals(3, rows.size(), "Should have 3 level rows (L2, L1, L0)");
 
-        // Row 0 (L:2): ui alone
-        assertEquals(1, rows.get(0).getChildren().size(), "L2 row should have 1 package (ui)");
+            // Row 0 (L:2): ui alone
+            assertEquals(1, rows.get(0).getChildren().size(), "L2 row should have 1 package (ui)");
 
-        // Row 1 (L:1): domain alone
-        assertEquals(1, rows.get(1).getChildren().size(), "L1 row should have 1 package (domain)");
+            // Row 1 (L:1): domain alone
+            assertEquals(1, rows.get(1).getChildren().size(), "L1 row should have 1 package (domain)");
 
-        // Row 2 (L:0): analysis and reader side-by-side
-        assertEquals(2, rows.get(2).getChildren().size(),
-                "L0 row should have 2 packages (analysis and reader) side-by-side");
+            // Row 2 (L:0): analysis and reader side-by-side
+            assertEquals(2, rows.get(2).getChildren().size(),
+                    "L0 row should have 2 packages (analysis and reader) side-by-side");
+        });
     }
 
     /**
@@ -90,23 +193,20 @@ public class ArchitectureTreeBuilderTest {
      */
     @Test
     public void testAllSameLevelInOneRow() {
-        ArchitectureNode root = new ArchitectureNode("root", "root", NodeType.PACKAGE, true, 0);
-        root.addChild(new ArchitectureNode("a", "a", NodeType.PACKAGE, true, 0));
-        root.addChild(new ArchitectureNode("b", "b", NodeType.PACKAGE, true, 0));
-        root.addChild(new ArchitectureNode("c", "c", NodeType.PACKAGE, true, 0));
+        runOnFxThread(() -> {
+            ArchitectureNode root = new ArchitectureNode("root", "root", NodeType.PACKAGE, true, 0);
+            root.addChild(new ArchitectureNode("a", "a", NodeType.PACKAGE, true, 0));
+            root.addChild(new ArchitectureNode("b", "b", NodeType.PACKAGE, true, 0));
+            root.addChild(new ArchitectureNode("c", "c", NodeType.PACKAGE, true, 0));
 
-        Map<String, Node> registry = new HashMap<>();
-        ArchitectureTreeBuilder builder = new ArchitectureTreeBuilder(registry);
-        VBox topLevel = builder.buildTree(root);
+            Map<String, Node> registry = new HashMap<>();
+            ArchitectureTreeBuilder builder = new ArchitectureTreeBuilder(registry);
+            VBox topLevel = builder.buildTree(root);
 
-        List<HBox> rows = new ArrayList<>();
-        for (Node child : topLevel.getChildren()) {
-            if (child instanceof HBox) {
-                rows.add((HBox) child);
-            }
-        }
-        assertEquals(1, rows.size(), "All same-level packages should be in 1 row");
-        assertEquals(3, rows.get(0).getChildren().size(), "The single row should contain all 3 packages");
+            List<HBox> rows = rows(topLevel);
+            assertEquals(1, rows.size(), "All same-level packages should be in 1 row");
+            assertEquals(3, rows.get(0).getChildren().size(), "The single row should contain all 3 packages");
+        });
     }
 
     /**
@@ -114,44 +214,76 @@ public class ArchitectureTreeBuilderTest {
      */
     @Test
     public void testDistinctLevelsGetSeparateRows() {
-        ArchitectureNode root = new ArchitectureNode("root", "root", NodeType.PACKAGE, true, 0);
-        root.addChild(new ArchitectureNode("low", "low", NodeType.PACKAGE, true, 0));
-        root.addChild(new ArchitectureNode("mid", "mid", NodeType.PACKAGE, true, 1));
-        root.addChild(new ArchitectureNode("high", "high", NodeType.PACKAGE, true, 2));
+        runOnFxThread(() -> {
+            ArchitectureNode root = new ArchitectureNode("root", "root", NodeType.PACKAGE, true, 0);
+            root.addChild(new ArchitectureNode("low", "low", NodeType.PACKAGE, true, 0));
+            root.addChild(new ArchitectureNode("mid", "mid", NodeType.PACKAGE, true, 1));
+            root.addChild(new ArchitectureNode("high", "high", NodeType.PACKAGE, true, 2));
 
-        Map<String, Node> registry = new HashMap<>();
-        ArchitectureTreeBuilder builder = new ArchitectureTreeBuilder(registry);
-        VBox topLevel = builder.buildTree(root);
+            Map<String, Node> registry = new HashMap<>();
+            ArchitectureTreeBuilder builder = new ArchitectureTreeBuilder(registry);
+            VBox topLevel = builder.buildTree(root);
 
-        List<HBox> rows = new ArrayList<>();
-        for (Node child : topLevel.getChildren()) {
-            if (child instanceof HBox) {
-                rows.add((HBox) child);
+            List<HBox> rows = rows(topLevel);
+            assertEquals(3, rows.size(), "3 distinct levels should produce 3 rows");
+
+            // Each row should have exactly 1 package
+            for (int i = 0; i < rows.size(); i++) {
+                assertEquals(1, rows.get(i).getChildren().size(),
+                        "Row " + i + " should have exactly 1 package");
             }
-        }
-        assertEquals(3, rows.size(), "3 distinct levels should produce 3 rows");
-
-        // Each row should have exactly 1 package
-        for (int i = 0; i < rows.size(); i++) {
-            assertEquals(1, rows.get(i).getChildren().size(),
-                    "Row " + i + " should have exactly 1 package");
-        }
+        });
     }
 
     @Test
     public void testTopLevelPaddingReservesOuterTangleLanes() {
-        ArchitectureNode root = new ArchitectureNode("root", "root", NodeType.PACKAGE, true, 0);
-        root.addChild(new ArchitectureNode("ui", "ui", NodeType.PACKAGE, true, 2));
+        runOnFxThread(() -> {
+            ArchitectureNode root = new ArchitectureNode("root", "root", NodeType.PACKAGE, true, 0);
+            root.addChild(new ArchitectureNode("ui", "ui", NodeType.PACKAGE, true, 2));
 
-        Map<String, Node> registry = new HashMap<>();
-        ArchitectureTreeBuilder builder = new ArchitectureTreeBuilder(registry);
-        VBox topLevel = builder.buildTree(root);
+            Map<String, Node> registry = new HashMap<>();
+            ArchitectureTreeBuilder builder = new ArchitectureTreeBuilder(registry);
+            VBox topLevel = builder.buildTree(root);
 
-        assertEquals(52.0, topLevel.getPadding().getTop(), 0.0001,
-                "Top gap should fit seven tangle lanes");
-        assertEquals(52.0, topLevel.getPadding().getBottom(), 0.0001,
-                "Bottom gap should fit seven tangle lanes");
-        assertEquals(60.0, topLevel.getPadding().getLeft(), 0.0001);
-        assertEquals(60.0, topLevel.getPadding().getRight(), 0.0001);
+            assertEquals(52.0, topLevel.getPadding().getTop(), 0.0001,
+                    "Top gap should fit seven tangle lanes");
+            assertEquals(52.0, topLevel.getPadding().getBottom(), 0.0001,
+                    "Bottom gap should fit seven tangle lanes");
+            assertEquals(60.0, topLevel.getPadding().getLeft(), 0.0001);
+            assertEquals(60.0, topLevel.getPadding().getRight(), 0.0001);
+        });
+    }
+
+    @Test
+    public void testScopeRootPackageCanRemainVisible() {
+        runOnFxThread(() -> {
+            ArchitectureNode root = new ArchitectureNode("root", "root", NodeType.PACKAGE, true, 0);
+            ArchitectureNode scope = new ArchitectureNode("com.example", "example", NodeType.PACKAGE, true, 1);
+            scope.addChild(new ArchitectureNode("com.example.internal", "internal", NodeType.PACKAGE, true, 0));
+            root.addChild(scope);
+
+            Map<String, Node> registry = new HashMap<>();
+            ArchitectureTreeBuilder builder = new ArchitectureTreeBuilder(registry);
+            VBox topLevel = builder.buildTree(root, 3, false);
+
+            List<HBox> rows = rows(topLevel);
+
+            assertEquals(1, rows.size(), "scope root should be the single top-level row");
+            assertEquals(1, rows.get(0).getChildren().size(), "scope root should be the visible top-level package");
+            assertTrue(rows.get(0).getChildren().get(0) instanceof LevelPackageBox,
+                    "scope root should render as a package box, not be skipped as transparent");
+            assertSame(rows.get(0).getChildren().get(0), registry.get("com.example"),
+                    "registry should point the scope package at its visible box");
+        });
+    }
+
+    private static List<HBox> rows(VBox topLevel) {
+        List<HBox> rows = new ArrayList<>();
+        for (Node child : topLevel.getChildren()) {
+            if (child instanceof HBox hbox) {
+                rows.add(hbox);
+            }
+        }
+        return rows;
     }
 }

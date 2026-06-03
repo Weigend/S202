@@ -18,10 +18,10 @@ package de.weigend.s202.ui.wfx.whatif;
 import de.weigend.s202.domain.architecture.Architecture;
 import de.weigend.s202.ui.ArchitectureView;
 import de.weigend.s202.ui.wfx.ArchitectureWfxView;
-import io.softwareecg.wfx.lookup.Lookup;
+import io.softwareecg.wfx.lookup.api.Lookup;
 import io.softwareecg.wfx.platform.api.Module;
 import io.softwareecg.wfx.platform.api.exceptions.PlatformException;
-import io.softwareecg.wfx.windowmtg.api.WindowManager;
+import io.softwareecg.wfx.windowmanager.api.WindowManager;
 import jakarta.annotation.Priority;
 import jakarta.inject.Singleton;
 import javafx.beans.value.ChangeListener;
@@ -179,9 +179,27 @@ public class WhatIfDependenciesModule implements Module {
         if (focused != null) {
             return focused;
         }
+
+        ArchitectureWfxView current = wrapperFor(boundView);
+        if (current != null) {
+            return current;
+        }
+
         return wm.getRegisteredViews().stream()
                 .filter(ArchitectureWfxView.class::isInstance)
                 .map(ArchitectureWfxView.class::cast)
+                .findFirst()
+                .orElse(null);
+    }
+
+    private ArchitectureWfxView wrapperFor(ArchitectureView view) {
+        if (view == null) {
+            return null;
+        }
+        return Lookup.lookup(WindowManager.class).getRegisteredViews().stream()
+                .filter(ArchitectureWfxView.class::isInstance)
+                .map(ArchitectureWfxView.class::cast)
+                .filter(wrapper -> wrapper.getArchitectureView() == view)
                 .findFirst()
                 .orElse(null);
     }

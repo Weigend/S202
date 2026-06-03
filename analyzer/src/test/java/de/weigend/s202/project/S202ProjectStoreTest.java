@@ -19,6 +19,7 @@ import de.weigend.s202.analysis.invariants.InvariantFinding;
 import de.weigend.s202.analysis.invariants.LayoutInvariantReport;
 import de.weigend.s202.domain.DependencyEdge;
 import de.weigend.s202.domain.DomainModel;
+import de.weigend.s202.domain.architecture.ArchitectureAnnotations;
 import de.weigend.s202.reader.DependencyModel;
 import de.weigend.s202.reader.EdgeKind;
 import org.junit.jupiter.api.Test;
@@ -40,6 +41,12 @@ class S202ProjectStoreTest {
     void saveAndLoadRoundTripsAnalysisModels() throws Exception {
         DependencyModel rawModel = rawModel();
         DomainModel domainModel = domainModel();
+        ArchitectureAnnotations annotations = new ArchitectureAnnotations(
+                List.of(),
+                Set.of("com.example.A"),
+                Set.of("com.example.internal"),
+                List.of(),
+                List.of());
         LayoutInvariantReport report = invariantReport();
         Set<DependencyEdge> cycleBreakEdges = Set.of(
                 new DependencyEdge("com.example.A", "com.example.B"));
@@ -49,7 +56,7 @@ class S202ProjectStoreTest {
         S202ProjectMapper mapper = new S202ProjectMapper();
         S202ProjectStore store = new S202ProjectStore();
         S202Project project = mapper.toProject(
-                "test", source, rawModel, domainModel, report, cycleBreakEdges);
+                "test", source, rawModel, domainModel, annotations, report, cycleBreakEdges);
 
         Path file = tempDir.resolve("example.s202.json");
         store.save(file, project);
@@ -57,10 +64,13 @@ class S202ProjectStoreTest {
         S202Project loaded = store.load(file);
         DependencyModel loadedRaw = mapper.toDependencyModel(loaded.dependencyModel());
         DomainModel loadedDomain = mapper.toDomainModel(loaded.domainModel());
+        ArchitectureAnnotations loadedAnnotations =
+                mapper.toArchitectureAnnotations(loaded.architectureAnnotations());
         LayoutInvariantReport loadedReport = mapper.toLayoutInvariantReport(loaded.layoutInvariantReport());
         Set<DependencyEdge> loadedEdges = mapper.toCycleBreakEdges(loaded.cycleBreakEdges());
 
         assertEquals(S202Project.FORMAT, loaded.format());
+        assertEquals(S202Project.FORMAT_VERSION, loaded.formatVersion());
         assertEquals(1, loadedRaw.getClassCount());
         DependencyModel.ClassInfo loadedClass = loadedRaw.getClass("com.example.A");
         assertNotNull(loadedClass);
@@ -72,6 +82,17 @@ class S202ProjectStoreTest {
 
         assertEquals(1, loadedRaw.getPackageCount());
         assertTrue(loadedRaw.getPackage("com.example").classNames.contains("com.example.A"));
+        assertEquals(1, loadedRaw.getModuleCount());
+        DependencyModel.ModuleInfo loadedModule = loadedRaw.getModule("com.example.module");
+        assertNotNull(loadedModule);
+        assertTrue(loadedModule.exportedPackages.stream()
+                .anyMatch(access -> access.packageName().equals("com.example")
+                        && access.targetModules().isEmpty()));
+        assertTrue(loadedModule.exportedPackages.stream()
+                .anyMatch(access -> access.packageName().equals("com.example.internal")
+                        && access.targetModules().equals(Set.of("com.friend"))));
+        assertTrue(loadedModule.openedPackages.stream()
+                .anyMatch(access -> access.packageName().equals("com.example.reflect")));
 
         DomainModel.CalculatedElementInfo loadedElement = loadedDomain.getClass("com.example.A");
         assertNotNull(loadedElement);
@@ -79,11 +100,46 @@ class S202ProjectStoreTest {
         assertTrue(loadedElement.interfaceType);
         assertEquals(Set.of("com.example.B"), loadedElement.dependencies);
         assertEquals(Set.of("com.example.C"), loadedElement.dependents);
+        assertEquals(Set.of("com.example.A"), loadedAnnotations.componentApiIncludes());
+        assertEquals(Set.of("com.example.internal"), loadedAnnotations.componentApiExcludes());
 
         assertNotNull(loadedReport);
         assertEquals(1, loadedReport.findings().size());
         assertEquals("R1", loadedReport.findings().get(0).ruleId());
         assertEquals(cycleBreakEdges, loadedEdges);
+    }
+
+    @Test
+    void versionOneProjectWithoutAnnotationsLoadsWithEmptyAnnotations() throws Exception {
+        S202ProjectMapper mapper = new S202ProjectMapper();
+        S202ProjectStore store = new S202ProjectStore();
+        S202Project current = mapper.toProject(
+                "test",
+                new S202Project.Source("JAR", List.of("/tmp/example.jar"), null),
+                rawModel(),
+                domainModel(),
+                null,
+                Set.of());
+        S202Project legacy = new S202Project(
+                S202Project.FORMAT,
+                1,
+                current.createdWith(),
+                current.source(),
+                current.dependencyModel(),
+                current.domainModel(),
+                null,
+                current.cycleBreakEdges(),
+                current.layoutInvariantReport(),
+                current.savedAt());
+
+        Path file = tempDir.resolve("legacy.s202.json");
+        store.save(file, legacy);
+
+        S202Project loaded = store.load(file);
+
+        assertEquals(1, loaded.formatVersion());
+        assertEquals(ArchitectureAnnotations.empty(),
+                mapper.toArchitectureAnnotations(loaded.architectureAnnotations()));
     }
 
     private static DependencyModel rawModel() {
@@ -100,6 +156,12 @@ class S202ProjectStoreTest {
         DependencyModel.PackageInfo packageInfo = new DependencyModel.PackageInfo("com.example", "example");
         packageInfo.classNames.add("com.example.A");
         model.setPackages(Map.of(packageInfo.fullName, packageInfo));
+
+        DependencyModel.ModuleInfo moduleInfo = new DependencyModel.ModuleInfo("com.example.module", "1.0");
+        moduleInfo.addExportedPackage("com.example", Set.of());
+        moduleInfo.addExportedPackage("com.example.internal", Set.of("com.friend"));
+        moduleInfo.addOpenedPackage("com.example.reflect", Set.of());
+        model.addModule(moduleInfo);
         return model;
     }
 

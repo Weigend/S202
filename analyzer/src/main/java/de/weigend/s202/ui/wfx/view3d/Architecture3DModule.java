@@ -20,12 +20,12 @@ import de.weigend.s202.ui.ArchitectureView;
 import de.weigend.s202.ui.model.ArchitectureNode;
 import de.weigend.s202.ui.wfx.ArchitectureWfxView;
 import de.weigend.s202.ui.wfx.events.NodeSelectionEvent;
-import io.softwareecg.wfx.lookup.Lookup;
+import io.softwareecg.wfx.lookup.api.Lookup;
 import io.softwareecg.wfx.platform.api.EventBus;
 import io.softwareecg.wfx.platform.api.Module;
 import io.softwareecg.wfx.platform.api.exceptions.PlatformException;
-import io.softwareecg.wfx.windowmtg.api.ApplicationWindow;
-import io.softwareecg.wfx.windowmtg.api.WindowManager;
+import io.softwareecg.wfx.windowmanager.api.ApplicationWindow;
+import io.softwareecg.wfx.windowmanager.api.WindowManager;
 import jakarta.annotation.Priority;
 import jakarta.inject.Singleton;
 import javafx.application.Platform;
@@ -134,7 +134,7 @@ public class Architecture3DModule implements Module {
     }
 
     /**
-     * The View menu calls {@link WindowManager#showView(io.softwareecg.wfx.windowmtg.api.View)}.
+     * The View menu calls {@link WindowManager#showView(io.softwareecg.wfx.windowmanager.api.View)}.
      * Defer one pulse after the 3D root is attached, then call it again so the
      * corresponding tab is selected even if the first attach happened while the
      * tab pane was still being assembled.
