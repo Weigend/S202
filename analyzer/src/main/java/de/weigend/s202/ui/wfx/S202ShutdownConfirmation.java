@@ -15,7 +15,7 @@
  */
 package de.weigend.s202.ui.wfx;
 
-import io.softwareecg.wfx.windowmtg.api.ShutdownConfirmation;
+import io.softwareecg.wfx.windowmanager.api.ShutdownConfirmation;
 import jakarta.inject.Singleton;
 import javafx.stage.Stage;
 

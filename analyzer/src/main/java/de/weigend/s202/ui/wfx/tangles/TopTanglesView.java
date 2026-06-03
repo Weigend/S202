@@ -16,8 +16,8 @@
 package de.weigend.s202.ui.wfx.tangles;
 
 import de.weigend.s202.reader.EdgeKind;
-import io.softwareecg.wfx.windowmtg.api.Position;
-import io.softwareecg.wfx.windowmtg.api.View;
+import io.softwareecg.wfx.windowmanager.api.Position;
+import io.softwareecg.wfx.windowmanager.api.View;
 import javafx.scene.Parent;
 import javafx.scene.control.ContextMenu;
 import javafx.scene.control.Label;

@@ -16,8 +16,8 @@
 package de.weigend.s202.ui.wfx.quality;
 
 import de.weigend.s202.analysis.quality.QualityMetrics;
-import io.softwareecg.wfx.windowmtg.api.Position;
-import io.softwareecg.wfx.windowmtg.api.View;
+import io.softwareecg.wfx.windowmanager.api.Position;
+import io.softwareecg.wfx.windowmanager.api.View;
 import javafx.geometry.Pos;
 import javafx.scene.Group;
 import javafx.scene.Parent;

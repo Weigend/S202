@@ -17,10 +17,10 @@ package de.weigend.s202.ui.wfx;
 
 import de.weigend.s202.ui.wfx.events.MenuRequestEvent;
 import io.softwareecg.wfx.extension.uiutils.MenuUtil;
-import io.softwareecg.wfx.lookup.Lookup;
+import io.softwareecg.wfx.lookup.api.Lookup;
 import io.softwareecg.wfx.platform.api.EventBus;
-import io.softwareecg.wfx.windowmtg.api.ApplicationWindow;
-import io.softwareecg.wfx.windowmtg.api.ShutdownConfirmation;
+import io.softwareecg.wfx.windowmanager.api.ApplicationWindow;
+import io.softwareecg.wfx.windowmanager.api.ShutdownConfirmation;
 import javafx.application.Platform;
 import javafx.beans.property.BooleanProperty;
 import javafx.collections.ListChangeListener;
