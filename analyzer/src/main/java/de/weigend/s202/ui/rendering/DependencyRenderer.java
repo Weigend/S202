@@ -17,6 +17,7 @@ package de.weigend.s202.ui.rendering;
 
 import de.weigend.s202.ui.LevelClassBox;
 import de.weigend.s202.ui.LevelPackageBox;
+import de.weigend.s202.ui.GraphSelection;
 import de.weigend.s202.ui.component.ComponentBox;
 import de.weigend.s202.ui.model.ArchitectureNode;
 import de.weigend.s202.ui.zoom.ZoomController;
@@ -202,6 +203,8 @@ public class DependencyRenderer implements DependencyRendererStrategy {
                         && isPackageCollapsed(child)) {
                     // Closed source: draw aggregated or class-level arrows from the package
                     drawCollapsedPackageArrows(child, uiElement, selectedClass);
+                } else if (isCollapsedAggregateEndpoint(uiElement)) {
+                    drawCollapsedPackageArrows(child, uiElement, selectedClass);
                 } else {
                     // Open source: recurse so class-level arrows are drawn
                     drawDependencyArrowsRecursive(child);
@@ -227,6 +230,13 @@ public class DependencyRenderer implements DependencyRendererStrategy {
         // Target is inside a collapsed package/component — roll up to the nearest visible box.
         Parent parent = element.getParent();
         while (parent != null) {
+            Object rollup = parent.getProperties().get("s202.rollupEndpointFqn");
+            if (rollup instanceof String endpointFqn) {
+                Node endpoint = elementRegistry.get(endpointFqn);
+                if (endpoint != null && isNodeActuallyVisible(endpoint)) {
+                    return endpoint;
+                }
+            }
             if (parent instanceof LevelPackageBox lpb && isNodeActuallyVisible(lpb)) {
                 return lpb;
             }
@@ -236,6 +246,13 @@ public class DependencyRenderer implements DependencyRendererStrategy {
             parent = parent.getParent();
         }
         return null;
+    }
+
+    private boolean isCollapsedAggregateEndpoint(Node node) {
+        return node != null
+                && Boolean.TRUE.equals(node.getProperties().get("s202.aggregateEndpoint"))
+                && Boolean.TRUE.equals(node.getProperties().get("s202.collapsed"))
+                && isNodeActuallyVisible(node);
     }
 
     /**
@@ -293,6 +310,7 @@ public class DependencyRenderer implements DependencyRendererStrategy {
             // Always show count badge; for class-level targets only when > 1.
             int badge = (targetElement instanceof LevelPackageBox
                     || targetElement instanceof ComponentBox
+                    || Boolean.TRUE.equals(targetElement.getProperties().get("s202.aggregateEndpoint"))
                     || count > 1) ? count : 0;
             createCurvedDependencyLine(sourceElement, targetElement, srcFqn, targetFqn, isIncoming, badge);
         }
@@ -324,6 +342,7 @@ public class DependencyRenderer implements DependencyRendererStrategy {
         if (node instanceof LevelPackageBox lpb) return lpb.getFullName();
         if (node instanceof ComponentBox component) return component.getFullName();
         if (node instanceof LevelClassBox  lcb) return lcb.getFullName();
+        if (node instanceof GraphSelection.Selectable selectable) return selectable.getFullName();
         return "";
     }
 

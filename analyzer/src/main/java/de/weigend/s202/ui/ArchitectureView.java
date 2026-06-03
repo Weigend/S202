@@ -22,6 +22,8 @@ import de.weigend.s202.domain.architecture.Architecture;
 import de.weigend.s202.domain.architecture.ArchitectureAnnotations;
 import de.weigend.s202.domain.architecture.ArchitectureContext;
 import de.weigend.s202.domain.architecture.ComponentArchitectureBuilder;
+import de.weigend.s202.domain.architecture.HexagonalArchitecture;
+import de.weigend.s202.domain.architecture.HexagonalArchitectureBuilder;
 import de.weigend.s202.domain.architecture.HierarchicalLayeredArchitecture;
 import de.weigend.s202.domain.architecture.HierarchicalLayeredArchitectureBuilder;
 import de.weigend.s202.domain.architecture.ViolationKind;
@@ -38,6 +40,7 @@ import de.weigend.s202.ui.rendering.TangleEdgeRenderer;
 import de.weigend.s202.ui.rendering.WhatIfUpwardEdgeRenderer;
 import de.weigend.s202.ui.tree.ArchitectureTreeBuilder;
 import de.weigend.s202.ui.tree.ComponentArchitectureTreeBuilder;
+import de.weigend.s202.ui.tree.HexagonalArchitectureTreeBuilder;
 import de.weigend.s202.ui.zoom.ZoomController;
 import javafx.collections.FXCollections;
 import javafx.collections.ObservableList;
@@ -194,6 +197,10 @@ public class ArchitectureView extends BorderPane {
                     ViolationKind.COMPONENT_API_BYPASS,
                     ViolationKind.COMPONENT_API_LEAKS_IMPLEMENTATION,
                     ViolationKind.COMPONENT_INTERNAL_LAYER_BREAK);
+    private static final Set<ViolationKind> HEXAGONAL_VIOLATION_OVERLAY_KINDS =
+            Set.of(
+                    ViolationKind.HEXAGON_OUTWARD_DEPENDENCY,
+                    ViolationKind.HEXAGON_PORT_BYPASS);
 
     public ArchitectureView() {
         setupUI();
@@ -377,6 +384,17 @@ public class ArchitectureView extends BorderPane {
                             this::handleComponentApiChanged);
             return componentBuilder.buildTree(rootNode, maxDepth);
         }
+        if (viewStyle == ArchitectureViewStyle.HEXAGONAL) {
+            HexagonalArchitectureTreeBuilder hexagonalBuilder =
+                    new HexagonalArchitectureTreeBuilder(
+                            elementRegistry,
+                            graphSelectionSink,
+                            getArchitectureAnnotations(),
+                            architecture.get() instanceof HexagonalArchitecture hex ? hex : null,
+                            this::handleHexagonalAnnotationsChanged,
+                            arrowsCoalescer::markDirty);
+            return hexagonalBuilder.buildTree(rootNode, maxDepth);
+        }
 
         treeBuilder = new ArchitectureTreeBuilder(elementRegistry, graphSelectionSink);
         return treeBuilder.buildTree(rootNode, maxDepth, skipTransparentTopLevelPackages);
@@ -395,6 +413,18 @@ public class ArchitectureView extends BorderPane {
                             rawDependencyModel.get(),
                             this::handleComponentApiChanged);
             componentBuilder.buildTreeAsync(rootNode, maxDepth, progressSink, onComplete);
+            return;
+        }
+        if (viewStyle == ArchitectureViewStyle.HEXAGONAL) {
+            HexagonalArchitectureTreeBuilder hexagonalBuilder =
+                    new HexagonalArchitectureTreeBuilder(
+                            elementRegistry,
+                            graphSelectionSink,
+                            getArchitectureAnnotations(),
+                            architecture.get() instanceof HexagonalArchitecture hex ? hex : null,
+                            this::handleHexagonalAnnotationsChanged,
+                            arrowsCoalescer::markDirty);
+            hexagonalBuilder.buildTreeAsync(rootNode, maxDepth, progressSink, onComplete);
             return;
         }
 
@@ -431,10 +461,15 @@ public class ArchitectureView extends BorderPane {
 
     private void handleComponentApiChanged(ArchitectureAnnotations nextAnnotations, String message) {
         setArchitectureAnnotations(nextAnnotations);
-        refreshComponentProjection(message);
+        refreshStyleProjection(message);
     }
 
-    private void refreshComponentProjection(String statusMessage) {
+    private void handleHexagonalAnnotationsChanged(ArchitectureAnnotations nextAnnotations, String message) {
+        setArchitectureAnnotations(nextAnnotations);
+        refreshStyleProjection(message);
+    }
+
+    private void refreshStyleProjection(String statusMessage) {
         if (currentRootNode == null) {
             return;
         }
@@ -752,6 +787,11 @@ public class ArchitectureView extends BorderPane {
                     rawDependencyModel.get(),
                     model,
                     getArchitectureAnnotations()));
+        } else if (viewStyle == ArchitectureViewStyle.HEXAGONAL) {
+            original = new HexagonalArchitectureBuilder().build(new ArchitectureContext(
+                    rawDependencyModel.get(),
+                    model,
+                    getArchitectureAnnotations()));
         } else {
             original = new HierarchicalLayeredArchitectureBuilder().build(model);
         }
@@ -779,7 +819,9 @@ public class ArchitectureView extends BorderPane {
     public void setRawDependencyModel(DependencyModel model) {
         rawDependencyModel.set(model);
         movedFqns.clear();
-        if (viewStyle == ArchitectureViewStyle.COMPONENT && domainModel.get() != null) {
+        if ((viewStyle == ArchitectureViewStyle.COMPONENT
+                || viewStyle == ArchitectureViewStyle.HEXAGONAL)
+                && domainModel.get() != null) {
             rebuildArchitectureProjection();
         }
         ensureWhatIfDropListenerRegistered();
@@ -856,10 +898,10 @@ public class ArchitectureView extends BorderPane {
         }
         if (apiDestination) {
             setArchitectureAnnotations(getArchitectureAnnotations().withComponentApiIncluded(movedFqcn));
-            refreshComponentProjection("Added to API: " + movedFqcn);
+            refreshStyleProjection("Added to API: " + movedFqcn);
         } else {
             setArchitectureAnnotations(getArchitectureAnnotations().withComponentApiExcluded(movedFqcn));
-            refreshComponentProjection("Removed from API: " + movedFqcn);
+            refreshStyleProjection("Removed from API: " + movedFqcn);
         }
         return true;
     }
@@ -1108,16 +1150,19 @@ public class ArchitectureView extends BorderPane {
     }
 
     private Architecture violationOverlayArchitecture() {
-        if (viewStyle == ArchitectureViewStyle.COMPONENT) {
+        if (viewStyle == ArchitectureViewStyle.COMPONENT
+                || viewStyle == ArchitectureViewStyle.HEXAGONAL) {
             return architecture.get();
         }
         return whatIfArchitecture.get() != null ? whatIfArchitecture.get() : architecture.get();
     }
 
     private Set<ViolationKind> violationOverlayKinds() {
-        return viewStyle == ArchitectureViewStyle.COMPONENT
-                ? COMPONENT_VIOLATION_OVERLAY_KINDS
-                : LAYERED_VIOLATION_OVERLAY_KINDS;
+        return switch (viewStyle) {
+            case COMPONENT -> COMPONENT_VIOLATION_OVERLAY_KINDS;
+            case HEXAGONAL -> HEXAGONAL_VIOLATION_OVERLAY_KINDS;
+            case LAYERED -> LAYERED_VIOLATION_OVERLAY_KINDS;
+        };
     }
 
     private void applyVirtuallyMovedDecorations() {

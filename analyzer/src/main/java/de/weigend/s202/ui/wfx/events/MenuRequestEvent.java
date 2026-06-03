@@ -65,6 +65,10 @@ public abstract class MenuRequestEvent extends EventObject {
         public OpenComponentView(Object source) { super(source); }
     }
 
+    public static final class OpenHexagonalView extends MenuRequestEvent {
+        public OpenHexagonalView(Object source) { super(source); }
+    }
+
     public static final class CloseFocusedView extends MenuRequestEvent {
         public CloseFocusedView(Object source) { super(source); }
     }

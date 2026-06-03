@@ -169,6 +169,13 @@ public final class WhatIfUpwardEdgeRenderer {
         }
         Node n = node.getParent();
         while (n != null) {
+            Object rollup = n.getProperties().get("s202.rollupEndpointFqn");
+            if (rollup instanceof String endpointFqn) {
+                Node endpoint = elementRegistry.get(endpointFqn);
+                if (endpoint != null && isActuallyVisible(endpoint)) {
+                    return endpointFqn;
+                }
+            }
             if (n instanceof de.weigend.s202.ui.LevelPackageBox lpb && isActuallyVisible(n)) {
                 return lpb.getFullName();
             }

@@ -74,6 +74,81 @@ public record ArchitectureAnnotations(
         return new ArchitectureAnnotations(components, includes, excludes, ports, roles);
     }
 
+    public ArchitectureAnnotations withPort(String classFqn, PortDirection direction, String componentOrSegmentId) {
+        if (classFqn == null || classFqn.isBlank()) {
+            return this;
+        }
+        PortDirection effectiveDirection = direction == null ? PortDirection.GENERIC : direction;
+        String id = "port:" + effectiveDirection.name().toLowerCase() + ":" + classFqn;
+        List<PortSpec> nextPorts = new ArrayList<>();
+        for (PortSpec port : ports) {
+            if (!classFqn.equals(port.classFqn())) {
+                nextPorts.add(port);
+            }
+        }
+        nextPorts.add(new PortSpec(id, componentOrSegmentId, classFqn, effectiveDirection));
+        return new ArchitectureAnnotations(components, componentApiIncludes, componentApiExcludes, nextPorts, roles);
+    }
+
+    public ArchitectureAnnotations withoutPort(String classFqn) {
+        if (classFqn == null || classFqn.isBlank()) {
+            return this;
+        }
+        List<PortSpec> nextPorts = ports.stream()
+                .filter(port -> !classFqn.equals(port.classFqn()))
+                .toList();
+        return new ArchitectureAnnotations(components, componentApiIncludes, componentApiExcludes, nextPorts, roles);
+    }
+
+    public PortSpec explicitPort(String classFqn) {
+        if (classFqn == null || classFqn.isBlank()) {
+            return null;
+        }
+        for (PortSpec port : ports) {
+            if (classFqn.equals(port.classFqn())) {
+                return port;
+            }
+        }
+        return null;
+    }
+
+    public ArchitectureAnnotations withElementRole(String elementFqn, ElementRole role) {
+        if (elementFqn == null || elementFqn.isBlank()) {
+            return this;
+        }
+        ElementRole effectiveRole = role == null ? ElementRole.NONE : role;
+        List<ElementRoleMark> nextRoles = new ArrayList<>();
+        for (ElementRoleMark mark : roles) {
+            if (!containsOrEquals(elementFqn, mark.elementFqn())) {
+                nextRoles.add(mark);
+            }
+        }
+        if (effectiveRole != ElementRole.NONE) {
+            nextRoles.add(new ElementRoleMark(elementFqn, effectiveRole));
+        }
+        return new ArchitectureAnnotations(components, componentApiIncludes, componentApiExcludes, ports, nextRoles);
+    }
+
+    public ArchitectureAnnotations withoutElementRole(String elementFqn) {
+        return withElementRole(elementFqn, ElementRole.NONE);
+    }
+
+    public ElementRole explicitElementRole(String elementFqn) {
+        if (elementFqn == null || elementFqn.isBlank()) {
+            return ElementRole.NONE;
+        }
+        ElementRole nearestRole = ElementRole.NONE;
+        String nearest = null;
+        for (ElementRoleMark mark : roles) {
+            if (containsOrEquals(mark.elementFqn(), elementFqn)
+                    && (nearest == null || mark.elementFqn().length() > nearest.length())) {
+                nearest = mark.elementFqn();
+                nearestRole = mark.role();
+            }
+        }
+        return nearestRole;
+    }
+
     /**
      * Returns an explicit include/exclude decision for {@code fqn}, or null
      * when heuristics should decide. Package-level annotations apply to their
