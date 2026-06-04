@@ -47,6 +47,7 @@ public class WhatIfDependenciesModule implements Module {
     private ChangeListener<Object> architectureListener;
     private ChangeListener<Object> whatIfArchitectureListener;
     private ChangeListener<Number> redrawListener;
+    private ChangeListener<String> selectionListener;
 
     @Override
     public String getName() {
@@ -113,7 +114,7 @@ public class WhatIfDependenciesModule implements Module {
         unbind();
 
         if (newBound == null) {
-            view.bind(null, null);
+            view.bind(null, null, null);
             return;
         }
 
@@ -125,11 +126,13 @@ public class WhatIfDependenciesModule implements Module {
         architectureListener = (o, w, n) -> pushCurrent();
         whatIfArchitectureListener = (o, w, n) -> pushCurrent();
         redrawListener = (o, w, n) -> view.refresh();
+        selectionListener = (o, w, n) -> pushCurrent();
         newBound.architectureRootProperty().addListener(rootListener);
         newBound.rawDependencyModelProperty().addListener(rawModelListener);
         newBound.architectureProperty().addListener(architectureListener);
         newBound.whatIfArchitectureProperty().addListener(whatIfArchitectureListener);
         newBound.redrawTickProperty().addListener(redrawListener);
+        newBound.selectedFullNameProperty().addListener(selectionListener);
     }
 
     private void unbind() {
@@ -149,6 +152,9 @@ public class WhatIfDependenciesModule implements Module {
             if (redrawListener != null) {
                 boundView.redrawTickProperty().removeListener(redrawListener);
             }
+            if (selectionListener != null) {
+                boundView.selectedFullNameProperty().removeListener(selectionListener);
+            }
         }
         boundView = null;
         rootListener = null;
@@ -156,16 +162,17 @@ public class WhatIfDependenciesModule implements Module {
         architectureListener = null;
         whatIfArchitectureListener = null;
         redrawListener = null;
+        selectionListener = null;
     }
 
     private void pushCurrent() {
         if (boundView == null) {
-            view.bind(null, null);
+            view.bind(null, null, null);
             return;
         }
         Architecture wif = boundView.getWhatIfArchitecture();
         Architecture displayed = wif != null ? wif : boundView.getArchitecture();
-        view.bind(displayed, boundView.getRawDependencyModel());
+        view.bind(displayed, boundView.getRawDependencyModel(), boundView.getSelectedFullName());
     }
 
     private ArchitectureWfxView focusedArchitectureView() {
