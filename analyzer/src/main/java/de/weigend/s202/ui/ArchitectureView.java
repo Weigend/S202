@@ -473,19 +473,168 @@ public class ArchitectureView extends BorderPane {
         if (currentRootNode == null) {
             return;
         }
+        StyleProjectionViewState viewState = captureStyleProjectionViewState();
         String selected = selectedFullName.get();
         boolean depsSave = showDependencies.get();
         boolean sccSave = showScc.get();
         boolean wifSave = showWhatIfViolations.get();
         setArchitectureRoot(currentRootNode);
+        restoreStyleProjectionViewState(viewState);
         showDependencies.set(depsSave);
         showScc.set(sccSave);
         showWhatIfViolations.set(wifSave);
         if (selected != null) {
-            selectByFullName(selected);
+            restoreSelectionWithoutScrolling(selected);
         }
         if (statusMessage != null && !statusMessage.isBlank()) {
             setStatus(statusMessage);
+        }
+    }
+
+    /**
+     * Rebuilds a style-specific projection while preserving the user's
+     * viewport and expansion state. Used when shared annotations change in a
+     * different component/hexagonal view.
+     */
+    public void refreshStyleProjection() {
+        refreshStyleProjection(null);
+    }
+
+    private StyleProjectionViewState captureStyleProjectionViewState() {
+        Map<String, Boolean> packageExpansion = new HashMap<>();
+        Map<String, Boolean> packageExpansionByFqn = new HashMap<>();
+        Map<String, ComponentExpansionState> componentExpansion = new HashMap<>();
+        collectExpansionState(
+                whatIfRootContainer,
+                packageExpansion,
+                packageExpansionByFqn,
+                componentExpansion);
+        return new StyleProjectionViewState(
+                zoomController == null ? 1.0 : zoomController.getZoomFactor(),
+                scrollPane == null ? 0.0 : scrollPane.getHvalue(),
+                scrollPane == null ? 0.0 : scrollPane.getVvalue(),
+                packageExpansion,
+                packageExpansionByFqn,
+                componentExpansion);
+    }
+
+    private static void collectExpansionState(javafx.scene.Node node,
+                                              Map<String, Boolean> packageExpansion,
+                                              Map<String, Boolean> packageExpansionByFqn,
+                                              Map<String, ComponentExpansionState> componentExpansion) {
+        if (node == null) {
+            return;
+        }
+        if (node instanceof ComponentBox component) {
+            componentExpansion.put(
+                    component.getFullName(),
+                    new ComponentExpansionState(component.isExpanded(), component.isApiExpanded()));
+            packageExpansionByFqn.putIfAbsent(component.getFullName(), component.isExpanded());
+        } else if (node instanceof LevelPackageBox pkg && pkg.getFullName() != null) {
+            packageExpansion.put(packageExpansionKey(pkg), pkg.isExpanded());
+            packageExpansionByFqn.putIfAbsent(pkg.getFullName(), pkg.isExpanded());
+        }
+        if (node instanceof javafx.scene.Parent parent) {
+            for (javafx.scene.Node child : parent.getChildrenUnmodifiable()) {
+                collectExpansionState(child, packageExpansion, packageExpansionByFqn, componentExpansion);
+            }
+        }
+    }
+
+    private void restoreStyleProjectionViewState(StyleProjectionViewState state) {
+        if (state == null) {
+            return;
+        }
+        restoreExpansionState(whatIfRootContainer, state);
+        restoreViewportState(state);
+
+        ZoomController restoredZoomController = zoomController;
+        javafx.scene.Node restoredScrollContent = scrollPane == null ? null : scrollPane.getContent();
+        javafx.application.Platform.runLater(() -> {
+            if (zoomController != restoredZoomController
+                    || scrollPane == null
+                    || scrollPane.getContent() != restoredScrollContent) {
+                return;
+            }
+            restoreViewportState(state);
+            arrowsCoalescer.markDirty();
+        });
+    }
+
+    private static void restoreExpansionState(javafx.scene.Node node, StyleProjectionViewState state) {
+        if (node == null) {
+            return;
+        }
+        if (node instanceof ComponentBox component) {
+            ComponentExpansionState expansion = state.componentExpansion().get(component.getFullName());
+            if (expansion != null) {
+                component.setExpanded(expansion.expanded());
+                component.setApiExpanded(expansion.apiExpanded());
+            } else {
+                Boolean expanded = state.packageExpansionByFqn().get(component.getFullName());
+                if (expanded != null) {
+                    component.setExpanded(expanded);
+                }
+            }
+        } else if (node instanceof LevelPackageBox pkg && pkg.getFullName() != null) {
+            Boolean expanded = state.packageExpansion().get(packageExpansionKey(pkg));
+            if (expanded == null) {
+                // A package moved between implementation and API during this
+                // refresh. Its FQN fallback keeps the state across that role change.
+                expanded = state.packageExpansionByFqn().get(pkg.getFullName());
+            }
+            if (expanded != null) {
+                pkg.setExpanded(expanded);
+            }
+        }
+        if (node instanceof javafx.scene.Parent parent) {
+            for (javafx.scene.Node child : parent.getChildrenUnmodifiable()) {
+                restoreExpansionState(child, state);
+            }
+        }
+    }
+
+    private void restoreViewportState(StyleProjectionViewState state) {
+        if (zoomController != null) {
+            zoomController.setZoom(state.zoomFactor());
+        }
+        if (scrollPane != null) {
+            scrollPane.setHvalue(state.horizontalScroll());
+            scrollPane.setVvalue(state.verticalScroll());
+        }
+    }
+
+    private void restoreSelectionWithoutScrolling(String fullName) {
+        javafx.scene.Node node = elementRegistry.get(fullName);
+        if (node instanceof GraphSelection.Selectable target) {
+            runWithoutSelectionSink(() -> GraphSelection.ensureSelected(target));
+            return;
+        }
+        if (node != null) {
+            runWithoutSelectionSink(GraphSelection::clear);
+            selectedFullName.set(fullName);
+        }
+    }
+
+    private static String packageExpansionKey(LevelPackageBox pkg) {
+        String role = ComponentBox.isApiElement(pkg) ? "api:" : "regular:";
+        return role + pkg.getFullName();
+    }
+
+    private record ComponentExpansionState(boolean expanded, boolean apiExpanded) {}
+
+    private record StyleProjectionViewState(
+            double zoomFactor,
+            double horizontalScroll,
+            double verticalScroll,
+            Map<String, Boolean> packageExpansion,
+            Map<String, Boolean> packageExpansionByFqn,
+            Map<String, ComponentExpansionState> componentExpansion) {
+
+        private StyleProjectionViewState {
+            packageExpansion = Map.copyOf(packageExpansion);
+            packageExpansionByFqn = Map.copyOf(packageExpansionByFqn);
+            componentExpansion = Map.copyOf(componentExpansion);
         }
     }
 

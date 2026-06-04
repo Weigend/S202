@@ -468,7 +468,7 @@ public class S202Module implements Module {
                 if ((target.getViewStyle() == ArchitectureViewStyle.COMPONENT
                         || target.getViewStyle() == ArchitectureViewStyle.HEXAGONAL)
                         && target.hasRoot()) {
-                    target.refreshLayout();
+                    target.refreshStyleProjection();
                 }
             }
         } finally {

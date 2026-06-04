@@ -19,9 +19,11 @@ import de.weigend.s202.domain.architecture.ArchitectureAnnotations;
 import de.weigend.s202.reader.DependencyModel;
 import de.weigend.s202.ui.model.ArchitectureNode;
 import de.weigend.s202.ui.model.ArchitectureNode.NodeType;
+import de.weigend.s202.ui.model.ArchitectureNodeLocalLevelCalculator;
 import org.junit.jupiter.api.Test;
 
 import java.util.HashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Set;
 
@@ -104,6 +106,88 @@ class ComponentArchitectureTreeBuilderTest {
         assertFalse(contains(implementation, "com.acme.payment.api.PaymentDto"));
         assertFalse(contains(implementation, "com.acme.payment.api.PaymentPort"));
         assertTrue(contains(implementation, "com.acme.payment.internal.PaymentService"));
+    }
+
+    @Test
+    void manualPackageAndClassSelectionsKeepTheirPackageHierarchyInApiProjection() {
+        ArchitectureNode component = find(sourceRoot(), "com.acme.payment");
+        ArchitectureAnnotations annotations = new ArchitectureAnnotations(
+                List.of(),
+                Set.of(
+                        "com.acme.payment.contract.PaymentFacade",
+                        "com.acme.payment.internal"),
+                Set.of(
+                        "com.acme.payment.PaymentApi",
+                        "com.acme.payment.api"),
+                List.of(),
+                List.of());
+        ComponentArchitectureTreeBuilder builder = new ComponentArchitectureTreeBuilder(
+                new HashMap<>(),
+                null,
+                annotations,
+                null);
+
+        Set<String> selectedNames = new LinkedHashSet<>(builder.selectedApiClasses(component).stream()
+                .map(ArchitectureNode::getFullName)
+                .toList());
+        ArchitectureNode apiProjection = ComponentArchitectureTreeBuilder.cloneApi(
+                component,
+                selectedNames,
+                true);
+
+        assertEquals(Set.of(
+                "com.acme.payment.contract.PaymentFacade",
+                "com.acme.payment.internal.PaymentService"), selectedNames);
+        assertTrue(contains(apiProjection, "com.acme.payment.contract"));
+        assertTrue(contains(apiProjection, "com.acme.payment.contract.PaymentFacade"));
+        assertTrue(contains(apiProjection, "com.acme.payment.internal"));
+        assertTrue(contains(apiProjection, "com.acme.payment.internal.PaymentService"));
+        assertEquals(List.of("com.acme.payment.contract.PaymentFacade"),
+                find(apiProjection, "com.acme.payment.contract").getChildren().stream()
+                        .map(ArchitectureNode::getFullName)
+                        .toList());
+        assertEquals(List.of("com.acme.payment.internal.PaymentService"),
+                find(apiProjection, "com.acme.payment.internal").getChildren().stream()
+                        .map(ArchitectureNode::getFullName)
+                        .toList());
+        assertFalse(contains(apiProjection, "com.acme.payment.api"));
+        assertFalse(contains(apiProjection, "com.acme.payment.PaymentApi"));
+    }
+
+    @Test
+    void apiProjectionRecalculatesClassAndPackageLevelsWithoutChangingSourceTree() {
+        ArchitectureNode component = pkg("com.acme.payment", "payment");
+        ArchitectureNode api = pkg("com.acme.payment.api", "api");
+        ArchitectureNode bridge = pkg("com.acme.payment.bridge", "bridge");
+        ArchitectureNode low = cls("com.acme.payment.api.Low", "Low", false);
+        ArchitectureNode high = cls("com.acme.payment.api.High", "High", false);
+        ArchitectureNode client = cls("com.acme.payment.bridge.Client", "Client", false);
+
+        api.setLevel(8);
+        bridge.setLevel(8);
+        low.setLevel(8);
+        high.setLevel(8);
+        client.setLevel(8);
+        high.setDependencies(Set.of(low.getFullName()));
+        client.setDependencies(Set.of(high.getFullName()));
+        api.addChild(low);
+        api.addChild(high);
+        bridge.addChild(client);
+        component.addChild(api);
+        component.addChild(bridge);
+
+        ArchitectureNode apiProjection = ComponentArchitectureTreeBuilder.cloneApi(
+                component,
+                Set.of(low.getFullName(), high.getFullName(), client.getFullName()),
+                true);
+        new ArchitectureNodeLocalLevelCalculator().assign(apiProjection, null);
+
+        assertEquals(1, find(apiProjection, high.getFullName()).getLevel());
+        assertEquals(0, find(apiProjection, low.getFullName()).getLevel());
+        assertEquals(1, find(apiProjection, bridge.getFullName()).getLevel());
+        assertEquals(0, find(apiProjection, api.getFullName()).getLevel());
+        assertEquals(8, high.getLevel(), "The source tree must keep its analyzed local levels");
+        assertEquals(8, bridge.getLevel(), "The source tree must keep its analyzed local levels");
     }
 
     private static ArchitectureNode sourceRoot() {
