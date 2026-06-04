@@ -443,6 +443,12 @@ public class ArchitectureTreeBuilderTest {
                 return match;
             }
         }
+        // ScrollPane.getContent() is not exposed via getChildrenUnmodifiable() without a skin.
+        if (root instanceof ScrollPane sp && sp.getContent() != null) {
+            try {
+                return findNode(sp.getContent(), type, predicate);
+            } catch (IllegalArgumentException ignored) {}
+        }
         if (root instanceof Parent parent) {
             for (Node child : parent.getChildrenUnmodifiable()) {
                 try {

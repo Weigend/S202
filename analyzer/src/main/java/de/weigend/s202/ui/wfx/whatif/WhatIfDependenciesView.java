@@ -40,6 +40,7 @@ import javafx.scene.layout.Priority;
 import javafx.scene.layout.VBox;
 
 import java.net.URL;
+import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -83,6 +84,7 @@ public final class WhatIfDependenciesView implements View {
 
     private Architecture architecture;
     private DependencyModel rawDepModel;
+    private String selectedFullName;
     private static final Set<ViolationKind> COMPONENT_VIOLATION_KINDS = Set.of(
             ViolationKind.COMPONENT_API_BYPASS,
             ViolationKind.COMPONENT_API_LEAKS_IMPLEMENTATION,
@@ -138,8 +140,14 @@ public final class WhatIfDependenciesView implements View {
 
     /** Re-bind the view to a different architecture context. Pass nulls to clear. */
     public void bind(Architecture architecture, DependencyModel rawDepModel) {
+        bind(architecture, rawDepModel, null);
+    }
+
+    /** Re-bind the view to a different architecture context and optional class/package scope. */
+    public void bind(Architecture architecture, DependencyModel rawDepModel, String selectedFullName) {
         this.architecture = architecture;
         this.rawDepModel = rawDepModel;
+        this.selectedFullName = selectedFullName;
         refresh();
     }
 
@@ -147,7 +155,7 @@ public final class WhatIfDependenciesView implements View {
         Map<EndpointPair, List<Violation>> grouped = aggregatedUpwardViolations();
         upwardTree.setRoot(buildUpwardTree(grouped));
         int totalClassEdges = grouped.values().stream().mapToInt(List::size).sum();
-        upwardHeader.setText("Wrong-direction edges — " + totalClassEdges + " class edge"
+        upwardHeader.setText("Wrong-direction edges" + scopeSuffix() + " — " + totalClassEdges + " class edge"
                 + (totalClassEdges == 1 ? "" : "s"));
 
         boolean styleView = architecture instanceof ComponentArchitecture
@@ -156,12 +164,12 @@ public final class WhatIfDependenciesView implements View {
         Map<EndpointPair, List<Violation>> componentGrouped = aggregatedStyleViolations();
         componentTree.setRoot(buildComponentViolationTree(componentGrouped));
         int totalComponentEdges = componentGrouped.values().stream().mapToInt(List::size).sum();
-        componentHeader.setText(styleViolationHeader() + " — " + totalComponentEdges + " class edge"
+        componentHeader.setText(styleViolationHeader() + scopeSuffix() + " — " + totalComponentEdges + " class edge"
                 + (totalComponentEdges == 1 ? "" : "s"));
 
         ObservableList<String> sccItems = buildSccList();
         sccList.setItems(sccItems);
-        sccHeader.setText("Package tangles (static) — " + sccItems.size());
+        sccHeader.setText("Package tangles (static)" + scopeSuffix() + " — " + sccItems.size());
     }
 
     /**
@@ -173,17 +181,54 @@ public final class WhatIfDependenciesView implements View {
         if (architecture == null) {
             return Map.of();
         }
+        if (hasSelection()) {
+            return groupScopedViolations(architecture, rawDepModel, selectedFullName, Set.of(ViolationKind.UPWARD));
+        }
         return architecture.groupUpwardViolations(WhatIfDependenciesView::parentOf);
     }
 
     private Map<EndpointPair, List<Violation>> aggregatedStyleViolations() {
         if (architecture instanceof ComponentArchitecture) {
+            if (hasSelection()) {
+                return groupScopedViolations(architecture, rawDepModel, selectedFullName, COMPONENT_VIOLATION_KINDS);
+            }
             return architecture.groupViolations(WhatIfDependenciesView::parentOf, COMPONENT_VIOLATION_KINDS);
         }
         if (architecture instanceof HexagonalArchitecture) {
+            if (hasSelection()) {
+                return groupScopedViolations(architecture, rawDepModel, selectedFullName, HEXAGONAL_VIOLATION_KINDS);
+            }
             return architecture.groupViolations(WhatIfDependenciesView::parentOf, HEXAGONAL_VIOLATION_KINDS);
         }
         return Map.of();
+    }
+
+    static Map<EndpointPair, List<Violation>> groupScopedViolations(Architecture architecture,
+                                                                    DependencyModel rawDepModel,
+                                                                    String selectedFullName,
+                                                                    Set<ViolationKind> kinds) {
+        if (architecture == null) {
+            return Map.of();
+        }
+        if (!hasSelection(selectedFullName)) {
+            return architecture.groupViolations(WhatIfDependenciesView::parentOf, kinds);
+        }
+        Map<EndpointPair, List<Violation>> grouped = new LinkedHashMap<>();
+        for (Violation v : architecture.violations()) {
+            if (kinds != null && !kinds.isEmpty() && !kinds.contains(v.kind())) {
+                continue;
+            }
+            if (!violationTouchesSelection(v, rawDepModel, selectedFullName)) {
+                continue;
+            }
+            String src = parentOf(v.sourceFqn());
+            String tgt = parentOf(v.targetFqn());
+            if (src == null || tgt == null) {
+                continue;
+            }
+            grouped.computeIfAbsent(new EndpointPair(src, tgt), k -> new ArrayList<>()).add(v);
+        }
+        return grouped;
     }
 
     private void updateComponentSection(boolean visible) {
@@ -292,10 +337,83 @@ public final class WhatIfDependenciesView implements View {
         if (architecture == null) {
             return items;
         }
-        for (Tangle t : architecture.tangles()) {
+        for (Tangle t : scopedTangles(architecture, rawDepModel, selectedFullName)) {
             items.add(formatTangle(t.members().stream().sorted().toList()));
         }
         return items;
+    }
+
+    static List<Tangle> scopedTangles(Architecture architecture,
+                                      DependencyModel rawDepModel,
+                                      String selectedFullName) {
+        if (architecture == null) {
+            return List.of();
+        }
+        if (!hasSelection(selectedFullName)) {
+            return architecture.tangles();
+        }
+        String packageScope = selectedPackageScope(rawDepModel, selectedFullName);
+        boolean classSelection = isClassSelection(rawDepModel, selectedFullName);
+        return architecture.tangles().stream()
+                .filter(t -> t.members().stream().anyMatch(member -> classSelection
+                        ? member.equals(packageScope)
+                        : packageInScope(member, packageScope)))
+                .toList();
+    }
+
+    private static boolean violationTouchesSelection(Violation violation,
+                                                     DependencyModel rawDepModel,
+                                                     String selectedFullName) {
+        return fqnInSelectedScope(violation.sourceFqn(), rawDepModel, selectedFullName)
+                || fqnInSelectedScope(violation.targetFqn(), rawDepModel, selectedFullName);
+    }
+
+    private static boolean fqnInSelectedScope(String fqn, DependencyModel rawDepModel, String selectedFullName) {
+        if (!hasSelection(selectedFullName)) {
+            return true;
+        }
+        if (isClassSelection(rawDepModel, selectedFullName)) {
+            return selectedFullName.equals(fqn);
+        }
+        return packageInScope(fqn, selectedFullName);
+    }
+
+    private static boolean isClassSelection(DependencyModel rawDepModel, String selectedFullName) {
+        return rawDepModel != null
+                && selectedFullName != null
+                && rawDepModel.getClass(selectedFullName) != null;
+    }
+
+    private static String selectedPackageScope(DependencyModel rawDepModel, String selectedFullName) {
+        if (!hasSelection(selectedFullName)) {
+            return null;
+        }
+        if (rawDepModel != null) {
+            DependencyModel.ClassInfo selectedClass = rawDepModel.getClass(selectedFullName);
+            if (selectedClass != null) {
+                return selectedClass.packageName;
+            }
+        }
+        return selectedFullName;
+    }
+
+    private boolean hasSelection() {
+        return hasSelection(selectedFullName);
+    }
+
+    private static boolean hasSelection(String selectedFullName) {
+        return selectedFullName != null && !selectedFullName.isBlank();
+    }
+
+    private String scopeSuffix() {
+        return hasSelection() ? " for " + selectedFullName : "";
+    }
+
+    private static boolean packageInScope(String fqn, String packageScope) {
+        if (fqn == null || packageScope == null) {
+            return false;
+        }
+        return fqn.equals(packageScope) || (!packageScope.isEmpty() && fqn.startsWith(packageScope + "."));
     }
 
     private static String formatTangle(List<String> members) {

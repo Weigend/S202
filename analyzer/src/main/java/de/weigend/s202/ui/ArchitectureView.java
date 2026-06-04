@@ -49,6 +49,7 @@ import javafx.beans.property.BooleanProperty;
 import javafx.beans.property.IntegerProperty;
 import javafx.beans.property.ObjectProperty;
 import javafx.beans.property.ReadOnlyDoubleProperty;
+import javafx.beans.property.ReadOnlyDoubleWrapper;
 import javafx.beans.property.ReadOnlyObjectProperty;
 import javafx.beans.property.ReadOnlyObjectWrapper;
 import javafx.beans.property.ReadOnlyStringProperty;
@@ -166,8 +167,10 @@ public class ArchitectureView extends BorderPane {
     private final IntegerProperty packageDepth = new SimpleIntegerProperty(3);
     private final BooleanProperty showDependencies = new SimpleBooleanProperty(false);
     private final BooleanProperty showScc = new SimpleBooleanProperty(false);
+    private final BooleanProperty showPackageScc = new SimpleBooleanProperty(false);
     private final BooleanProperty showWhatIfViolations = new SimpleBooleanProperty(false);
     private final BooleanProperty showTangleDebugLines = new SimpleBooleanProperty(false);
+    private final ReadOnlyDoubleWrapper zoomFactor = new ReadOnlyDoubleWrapper(1.0);
     // Icon visibility is shared across all open architecture views — boxes bind
     // their FontIcon visibility to this property so toggling refreshes every
     // open tab without rebuilding the tree.
@@ -273,6 +276,7 @@ public class ArchitectureView extends BorderPane {
     private void wirePropertyListeners() {
         showDependencies.addListener((obs, was, isNow) -> applyShowDependencies(isNow));
         showScc.addListener((obs, was, isNow) -> applyShowScc(isNow));
+        showPackageScc.addListener((obs, was, isNow) -> applyShowPackageScc(isNow));
         showWhatIfViolations.addListener((obs, was, isNow) -> applyShowWhatIfViolations(isNow));
         showTangleDebugLines.addListener((obs, was, isNow) -> applyShowTangleDebugLines(isNow));
     }
@@ -292,11 +296,22 @@ public class ArchitectureView extends BorderPane {
     }
 
     private void applyShowScc(boolean visible) {
-        if (sccRenderer == null || sccPane == null) {
-            return;
-        }
-        if (visible) {
-            if (currentRootNode != null && (!sccRenderer.isSccLinesDrawn() || linesNeedUpdate)) {
+        if (sccRenderer == null || sccPane == null) return;
+        sccRenderer.setShowClassScc(visible);
+        refreshSccPane();
+    }
+
+    private void applyShowPackageScc(boolean visible) {
+        if (sccRenderer == null || sccPane == null) return;
+        sccRenderer.setShowPackageCycles(visible);
+        refreshSccPane();
+    }
+
+    private void refreshSccPane() {
+        boolean anyEnabled = showScc.get() || showPackageScc.get();
+        if (anyEnabled) {
+            sccRenderer.clearSccLines();
+            if (currentRootNode != null) {
                 sccRenderer.drawSccLines(currentRootNode);
                 linesNeedUpdate = false;
             }
@@ -345,11 +360,7 @@ public class ArchitectureView extends BorderPane {
      */
     public void setArchitectureRoot(ArchitectureNode rootNode) {
         Objects.requireNonNull(rootNode, "rootNode cannot be null");
-        beginArchitectureRootBuild(rootNode);
-
-        int maxDepth = packageDepth.get();
-        javafx.scene.layout.VBox topLevelContainer = buildTree(rootNode, maxDepth);
-        finishArchitectureRootBuild(rootNode, topLevelContainer);
+        setArchitectureRoot(rootNode, null);
     }
 
     public void setArchitectureRootAsync(ArchitectureNode rootNode,
@@ -477,11 +488,12 @@ public class ArchitectureView extends BorderPane {
         String selected = selectedFullName.get();
         boolean depsSave = showDependencies.get();
         boolean sccSave = showScc.get();
+        boolean pkgSccSave = showPackageScc.get();
         boolean wifSave = showWhatIfViolations.get();
-        setArchitectureRoot(currentRootNode);
-        restoreStyleProjectionViewState(viewState);
+        setArchitectureRoot(currentRootNode, viewState);
         showDependencies.set(depsSave);
         showScc.set(sccSave);
+        showPackageScc.set(pkgSccSave);
         showWhatIfViolations.set(wifSave);
         if (selected != null) {
             restoreSelectionWithoutScrolling(selected);
@@ -510,7 +522,7 @@ public class ArchitectureView extends BorderPane {
                 packageExpansionByFqn,
                 componentExpansion);
         return new StyleProjectionViewState(
-                zoomController == null ? 1.0 : zoomController.getZoomFactor(),
+                zoomFactor.get(),
                 scrollPane == null ? 0.0 : scrollPane.getHvalue(),
                 scrollPane == null ? 0.0 : scrollPane.getVvalue(),
                 packageExpansion,
@@ -541,15 +553,16 @@ public class ArchitectureView extends BorderPane {
         }
     }
 
-    private void restoreStyleProjectionViewState(StyleProjectionViewState state) {
-        if (state == null) {
-            return;
-        }
-        restoreExpansionState(whatIfRootContainer, state);
-        restoreViewportState(state);
-
+    private void scheduleDeferredViewportRestore(StyleProjectionViewState state) {
         ZoomController restoredZoomController = zoomController;
         javafx.scene.Node restoredScrollContent = scrollPane == null ? null : scrollPane.getContent();
+        scheduleDeferredViewportRestore(state, restoredZoomController, restoredScrollContent, 2);
+    }
+
+    private void scheduleDeferredViewportRestore(StyleProjectionViewState state,
+                                                 ZoomController restoredZoomController,
+                                                 javafx.scene.Node restoredScrollContent,
+                                                 int remainingPulses) {
         javafx.application.Platform.runLater(() -> {
             if (zoomController != restoredZoomController
                     || scrollPane == null
@@ -557,6 +570,14 @@ public class ArchitectureView extends BorderPane {
                 return;
             }
             restoreViewportState(state);
+            if (remainingPulses > 1) {
+                scheduleDeferredViewportRestore(
+                        state,
+                        restoredZoomController,
+                        restoredScrollContent,
+                        remainingPulses - 1);
+                return;
+            }
             arrowsCoalescer.markDirty();
         });
     }
@@ -638,9 +659,27 @@ public class ArchitectureView extends BorderPane {
         }
     }
 
+    private void setArchitectureRoot(ArchitectureNode rootNode, StyleProjectionViewState preservedState) {
+        Objects.requireNonNull(rootNode, "rootNode cannot be null");
+        beginArchitectureRootBuild(rootNode);
+
+        int maxDepth = packageDepth.get();
+        javafx.scene.layout.VBox topLevelContainer = buildTree(rootNode, maxDepth);
+        finishArchitectureRootBuild(rootNode, topLevelContainer, preservedState);
+    }
+
     private void finishArchitectureRootBuild(ArchitectureNode rootNode,
                                              javafx.scene.layout.VBox topLevelContainer) {
+        finishArchitectureRootBuild(rootNode, topLevelContainer, null);
+    }
+
+    private void finishArchitectureRootBuild(ArchitectureNode rootNode,
+                                             javafx.scene.layout.VBox topLevelContainer,
+                                             StyleProjectionViewState preservedState) {
         this.whatIfRootContainer = topLevelContainer;
+        if (preservedState != null) {
+            restoreExpansionState(topLevelContainer, preservedState);
+        }
         dependencyPane.getChildren().clear();
         dependencyPane.setVisible(false);
         sccPane.getChildren().clear();
@@ -682,7 +721,13 @@ public class ArchitectureView extends BorderPane {
         }
 
         zoomController = new ZoomController(zoomableContent, this::handleZoomChanged);
-        zoomController.resetZoom();
+        zoomController.zoomFactorProperty().addListener(
+                (obs, was, isNow) -> zoomFactor.set(isNow.doubleValue()));
+        if (preservedState != null) {
+            zoomController.setZoom(preservedState.zoomFactor());
+        } else {
+            zoomController.resetZoom();
+        }
 
         classicRenderer = new DependencyRenderer(dependencyPane, elementRegistry, zoomController, this::setStatus);
         classicRenderer.setCoordinateContext(zoomableContent, overlayPane, scrollPane);
@@ -690,6 +735,7 @@ public class ArchitectureView extends BorderPane {
 
         sccRenderer = new SCCRenderer(sccPane, elementRegistry, this::setStatus);
         sccRenderer.setCoordinateContext(zoomableContent, overlayPane, scrollPane);
+        updateSccRendererTangles();
 
         whatIfRenderer = new WhatIfUpwardEdgeRenderer(whatIfPane, elementRegistry);
         whatIfRenderer.setCoordinateContext(zoomableContent, overlayPane);
@@ -711,6 +757,12 @@ public class ArchitectureView extends BorderPane {
         // Reset overlay toggles for the new architecture so the global toolbar resyncs.
         showDependencies.set(false);
         showScc.set(false);
+        showPackageScc.set(false);
+
+        if (preservedState != null) {
+            restoreViewportState(preservedState);
+            scheduleDeferredViewportRestore(preservedState);
+        }
         showWhatIfViolations.set(false);
 
         // Re-apply any pending tangle visualisation now that the renderer
@@ -948,6 +1000,20 @@ public class ArchitectureView extends BorderPane {
         whatIfArchitecture.set(original instanceof HierarchicalLayeredArchitecture hla
                 ? new WhatIfArchitecture(hla, model)
                 : null);
+        updateSccRendererTangles();
+    }
+
+    private void updateSccRendererTangles() {
+        if (sccRenderer == null) return;
+        Architecture arch = architecture.get();
+        if (arch != null) {
+            sccRenderer.setPackageTangles(
+                    arch.tangles().stream()
+                            .map(t -> (java.util.Set<String>) t.members())
+                            .collect(java.util.stream.Collectors.toList()));
+        } else {
+            sccRenderer.setPackageTangles(java.util.List.of());
+        }
     }
 
     /**
@@ -1364,9 +1430,10 @@ public class ArchitectureView extends BorderPane {
         // toolbar syncs correctly when a new JAR is loaded.  For a depth-change
         // refresh we want to keep whatever the user had enabled, so save and
         // restore them around the rebuild.
-        boolean depsSave = showDependencies.get();
-        boolean sccSave  = showScc.get();
-        boolean wifSave  = showWhatIfViolations.get();
+        boolean depsSave    = showDependencies.get();
+        boolean sccSave     = showScc.get();
+        boolean pkgSccSave2 = showPackageScc.get();
+        boolean wifSave     = showWhatIfViolations.get();
 
         WhatIfArchitecture wif = whatIfArchitecture.get();
         if (wif != null) {
@@ -1377,6 +1444,7 @@ public class ArchitectureView extends BorderPane {
 
         showDependencies.set(depsSave);
         showScc.set(sccSave);
+        showPackageScc.set(pkgSccSave2);
         showWhatIfViolations.set(wifSave);
     }
 
@@ -1487,11 +1555,12 @@ public class ArchitectureView extends BorderPane {
     }
 
     /**
-     * Read-only zoom factor (1.0 = 100%). Returns null when no architecture is
-     * loaded yet — bind via {@link #zoomFactorProperty()} for live updates.
+     * Stable read-only zoom factor (1.0 = 100%). The underlying
+     * {@link ZoomController} is rebuilt with the view content, but callers keep
+     * observing this ArchitectureView-level property.
      */
     public ReadOnlyDoubleProperty zoomFactorProperty() {
-        return zoomController != null ? zoomController.zoomFactorProperty() : null;
+        return zoomFactor.getReadOnlyProperty();
     }
 
     /* ----- Settings properties --------------------------------------------- */
@@ -1530,6 +1599,18 @@ public class ArchitectureView extends BorderPane {
 
     public void setShowScc(boolean show) {
         showScc.set(show);
+    }
+
+    public BooleanProperty showPackageSccProperty() {
+        return showPackageScc;
+    }
+
+    public boolean isShowPackageScc() {
+        return showPackageScc.get();
+    }
+
+    public void setShowPackageScc(boolean show) {
+        showPackageScc.set(show);
     }
 
     public BooleanProperty showWhatIfViolationsProperty() {
