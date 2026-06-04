@@ -33,9 +33,6 @@ import javafx.scene.paint.Color;
 import javafx.scene.shape.Circle;
 import javafx.scene.shape.Line;
 
-import java.util.Comparator;
-import java.util.Map;
-import java.util.TreeMap;
 import java.util.function.Consumer;
 
 /**
@@ -68,7 +65,6 @@ public class ComponentBox extends VBox implements GraphSelection.Selectable {
     private final VBox componentContentContainer = new VBox(8);
     private final ApiSurfaceBox apiContainer;
     private final VBox apiRowsContainer = new VBox(6);
-    private final Map<Integer, HBox> apiRows = new TreeMap<>(Comparator.reverseOrder());
     private final VBox implementationContainer = new VBox(6);
     private boolean componentExpanded = true;
     private boolean apiExpanded = true;
@@ -150,14 +146,8 @@ public class ComponentBox extends VBox implements GraphSelection.Selectable {
         });
     }
 
-    public void addApiNode(Node node) {
-        addApiNode(0, node);
-    }
-
-    public void addApiNode(int level, Node node) {
-        HBox row = apiRows.computeIfAbsent(level, this::createApiRow);
-        row.getChildren().add(node);
-        refreshApiRowOrder();
+    public void setApiContent(Node node) {
+        apiRowsContainer.getChildren().setAll(node);
     }
 
     public static void markApiElement(Node node) {
@@ -228,21 +218,6 @@ public class ComponentBox extends VBox implements GraphSelection.Selectable {
     @Override
     public void applyUnselectedStyle() {
         setStyle(STYLE_NORMAL);
-    }
-
-    private HBox createApiRow(int level) {
-        HBox row = new HBox(8);
-        row.setMaxWidth(Double.MAX_VALUE);
-        row.setMaxHeight(Double.MAX_VALUE);
-        row.setAlignment(Pos.CENTER);
-        row.setStyle("-fx-background-color: transparent;");
-        VBox.setVgrow(row, Priority.ALWAYS);
-        ArchitectureDragController.markAsRow(row);
-        return row;
-    }
-
-    private void refreshApiRowOrder() {
-        apiRowsContainer.getChildren().setAll(apiRows.values());
     }
 
     private void toggleComponentExpanded() {

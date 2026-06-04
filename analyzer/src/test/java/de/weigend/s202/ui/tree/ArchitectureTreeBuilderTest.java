@@ -15,11 +15,18 @@
  */
 package de.weigend.s202.ui.tree;
 
+import de.weigend.s202.domain.architecture.ArchitectureAnnotations;
+import de.weigend.s202.ui.ArchitectureView;
+import de.weigend.s202.ui.ArchitectureViewStyle;
+import de.weigend.s202.ui.LevelClassBox;
 import de.weigend.s202.ui.LevelPackageBox;
+import de.weigend.s202.ui.component.ComponentBox;
 import de.weigend.s202.ui.model.ArchitectureNode;
 import de.weigend.s202.ui.model.ArchitectureNode.NodeType;
 import javafx.application.Platform;
 import javafx.scene.Node;
+import javafx.scene.Parent;
+import javafx.scene.control.ScrollPane;
 import javafx.scene.layout.HBox;
 import javafx.scene.layout.VBox;
 import org.junit.jupiter.api.AfterAll;
@@ -32,6 +39,7 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.FutureTask;
@@ -275,6 +283,187 @@ public class ArchitectureTreeBuilderTest {
             assertSame(rows.get(0).getChildren().get(0), registry.get("com.example"),
                     "registry should point the scope package at its visible box");
         });
+    }
+
+    @Test
+    public void testComponentApiRendersSelectedPackageHierarchyWithRecalculatedLevels() {
+        runOnFxThread(() -> {
+            ArchitectureNode root = new ArchitectureNode("root", "root", NodeType.PACKAGE, true, 0);
+            ArchitectureNode com = new ArchitectureNode("com", "com", NodeType.PACKAGE, true, 0);
+            ArchitectureNode acme = new ArchitectureNode("com.acme", "acme", NodeType.PACKAGE, true, 0);
+            ArchitectureNode payment = new ArchitectureNode(
+                    "com.acme.payment", "payment", NodeType.PACKAGE, true, 0);
+            ArchitectureNode contract = new ArchitectureNode(
+                    "com.acme.payment.contract", "contract", NodeType.PACKAGE, true, 7);
+            ArchitectureNode high = new ArchitectureNode(
+                    "com.acme.payment.contract.High", "High", NodeType.CLASS, true, 7);
+            ArchitectureNode low = new ArchitectureNode(
+                    "com.acme.payment.contract.Low", "Low", NodeType.CLASS, true, 7);
+            ArchitectureNode implementation = new ArchitectureNode(
+                    "com.acme.payment.PaymentService", "PaymentService", NodeType.CLASS, true, 0);
+            ArchitectureNode shipping = new ArchitectureNode(
+                    "com.acme.shipping", "shipping", NodeType.PACKAGE, true, 0);
+            ArchitectureNode shippingService = new ArchitectureNode(
+                    "com.acme.shipping.ShippingService", "ShippingService", NodeType.CLASS, true, 0);
+
+            high.setDependencies(Set.of(low.getFullName()));
+            contract.addChild(high);
+            contract.addChild(low);
+            payment.addChild(contract);
+            payment.addChild(implementation);
+            shipping.addChild(shippingService);
+            acme.addChild(payment);
+            acme.addChild(shipping);
+            com.addChild(acme);
+            root.addChild(com);
+
+            Map<String, Node> registry = new HashMap<>();
+            ComponentArchitectureTreeBuilder builder = new ComponentArchitectureTreeBuilder(
+                    registry,
+                    null,
+                    ArchitectureAnnotations.empty().withComponentApiIncluded(contract.getFullName()),
+                    null);
+            builder.buildTree(root, 3);
+
+            Node contractBox = registry.get(contract.getFullName());
+            Node highBox = registry.get(high.getFullName());
+            Node lowBox = registry.get(low.getFullName());
+
+            assertInstanceOf(LevelPackageBox.class, contractBox);
+            assertInstanceOf(LevelClassBox.class, highBox);
+            assertInstanceOf(LevelClassBox.class, lowBox);
+            assertTrue(ComponentBox.isApiElement(contractBox), "API package must remain draggable out of API");
+            assertTrue(ComponentBox.isApiElement(highBox));
+            assertTrue(isDescendantOf(highBox, contractBox), "API class must stay nested below its package");
+            assertTrue(isDescendantOf(lowBox, contractBox), "API class must stay nested below its package");
+            assertTrue(((LevelClassBox) highBox).getText().contains("L:1"));
+            assertTrue(((LevelClassBox) lowBox).getText().contains("L:0"));
+        });
+    }
+
+    @Test
+    public void testComponentProjectionRefreshPreservesViewportAndExpansionState() {
+        runOnFxThread(() -> {
+            ArchitectureNode root = componentSourceRoot();
+            ArchitectureView view = new ArchitectureView();
+            view.setViewStyle(ArchitectureViewStyle.COMPONENT);
+            view.setArchitectureRoot(root);
+
+            ComponentBox component = findComponent(view, "com.acme.payment");
+            LevelPackageBox apiPackage = findPackage(view, "com.acme.payment.api", true);
+            LevelPackageBox internalPackage = findPackage(view, "com.acme.payment.internal", false);
+            LevelPackageBox billingPackage = findPackage(view, "com.acme.billing", false);
+            ScrollPane scrollPane = findNode(view, ScrollPane.class);
+
+            apiPackage.setExpanded(false);
+            internalPackage.setExpanded(false);
+            billingPackage.setExpanded(false);
+            component.setApiExpanded(false);
+            component.setExpanded(false);
+            view.setZoom(0.6);
+            scrollPane.setHvalue(0.37);
+            scrollPane.setVvalue(0.61);
+
+            view.setArchitectureAnnotations(ArchitectureAnnotations.empty()
+                    .withComponentApiIncluded("com.acme.payment.internal")
+                    .withComponentApiIncluded("com.acme.billing.BillingService"));
+            view.refreshStyleProjection();
+
+            ComponentBox refreshedComponent = findComponent(view, "com.acme.payment");
+            ComponentBox newBillingComponent = findComponent(view, "com.acme.billing");
+            LevelPackageBox refreshedApiPackage = findPackage(view, "com.acme.payment.api", true);
+            LevelPackageBox movedInternalPackage = findPackage(view, "com.acme.payment.internal", true);
+            ScrollPane refreshedScrollPane = findNode(view, ScrollPane.class);
+
+            assertFalse(refreshedComponent.isExpanded());
+            assertFalse(refreshedComponent.isApiExpanded());
+            assertFalse(newBillingComponent.isExpanded(),
+                    "A package that becomes a component must keep its expansion state");
+            assertFalse(refreshedApiPackage.isExpanded());
+            assertFalse(movedInternalPackage.isExpanded(),
+                    "Package state must survive moving from implementation to API");
+            assertEquals(0.6, view.zoomFactorProperty().get(), 0.0001);
+            assertEquals(0.37, refreshedScrollPane.getHvalue(), 0.0001);
+            assertEquals(0.61, refreshedScrollPane.getVvalue(), 0.0001);
+        });
+    }
+
+    private static ArchitectureNode componentSourceRoot() {
+        ArchitectureNode root = new ArchitectureNode("root", "root", NodeType.PACKAGE, true, 0);
+        ArchitectureNode com = new ArchitectureNode("com", "com", NodeType.PACKAGE, true, 0);
+        ArchitectureNode acme = new ArchitectureNode("com.acme", "acme", NodeType.PACKAGE, true, 0);
+        ArchitectureNode payment = new ArchitectureNode(
+                "com.acme.payment", "payment", NodeType.PACKAGE, true, 0);
+        ArchitectureNode api = new ArchitectureNode(
+                "com.acme.payment.api", "api", NodeType.PACKAGE, true, 0);
+        ArchitectureNode internal = new ArchitectureNode(
+                "com.acme.payment.internal", "internal", NodeType.PACKAGE, true, 0);
+        ArchitectureNode billing = new ArchitectureNode(
+                "com.acme.billing", "billing", NodeType.PACKAGE, true, 0);
+        ArchitectureNode shipping = new ArchitectureNode(
+                "com.acme.shipping", "shipping", NodeType.PACKAGE, true, 0);
+
+        api.addChild(new ArchitectureNode(
+                "com.acme.payment.api.PaymentFacade", "PaymentFacade", NodeType.CLASS, true, 0));
+        internal.addChild(new ArchitectureNode(
+                "com.acme.payment.internal.PaymentService", "PaymentService", NodeType.CLASS, true, 0));
+        billing.addChild(new ArchitectureNode(
+                "com.acme.billing.BillingService", "BillingService", NodeType.CLASS, true, 0));
+        shipping.addChild(new ArchitectureNode(
+                "com.acme.shipping.ShippingService", "ShippingService", NodeType.CLASS, true, 0));
+        payment.addChild(api);
+        payment.addChild(internal);
+        acme.addChild(payment);
+        acme.addChild(billing);
+        acme.addChild(shipping);
+        com.addChild(acme);
+        root.addChild(com);
+        return root;
+    }
+
+    private static ComponentBox findComponent(Node root, String fullName) {
+        return findNode(root, ComponentBox.class, component -> fullName.equals(component.getFullName()));
+    }
+
+    private static LevelPackageBox findPackage(Node root, String fullName, boolean apiElement) {
+        return findNode(root, LevelPackageBox.class, pkg ->
+                fullName.equals(pkg.getFullName()) && ComponentBox.isApiElement(pkg) == apiElement);
+    }
+
+    private static <T extends Node> T findNode(Node root, Class<T> type) {
+        return findNode(root, type, ignored -> true);
+    }
+
+    private static <T extends Node> T findNode(Node root,
+                                               Class<T> type,
+                                               java.util.function.Predicate<T> predicate) {
+        if (type.isInstance(root)) {
+            T match = type.cast(root);
+            if (predicate.test(match)) {
+                return match;
+            }
+        }
+        if (root instanceof Parent parent) {
+            for (Node child : parent.getChildrenUnmodifiable()) {
+                try {
+                    return findNode(child, type, predicate);
+                } catch (IllegalArgumentException ignored) {
+                    // Continue with the next subtree.
+                }
+            }
+        }
+        throw new IllegalArgumentException("Missing node of type " + type.getSimpleName());
+    }
+
+    private static boolean isDescendantOf(Node node, Node ancestor) {
+        Node current = node == null ? null : node.getParent();
+        while (current != null) {
+            if (current == ancestor) {
+                return true;
+            }
+            current = current.getParent();
+        }
+        return false;
     }
 
     private static List<HBox> rows(VBox topLevel) {

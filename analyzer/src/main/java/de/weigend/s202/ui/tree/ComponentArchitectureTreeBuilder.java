@@ -23,9 +23,11 @@ import de.weigend.s202.ui.LevelClassBox;
 import de.weigend.s202.ui.LevelPackageBox;
 import de.weigend.s202.ui.component.ComponentBox;
 import de.weigend.s202.ui.layout.horizontal.HorizontalLayoutOrdering;
+import de.weigend.s202.ui.layout.horizontal.HorizontalRowLayoutOptimizer;
 import de.weigend.s202.ui.model.ArchitectureNode;
 import de.weigend.s202.ui.model.ArchitectureNode.NodeType;
 import de.weigend.s202.ui.model.ArchitectureNodeCloner;
+import de.weigend.s202.ui.model.ArchitectureNodeLocalLevelCalculator;
 import javafx.application.Platform;
 import javafx.geometry.Insets;
 import javafx.geometry.Pos;
@@ -48,18 +50,21 @@ import java.util.function.Consumer;
 
 /**
  * Builds the component architecture projection. Components are packages with a
- * detectable API surface. They are rendered as flat top-level boxes; packages
- * remain nested inside the component implementation area.
+ * detectable API surface. They are rendered as top-level boxes; packages remain
+ * nested inside both the API and implementation areas.
  */
 public class ComponentArchitectureTreeBuilder {
 
     private static final double TOP_LEVEL_HORIZONTAL_PADDING = 60.0;
     private static final double TOP_LEVEL_VERTICAL_PADDING = 52.0;
+    private static final String API_CLASS_STYLE =
+            "; -fx-border-color: #1f5e9d; -fx-border-width: 2; -fx-background-color: #ffffff;";
 
     private final Map<String, Node> elementRegistry;
     private final Consumer<String> selectionChangeSink;
     private final ArchitectureAnnotations annotations;
     private final ComponentApiClassifier apiClassifier;
+    private final DependencyModel rawModel;
     private final java.util.function.BiConsumer<ArchitectureAnnotations, String> apiChangeSink;
 
     public ComponentArchitectureTreeBuilder(Map<String, Node> elementRegistry,
@@ -83,6 +88,7 @@ public class ComponentArchitectureTreeBuilder {
         this.elementRegistry = Objects.requireNonNull(elementRegistry, "elementRegistry cannot be null");
         this.selectionChangeSink = selectionChangeSink;
         this.annotations = annotations == null ? ArchitectureAnnotations.empty() : annotations;
+        this.rawModel = rawModel;
         this.apiClassifier = new ComponentApiClassifier(this.annotations, rawModel);
         this.apiChangeSink = apiChangeSink != null ? apiChangeSink : (next, message) -> {};
     }
@@ -179,20 +185,11 @@ public class ComponentArchitectureTreeBuilder {
         installApiContextMenu(componentBox, component.getFullName());
         elementRegistry.put(component.getFullName(), componentBox);
 
-        for (ArchitectureNode apiClass : apiClasses) {
-            LevelClassBox apiBox = new LevelClassBox(
-                    apiClass.getSimpleName(),
-                    apiClass.getLevel(),
-                    apiClass.getFullName(),
-                    apiClass.isInterfaceType(),
-                    apiClass.getArchitectureLevel());
-            apiBox.setSelectionChangeSink(selectionChangeSink);
-            apiBox.setStyle(apiBox.getStyle()
-                    + "; -fx-border-color: #1f5e9d; -fx-border-width: 2; -fx-background-color: #ffffff;");
-            installApiContextMenu(apiBox, apiClass.getFullName());
-            ComponentBox.markApiElement(apiBox);
-            elementRegistry.put(apiClass.getFullName(), apiBox);
-            componentBox.addApiNode(apiClass.getLevel(), apiBox);
+        ArchitectureNode apiRoot = cloneApi(component, apiFullNames, true);
+        if (apiRoot != null && apiRoot.hasChildren()) {
+            new ArchitectureNodeLocalLevelCalculator().assign(apiRoot, rawModel);
+            new HorizontalRowLayoutOptimizer().assignHorizontalLayoutOrders(apiRoot);
+            componentBox.setApiContent(buildApiContent(component, apiRoot, maxDepth));
         }
 
         ArchitectureNode implementationRoot = cloneImplementation(component, apiFullNames, true);
@@ -201,6 +198,32 @@ public class ComponentArchitectureTreeBuilder {
         }
         componentBox.setImplementationContent(buildImplementationContent(component, implementationRoot, maxDepth));
         return componentBox;
+    }
+
+    private Node buildApiContent(ArchitectureNode component,
+                                 ArchitectureNode apiRoot,
+                                 int maxDepth) {
+        ArchitectureNode fakeRoot = new ArchitectureNode(
+                "component-api-root-" + component.getFullName(),
+                "component-api-root",
+                NodeType.PACKAGE,
+                true,
+                0);
+        fakeRoot.addChild(apiRoot);
+
+        Map<String, Node> nestedRegistry = new HashMap<>();
+        ArchitectureTreeBuilder nestedBuilder = new ArchitectureTreeBuilder(nestedRegistry, selectionChangeSink);
+        VBox nestedTree = nestedBuilder.buildTree(fakeRoot, maxDepth, false);
+
+        Node componentPackageNode = nestedRegistry.remove(component.getFullName());
+        installApiProjectionNodes(nestedRegistry);
+        elementRegistry.putAll(nestedRegistry);
+        if (componentPackageNode instanceof LevelPackageBox componentPackageBox) {
+            VBox content = componentPackageBox.getContentContainer();
+            componentPackageBox.getChildren().remove(content);
+            return content;
+        }
+        return nestedTree;
     }
 
     private Node buildImplementationContent(ArchitectureNode component,
@@ -229,6 +252,17 @@ public class ComponentArchitectureTreeBuilder {
 
         elementRegistry.putAll(nestedRegistry);
         return nestedTree;
+    }
+
+    private void installApiProjectionNodes(Map<String, Node> registry) {
+        for (Map.Entry<String, Node> entry : registry.entrySet()) {
+            Node node = entry.getValue();
+            installApiContextMenu(node, entry.getKey());
+            ComponentBox.markApiElement(node);
+            if (node instanceof LevelClassBox apiBox) {
+                apiBox.setStyle(apiBox.getStyle() + API_CLASS_STYLE);
+            }
+        }
     }
 
     private boolean isSelectedComponentRoot(ArchitectureNode node) {
@@ -400,6 +434,28 @@ public class ComponentArchitectureTreeBuilder {
         ArchitectureNode clone = ArchitectureNodeCloner.cloneShallow(node);
         for (ArchitectureNode child : HorizontalLayoutOrdering.childrenInLayoutOrder(node)) {
             ArchitectureNode childClone = cloneImplementation(child, apiFullNames, false);
+            if (childClone != null) {
+                clone.addChild(childClone);
+            }
+        }
+        if (!keepEmptyPackage && !clone.hasChildren()) {
+            return null;
+        }
+        return clone;
+    }
+
+    static ArchitectureNode cloneApi(ArchitectureNode node,
+                                     Set<String> apiFullNames,
+                                     boolean keepEmptyPackage) {
+        if (node.getType() == NodeType.CLASS) {
+            return apiFullNames.contains(node.getFullName())
+                    ? ArchitectureNodeCloner.cloneShallow(node)
+                    : null;
+        }
+
+        ArchitectureNode clone = ArchitectureNodeCloner.cloneShallow(node);
+        for (ArchitectureNode child : HorizontalLayoutOrdering.childrenInLayoutOrder(node)) {
+            ArchitectureNode childClone = cloneApi(child, apiFullNames, false);
             if (childClone != null) {
                 clone.addChild(childClone);
             }

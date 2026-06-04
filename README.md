@@ -96,7 +96,7 @@ The user decides which edges to cut — guided by what is easiest to implement, 
 
 ## Component View
 
-The **Component View** is available from the **View -> Component View** menu after loading a JAR or project. It keeps the normal layered package ordering, but projects packages with a public API into component boxes: the API is shown in a blue section at the top, the implementation keeps the regular nested package layout below it.
+The **Component View** is available from the **View -> Component View** menu after loading a JAR or project. It keeps the normal layered package ordering, but projects packages with a public API into component boxes: the API is shown in a blue section at the top, and both API and implementation keep their regular nested package layout. Local levels inside the API are recalculated from API-only dependencies.
 
 ![Component View showing WFX modules](docs/wfx-architecture.png)
 
@@ -109,7 +109,7 @@ API membership is determined in this order:
 - Packages named `api`, `apis`, `port`, or `ports`
 - Interfaces and classes whose name ends in `Api` or `API`
 
-You can also drag classes between the API area and the implementation area. These manual API decisions are stored with the project and are reapplied when the project is loaded again.
+You can also drag packages or classes between the API area and the implementation area. These manual API decisions are stored with the project and are reapplied when the project is loaded again.
 
 Component-specific findings are shown in the dependencies side view under **Component violations** while the Component View is active. The current checks flag calls from outside a component into its implementation and API classes that depend on implementation classes. Regular package-layer violations and package tangles are still shown separately, because the Component View does not change the underlying dependency graph or level calculation.
 
