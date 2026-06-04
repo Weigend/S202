@@ -129,6 +129,7 @@ public class S202Module implements Module {
     private Button refreshButton;
     private CheckBox showDependenciesCheckbox;
     private CheckBox showSccCheckbox;
+    private CheckBox showPackageSccCheckbox;
     private CheckBox showWhatIfViolationsCheckbox;
     private CheckBox debugLinesCheckbox;
     private CheckBox showIconsCheckbox;
@@ -649,12 +650,16 @@ public class S202Module implements Module {
             }
         });
 
-        showSccCheckbox = new CheckBox("Show SCCs");
-        showSccCheckbox.setTooltip(new Tooltip("Toggle cycle highlighting (Strongly Connected Components)"));
+        showSccCheckbox = new CheckBox("Class SCCs");
+        showSccCheckbox.setTooltip(new Tooltip("Show strict class-level cycles (red)"));
         showSccCheckbox.selectedProperty().addListener((obs, was, isNow) -> {
-            if (boundView != null) {
-                boundView.setShowScc(isNow);
-            }
+            if (boundView != null) boundView.setShowScc(isNow);
+        });
+
+        showPackageSccCheckbox = new CheckBox("Package Cycles");
+        showPackageSccCheckbox.setTooltip(new Tooltip("Show classes contributing to package-level cycles (orange)"));
+        showPackageSccCheckbox.selectedProperty().addListener((obs, was, isNow) -> {
+            if (boundView != null) boundView.setShowPackageScc(isNow);
         });
 
         showWhatIfViolationsCheckbox = new CheckBox("Show Violations");
@@ -715,8 +720,8 @@ public class S202Module implements Module {
         // Everything except the Open JAR button is view-dependent.
         viewDependentToolbarNodes.addAll(List.of(
                 depthLabel, depthSpinner, refreshButton,
-                showDependenciesCheckbox, showSccCheckbox, showWhatIfViolationsCheckbox,
-                debugLinesCheckbox, showIconsCheckbox, showArchLevelCheckbox,
+                showDependenciesCheckbox, showSccCheckbox, showPackageSccCheckbox,
+                showWhatIfViolationsCheckbox, debugLinesCheckbox, showIconsCheckbox, showArchLevelCheckbox,
                 zoomOutButton, zoomLabel, zoomInButton, zoomResetButton));
 
         applicationWindow.getToolbarItems().setAll(
@@ -725,7 +730,7 @@ public class S202Module implements Module {
                 new Separator(),
                 undoButton, redoButton,
                 new Separator(),
-                showDependenciesCheckbox, showSccCheckbox,
+                showDependenciesCheckbox, showSccCheckbox, showPackageSccCheckbox,
                 showWhatIfViolationsCheckbox, debugLinesCheckbox, showIconsCheckbox, showArchLevelCheckbox,
                 new Separator(),
                 zoomGroup, zoomResetButton);
@@ -777,6 +782,7 @@ public class S202Module implements Module {
         depthSpinner.getValueFactory().setValue(view.getPackageDepth());
         showDependenciesCheckbox.setSelected(view.isShowDependencies());
         showSccCheckbox.setSelected(view.isShowScc());
+        showPackageSccCheckbox.setSelected(view.isShowPackageScc());
         showWhatIfViolationsCheckbox.setSelected(view.isShowWhatIfViolations());
         debugLinesCheckbox.setSelected(view.isShowTangleDebugLines());
         showIconsCheckbox.setSelected(view.isShowIcons());

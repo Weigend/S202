@@ -262,14 +262,25 @@ public class LevelCalculator {
             graph.get(entry.getKey()).addAll(entry.getValue().keySet());
         }
 
-        // Collect tangles from the original graph (before any edges are removed),
-        // so consumers (e.g. HierarchicalLayeredArchitectureBuilder) can read
-        // SCC membership without re-running Tarjan.
-        List<Set<String>> tangles = new TarjanSCCFinder(graph).findSCCs().stream()
+        // Package tangles use a direct (non-propagated) package graph so that
+        // upward-propagation artefacts do not create phantom cycles.
+        // The propagated `graph` is kept for cycle-breaking and level assignment.
+        Map<String, Set<String>> directPkgGraph = new LinkedHashMap<>();
+        for (String pkg : allPkgNames) directPkgGraph.put(pkg, new LinkedHashSet<>());
+        for (DomainModel.CalculatedElementInfo cls : model.getAllClasses().values()) {
+            String from = extractPackageName(cls.fullName);
+            if (from == null || !allPkgNames.contains(from)) continue;
+            for (String dep : cls.dependencies) {
+                String to = extractPackageName(dep);
+                if (to != null && !to.equals(from) && allPkgNames.contains(to)) {
+                    directPkgGraph.get(from).add(to);
+                }
+            }
+        }
+        model.setPackageTangles(new TarjanSCCFinder(directPkgGraph).findSCCs().stream()
                 .filter(StronglyConnectedComponent::isTangle)
                 .map(StronglyConnectedComponent::getMembers)
-                .collect(Collectors.toList());
-        model.setPackageTangles(tangles);
+                .collect(Collectors.toList()));
 
         // Two-step deterministic cycle breaking — no heuristics, no thresholds:
         //

@@ -166,6 +166,7 @@ public class ArchitectureView extends BorderPane {
     private final IntegerProperty packageDepth = new SimpleIntegerProperty(3);
     private final BooleanProperty showDependencies = new SimpleBooleanProperty(false);
     private final BooleanProperty showScc = new SimpleBooleanProperty(false);
+    private final BooleanProperty showPackageScc = new SimpleBooleanProperty(false);
     private final BooleanProperty showWhatIfViolations = new SimpleBooleanProperty(false);
     private final BooleanProperty showTangleDebugLines = new SimpleBooleanProperty(false);
     // Icon visibility is shared across all open architecture views — boxes bind
@@ -273,6 +274,7 @@ public class ArchitectureView extends BorderPane {
     private void wirePropertyListeners() {
         showDependencies.addListener((obs, was, isNow) -> applyShowDependencies(isNow));
         showScc.addListener((obs, was, isNow) -> applyShowScc(isNow));
+        showPackageScc.addListener((obs, was, isNow) -> applyShowPackageScc(isNow));
         showWhatIfViolations.addListener((obs, was, isNow) -> applyShowWhatIfViolations(isNow));
         showTangleDebugLines.addListener((obs, was, isNow) -> applyShowTangleDebugLines(isNow));
     }
@@ -292,11 +294,22 @@ public class ArchitectureView extends BorderPane {
     }
 
     private void applyShowScc(boolean visible) {
-        if (sccRenderer == null || sccPane == null) {
-            return;
-        }
-        if (visible) {
-            if (currentRootNode != null && (!sccRenderer.isSccLinesDrawn() || linesNeedUpdate)) {
+        if (sccRenderer == null || sccPane == null) return;
+        sccRenderer.setShowClassScc(visible);
+        refreshSccPane();
+    }
+
+    private void applyShowPackageScc(boolean visible) {
+        if (sccRenderer == null || sccPane == null) return;
+        sccRenderer.setShowPackageCycles(visible);
+        refreshSccPane();
+    }
+
+    private void refreshSccPane() {
+        boolean anyEnabled = showScc.get() || showPackageScc.get();
+        if (anyEnabled) {
+            sccRenderer.clearSccLines();
+            if (currentRootNode != null) {
                 sccRenderer.drawSccLines(currentRootNode);
                 linesNeedUpdate = false;
             }
@@ -477,11 +490,13 @@ public class ArchitectureView extends BorderPane {
         String selected = selectedFullName.get();
         boolean depsSave = showDependencies.get();
         boolean sccSave = showScc.get();
+        boolean pkgSccSave = showPackageScc.get();
         boolean wifSave = showWhatIfViolations.get();
         setArchitectureRoot(currentRootNode);
         restoreStyleProjectionViewState(viewState);
         showDependencies.set(depsSave);
         showScc.set(sccSave);
+        showPackageScc.set(pkgSccSave);
         showWhatIfViolations.set(wifSave);
         if (selected != null) {
             restoreSelectionWithoutScrolling(selected);
@@ -690,6 +705,7 @@ public class ArchitectureView extends BorderPane {
 
         sccRenderer = new SCCRenderer(sccPane, elementRegistry, this::setStatus);
         sccRenderer.setCoordinateContext(zoomableContent, overlayPane, scrollPane);
+        updateSccRendererTangles();
 
         whatIfRenderer = new WhatIfUpwardEdgeRenderer(whatIfPane, elementRegistry);
         whatIfRenderer.setCoordinateContext(zoomableContent, overlayPane);
@@ -711,6 +727,7 @@ public class ArchitectureView extends BorderPane {
         // Reset overlay toggles for the new architecture so the global toolbar resyncs.
         showDependencies.set(false);
         showScc.set(false);
+        showPackageScc.set(false);
         showWhatIfViolations.set(false);
 
         // Re-apply any pending tangle visualisation now that the renderer
@@ -948,6 +965,20 @@ public class ArchitectureView extends BorderPane {
         whatIfArchitecture.set(original instanceof HierarchicalLayeredArchitecture hla
                 ? new WhatIfArchitecture(hla, model)
                 : null);
+        updateSccRendererTangles();
+    }
+
+    private void updateSccRendererTangles() {
+        if (sccRenderer == null) return;
+        Architecture arch = architecture.get();
+        if (arch != null) {
+            sccRenderer.setPackageTangles(
+                    arch.tangles().stream()
+                            .map(t -> (java.util.Set<String>) t.members())
+                            .collect(java.util.stream.Collectors.toList()));
+        } else {
+            sccRenderer.setPackageTangles(java.util.List.of());
+        }
     }
 
     /**
@@ -1364,9 +1395,10 @@ public class ArchitectureView extends BorderPane {
         // toolbar syncs correctly when a new JAR is loaded.  For a depth-change
         // refresh we want to keep whatever the user had enabled, so save and
         // restore them around the rebuild.
-        boolean depsSave = showDependencies.get();
-        boolean sccSave  = showScc.get();
-        boolean wifSave  = showWhatIfViolations.get();
+        boolean depsSave    = showDependencies.get();
+        boolean sccSave     = showScc.get();
+        boolean pkgSccSave2 = showPackageScc.get();
+        boolean wifSave     = showWhatIfViolations.get();
 
         WhatIfArchitecture wif = whatIfArchitecture.get();
         if (wif != null) {
@@ -1377,6 +1409,7 @@ public class ArchitectureView extends BorderPane {
 
         showDependencies.set(depsSave);
         showScc.set(sccSave);
+        showPackageScc.set(pkgSccSave2);
         showWhatIfViolations.set(wifSave);
     }
 
@@ -1530,6 +1563,18 @@ public class ArchitectureView extends BorderPane {
 
     public void setShowScc(boolean show) {
         showScc.set(show);
+    }
+
+    public BooleanProperty showPackageSccProperty() {
+        return showPackageScc;
+    }
+
+    public boolean isShowPackageScc() {
+        return showPackageScc.get();
+    }
+
+    public void setShowPackageScc(boolean show) {
+        showPackageScc.set(show);
     }
 
     public BooleanProperty showWhatIfViolationsProperty() {

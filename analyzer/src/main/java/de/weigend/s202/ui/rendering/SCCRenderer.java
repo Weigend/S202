@@ -45,6 +45,7 @@ import java.util.function.Consumer;
 public class SCCRenderer {
 
     private static final Color SCC_COLOR = Color.RED;
+    private static final Color PKG_CYCLE_COLOR = Color.web("#ff8c00"); // orange
     private static final Color SCC_HIGHLIGHT_COLOR = Color.web("#ffeb3b"); // bright yellow
     private static final double SCC_WIDTH = 1.0;
     private static final double SCC_HIGHLIGHT_WIDTH_FACTOR = 3.0;
@@ -52,6 +53,12 @@ public class SCCRenderer {
     private final Pane sccPane;
     private final Map<String, Node> elementRegistry;
     private final Consumer<String> statusCallback;
+
+    /** Package tangles from DomainModel — used to draw cross-package cycle contributions. */
+    private List<Set<String>> packageTangles = List.of();
+
+    private boolean showClassScc = true;
+    private boolean showPackageCycles = true;
 
     private final List<Line> sccLines = new ArrayList<>();
     private boolean sccLinesDrawn = false;
@@ -82,6 +89,13 @@ public class SCCRenderer {
      * Sets dynamic references needed for coordinate calculations.
      * Must be called before drawing.
      */
+    public void setPackageTangles(List<Set<String>> packageTangles) {
+        this.packageTangles = packageTangles == null ? List.of() : List.copyOf(packageTangles);
+    }
+
+    public void setShowClassScc(boolean show) { this.showClassScc = show; }
+    public void setShowPackageCycles(boolean show) { this.showPackageCycles = show; }
+
     public void setCoordinateContext(Pane zoomableContent, Pane overlayPane, ScrollPane scrollPane) {
         this.zoomableContent = zoomableContent;
         this.overlayPane = overlayPane;
@@ -132,12 +146,12 @@ public class SCCRenderer {
             String sourceName = (String) meta[3];
             String targetName = (String) meta[4];
             boolean hi = isHighlighted(sourceName, targetName);
-            Color color = hi ? SCC_HIGHLIGHT_COLOR : SCC_COLOR;
+            Color baseColor = meta[2] instanceof Color c ? c : SCC_COLOR;
+            Color color = hi ? SCC_HIGHLIGHT_COLOR : baseColor;
             double width = hi ? baseWidth * SCC_HIGHLIGHT_WIDTH_FACTOR : baseWidth;
             line.setStroke(color);
             line.setStrokeWidth(width);
-            // Update the stored "default" colour and the arrow strokes too.
-            meta[2] = color;
+            // Update the arrow strokes (but not meta[2] — that holds the original base color).
             ((Line) meta[0]).setStroke(color);
             ((Line) meta[1]).setStroke(color);
             ((Line) meta[0]).setStrokeWidth(width);
@@ -178,13 +192,24 @@ public class SCCRenderer {
         TarjanSCCFinder sccFinder = new TarjanSCCFinder(classDependencies);
         List<StronglyConnectedComponent> sccs = sccFinder.findSCCs();
 
-        // Step 3: Draw lines for each SCC with more than 1 member (cycles only)
+        // Step 3: Draw red lines for strict class-level SCCs (size > 1)
+        Set<String> classSccMembers = new HashSet<>();
         int sccCount = 0;
-        for (StronglyConnectedComponent scc : sccs) {
-            if (scc.isTangle()) { // Only draw for cycles (size > 1)
-                drawSccComponentLines(scc, classDependencies);
-                sccCount++;
+        if (showClassScc) {
+            for (StronglyConnectedComponent scc : sccs) {
+                if (scc.isTangle()) {
+                    drawSccComponentLines(scc, classDependencies, SCC_COLOR);
+                    classSccMembers.addAll(scc.getMembers());
+                    sccCount++;
+                }
             }
+        }
+
+        // Step 4: Draw orange lines for cross-package deps within package tangles
+        // where the classes are not already covered by a red class-SCC line.
+        int pkgCycleCount = 0;
+        if (showPackageCycles) {
+            pkgCycleCount = drawPackageCycleLines(classDependencies, classSccMembers);
         }
 
         // Mark as drawn
@@ -193,8 +218,9 @@ public class SCCRenderer {
         // Re-apply the highlight (if any) on the freshly drawn lines.
         applyHighlightToExistingLines();
 
-        if (sccCount > 0) {
-            statusCallback.accept("Showing " + sccCount + " SCC cycle(s) in red");
+        if (sccCount > 0 || pkgCycleCount > 0) {
+            statusCallback.accept("Cycles: " + sccCount + " class SCC(s) (red)"
+                    + (pkgCycleCount > 0 ? ", " + pkgCycleCount + " package cycle edge(s) (orange)" : ""));
         } else {
             statusCallback.accept("No cycles found among visible classes");
         }
@@ -229,7 +255,37 @@ public class SCCRenderer {
      * Draws lines connecting all members of a single SCC that are visible.
      * Only draws the actual dependency edges within the SCC, not all pairs.
      */
+    private int drawPackageCycleLines(Map<String, Set<String>> classDeps, Set<String> skipClasses) {
+        int count = 0;
+        for (Set<String> tangle : packageTangles) {
+            for (String cls : classDeps.keySet()) {
+                if (!tangle.contains(pkg(cls))) continue;
+                for (String dep : classDeps.getOrDefault(cls, Set.of())) {
+                    String depPkg = pkg(dep);
+                    if (!tangle.contains(depPkg) || depPkg.equals(pkg(cls))) continue;
+                    if (skipClasses.contains(cls) && skipClasses.contains(dep)) continue;
+                    Node src = elementRegistry.get(cls);
+                    Node tgt = elementRegistry.get(dep);
+                    if (src == null || tgt == null) continue;
+                    if (!isNodeActuallyVisible(src) || !isNodeActuallyVisible(tgt)) continue;
+                    drawLine(src, tgt, cls, dep, PKG_CYCLE_COLOR);
+                    count++;
+                }
+            }
+        }
+        return count;
+    }
+
+    private static String pkg(String fqn) {
+        int dot = fqn == null ? -1 : fqn.lastIndexOf('.');
+        return dot < 0 ? "" : fqn.substring(0, dot);
+    }
+
     private void drawSccComponentLines(StronglyConnectedComponent scc, Map<String, Set<String>> classDependencies) {
+        drawSccComponentLines(scc, classDependencies, SCC_COLOR);
+    }
+
+    private void drawSccComponentLines(StronglyConnectedComponent scc, Map<String, Set<String>> classDependencies, Color color) {
         Set<String> members = scc.getMembers();
 
         // Draw dependency edges between members of this SCC
@@ -254,7 +310,15 @@ public class SCCRenderer {
     /**
      * Creates a single SCC line between two elements.
      */
+    private void drawLine(Node source, Node target, String sourceName, String targetName, Color color) {
+        createSccLine(source, target, sourceName, targetName, color);
+    }
+
     private void createSccLine(Node source, Node target, String sourceName, String targetName) {
+        createSccLine(source, target, sourceName, targetName, SCC_COLOR);
+    }
+
+    private void createSccLine(Node source, Node target, String sourceName, String targetName, Color color) {
         try {
             // Get coordinates
             double[] sourceCenter = getNodeCenterInPane(source);
@@ -272,7 +336,7 @@ public class SCCRenderer {
             // Create the line
             double scaledWidth = getScaledLineWidth();
             Line line = new Line(startX, startY, endX, endY);
-            line.setStroke(SCC_COLOR);
+            line.setStroke(color);
             line.setStrokeWidth(scaledWidth);
 
             // Hover effects — restore via the stored "default" colour kept on
@@ -311,15 +375,15 @@ public class SCCRenderer {
 
             Line arrow1 = new Line(endX, endY, x1, y1);
             Line arrow2 = new Line(endX, endY, x2, y2);
-            arrow1.setStroke(SCC_COLOR);
-            arrow2.setStroke(SCC_COLOR);
+            arrow1.setStroke(color);
+            arrow2.setStroke(color);
             arrow1.setStrokeWidth(scaledWidth);
             arrow2.setStrokeWidth(scaledWidth);
             arrow1.setMouseTransparent(true);
             arrow2.setMouseTransparent(true);
 
             // Store metadata
-            line.setUserData(new Object[]{arrow1, arrow2, SCC_COLOR, sourceName, targetName});
+            line.setUserData(new Object[]{arrow1, arrow2, color, sourceName, targetName});
 
             sccPane.getChildren().addAll(line, arrow1, arrow2);
             sccLines.add(line);
