@@ -56,6 +56,44 @@ Then use the **File** menu:
 
 The architecture is analyzed, visualized, and automatically checked against five layout invariants (plausibility alerts).
 
+## Layered Architecture View
+
+The **Layered Architecture View** is the default view after loading a JAR or project. It arranges packages in horizontal layers according to their dependency depth: packages that depend on nothing sit at the bottom (level 0), and each layer above depends only on layers below it.
+
+![Layered Architecture View showing WFX modules](docs/wfx-layered-architecture.png)
+
+**What the view checks:**
+
+- **Direction**: Every valid dependency points downward. An arrow that points upward or sideways is a layering violation and is highlighted in red as a dashed arrow.
+- **Violations**: Backward dependencies (calls from a lower layer to a higher layer) are displayed prominently so they can be identified and resolved.
+- **Cycles / Tangles**: Packages involved in cyclic dependencies are grouped and marked separately; their internal cross-edges are shown as a tangle.
+
+**Navigating dependencies:**
+
+- **Selective display**: Click a package or class to highlight only the dependencies that involve the selected element.
+- **Collapsed view**: Packages can be collapsed to their package name; dependencies are then shown as aggregated arrows with a filled-circle count badge.
+- **Full expansion**: Expand any package to see all contained classes and their individual dependency arrows.
+
+## Tangle View and Top Tangles
+
+Packages involved in cyclic dependencies form **tangles** — groups of classes and packages that are mutually dependent and cannot be cleanly layered. The main view lists the largest tangles ranked by size (**Top Tangles**). A double-click on any tangle entry opens the **Tangle View**, a focused sub-view that shows only the classes and packages involved in that specific cycle.
+
+![Tangle View showing a cyclic dependency cluster](docs/wfx-tangle-view.png)
+
+**Cutting edges to resolve the tangle:**
+
+The Tangle View provides a **Cut** function to remove individual dependency edges. Cuts operate at the *method level*: each cut targets the specific method calls that create the dependency, not the entire class relationship. After every cut the view refreshes immediately so the effect on the remaining cycle is visible at once.
+
+For cases where an entire class dependency should be removed in one step, **Cut All** eliminates all method-level edges between two classes together.
+
+The goal is a cycle-free graph like the one below, where every remaining arrow points in a consistent direction:
+
+![Tangle resolved — cycle-free result](docs/wfx-tangle-resolved.png)
+
+**Using the cut list as a refactoring plan:**
+
+The user decides which edges to cut — guided by what is easiest to implement, what fits the intended target architecture, or what minimises the change surface. The resulting list of cuts is a concrete, method-level refactoring plan that can be handed directly to developers: each entry names the exact call site to remove or redirect, making the path from tangled to clean architecture traceable and reviewable before a single line of production code is touched.
+
 ## Component View
 
 The **Component View** is available from the **View -> Component View** menu after loading a JAR or project. It keeps the normal layered package ordering, but projects packages with a public API into component boxes: the API is shown in a blue section at the top, the implementation keeps the regular nested package layout below it.
@@ -74,6 +112,8 @@ API membership is determined in this order:
 You can also drag classes between the API area and the implementation area. These manual API decisions are stored with the project and are reapplied when the project is loaded again.
 
 Component-specific findings are shown in the dependencies side view under **Component violations** while the Component View is active. The current checks flag calls from outside a component into its implementation and API classes that depend on implementation classes. Regular package-layer violations and package tangles are still shown separately, because the Component View does not change the underlying dependency graph or level calculation.
+
+The Component View is also useful for codebases that are **not yet component-oriented**. By manually marking API classes you can explore a what-if scenario: which packages could form a component, which API boundary would be needed to decouple them, and which existing callers would violate that boundary. JPMS (`module-info`) is therefore not a prerequisite or source of truth — it can be a *target*: once the Component View shows a clean boundary with no violations, introducing a JPMS module or an explicit API layer becomes a low-risk, well-scoped step.
 
 ## Requirements
 
