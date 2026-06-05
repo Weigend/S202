@@ -95,3 +95,18 @@ im Namen gehört nicht ins `graph`-Paket (Domain-Graph-Infrastruktur).
 **Aktion:** Datei löschen.
 
 ---
+
+## 3. `SCCDAGBuilder` — Altlast, kann gelöscht werden
+
+`de.weigend.s202.graph.SCCDAGBuilder` wird im Produktionscode nirgendwo
+aufgerufen. Einziger Aufrufer ist `SCCDAGBuilderTest`, der die Klasse
+künstlich am Leben hält.
+
+Die Funktionalität ist vollständig im `LevelCalculator` enthalten: dieser
+baut ebenfalls einen SCC-DAG und berechnet Levels per Longest-Path — aber
+mit `rank(P)`-Mechanismus und Paket-Hypothese. `SCCDAGBuilder` kennt
+beides nicht und würde allein keine korrekten Architekturlevels liefern.
+
+**Aktion:** Klasse und begleitenden `SCCDAGBuilderTest` löschen.
+
+---
