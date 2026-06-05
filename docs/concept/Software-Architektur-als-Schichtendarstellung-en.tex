@@ -43,7 +43,8 @@
 \begin{abstract}
 S202 computes a hierarchical layered representation of Java systems from
 bytecode. The tool derives an architectural hypothesis from the observed class
-dependencies, makes cycles and back edges visible as explicit findings, and
+dependencies, distinguishes two kinds of cycles — class-level cycles and
+package-level cycles — makes both visible as separately toggled findings, and
 checks the finished representation redundantly against consistency rules. This
 document describes typical errors in the computation of such layouts, explains
 the conceptual solution, and shows how the representation can be used as a
@@ -256,6 +257,49 @@ must therefore be able to break large SCCs. The decisive point is that the cut
 edges must not disappear. They must remain visible, because they explain why
 the computed order is only an architectural hypothesis.
 
+\section{Two Kinds of Cycles}
+
+S202 distinguishes two fundamentally different kinds of cycles and makes both
+visible as separately toggled overlays:
+
+\begin{description}
+  \item[Class cycles (red)] Strongly connected components at the class level.
+        Two or more classes that depend on each other directly or transitively
+        form such a cycle. Class cycles reveal implementation-level coupling
+        that prevents a strict linear order of individual classes. They are
+        detected by Tarjan's algorithm on the class dependency graph.
+  \item[Package cycles (orange)] Tangles at the package level, detected on the
+        aggregated package graph. A package cycle means that two or more
+        packages depend on each other as a group, regardless of which concrete
+        classes inside them are responsible. Package cycles reveal
+        architectural-level coupling: the package structure itself has circular
+        dependencies.
+\end{description}
+
+The distinction matters because the two kinds answer different questions:
+
+\begin{itemize}
+  \item A \emph{class cycle} shows where individual classes need to be
+        untangled. Breaking it often requires moving a method, extracting an
+        interface, or inverting a dependency between two specific classes.
+  \item A \emph{package cycle} shows where package boundaries themselves are
+        broken. Resolving it may require a larger restructuring — merging two
+        packages, introducing a new one, or redefining the module split
+        entirely.
+\end{itemize}
+
+A package cycle can exist even when no individual class cycle is visible —
+for example, when two packages call each other through different classes that
+are each individually acyclic. Conversely, a class cycle contained entirely
+within a single package does not necessarily imply a package cycle.
+
+Because the two overlays answer different questions, S202 keeps them as
+independent switches. Activating both at the same time is possible and useful
+when looking for the root cause of an architectural problem, but each overlay
+is also meaningful on its own: the package-cycle overlay reveals the
+structural shape of the problem, while the class-cycle overlay reveals the
+concrete edges that cause it.
+
 \section{The Package Graph as an Architectural Hypothesis}
 
 The solution chosen by S202 is to separate analysis, ordering, and
@@ -465,13 +509,15 @@ The check considers three levels:
   \item \textbf{Class graph:} For normal class dependencies, the following
         must hold: if $A \to B$, then $A$ is on a higher level than $B$.
         Exceptions must be classified explicitly, for example as a back edge
-        or as an edge inside an SCC.
+        or as an edge inside a class SCC. Class-level cycles detected here
+        correspond to the red overlay in the UI.
   \item \textbf{Package graph:} The computed package ordering must be
         consistent with the weighted package dependencies. For every package
         dependency $P \to Q$ that is not classified as a package back edge,
         $P$ must lie strictly above $Q$ in the computed ordering. Edges cut
         during package SCC-breaking must be classified as package back edges
-        and are exempt from this check.
+        and are exempt from this check. Package-level cycles detected here
+        correspond to the orange overlay in the UI.
   \item \textbf{Visible representation:} The visible arrangement must match
         the computed model. Package containers, local class positions, and
         nested levels must not silently reverse the computed architectural
@@ -582,7 +628,9 @@ information that justifies this position is available.
 In short:
 
 \begin{lstlisting}
-Bytecode -> class graph -> SCCs -> package graph -> package architectureLevel
+Bytecode -> class graph -> class SCCs (red overlay)
+         -> package graph -> package SCCs / tangles (orange overlay)
+         -> package architectureLevel
          -> class architectureLevel -> localLevel -> consistency rules
 \end{lstlisting}
 
@@ -594,6 +642,16 @@ representation: class dependencies provide the graph, package dependencies
 provide a robust order, back edges make necessary breaks visible, and
 consistency rules check whether the finished representation satisfies its own
 claim.
+
+A key design decision is the explicit separation of two kinds of cycles.
+Class cycles and package cycles are detected independently, stored as distinct
+findings, and exposed through separate toggle switches in the UI. Class cycles
+(red) show which concrete classes form cyclic dependency chains;
+package cycles (orange) show which packages are mutually dependent at the
+architectural level. Because both views are available simultaneously, the tool
+can answer two different questions at once: \emph{where} in the package
+structure is the circular coupling, and \emph{which concrete class
+dependencies} cause it.
 
 The most important contribution is therefore not an optically improved graph,
 but the connection of representation, explanation, and changeability. The
