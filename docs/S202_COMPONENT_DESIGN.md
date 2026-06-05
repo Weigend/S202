@@ -110,3 +110,18 @@ beides nicht und würde allein keine korrekten Architekturlevels liefern.
 **Aktion:** Klasse und begleitenden `SCCDAGBuilderTest` löschen.
 
 ---
+
+## 4. `EdgeClassification` — verschieben, nicht löschen
+
+`de.weigend.s202.graph.EdgeClassification` hat genau einen Aufrufer im
+Produktionscode: `LayoutInvariantChecker`. Kein anderer Code braucht sie.
+
+Als eigenständige public Klasse im `graph`-Paket suggeriert sie eine
+allgemeine Nutzbarkeit, die nicht existiert. Die Klasse ist ausschließlich
+ein Implementierungsdetail der Invariantenprüfung.
+
+**Aktion:** Als `private static` Hilfsklasse in `LayoutInvariantChecker`
+verschieben (oder package-private im `analysis.invariants`-Paket, falls
+der Checker zu groß wird). Aus dem `graph`-Paket entfernen.
+
+---
