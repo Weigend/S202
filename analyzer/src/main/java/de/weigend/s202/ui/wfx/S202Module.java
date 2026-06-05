@@ -25,6 +25,7 @@ import de.weigend.s202.domain.architecture.LevelCalculator;
 import de.weigend.s202.project.S202Project;
 import de.weigend.s202.project.S202ProjectMapper;
 import de.weigend.s202.project.S202ProjectStore;
+import de.weigend.s202.reader.CSourceAnalyzer;
 import de.weigend.s202.reader.DependencyModel;
 import de.weigend.s202.reader.GradleProjectScanner;
 import de.weigend.s202.reader.InputAnalyzer;
@@ -114,6 +115,7 @@ public class S202Module implements Module {
     private final ApplicationWindow applicationWindow;
     private final InputAnalyzer rawAnalyzer = new InputAnalyzer();
     private final PythonSourceAnalyzer pythonAnalyzer = new PythonSourceAnalyzer();
+    private final CSourceAnalyzer cAnalyzer = new CSourceAnalyzer();
     private final ArchitectureNodeBuilder architectureNodeBuilder = new ArchitectureNodeBuilder();
     private final LayoutInvariantChecker invariantChecker = new LayoutInvariantChecker();
     private final S202ProjectStore projectStore = new S202ProjectStore();
@@ -303,6 +305,7 @@ public class S202Module implements Module {
     private void subscribeToMenuRequests(EventBus<EventObject> bus) {
         bus.subscribe(MenuRequestEvent.OpenJar.class, ev -> { openJarChooser(); return true; });
         bus.subscribe(MenuRequestEvent.OpenPythonSource.class, ev -> { openPythonSourceRoot(); return true; });
+        bus.subscribe(MenuRequestEvent.OpenCSource.class, ev -> { openCSourceRoot(); return true; });
         bus.subscribe(MenuRequestEvent.OpenMavenProject.class, ev -> { openMavenProject(); return true; });
         bus.subscribe(MenuRequestEvent.OpenGradleProject.class, ev -> { openGradleProject(); return true; });
         bus.subscribe(MenuRequestEvent.SaveProject.class, ev -> { saveProject(); return true; });
@@ -841,6 +844,22 @@ public class S202Module implements Module {
         }
     }
 
+    private void openCSourceRoot() {
+        DirectoryChooser chooser = new DirectoryChooser();
+        chooser.setTitle("Select C source root");
+        File initial = lastProjectDirectory != null && lastProjectDirectory.isDirectory()
+                ? lastProjectDirectory
+                : (lastDirectory != null && lastDirectory.isDirectory() ? lastDirectory : null);
+        if (initial != null) {
+            chooser.setInitialDirectory(initial);
+        }
+        File root = chooser.showDialog(applicationWindow.getStage());
+        if (root != null) {
+            lastProjectDirectory = root;
+            loadCSourceRoot(root);
+        }
+    }
+
     private void openMavenProject() {
         File pom = chooseProjectFile("Select Maven project root pom.xml",
                 new FileChooser.ExtensionFilter("Maven POM", "pom.xml"));
@@ -1173,6 +1192,55 @@ public class S202Module implements Module {
         analyzer.start();
     }
 
+    private void loadCSourceRoot(File root) {
+        if (root == null || !root.isDirectory()) {
+            return;
+        }
+        ArchitectureWfxView target = createArchitectureView("C: " + root.getName());
+        registerArchitectureView(target);
+        final ArchitectureView view = target.getArchitectureView();
+        final String rootPath = root.getAbsolutePath();
+        final S202Project.Source source = new S202Project.Source("C", List.of(rootPath), rootPath);
+
+        publishProgress("Analyzing C source: " + root.getName() + " (this may take a moment)...", -1);
+
+        Task<AnalysisResult> task = new Task<>() {
+            @Override
+            protected AnalysisResult call() throws Exception {
+                publishProgress("Scanning C translation units...", 0.20);
+                DependencyModel rawModel = cAnalyzer.analyze(root.toPath());
+                return buildAnalysisResult(rawModel, List.of(rootPath));
+            }
+        };
+
+        task.setOnSucceeded(e -> {
+            AnalysisResult result = task.getValue();
+            if (result.rootNode() == null) {
+                publishProgress("Error: No C translation units found", 1);
+                showError("No C Sources Found",
+                        "The selected source root does not contain analyzable .c files.");
+                return;
+            }
+            publishProgress("Building JavaFX architecture view...", 0.97);
+
+            PauseTransition yieldToPulse = new PauseTransition(Duration.millis(50));
+            AnalysisInputSummary summary = new AnalysisInputSummary("C root(s)", 1);
+            yieldToPulse.setOnFinished(event -> applyAnalysisResult(summary, view, source, result));
+            yieldToPulse.play();
+        });
+        task.setOnFailed(e -> {
+            Throwable t = task.getException();
+            LOGGER.error("C analysis failed", t);
+            String msg = t != null ? t.getMessage() : "unknown error";
+            publishProgress("Error: " + msg, 1);
+            showError("C Analysis Error", "Failed to analyze C source root:\n" + msg);
+        });
+
+        Thread analyzer = new Thread(task, "s202-c-analyzer");
+        analyzer.setDaemon(true);
+        analyzer.start();
+    }
+
     private AnalysisResult buildAnalysisResult(DependencyModel rawModel, List<String> sourcePaths) {
         if (rawModel.getAllClasses().isEmpty()) {
             return new AnalysisResult(rawModel, null, null, null, null, Set.of());
@@ -1370,7 +1438,7 @@ public class S202Module implements Module {
 
     private void closeProject() {
         resetProjectUi();
-        publishProgress("Ready to analyze code. Open JARs or Python source roots to begin.", 0);
+        publishProgress("Ready to analyze code. Open JARs, Python source roots, or C source roots to begin.", 0);
     }
 
     private void resetProjectUi() {
