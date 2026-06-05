@@ -218,14 +218,25 @@ public final class HexagonalArchitectureBuilder implements ArchitectureStyle {
                 cls.fullName,
                 cls.simpleName,
                 cls.interfaceType,
-                isInApiPackage(cls.fullName, index));
+                isInApiPackage(cls.fullName, index),
+                isInImplementationPackage(cls.fullName, index));
     }
 
     private static boolean isInApiPackage(String classFqn, ModelIndex index) {
+        return isInPackageNamed(classFqn, index, true);
+    }
+
+    private static boolean isInImplementationPackage(String classFqn, ModelIndex index) {
+        return isInPackageNamed(classFqn, index, false);
+    }
+
+    private static boolean isInPackageNamed(String classFqn, ModelIndex index, boolean apiPackage) {
         String current = parentOf(classFqn);
         while (current != null && !current.isEmpty()) {
             CalculatedElementInfo pkg = index.packages().get(current);
-            if (pkg != null && ComponentApiClassifier.isApiPackageName(pkg.simpleName)) {
+            if (pkg != null && (apiPackage
+                    ? ComponentApiClassifier.isApiPackageName(pkg.simpleName)
+                    : ComponentApiClassifier.isImplementationPackageName(pkg.simpleName))) {
                 return true;
             }
             current = parentOf(current);

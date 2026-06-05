@@ -21,9 +21,9 @@ import java.util.Set;
 
 /**
  * Shared component-API classification. Manual annotations have priority;
- * JPMS exports are treated as analyzed API metadata; naming/interface
- * heuristics remain a fallback so existing projects get a useful first
- * projection without changing the underlying dependency model.
+ * JPMS exports are treated as analyzed API metadata. Naming/interface
+ * heuristics remain a fallback, but they do not promote classes from known
+ * implementation packages unless the user marks them explicitly.
  */
 public final class ComponentApiClassifier {
 
@@ -43,12 +43,23 @@ public final class ComponentApiClassifier {
                                       String simpleName,
                                       boolean interfaceType,
                                       boolean inApiPackage) {
+        return isSelectedApiClass(fqn, simpleName, interfaceType, inApiPackage, false);
+    }
+
+    public boolean isSelectedApiClass(String fqn,
+                                      String simpleName,
+                                      boolean interfaceType,
+                                      boolean inApiPackage,
+                                      boolean inImplementationPackage) {
         Boolean explicit = annotations.explicitComponentApiDecision(fqn);
         if (explicit != null) {
             return explicit;
         }
         if (isJpmsExportedClass(fqn)) {
             return true;
+        }
+        if (inImplementationPackage) {
+            return false;
         }
         return inApiPackage || isHeuristicApiClass(simpleName, interfaceType);
     }
@@ -72,6 +83,14 @@ public final class ComponentApiClassifier {
                 || normalized.equals("apis")
                 || normalized.equals("port")
                 || normalized.equals("ports");
+    }
+
+    public static boolean isImplementationPackageName(String simpleName) {
+        String normalized = simpleName == null ? "" : simpleName.toLowerCase();
+        return normalized.equals("impl")
+                || normalized.equals("implementation")
+                || normalized.equals("internal")
+                || normalized.equals("private");
     }
 
     private static String packageNameOf(String fqn) {

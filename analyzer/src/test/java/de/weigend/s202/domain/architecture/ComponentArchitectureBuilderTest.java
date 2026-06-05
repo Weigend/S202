@@ -116,6 +116,43 @@ class ComponentArchitectureBuilderTest {
     }
 
     @Test
+    void implementationPackageInterfacesAreNotPromotedToApiByHeuristic() {
+        DomainModel domain = jpmsDomainModel();
+        cls(domain, "com.acme.payment.impl.MultiWindowManager", true, 1, Set.of());
+        cls(domain, "com.acme.payment.impl.DragNDropManager", true, 1, Set.of());
+        cls(domain, "com.acme.payment.impl.ViewContainerAreaFactory", true, 1, Set.of());
+        DependencyModel rawModel = jpmsRawModel();
+
+        ComponentArchitecture architecture = new ComponentArchitectureBuilder()
+                .build(new ArchitectureContext(rawModel, domain, ArchitectureAnnotations.empty()));
+
+        Set<String> apiFqns = apiFqns(architecture, "com.acme.payment");
+        assertFalse(apiFqns.contains("com.acme.payment.impl.MultiWindowManager"));
+        assertFalse(apiFqns.contains("com.acme.payment.impl.DragNDropManager"));
+        assertFalse(apiFqns.contains("com.acme.payment.impl.ViewContainerAreaFactory"));
+        assertTrue(apiFqns.contains("com.acme.payment.contract.PaymentFacade"));
+    }
+
+    @Test
+    void manualIncludeCanStillPromoteImplementationPackageInterface() {
+        DomainModel domain = jpmsDomainModel();
+        cls(domain, "com.acme.payment.impl.ExtensionPoint", true, 1, Set.of());
+        DependencyModel rawModel = jpmsRawModel();
+        ArchitectureAnnotations annotations = new ArchitectureAnnotations(
+                List.of(),
+                Set.of("com.acme.payment.impl.ExtensionPoint"),
+                Set.of(),
+                List.of(),
+                List.of());
+
+        ComponentArchitecture architecture = new ComponentArchitectureBuilder()
+                .build(new ArchitectureContext(rawModel, domain, annotations));
+
+        Set<String> apiFqns = apiFqns(architecture, "com.acme.payment");
+        assertTrue(apiFqns.contains("com.acme.payment.impl.ExtensionPoint"));
+    }
+
+    @Test
     void manualApiExcludesOverrideJpmsExports() {
         DomainModel domain = jpmsDomainModel();
         DependencyModel rawModel = jpmsRawModel();
@@ -213,6 +250,7 @@ class ComponentArchitectureBuilderTest {
         pkg(model, "com.acme.payment", 1);
         pkg(model, "com.acme.payment.contract", 1);
         pkg(model, "com.acme.payment.contract.internal", 0);
+        pkg(model, "com.acme.payment.impl", 0);
         pkg(model, "com.acme.payment.reflect", 0);
         pkg(model, "com.acme.web", 2);
 

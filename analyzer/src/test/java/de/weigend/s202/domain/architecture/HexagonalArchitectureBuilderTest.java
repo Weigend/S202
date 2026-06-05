@@ -17,6 +17,7 @@ package de.weigend.s202.domain.architecture;
 
 import de.weigend.s202.domain.DomainModel;
 import de.weigend.s202.domain.DomainModel.CalculatedElementInfo;
+import de.weigend.s202.reader.DependencyModel;
 import org.junit.jupiter.api.Test;
 
 import java.util.LinkedHashMap;
@@ -100,6 +101,34 @@ class HexagonalArchitectureBuilderTest {
         new HexagonalArchitectureBuilder().build(domain, ArchitectureAnnotations.empty());
 
         assertEquals(before, classLevels(domain));
+    }
+
+    @Test
+    void implementationPackageInterfacesAreNotComponentApiPorts() {
+        DomainModel domain = new DomainModel();
+        pkg(domain, "com", 0);
+        pkg(domain, "com.acme", 0);
+        pkg(domain, "com.acme.payment", 1);
+        pkg(domain, "com.acme.payment.api", 1);
+        pkg(domain, "com.acme.payment.impl", 0);
+
+        cls(domain, "com.acme.payment.api.PaymentFacade", false, 2, Set.of());
+        cls(domain, "com.acme.payment.impl.MultiWindowManager", true, 1, Set.of());
+
+        DependencyModel rawModel = new DependencyModel();
+        DependencyModel.ModuleInfo module = new DependencyModel.ModuleInfo("com.acme.payment", null);
+        module.addExportedPackage("com.acme.payment.api", Set.of());
+        rawModel.addModule(module);
+
+        HexagonalArchitecture architecture = new HexagonalArchitectureBuilder()
+                .build(new ArchitectureContext(rawModel, domain, ArchitectureAnnotations.empty()));
+
+        HexagonalArchitecture.HexElement implInterface = architecture.elements().stream()
+                .filter(element -> element.fqn().equals("com.acme.payment.impl.MultiWindowManager"))
+                .findFirst()
+                .orElseThrow();
+        assertFalse(implInterface.componentApi());
+        assertFalse(implInterface.portCandidate());
     }
 
     private static void assertElementRing(HexagonalArchitecture architecture,

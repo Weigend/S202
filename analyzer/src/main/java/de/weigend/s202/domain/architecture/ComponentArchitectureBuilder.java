@@ -118,7 +118,7 @@ public final class ComponentArchitectureBuilder implements ArchitectureStyle {
                                                                   ModelIndex index,
                                                                   ComponentApiClassifier classifier) {
         List<CalculatedElementInfo> api = new ArrayList<>();
-        collectSelectedApiClasses(rootPackageFqn, index, classifier, false, api);
+        collectSelectedApiClasses(rootPackageFqn, index, classifier, false, false, api);
         api.sort(Comparator.comparing(c -> c.fullName, String.CASE_INSENSITIVE_ORDER));
         return api;
     }
@@ -127,18 +127,32 @@ public final class ComponentArchitectureBuilder implements ArchitectureStyle {
                                                   ModelIndex index,
                                                   ComponentApiClassifier classifier,
                                                   boolean inheritedApiPackage,
+                                                  boolean inheritedImplementationPackage,
                                                   List<CalculatedElementInfo> api) {
         for (CalculatedElementInfo child : sortedChildren(index, parentFqn)) {
             boolean inApiPackage = inheritedApiPackage
                     || ("PACKAGE".equals(child.type)
                     && ComponentApiClassifier.isApiPackageName(child.simpleName));
+            boolean inImplementationPackage = inheritedImplementationPackage
+                    || ("PACKAGE".equals(child.type)
+                    && ComponentApiClassifier.isImplementationPackageName(child.simpleName));
             if ("CLASS".equals(child.type)) {
                 if (classifier.isSelectedApiClass(
-                        child.fullName, child.simpleName, child.interfaceType, inheritedApiPackage)) {
+                        child.fullName,
+                        child.simpleName,
+                        child.interfaceType,
+                        inApiPackage,
+                        inImplementationPackage)) {
                     api.add(child);
                 }
             } else {
-                collectSelectedApiClasses(child.fullName, index, classifier, inApiPackage, api);
+                collectSelectedApiClasses(
+                        child.fullName,
+                        index,
+                        classifier,
+                        inApiPackage,
+                        inImplementationPackage,
+                        api);
             }
         }
     }
