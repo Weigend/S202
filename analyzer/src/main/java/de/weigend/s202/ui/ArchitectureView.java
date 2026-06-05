@@ -21,6 +21,7 @@ import de.weigend.s202.domain.DomainModel;
 import de.weigend.s202.domain.architecture.Architecture;
 import de.weigend.s202.domain.architecture.ArchitectureAnnotations;
 import de.weigend.s202.domain.architecture.ArchitectureContext;
+import de.weigend.s202.domain.architecture.ComponentArchitecture;
 import de.weigend.s202.domain.architecture.ComponentArchitectureBuilder;
 import de.weigend.s202.domain.architecture.HexagonalArchitecture;
 import de.weigend.s202.domain.architecture.HexagonalArchitectureBuilder;
@@ -393,6 +394,7 @@ public class ArchitectureView extends BorderPane {
                             graphSelectionSink,
                             getArchitectureAnnotations(),
                             rawDependencyModel.get(),
+                            architecture.get() instanceof ComponentArchitecture component ? component : null,
                             this::handleComponentApiChanged);
             return componentBuilder.buildTree(rootNode, maxDepth);
         }
@@ -423,6 +425,7 @@ public class ArchitectureView extends BorderPane {
                             graphSelectionSink,
                             getArchitectureAnnotations(),
                             rawDependencyModel.get(),
+                            architecture.get() instanceof ComponentArchitecture component ? component : null,
                             this::handleComponentApiChanged);
             componentBuilder.buildTreeAsync(rootNode, maxDepth, progressSink, onComplete);
             return;

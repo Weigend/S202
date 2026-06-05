@@ -16,6 +16,8 @@
 package de.weigend.s202.ui.tree;
 
 import de.weigend.s202.domain.architecture.ArchitectureAnnotations;
+import de.weigend.s202.domain.architecture.ComponentArchitecture;
+import de.weigend.s202.domain.architecture.Element;
 import de.weigend.s202.ui.ArchitectureView;
 import de.weigend.s202.ui.ArchitectureViewStyle;
 import de.weigend.s202.ui.LevelClassBox;
@@ -385,6 +387,52 @@ public class ArchitectureTreeBuilderTest {
             assertEquals(0.6, view.zoomFactorProperty().get(), 0.0001);
             assertEquals(0.37, refreshedScrollPane.getHvalue(), 0.0001);
             assertEquals(0.61, refreshedScrollPane.getVvalue(), 0.0001);
+        });
+    }
+
+    @Test
+    public void testComponentProjectionKeepsNonComponentPackagesInLevelRows() {
+        runOnFxThread(() -> {
+            ArchitectureNode root = new ArchitectureNode("root", "root", NodeType.PACKAGE, true, 0);
+            ArchitectureNode payment = new ArchitectureNode(
+                    "com.acme.payment", "payment", NodeType.PACKAGE, true, 2);
+            ArchitectureNode paymentApi = new ArchitectureNode(
+                    "com.acme.payment.PaymentApi", "PaymentApi", NodeType.CLASS, true, 2, true);
+            ArchitectureNode shipping = new ArchitectureNode(
+                    "com.acme.shipping", "shipping", NodeType.PACKAGE, true, 0);
+            ArchitectureNode shippingService = new ArchitectureNode(
+                    "com.acme.shipping.ShippingService", "ShippingService", NodeType.CLASS, true, 0);
+            payment.addChild(paymentApi);
+            shipping.addChild(shippingService);
+            root.addChild(payment);
+            root.addChild(shipping);
+
+            ComponentArchitecture architecture = new ComponentArchitecture(
+                    List.of(new ComponentArchitecture.ComponentElement(
+                            "payment",
+                            "Payment",
+                            payment.getFullName(),
+                            List.of(new Element.ClassElement(paymentApi.getFullName(), 2, 0)),
+                            List.of())),
+                    List.of(),
+                    List.of());
+
+            Map<String, Node> registry = new HashMap<>();
+            ComponentArchitectureTreeBuilder builder = new ComponentArchitectureTreeBuilder(
+                    registry,
+                    null,
+                    ArchitectureAnnotations.empty(),
+                    null,
+                    architecture,
+                    null);
+            VBox topLevel = builder.buildTree(root, 3);
+
+            assertInstanceOf(ComponentBox.class, registry.get(payment.getFullName()));
+            assertInstanceOf(LevelPackageBox.class, registry.get(shipping.getFullName()));
+            List<HBox> rows = rows(topLevel);
+            assertEquals(2, rows.size());
+            assertSame(registry.get(payment.getFullName()), rows.get(0).getChildren().get(0));
+            assertSame(registry.get(shipping.getFullName()), rows.get(1).getChildren().get(0));
         });
     }
 
