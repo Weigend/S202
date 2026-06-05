@@ -341,3 +341,20 @@ auch `S202Project` zum Implementierungsdetail. Das ist ein separater Schritt.
 - `S202ProjectMapper` und `S202ProjectStore` sind versteckte Impl
 
 ---
+
+## 9. UI — bewusst außerhalb dieses Schritts
+
+Die UI-Schicht (`de.weigend.s202.ui`) bleibt in diesem Schritt monolithisch.
+Sie wird nicht als Komponente neu geschnitten.
+
+Verbesserungen an der UI erfolgen chirurgisch dort, wo es konkret nötig
+ist — z.B. wenn ein neues WFX-Modul eine saubere Grenze erfordert oder
+eine Klasse nachweislich zu viel verantwortet. Kein großer Rewrite.
+
+**Was dieser Schritt liefert:**
+Die UI-Schicht bekommt saubere Gegenstücke: `LanguageAnalyzer`, `ProjectStore`,
+`DomainComputer`, `ArchitectureStyle` — alles was sie heute direkt
+instanziiert, wird durch Interfaces ersetzt. Die UI selbst ändert ihre
+interne Struktur dabei nicht.
+
+---
