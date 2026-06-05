@@ -193,6 +193,7 @@ public class ArchitectureView extends BorderPane {
     private boolean skipTransparentTopLevelPackages = true;
     private ArchitectureNode scopeExtensionSourceRoot;
     private ArchitectureViewStyle viewStyle = ArchitectureViewStyle.LAYERED;
+    private final java.util.LinkedHashMap<String, String> plannedPackageNames = new java.util.LinkedHashMap<>();
     private static final Set<ViolationKind> LAYERED_VIOLATION_OVERLAY_KINDS =
             Set.of(ViolationKind.UPWARD);
     private static final Set<ViolationKind> COMPONENT_VIOLATION_OVERLAY_KINDS =
@@ -680,6 +681,9 @@ public class ArchitectureView extends BorderPane {
         if (preservedState != null) {
             restoreExpansionState(topLevelContainer, preservedState);
         }
+        if (viewStyle == ArchitectureViewStyle.COMPONENT && !plannedPackageNames.isEmpty()) {
+            injectPlannedPackagesIntoScene(topLevelContainer);
+        }
         dependencyPane.getChildren().clear();
         dependencyPane.setVisible(false);
         sccPane.getChildren().clear();
@@ -781,18 +785,31 @@ public class ArchitectureView extends BorderPane {
     }
 
     private void installScopeExtensionContextMenu(javafx.scene.Node target) {
-        if (scopeExtensionSourceRoot == null) {
+        boolean componentMode = viewStyle == ArchitectureViewStyle.COMPONENT;
+        if (scopeExtensionSourceRoot == null && !componentMode) {
             target.setOnContextMenuRequested(null);
             return;
         }
 
         target.setOnContextMenuRequested(event -> {
             ContextMenu menu = new ContextMenu();
-            MenuItem addToScope = new MenuItem("Add to Scope...");
-            addToScope.setOnAction(action -> showScopeExtensionDialog());
-            menu.getItems().setAll(addToScope);
-            menu.show(target, event.getScreenX(), event.getScreenY());
-            event.consume();
+            if (componentMode) {
+                MenuItem addPkg = new MenuItem("Add Planned Package...");
+                addPkg.setOnAction(action -> showAddPlannedPackageDialog());
+                menu.getItems().add(addPkg);
+                MenuItem reportItem = new MenuItem("Refactoring Report...");
+                reportItem.setOnAction(action -> showRefactoringReport());
+                menu.getItems().add(reportItem);
+            }
+            if (scopeExtensionSourceRoot != null) {
+                MenuItem addToScope = new MenuItem("Add to Scope...");
+                addToScope.setOnAction(action -> showScopeExtensionDialog());
+                menu.getItems().add(addToScope);
+            }
+            if (!menu.getItems().isEmpty()) {
+                menu.show(target, event.getScreenX(), event.getScreenY());
+                event.consume();
+            }
         });
     }
 
@@ -881,6 +898,206 @@ public class ArchitectureView extends BorderPane {
         setArchitectureRoot(extendedRoot);
         selectByFullName(candidate.fullName());
         setStatus("Scope extended: " + candidate.fullName());
+    }
+
+    private void showAddPlannedPackageDialog() {
+        javafx.scene.control.TextInputDialog dialog = new javafx.scene.control.TextInputDialog();
+        dialog.setTitle("Add Planned Package");
+        dialog.setHeaderText("Enter a name for the new planned package");
+        dialog.setContentText("Package name:");
+        if (getScene() != null && getScene().getWindow() != null) {
+            dialog.initOwner(getScene().getWindow());
+        }
+        dialog.showAndWait()
+                .map(String::trim)
+                .filter(name -> !name.isEmpty())
+                .ifPresent(name -> {
+                    String fqn = "virtual-pkg-" + java.util.UUID.randomUUID().toString().replace("-", "");
+                    plannedPackageNames.put(fqn, name);
+                    refreshStyleProjection("Added planned package: " + name);
+                });
+    }
+
+    private void showRenamePlannedPackageDialog(String fqn) {
+        String currentName = plannedPackageNames.getOrDefault(fqn, "");
+        javafx.scene.control.TextInputDialog dialog = new javafx.scene.control.TextInputDialog(currentName);
+        dialog.setTitle("Rename Package");
+        dialog.setHeaderText("Enter a new name for the planned package");
+        dialog.setContentText("Package name:");
+        if (getScene() != null && getScene().getWindow() != null) {
+            dialog.initOwner(getScene().getWindow());
+        }
+        dialog.showAndWait()
+                .map(String::trim)
+                .filter(name -> !name.isEmpty() && !name.equals(currentName))
+                .ifPresent(name -> {
+                    plannedPackageNames.put(fqn, name);
+                    refreshStyleProjection("Renamed planned package to: " + name);
+                });
+    }
+
+    private void deletePlannedPackage(String fqn) {
+        String name = plannedPackageNames.remove(fqn);
+        if (name != null) {
+            refreshStyleProjection("Deleted planned package: " + name);
+        }
+    }
+
+    public void showRefactoringReport() {
+        String json = buildRefactoringReportJson();
+
+        javafx.scene.control.TextArea area = new javafx.scene.control.TextArea(json);
+        area.setEditable(false);
+        area.setWrapText(false);
+        area.setFont(javafx.scene.text.Font.font("Monospaced", 12));
+        area.setPrefRowCount(28);
+        area.setPrefColumnCount(80);
+
+        javafx.scene.control.ButtonType copyButton = new javafx.scene.control.ButtonType(
+                "Copy to Clipboard", javafx.scene.control.ButtonBar.ButtonData.LEFT);
+        javafx.scene.control.ButtonType closeButton = javafx.scene.control.ButtonType.CLOSE;
+
+        javafx.scene.control.Dialog<Void> dialog = new javafx.scene.control.Dialog<>();
+        dialog.setTitle("Refactoring Report");
+        dialog.setHeaderText("All architecture changes made in this session — paste into an AI prompt.");
+        if (getScene() != null && getScene().getWindow() != null) {
+            dialog.initOwner(getScene().getWindow());
+        }
+        dialog.getDialogPane().getButtonTypes().addAll(copyButton, closeButton);
+        dialog.getDialogPane().setContent(area);
+        dialog.getDialogPane().setPrefSize(820, 560);
+
+        javafx.scene.Node copyNode = dialog.getDialogPane().lookupButton(copyButton);
+        copyNode.addEventFilter(javafx.scene.input.MouseEvent.MOUSE_RELEASED, e -> {
+            javafx.scene.input.ClipboardContent cc = new javafx.scene.input.ClipboardContent();
+            cc.putString(json);
+            javafx.scene.input.Clipboard.getSystemClipboard().setContent(cc);
+            e.consume();
+        });
+
+        dialog.showAndWait();
+    }
+
+    private String buildRefactoringReportJson() {
+        // Deduplicate moves: keep only the last move per FQN (latest destination wins).
+        java.util.LinkedHashMap<String, WhatIfUndoManager.Move> lastMove = new java.util.LinkedHashMap<>();
+        for (WhatIfUndoManager.Move m : undoManager.effectiveMoves()) {
+            lastMove.put(m.fqn(), m);
+        }
+
+        ArchitectureAnnotations ann = getArchitectureAnnotations();
+        java.util.List<String> apiAdded = new java.util.ArrayList<>(ann.componentApiIncludes());
+        java.util.List<String> apiRemoved = new java.util.ArrayList<>(ann.componentApiExcludes());
+
+        StringBuilder sb = new StringBuilder();
+        sb.append("{\n");
+        sb.append("  \"tool\": \"Structure202\",\n");
+        sb.append("  \"view\": \"Component View\",\n");
+        sb.append("  \"summary\": {\n");
+        sb.append("    \"plannedPackages\": ").append(plannedPackageNames.size()).append(",\n");
+        sb.append("    \"movedElements\": ").append(lastMove.size()).append(",\n");
+        sb.append("    \"cutDependencies\": ").append(appliedCutEdges.size()).append(",\n");
+        sb.append("    \"apiAdded\": ").append(apiAdded.size()).append(",\n");
+        sb.append("    \"apiRemoved\": ").append(apiRemoved.size()).append("\n");
+        sb.append("  },\n");
+        sb.append("  \"changes\": [\n");
+
+        java.util.List<String> entries = new java.util.ArrayList<>();
+
+        for (String displayName : plannedPackageNames.values()) {
+            entries.add("    {\n"
+                    + "      \"action\": \"CREATE_PACKAGE\",\n"
+                    + "      \"name\": " + jsonStr(displayName) + ",\n"
+                    + "      \"note\": \"Planned package for cycle-free refactoring\"\n"
+                    + "    }");
+        }
+
+        for (WhatIfUndoManager.Move m : lastMove.values()) {
+            String dest = m.containerFqn() == null || m.containerFqn().isEmpty()
+                    ? "(top-level)" : m.containerFqn();
+            entries.add("    {\n"
+                    + "      \"action\": \"MOVE\",\n"
+                    + "      \"element\": " + jsonStr(m.fqn()) + ",\n"
+                    + "      \"toPackage\": " + jsonStr(dest) + ",\n"
+                    + "      \"toRow\": " + m.rowIndex() + ",\n"
+                    + "      \"note\": \"Move class/package to new position to eliminate layer violation\"\n"
+                    + "    }");
+        }
+
+        for (de.weigend.s202.domain.DependencyEdge e : appliedCutEdges) {
+            entries.add("    {\n"
+                    + "      \"action\": \"CUT_DEPENDENCY\",\n"
+                    + "      \"from\": " + jsonStr(e.from()) + ",\n"
+                    + "      \"to\": " + jsonStr(e.to()) + ",\n"
+                    + "      \"note\": \"Remove this direct dependency to break the tangle\"\n"
+                    + "    }");
+        }
+
+        for (String fqn : apiAdded) {
+            entries.add("    {\n"
+                    + "      \"action\": \"ADD_TO_API\",\n"
+                    + "      \"element\": " + jsonStr(fqn) + ",\n"
+                    + "      \"note\": \"Expose this element as part of the component's public API\"\n"
+                    + "    }");
+        }
+
+        for (String fqn : apiRemoved) {
+            entries.add("    {\n"
+                    + "      \"action\": \"REMOVE_FROM_API\",\n"
+                    + "      \"element\": " + jsonStr(fqn) + ",\n"
+                    + "      \"note\": \"Remove this element from the public API surface\"\n"
+                    + "    }");
+        }
+
+        sb.append(String.join(",\n", entries));
+        if (!entries.isEmpty()) {
+            sb.append("\n");
+        }
+        sb.append("  ]\n");
+        sb.append("}");
+        return sb.toString();
+    }
+
+    private static String jsonStr(String s) {
+        if (s == null) return "null";
+        return "\"" + s.replace("\\", "\\\\").replace("\"", "\\\"") + "\"";
+    }
+
+    private void injectPlannedPackagesIntoScene(VBox topLevelContainer) {
+        HBox plannedRow = new HBox(10);
+        plannedRow.setMaxWidth(Double.MAX_VALUE);
+        plannedRow.setAlignment(Pos.CENTER);
+        VBox.setVgrow(plannedRow, Priority.ALWAYS);
+        ArchitectureDragController.markAsRow(plannedRow);
+
+        for (Map.Entry<String, String> entry : plannedPackageNames.entrySet()) {
+            String fqn = entry.getKey();
+            String displayName = entry.getValue();
+            ComponentBox box = new ComponentBox(displayName, fqn, 0);
+            box.setSelectionChangeSink(graphSelectionSink);
+            box.setCustomStyles(
+                    "-fx-background-color: #f0f7e8; -fx-border-color: #4a8a3a; -fx-border-width: 2;"
+                  + " -fx-border-style: dashed; -fx-background-radius: 7; -fx-border-radius: 7;",
+                    "-fx-background-color: #f0f7e8; -fx-border-color: #ff8a00; -fx-border-width: 3;"
+                  + " -fx-border-style: dashed; -fx-background-radius: 7; -fx-border-radius: 7;");
+            attachPlannedPackageContextMenu(box, fqn);
+            elementRegistry.put(fqn, box);
+            HBox.setHgrow(box, Priority.ALWAYS);
+            plannedRow.getChildren().add(box);
+        }
+
+        topLevelContainer.getChildren().add(plannedRow);
+    }
+
+    private void attachPlannedPackageContextMenu(ComponentBox box, String fqn) {
+        box.setOnContextMenuRequested(event -> {
+            MenuItem rename = new MenuItem("Rename Package...");
+            rename.setOnAction(a -> showRenamePlannedPackageDialog(fqn));
+            MenuItem delete = new MenuItem("Delete Package");
+            delete.setOnAction(a -> deletePlannedPackage(fqn));
+            new ContextMenu(rename, delete).show(box, event.getScreenX(), event.getScreenY());
+            event.consume();
+        });
     }
 
     /**

@@ -77,6 +77,11 @@ public final class WhatIfUndoManager {
     public BooleanProperty canUndoProperty() { return canUndo; }
     public BooleanProperty canRedoProperty() { return canRedo; }
 
+    /** Returns the effective move history up to the current cursor position. */
+    public List<Move> effectiveMoves() {
+        return List.copyOf(history.subList(0, cursor));
+    }
+
     private void sync() {
         canUndo.set(cursor > 0);
         canRedo.set(cursor < history.size());

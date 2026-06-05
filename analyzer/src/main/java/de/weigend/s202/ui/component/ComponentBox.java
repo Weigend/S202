@@ -69,6 +69,8 @@ public class ComponentBox extends VBox implements GraphSelection.Selectable {
     private boolean componentExpanded = true;
     private boolean apiExpanded = true;
     private Consumer<String> selectionChangeSink;
+    private String styleNormal = STYLE_NORMAL;
+    private String styleSelected = STYLE_SELECTED;
 
     private static Runnable onExpandChangeCallback = null;
 
@@ -210,14 +212,20 @@ public class ComponentBox extends VBox implements GraphSelection.Selectable {
         return fullName;
     }
 
+    public void setCustomStyles(String normalStyle, String selectedStyle) {
+        this.styleNormal = normalStyle;
+        this.styleSelected = selectedStyle;
+        setStyle(styleNormal);
+    }
+
     @Override
     public void applySelectedStyle() {
-        setStyle(STYLE_SELECTED);
+        setStyle(styleSelected);
     }
 
     @Override
     public void applyUnselectedStyle() {
-        setStyle(STYLE_NORMAL);
+        setStyle(styleNormal);
     }
 
     private void toggleComponentExpanded() {

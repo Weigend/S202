@@ -197,7 +197,7 @@ public class InputAnalyzer {
     public DependencyModel analyze(String jarPath) throws IOException {
         DependencyModel model = new DependencyModel();
         analyzeInto(jarPath, model);
-        buildPackageHierarchy(model);
+        PackageHierarchyBuilder.buildPackageHierarchy(model);
         return model;
     }
 
@@ -223,7 +223,7 @@ public class InputAnalyzer {
         for (String jarPath : jarPaths) {
             processedClasses = analyzeInto(jarPath, model, progress, processedClasses, totalClasses);
         }
-        buildPackageHierarchy(model);
+        PackageHierarchyBuilder.buildPackageHierarchy(model);
         return model;
     }
 
@@ -306,49 +306,6 @@ public class InputAnalyzer {
         } catch (Exception e) {
             System.err.println("Error analyzing module descriptor " + classPath + ": " + e.getMessage());
         }
-    }
-
-    /**
-     * Builds the package hierarchy from all loaded classes.
-     */
-    private void buildPackageHierarchy(DependencyModel model) {
-        Map<String, DependencyModel.PackageInfo> packages = new HashMap<>();
-
-        for (String className : model.getAllClassNames()) {
-            DependencyModel.ClassInfo classInfo = model.getClass(className);
-            String packageName = classInfo.packageName;
-
-            // Create all parent packages
-            String[] parts = packageName.split("\\.");
-            String current = "";
-            for (String part : parts) {
-                String parentPkg = current.isEmpty() ? current : current + ".";
-                current = parentPkg + part;
-
-                if (!packages.containsKey(current)) {
-                    DependencyModel.PackageInfo pkgInfo = new DependencyModel.PackageInfo(
-                        current, part
-                    );
-                    packages.put(current, pkgInfo);
-
-                    // Add to parent if exists
-                    if (!parentPkg.isEmpty() && parentPkg.endsWith(".")) {
-                        String parent = parentPkg.substring(0, parentPkg.length() - 1);
-                        if (packages.containsKey(parent)) {
-                            packages.get(parent).childPackages.add(current);
-                        }
-                    }
-                }
-            }
-
-            // Add class to its package
-            if (packages.containsKey(packageName)) {
-                packages.get(packageName).classNames.add(className);
-            }
-        }
-
-        // Store packages in model
-        model.setPackages(packages);
     }
 
     /**
