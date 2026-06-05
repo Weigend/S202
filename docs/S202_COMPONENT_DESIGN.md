@@ -372,6 +372,17 @@ Implementierungsdetails liegen im Unterpaket `name.impl`.
 - Passt zur bestehenden Struktur — `reader.java`, `reader.python`, `reader.c`
   sind bereits natürliche Impl-Unterpakete, kein Umbenennen nötig
 
+### Kein JPMS — aber JPMS-kompatibles Design
+
+`module-info.java` wird **nicht** eingeführt. Der Mehrwert für ein agil
+entwickeltes Werkzeug dieser Größe ist gering, der Aufwand bei
+Refactorings und Abhängigkeitsänderungen aber spürbar — JPMS behindert
+schnelle Iterationen.
+
+Das Paketlayout wird jedoch so gestaltet, dass eine spätere JPMS-Migration
+ohne konzeptionelle Änderungen möglich ist: API-Pakete wären `exports`,
+`*.impl`-Pakete würden schlicht nicht exportiert.
+
 ### Anwendung auf alle Komponenten
 
 ```
