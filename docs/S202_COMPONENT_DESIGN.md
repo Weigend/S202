@@ -75,3 +75,23 @@ optional einen passenden `FileLoader` dazuregistrieren.
   `LanguageAnalyzer.displayName()`.
 
 ---
+
+## 2. `SCCVisualizationHelper` — Altlast, kann gelöscht werden
+
+`de.weigend.s202.graph.SCCVisualizationHelper` hat keinen einzigen Aufrufer
+außerhalb seiner eigenen Klassendefinition. Die Klasse ist toter Code.
+
+Inhaltlich ist sie durch neuere Mechanismen vollständig ersetzt:
+
+| Methode | Ersatz |
+|---|---|
+| `getTangles()` | `DomainModel.getPackageTangles()`, `SCCRenderer` |
+| `generateSummary()` / `ArchitectureSummary` | kein Abnehmer — nie integriert |
+| `sortTangleMembers()` | früher Layoutversuch; ersetzt durch `rank(P)` in `LevelCalculator` |
+
+Zusätzlich ist der Name strukturell falsch: eine Klasse mit "Visualization"
+im Namen gehört nicht ins `graph`-Paket (Domain-Graph-Infrastruktur).
+
+**Aktion:** Datei löschen.
+
+---
