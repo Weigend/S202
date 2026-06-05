@@ -3,6 +3,24 @@
 Sammlung von Entkopplungs- und Komponentendesign-Entscheidungen für S202.
 Dieses Dokument wächst mit neuen Erkenntnissen.
 
+## Ziel: Case Study
+
+Die Umsetzung der hier erarbeiteten Maßnahmen ist gleichzeitig eine
+**Case Study für S202 selbst**. Jeder Schritt wird mit Vorher-Nachher-
+Vergleich dokumentiert: welche Violations und Abhängigkeiten das Tool
+vor der Maßnahme gezeigt hat, welche Design-Entscheidung daraus folgte,
+und wie die Darstellung danach aussieht.
+
+Der entscheidende Aspekt: die gesamte Analyse in diesem Dokument wurde
+**ausschließlich aus dem Tool abgeleitet** — kein direkter Blick in den
+Quellcode. Altlasten, falsche Paketgrenzen, zu breite API-Oberflächen
+und fehlende Interfaces wurden durch die Schichten- und Komponentensicht
+von S202 sichtbar, nicht durch manuelles Code-Reading.
+
+Das macht S202 zum Werkzeug seiner eigenen Verbesserung — und die
+Ergebnisse zu einem nachvollziehbaren Beispiel dafür, was das Tool in
+realen Codebasen leisten kann.
+
 ---
 
 ## 1. `reader` als Komponente mit versteckter Implementierung
