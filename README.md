@@ -12,7 +12,7 @@ A JavaFX-based tool for analyzing Java bytecode and Python source code and visua
 - **Bytecode analysis**: Parses Java `.class` files with ASM 9.6
 - **Python source analysis**: Analyzes Python source trees via CPython's `ast` module; maps modules to the same dependency model as Java (no extra tooling beyond a standard `python3` install)
 - **Dependency detection**: Extracts class/module and package dependencies (imports, calls, inheritance, type annotations)
-- **Cycle detection**: Finds cyclic dependencies (Strongly Connected Components)
+- **Cycle detection**: Detects two independent kinds of cycles — **class cycles** (red overlay: SCCs at the class level) and **package cycles** (orange overlay: tangles at the package level); both are separately togglable because they answer different questions
 - **Architecture layering**: Topological ordering by dependency depth
 - **Hierarchical visualization**: JavaFX TreeView with expandable packages
 - **Component View**: Shows top-level components with an explicit API area above the implementation packages
@@ -68,7 +68,8 @@ The **Layered Architecture View** is the default view after loading a JAR or pro
 
 - **Direction**: Every valid dependency points downward. An arrow that points upward or sideways is a layering violation and is highlighted in red as a dashed arrow.
 - **Violations**: Backward dependencies (calls from a lower layer to a higher layer) are displayed prominently so they can be identified and resolved.
-- **Cycles / Tangles**: Packages involved in cyclic dependencies are grouped and marked separately; their internal cross-edges are shown as a tangle.
+- **Class cycles** (red): classes that form SCCs — shows which concrete class dependencies create the cycle.
+- **Package cycles** (orange): packages that are mutually dependent as a group — shows where package boundaries themselves are broken. Both overlays are toggled independently; activating both at once reveals where in the package structure the circular coupling sits and which class edges cause it.
 
 **Navigating dependencies:**
 
