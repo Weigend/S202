@@ -13,7 +13,11 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package de.weigend.s202.reader;
+package de.weigend.s202.reader.java;
+
+import de.weigend.s202.reader.DependencyModel;
+import de.weigend.s202.reader.EdgeKind;
+import de.weigend.s202.reader.PackageHierarchyBuilder;
 
 import org.objectweb.asm.ClassReader;
 import org.objectweb.asm.ClassVisitor;

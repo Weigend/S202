@@ -16,7 +16,7 @@
 package de.weigend.s202.analysis.input;
 
 import de.weigend.s202.reader.DependencyModel;
-import de.weigend.s202.reader.InputAnalyzer;
+import de.weigend.s202.reader.java.InputAnalyzer;
 import org.junit.jupiter.api.io.TempDir;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
