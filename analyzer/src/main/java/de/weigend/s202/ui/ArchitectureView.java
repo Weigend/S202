@@ -346,7 +346,7 @@ public class ArchitectureView extends BorderPane {
         if (showDependencies.get() && dependencyPane != null && dependencyPane.isVisible()) {
             dependencyRenderer.drawDependencyArrows(currentRootNode);
         }
-        if (showScc.get() && sccPane != null && sccPane.isVisible()) {
+        if ((showScc.get() || showPackageScc.get()) && sccPane != null && sccPane.isVisible()) {
             sccRenderer.drawSccLines(currentRootNode);
         }
     }
@@ -1570,7 +1570,7 @@ public class ArchitectureView extends BorderPane {
             dependencyRenderer.drawDependencyArrows(currentRootNode);
             linesNeedUpdate = false;
         }
-        if (showScc.get()) {
+        if (showScc.get() || showPackageScc.get()) {
             sccRenderer.drawSccLines(currentRootNode);
         }
         if (whatIfRenderer != null) {

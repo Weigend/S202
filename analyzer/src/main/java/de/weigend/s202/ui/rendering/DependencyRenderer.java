@@ -624,7 +624,7 @@ public class DependencyRenderer implements DependencyRendererStrategy {
     }
 
     /**
-     * Returns [minX, minY, maxX, maxY] of {@code node} in the zoomable-content
+     * Returns [minX, minY, maxX, maxY] of {@code node} in the dependency pane's
      * coordinate space using JavaFX's built-in scene-graph transform API.
      *
      * <p>{@code localToScene} + {@code sceneToLocal} is always consistent with
@@ -634,9 +634,11 @@ public class DependencyRenderer implements DependencyRendererStrategy {
      */
     private double[] getBoundsInPane(Node node) {
         try {
-            if (zoomableContent == null) return null;
+            if (node == null || dependencyPane == null || node.getScene() != dependencyPane.getScene()) {
+                return null;
+            }
             Bounds inScene = node.localToScene(node.getBoundsInLocal());
-            Bounds inPane  = zoomableContent.sceneToLocal(inScene);
+            Bounds inPane  = dependencyPane.sceneToLocal(inScene);
             return new double[]{inPane.getMinX(), inPane.getMinY(),
                                 inPane.getMaxX(), inPane.getMaxY()};
         } catch (Exception e) {
