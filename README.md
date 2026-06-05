@@ -185,7 +185,7 @@ Details: [docs/VS_CODE_SETUP.md](docs/VS_CODE_SETUP.md)
 
 ## Case Studies
 
-**[→ docs/S202_CASE_STUDY_WFX.md](docs/S202_CASE_STUDY_WFX.md)** — Real-world codebases analyzed with S202: which architectural problems became visible and which refactoring decisions follow.
+**[→ docs/wfx/S202_CASE_STUDY_WFX.md](docs/wfx/S202_CASE_STUDY_WFX.md)** — Real-world codebases analyzed with S202: which architectural problems became visible and which refactoring decisions follow.
 
 ## Documentation
 
