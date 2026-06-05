@@ -15,9 +15,9 @@
  */
 package de.weigend.s202.ui.rendering;
 
+import de.weigend.s202.ui.GraphSelection;
 import de.weigend.s202.ui.LevelClassBox;
 import de.weigend.s202.ui.LevelPackageBox;
-import de.weigend.s202.ui.GraphSelection;
 import de.weigend.s202.ui.component.ComponentBox;
 import de.weigend.s202.ui.model.ArchitectureNode;
 import de.weigend.s202.ui.zoom.ZoomController;
@@ -78,6 +78,7 @@ public class DependencyRenderer implements DependencyRendererStrategy {
     private final List<Shape> dependencyLines = new ArrayList<>();
     private Shape selectedLine = null;
     private boolean dependencyLinesDrawn = false;
+    private String selectedFullName;
 
     // Dynamic references set by ArchitectureView
     private Pane zoomableContent;
@@ -110,6 +111,11 @@ public class DependencyRenderer implements DependencyRendererStrategy {
         this.scrollPane = scrollPane;
     }
 
+    @Override
+    public void setSelectedFullName(String selectedFullName) {
+        this.selectedFullName = selectedFullName == null || selectedFullName.isBlank() ? null : selectedFullName;
+    }
+
     /**
      * Clears all dependency arrows and resets the drawn flag.
      */
@@ -134,7 +140,7 @@ public class DependencyRenderer implements DependencyRendererStrategy {
         selectedLine = null;
 
         // Iterate through all registered elements and draw arrows for their dependencies
-        drawDependencyArrowsRecursive(rootNode);
+        drawDependencyArrowsRecursive(rootNode, selectedFullName);
 
         // Mark as drawn
         dependencyLinesDrawn = true;
@@ -156,9 +162,7 @@ public class DependencyRenderer implements DependencyRendererStrategy {
      *  source closed / target collapsed → package → package (aggregated + badge)
      * </pre>
      */
-    private void drawDependencyArrowsRecursive(ArchitectureNode node) {
-        String selectedClass = LevelClassBox.getSelectedClassName();
-
+    private void drawDependencyArrowsRecursive(ArchitectureNode node, String selectedFqn) {
         for (ArchitectureNode child : node.getChildren()) {
             if (child.getType() == ArchitectureNode.NodeType.CLASS) {
                 Node sourceElement = elementRegistry.get(child.getFullName());
@@ -178,13 +182,13 @@ public class DependencyRenderer implements DependencyRendererStrategy {
                 for (Map.Entry<Node, String> e : targetToRepName.entrySet()) {
                     Node targetElement = e.getKey();
                     String depName    = e.getValue();
-                    boolean isSourceSelected = selectedClass != null &&
-                            (child.getFullName().equals(selectedClass) ||
-                             child.getFullName().startsWith(selectedClass + "."));
-                    boolean isTargetSelected = selectedClass != null &&
-                            (depName.equals(selectedClass) ||
-                             depName.startsWith(selectedClass + "."));
-                    if (selectedClass != null && !isSourceSelected && !isTargetSelected) {
+                    boolean isSourceSelected = selectedFqn != null &&
+                            (child.getFullName().equals(selectedFqn) ||
+                             child.getFullName().startsWith(selectedFqn + "."));
+                    boolean isTargetSelected = selectedFqn != null &&
+                            (depName.equals(selectedFqn) ||
+                             depName.startsWith(selectedFqn + "."));
+                    if (selectedFqn != null && !isSourceSelected && !isTargetSelected) {
                         continue;
                     }
                     boolean isIncoming = isTargetSelected && !isSourceSelected;
@@ -202,12 +206,12 @@ public class DependencyRenderer implements DependencyRendererStrategy {
                         && isNodeActuallyVisible(uiElement)
                         && isPackageCollapsed(child)) {
                     // Closed source: draw aggregated or class-level arrows from the package
-                    drawCollapsedPackageArrows(child, uiElement, selectedClass);
+                    drawCollapsedPackageArrows(child, uiElement, selectedFqn);
                 } else if (isCollapsedAggregateEndpoint(uiElement)) {
-                    drawCollapsedPackageArrows(child, uiElement, selectedClass);
+                    drawCollapsedPackageArrows(child, uiElement, selectedFqn);
                 } else {
                     // Open source: recurse so class-level arrows are drawn
-                    drawDependencyArrowsRecursive(child);
+                    drawDependencyArrowsRecursive(child, selectedFqn);
                 }
             }
         }
@@ -284,7 +288,7 @@ public class DependencyRenderer implements DependencyRendererStrategy {
      * <p>Results are grouped by the visible target node so that many deps into
      * the same collapsed package produce exactly one aggregated arrow.
      */
-    private void drawCollapsedPackageArrows(ArchitectureNode packageNode, Node sourceElement, String selectedClass) {
+    private void drawCollapsedPackageArrows(ArchitectureNode packageNode, Node sourceElement, String selectedFqn) {
         String srcFqn    = packageNode.getFullName();
         String srcPrefix = srcFqn != null ? srcFqn + "." : "";
 
@@ -297,14 +301,14 @@ public class DependencyRenderer implements DependencyRendererStrategy {
             int    count         = entry.getValue();
             String targetFqn     = fqnOf(targetElement);
 
-            boolean isSourceSelected = selectedClass != null &&
-                    (srcFqn.equals(selectedClass) || srcFqn.startsWith(selectedClass + ".") ||
-                     selectedClass.startsWith(srcPrefix));
-            boolean isTargetSelected = selectedClass != null &&
-                    (targetFqn.equals(selectedClass) || targetFqn.startsWith(selectedClass + ".") ||
-                     selectedClass.startsWith(targetFqn + "."));
+            boolean isSourceSelected = selectedFqn != null &&
+                    (srcFqn.equals(selectedFqn) || srcFqn.startsWith(selectedFqn + ".") ||
+                     selectedFqn.startsWith(srcPrefix));
+            boolean isTargetSelected = selectedFqn != null &&
+                    (targetFqn.equals(selectedFqn) || targetFqn.startsWith(selectedFqn + ".") ||
+                     selectedFqn.startsWith(targetFqn + "."));
 
-            if (selectedClass != null && !isSourceSelected && !isTargetSelected) continue;
+            if (selectedFqn != null && !isSourceSelected && !isTargetSelected) continue;
 
             boolean isIncoming = isTargetSelected && !isSourceSelected;
             // Always show count badge; for class-level targets only when > 1.

@@ -17,12 +17,17 @@ package de.weigend.s202.domain.architecture;
 
 import de.weigend.s202.domain.DomainModel;
 import de.weigend.s202.domain.DomainModel.CalculatedElementInfo;
+import de.weigend.s202.graph.StronglyConnectedComponent;
+import de.weigend.s202.graph.TarjanSCCFinder;
 
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Set;
 
 /**
  * Mutable What-If counterpart to {@link HierarchicalLayeredArchitecture}.
@@ -34,10 +39,11 @@ import java.util.Objects;
  * sits below its target (larger row index at the first divergent depth)
  * is reported as {@link ViolationKind#UPWARD}.
  *
- * <p>Tangles are taken from the original architecture and stay constant
- * for now — the side panel header already labels them "(static)". The
- * static class-edge graph is captured once at construction and never
- * changes either: moving a box doesn't alter the underlying source code.
+ * <p>The static class-edge graph is captured once at construction and never
+ * changes: moving a box doesn't alter the underlying source code. Package
+ * tangles are derived from that static graph but use the current virtual
+ * class-to-package placement, so moving a class between packages immediately
+ * changes the package-cycle view.
  *
  * <p>The internal representation uses a small private {@code Node} tree
  * to keep mutation cheap; rows are exposed as immutable
@@ -47,7 +53,6 @@ import java.util.Objects;
 public final class WhatIfArchitecture implements Architecture {
 
     private final HierarchicalLayeredArchitecture original;
-    private final List<Tangle> tangles;
     /** Snapshot of class-to-class edges captured at construction. */
     private final List<StaticEdge> staticEdges;
 
@@ -57,7 +62,6 @@ public final class WhatIfArchitecture implements Architecture {
     public WhatIfArchitecture(HierarchicalLayeredArchitecture original, DomainModel domain) {
         this.original = Objects.requireNonNull(original, "original");
         Objects.requireNonNull(domain, "domain");
-        this.tangles = original.tangles();
         this.staticEdges = extractStaticEdges(domain);
         rebuildFromOriginal();
     }
@@ -162,7 +166,42 @@ public final class WhatIfArchitecture implements Architecture {
 
     @Override
     public List<Tangle> tangles() {
-        return tangles;
+        Map<String, String> classPackages = currentClassPackages();
+        Map<String, Set<String>> packageGraph = new LinkedHashMap<>();
+        collectPackages(root, packageGraph);
+
+        for (StaticEdge edge : staticEdges) {
+            String sourcePackage = classPackages.get(edge.source());
+            String targetPackage = classPackages.get(edge.target());
+            if (sourcePackage == null
+                    || targetPackage == null
+                    || sourcePackage.isEmpty()
+                    || targetPackage.isEmpty()
+                    || sourcePackage.equals(targetPackage)) {
+                continue;
+            }
+            packageGraph.computeIfAbsent(sourcePackage, ignored -> new LinkedHashSet<>())
+                    .add(targetPackage);
+            packageGraph.computeIfAbsent(targetPackage, ignored -> new LinkedHashSet<>());
+        }
+
+        return new TarjanSCCFinder(packageGraph).findSCCs().stream()
+                .filter(StronglyConnectedComponent::isTangle)
+                .map(scc -> new Tangle(scc.getMembers()))
+                .toList();
+    }
+
+    /**
+     * Current virtual package for a class after What-If moves. Falls back to
+     * the static FQN parent if the class is not part of the mutable view tree.
+     */
+    public String packageOf(String classFqn) {
+        String currentPackage = currentClassPackages().get(classFqn);
+        return currentPackage != null ? currentPackage : parentOf(classFqn);
+    }
+
+    public Map<String, String> classPackages() {
+        return Map.copyOf(currentClassPackages());
     }
 
     /**
@@ -269,6 +308,37 @@ public final class WhatIfArchitecture implements Architecture {
         }
     }
 
+    private Map<String, String> currentClassPackages() {
+        Map<String, String> result = new HashMap<>();
+        collectClassPackages(root, "", result);
+        return result;
+    }
+
+    private static void collectClassPackages(Node parent, String currentPackage, Map<String, String> out) {
+        for (List<Node> row : parent.rows) {
+            for (Node child : row) {
+                if (child.isPackage) {
+                    collectClassPackages(child, child.fqn, out);
+                } else {
+                    out.put(child.fqn, currentPackage);
+                }
+            }
+        }
+    }
+
+    private static void collectPackages(Node parent, Map<String, Set<String>> out) {
+        for (List<Node> row : parent.rows) {
+            for (Node child : row) {
+                if (child.isPackage) {
+                    if (!child.fqn.isEmpty()) {
+                        out.computeIfAbsent(child.fqn, ignored -> new LinkedHashSet<>());
+                    }
+                    collectPackages(child, out);
+                }
+            }
+        }
+    }
+
     private static int compareLex(int[] a, int[] b) {
         int n = Math.min(a.length, b.length);
         for (int i = 0; i < n; i++) {
@@ -281,6 +351,11 @@ public final class WhatIfArchitecture implements Architecture {
 
     private static int depthValue(int[] position) {
         return position.length == 0 ? 0 : position[position.length - 1];
+    }
+
+    private static String parentOf(String fqn) {
+        int dot = fqn == null ? -1 : fqn.lastIndexOf('.');
+        return dot < 0 ? "" : fqn.substring(0, dot);
     }
 
     private static List<StaticEdge> extractStaticEdges(DomainModel domain) {

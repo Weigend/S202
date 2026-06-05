@@ -24,7 +24,6 @@ import java.util.Map;
 import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -210,17 +209,36 @@ class WhatIfArchitectureTest {
     }
 
     @Test
-    void tanglesAreInheritedFromOriginalAndStayStableAcrossMoves() {
+    void packageTanglesAreRemovedWhenClassMoveMakesEdgesIntraPackage() {
         DomainModel domain = withCycle();
         HierarchicalLayeredArchitecture original =
                 (HierarchicalLayeredArchitecture) new HierarchicalLayeredArchitectureBuilder().build(domain);
         WhatIfArchitecture wif = new WhatIfArchitecture(original, domain);
 
-        assertEquals(original.tangles(), wif.tangles());
+        assertEquals(1, wif.tangles().size());
+        assertEquals(Set.of("a", "b"), wif.tangles().get(0).members());
 
-        wif.moveElementAsNewRow("a", "", 0);
-        assertEquals(original.tangles(), wif.tangles(),
-                "tangles are static — moving boxes around does not change them");
+        wif.moveElement("a.X", "b", 0, 1);
+
+        assertEquals("b", wif.packageOf("a.X"));
+        assertTrue(wif.tangles().isEmpty(),
+                "both class edges are now inside package b, so the package cycle disappears");
+    }
+
+    @Test
+    void packageTanglesCanAppearAfterMovingClassBetweenPackages() {
+        DomainModel domain = moveCreatesCycle();
+        HierarchicalLayeredArchitecture original =
+                (HierarchicalLayeredArchitecture) new HierarchicalLayeredArchitectureBuilder().build(domain);
+        WhatIfArchitecture wif = new WhatIfArchitecture(original, domain);
+
+        assertTrue(wif.tangles().isEmpty(), "original package graph is acyclic");
+
+        wif.moveElement("c.C", "b", 0, 1);
+
+        assertEquals("b", wif.packageOf("c.C"));
+        assertEquals(1, wif.tangles().size());
+        assertEquals(Set.of("a", "b"), wif.tangles().get(0).members());
     }
 
     // ----------------------------------------------------- fixtures
@@ -250,6 +268,21 @@ class WhatIfArchitectureTest {
                 "a", Map.of("b", 1),
                 "b", Map.of("a", 1)));
         domain.setPackageBackEdges(Set.of("b\0a"));
+        return domain;
+    }
+
+    private static DomainModel moveCreatesCycle() {
+        DomainModel domain = new DomainModel();
+        addPackage(domain, "a", 0);
+        addPackage(domain, "b", 0);
+        addPackage(domain, "c", 0);
+        addClass(domain, "a.A", 0, Set.of("b.B"));
+        addClass(domain, "b.B", 0, Set.of());
+        addClass(domain, "c.C", 0, Set.of("a.A"));
+        domain.setPackageEdgeWeights(Map.of(
+                "a", Map.of("b", 1),
+                "c", Map.of("a", 1)));
+        domain.setPackageBackEdges(Set.of());
         return domain;
     }
 

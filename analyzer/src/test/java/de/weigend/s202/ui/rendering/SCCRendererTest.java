@@ -53,6 +53,18 @@ class SCCRendererTest {
         assertEquals(Color.web("#ff8c00"), firstLine.getStroke());
     }
 
+    @Test
+    void packageCyclesUseConfiguredPackageResolver() {
+        Fixture fixture = fixture();
+        fixture.renderer.setPackageTangles(java.util.List.of(Set.of("pkg.a", "pkg.b")));
+        fixture.renderer.setPackageResolver(fqn -> "pkg.b");
+        fixture.renderer.setShowPackageCycles(true);
+
+        fixture.renderer.drawSccLines(fixture.root);
+
+        assertEquals(0, fixture.sccPane.getChildren().size());
+    }
+
     private static Fixture fixture() {
         ArchitectureNode root = new ArchitectureNode("", "", ArchitectureNode.NodeType.PACKAGE, true);
         ArchitectureNode a = new ArchitectureNode("pkg.a.A", "A", ArchitectureNode.NodeType.CLASS, true);

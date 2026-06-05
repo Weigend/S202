@@ -312,6 +312,7 @@ public class ArchitectureView extends BorderPane {
     private void refreshSccPane() {
         boolean anyEnabled = showScc.get() || showPackageScc.get();
         if (anyEnabled) {
+            updateSccRendererTangles();
             sccRenderer.clearSccLines();
             if (currentRootNode != null) {
                 sccRenderer.drawSccLines(currentRootNode);
@@ -344,7 +345,7 @@ public class ArchitectureView extends BorderPane {
     private void handleZoomChanged() {
         invalidateLines();
         if (showDependencies.get() && dependencyPane != null && dependencyPane.isVisible()) {
-            dependencyRenderer.drawDependencyArrows(currentRootNode);
+            drawDependencyArrows();
         }
         if ((showScc.get() || showPackageScc.get()) && sccPane != null && sccPane.isVisible()) {
             sccRenderer.drawSccLines(currentRootNode);
@@ -465,6 +466,7 @@ public class ArchitectureView extends BorderPane {
 
     private void handleGraphSelectionChanged(String fqn) {
         selectedFullName.set(fqn);
+        invalidateLines();
         // Defer arrow redraw via the coalescer so the CSS layout pass
         // (border-width change on the selected box) finishes first —
         // direct drawDependencyArrows() here uses stale bounds.
@@ -638,6 +640,8 @@ public class ArchitectureView extends BorderPane {
         if (node != null) {
             runWithoutSelectionSink(GraphSelection::clear);
             selectedFullName.set(fullName);
+            invalidateLines();
+            arrowsCoalescer.markDirty();
         }
     }
 
@@ -1225,7 +1229,13 @@ public class ArchitectureView extends BorderPane {
 
     private void updateSccRendererTangles() {
         if (sccRenderer == null) return;
-        Architecture arch = architecture.get();
+        Architecture arch = packageCycleArchitecture();
+        if (arch instanceof WhatIfArchitecture wif) {
+            Map<String, String> classPackages = wif.classPackages();
+            sccRenderer.setPackageResolver(fqn -> classPackages.getOrDefault(fqn, staticPackageOf(fqn)));
+        } else {
+            sccRenderer.setPackageResolver(ArchitectureView::staticPackageOf);
+        }
         if (arch != null) {
             sccRenderer.setPackageTangles(
                     arch.tangles().stream()
@@ -1234,6 +1244,16 @@ public class ArchitectureView extends BorderPane {
         } else {
             sccRenderer.setPackageTangles(java.util.List.of());
         }
+    }
+
+    private Architecture packageCycleArchitecture() {
+        WhatIfArchitecture wif = whatIfArchitecture.get();
+        return wif != null ? wif : architecture.get();
+    }
+
+    private static String staticPackageOf(String fqn) {
+        int dot = fqn == null ? -1 : fqn.lastIndexOf('.');
+        return dot < 0 ? "" : fqn.substring(0, dot);
     }
 
     /**
@@ -1567,10 +1587,11 @@ public class ArchitectureView extends BorderPane {
 
     private void redrawVisibleArrows() {
         if (showDependencies.get()) {
-            dependencyRenderer.drawDependencyArrows(currentRootNode);
+            drawDependencyArrows();
             linesNeedUpdate = false;
         }
         if (showScc.get() || showPackageScc.get()) {
+            updateSccRendererTangles();
             sccRenderer.drawSccLines(currentRootNode);
         }
         if (whatIfRenderer != null) {
@@ -1631,6 +1652,11 @@ public class ArchitectureView extends BorderPane {
         getScene().getRoot().layout();
         redrawVisibleArrows();
         redrawTick.set(redrawTick.get() + 1);
+    }
+
+    private void drawDependencyArrows() {
+        dependencyRenderer.setSelectedFullName(selectedFullName.get());
+        dependencyRenderer.drawDependencyArrows(currentRootNode);
     }
 
     /**

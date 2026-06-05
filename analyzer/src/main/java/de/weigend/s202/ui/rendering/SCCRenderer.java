@@ -28,6 +28,7 @@ import javafx.scene.shape.Line;
 
 import java.util.*;
 import java.util.function.Consumer;
+import java.util.function.Function;
 
 /**
  * Renders SCC (Strongly Connected Components) visualization.
@@ -54,8 +55,9 @@ public class SCCRenderer {
     private final Map<String, Node> elementRegistry;
     private final Consumer<String> statusCallback;
 
-    /** Package tangles from DomainModel — used to draw cross-package cycle contributions. */
+    /** Package tangles for the active architecture — used to draw cross-package cycle contributions. */
     private List<Set<String>> packageTangles = List.of();
+    private Function<String, String> packageResolver = SCCRenderer::staticPackage;
 
     private boolean showClassScc = false;
     private boolean showPackageCycles = false;
@@ -82,6 +84,10 @@ public class SCCRenderer {
 
     public void setPackageTangles(List<Set<String>> packageTangles) {
         this.packageTangles = packageTangles == null ? List.of() : List.copyOf(packageTangles);
+    }
+
+    public void setPackageResolver(Function<String, String> packageResolver) {
+        this.packageResolver = packageResolver == null ? SCCRenderer::staticPackage : packageResolver;
     }
 
     public void setShowClassScc(boolean show) { this.showClassScc = show; }
@@ -248,10 +254,11 @@ public class SCCRenderer {
         int count = 0;
         for (Set<String> tangle : packageTangles) {
             for (String cls : classDeps.keySet()) {
-                if (!tangle.contains(pkg(cls))) continue;
+                String clsPkg = packageOf(cls);
+                if (!tangle.contains(clsPkg)) continue;
                 for (String dep : classDeps.getOrDefault(cls, Set.of())) {
-                    String depPkg = pkg(dep);
-                    if (!tangle.contains(depPkg) || depPkg.equals(pkg(cls))) continue;
+                    String depPkg = packageOf(dep);
+                    if (!tangle.contains(depPkg) || depPkg.equals(clsPkg)) continue;
                     if (skipClasses.contains(cls) && skipClasses.contains(dep)) continue;
                     Node src = elementRegistry.get(cls);
                     Node tgt = elementRegistry.get(dep);
@@ -265,7 +272,12 @@ public class SCCRenderer {
         return count;
     }
 
-    private static String pkg(String fqn) {
+    private String packageOf(String fqn) {
+        String packageName = packageResolver.apply(fqn);
+        return packageName == null ? staticPackage(fqn) : packageName;
+    }
+
+    private static String staticPackage(String fqn) {
         int dot = fqn == null ? -1 : fqn.lastIndexOf('.');
         return dot < 0 ? "" : fqn.substring(0, dot);
     }

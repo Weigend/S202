@@ -62,8 +62,8 @@ import java.util.Set;
  *   <li><b>Component/Hexagonal violations</b> — shown only for the active
  *       style projection and sourced from its style-specific
  *       {@link Architecture#violations()}.</li>
- *   <li><b>Package tangles</b> — static package SCCs from the analyzer.
- *       Independent of any visual rearrangement.</li>
+ *   <li><b>Package tangles</b> — package SCCs for the displayed architecture,
+ *       including What-If class moves.</li>
  * </ul>
  */
 public final class WhatIfDependenciesView implements View {
@@ -169,7 +169,7 @@ public final class WhatIfDependenciesView implements View {
 
         ObservableList<String> sccItems = buildSccList();
         sccList.setItems(sccItems);
-        sccHeader.setText("Package tangles (static)" + scopeSuffix() + " — " + sccItems.size());
+        sccHeader.setText("Package tangles" + scopeSuffix() + " — " + sccItems.size());
     }
 
     /**
