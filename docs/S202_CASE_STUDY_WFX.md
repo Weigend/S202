@@ -35,7 +35,7 @@ The following screenshots show the analysis workflow.
 
 ### 1. Layered Architecture
 
-![WFX layered architecture](wfx-layered-architecture.png)
+![WFX layered architecture](wfx/wfx-layered-architecture.png)
 
 The layered architecture view is the baseline. It uses S202's normal
 interpretation: callers are placed above the called elements, packages are
@@ -59,7 +59,7 @@ boundary checks than a package hierarchy alone can provide.
 
 ### 2. Resolving Tangles
 
-![WFX tangle view](wfx-tangle-view.png)
+![WFX tangle view](wfx/wfx-tangle-view.png)
 
 The tangle view focuses on strongly connected package or class groups. In the
 example, a tangle around `RootArea`, `TabArea`, `ViewArea`, and `ViewStatus`
@@ -76,14 +76,14 @@ preview workflow: S202 does not silently rewrite code. It helps identify which
 edges would break a cycle and lets the developer reason about the design
 impact.
 
-![WFX resolved tangle preview](wfx-top-tangle-resolved.png)
+![WFX resolved tangle preview](wfx/wfx-top-tangle-resolved.png)
 
 After selecting candidate cuts, the refactoring preview shows the expected
 effect. Green preview entries indicate dependencies that would be removed or
 redirected by the proposed change. This helped WFX development because tangles
 could be reduced before they hardened into JPMS module boundaries.
 
-![WFX resolved tangle graph](wfx-tangle-resolved.png)
+![WFX resolved tangle graph](wfx/wfx-tangle-resolved.png)
 
 The graph view mirrors the same state visually: the formerly orange cycle is
 now shown in the preview color, making it easier to check whether the proposed
@@ -92,7 +92,7 @@ cuts address the intended dependency paths.
 The quality view provides an additional compact signal for the currently
 selected scope.
 
-![WFX quality view](wfx-quality-view.png)
+![WFX quality view](wfx/wfx-quality-view.png)
 
 The screenshot shows a scope with low tangling and moderate fatness. This view
 is not a replacement for the dependency graph; it is a quick indicator for
@@ -107,7 +107,7 @@ Violations visible in this part of the workflow:
 
 ### 3. Component View
 
-![WFX component view with platform dependencies](wfx-component-view-platform-deps.png)
+![WFX component view with platform dependencies](wfx/wfx-component-view-platform-deps.png)
 
 The Component View adds a stronger architectural interpretation on top of the
 same dependency graph. Components are shown as top-level boxes. Each component
@@ -141,7 +141,7 @@ redirected through API classes or JPMS exports.
 
 ### 4. 3D Dependency Inspection
 
-![WFX 3D dependency inspection](wfx-3dview-lookup-deps.png)
+![WFX 3D dependency inspection](wfx/wfx-3dview-lookup-deps.png)
 
 The 3D view provides a different inspection mode. Instead of focusing on
 package boxes, it renders the architecture as a layered terrain with classes
@@ -165,7 +165,7 @@ that should then be checked in the layered, component, or dependency panels.
 
 ### 5. Hexagonal Architecture Prototype
 
-![WFX hexagonal architecture view](wfx-hexagonal-view.png)
+![WFX hexagonal architecture view](wfx/wfx-hexagonal-view.png)
 
 The Hexagonal View is the first prototype of a radial architecture projection.
 It keeps the same calculated levels, but displays them as rings:
