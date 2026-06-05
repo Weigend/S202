@@ -125,3 +125,46 @@ verschieben (oder package-private im `analysis.invariants`-Paket, falls
 der Checker zu groß wird). Aus dem `graph`-Paket entfernen.
 
 ---
+
+## 5. `graph`-Paket auflösen — Inhalt in `domain` überführen
+
+Nach den Löschungen aus Punkt 2–4 verbleiben im `graph`-Paket nur noch
+zwei Klassen: `TarjanSCCFinder` und `StronglyConnectedComponent`.
+Das Paket als eigenständige Ebene ist damit nicht mehr gerechtfertigt.
+
+### Ziel
+
+Das `graph`-Paket verschwindet. Sein Inhalt wird in `domain` überführt
+mit einer sauberen API/Impl-Trennung:
+
+**Domain-API** (öffentlich sichtbar für `domain`, `analysis`, `ui`):
+```
+de.weigend.s202.domain.SCCFinder                  ← neues Interface
+de.weigend.s202.domain.StronglyConnectedComponent ← Ergebnistyp, Teil der Schnittstelle
+```
+
+`StronglyConnectedComponent` ist der Rückgabetyp von `SCCFinder` und
+damit zwingend Teil der API — ohne ihn kann kein Aufrufer mit dem Ergebnis
+arbeiten.
+
+**Domain-Impl** (Implementierungsdetail, nicht direkt importierbar):
+```
+de.weigend.s202.domain.impl.TarjanSCCFinder       ← implementiert SCCFinder
+```
+
+### Interface
+
+```java
+public interface SCCFinder {
+    List<StronglyConnectedComponent> findSCCs(Map<String, Set<String>> graph);
+}
+```
+
+### Ergebnis
+
+- Das `graph`-Paket verschwindet vollständig.
+- Alle bisherigen Aufrufer (`LevelCalculator`, `LayoutInvariantChecker`,
+  `SCCRenderer`, etc.) importieren künftig aus `domain` statt aus `graph`.
+- `TarjanSCCFinder` ist nicht mehr direkt instanziierbar von außen.
+
+---
