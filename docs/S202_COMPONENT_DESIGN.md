@@ -168,3 +168,135 @@ public interface SCCFinder {
 - `TarjanSCCFinder` ist nicht mehr direkt instanziierbar von außen.
 
 ---
+
+## 6. `domain` als Komponente — API-Schnitt
+
+### Problem
+
+`domain` ist heute kein Komponent sondern ein Paket-Namespace. `S202Module`
+und die UI instanziieren `LevelCalculator`, `LocalLevelCalculator` und alle
+drei Builder direkt. Alles ist implizit API.
+
+### Zwei Verantwortlichkeiten
+
+`domain` hat intern zwei klar trennbare Verantwortlichkeiten:
+
+1. **Computation** — `DependencyModel → DomainModel`
+   (`LevelCalculator` + `LocalLevelCalculator`)
+2. **Projection** — `DomainModel + Annotations → Architecture`
+   (die drei Builder)
+
+Für beide existiert bereits ein Interface-Ansatz oder lässt sich einer
+einführen.
+
+### Zwei neue/angepasste Interfaces
+
+```java
+// Computation (neu)
+public interface DomainComputer {
+    DomainModel compute(DependencyModel input);
+}
+
+// Projection (existiert bereits)
+public interface ArchitectureStyle {
+    ArchitectureKind kind();
+    Architecture build(ArchitectureContext ctx);
+}
+```
+
+`LevelCalculator` + `LocalLevelCalculator` verschwinden hinter
+`DomainComputer`. Die drei Builder verschwinden hinter `ArchitectureStyle`.
+`ComponentApiClassifier` ist dann ein internes Hilfsmittel der Builder.
+
+### API-Oberfläche
+
+| Typ | Klasse/Interface |
+|---|---|
+| Interface | `Architecture` |
+| Interface | `DomainComputer` (neu) |
+| Interface | `ArchitectureStyle` |
+| Daten | `DomainModel` |
+| Daten | `ArchitectureAnnotations` |
+| Daten | `ArchitectureContext` |
+| Daten | `Element` |
+| Daten | `Tangle` |
+| Daten | `Violation` |
+| Enum | `ArchitectureKind` |
+| Enum | `ViolationKind` |
+
+Dazu die vier konkreten Architecture-Projektionen (siehe Punkt unten).
+
+### Impl (versteckt)
+
+```
+LevelCalculator, LocalLevelCalculator  ← impl DomainComputer
+HierarchicalLayeredArchitectureBuilder ← impl ArchitectureStyle
+ComponentArchitectureBuilder           ← impl ArchitectureStyle
+HexagonalArchitectureBuilder           ← impl ArchitectureStyle
+ComponentApiClassifier                 ← intern in Buildern
+```
+
+---
+
+## 7. `sealed Architecture` ablösen — offene Interface-Hierarchie
+
+### Problem
+
+`Architecture` ist aktuell ein `sealed interface` das nur explizit
+aufgeführte Subtypen erlaubt. Das erzwingt an jeder Verwendungsstelle
+einen exhaustiven Switch über alle konkreten Typen. Neue Architekturstile
+brechen bestehenden Code.
+
+Tiefer liegendes Problem: die verschiedenen Stile sind keine Variationen
+desselben Konzepts, sondern fachlich unterschiedliche Modelle mit je
+eigenen Domain-Konzepten:
+
+- **Layered**: Level, Schichtenordnung, Back-Edges
+- **Component**: API-Klassifikation, Komponentengrenzen, Bypass-Erkennung
+- **Hexagonal**: Ports, Ringe, Adapter-Rollen, Inward/Outward-Richtung
+
+Ein gemeinsames `violations()`/`tangles()`-Interface ist der kleinste
+gemeinsame Nenner und verschleiert diese Unterschiede.
+
+### Lösung: offene Vererbung statt sealed
+
+```java
+public interface Architecture {
+    List<Violation> violations();
+    List<Tangle> tangles();
+}
+
+public interface LayeredArchitecture extends Architecture {
+    List<List<Element>> rows();
+    // weitere layered-spezifische Methoden
+}
+
+public interface ComponentArchitecture extends Architecture {
+    List<ComponentElement> components();
+    // weitere component-spezifische Methoden
+}
+
+public interface HexagonalArchitecture extends Architecture {
+    List<HexRing> rings();
+    List<HexPort> ports();
+    // weitere hexagonal-spezifische Methoden
+}
+```
+
+Die konkreten Implementierungen (`HierarchicalLayeredArchitecture` etc.)
+implementieren die jeweiligen Sub-Interfaces. Da der Interface-Name dann
+besetzt ist, müssen die Implementierungsklassen umbenannt werden —
+z.B. `HierarchicalLayeredArchitectureImpl` oder die Interfaces erhalten
+sprechendere Namen wie `LayeredView`.
+
+### Vorteile gegenüber sealed
+
+- Neue Stile brechen keinen bestehenden Code
+- Jeder Konsument arbeitet mit genau dem Interface das er braucht,
+  kein Cast, kein exhaustiver Switch
+- Stil-spezifische Domain-Konzepte können das Interface natürlich
+  erweitern ohne den gemeinsamen Vertrag anzufassen
+- Wächst ein Stil fachlich, wächst sein Interface — unabhängig von
+  den anderen
+
+---
