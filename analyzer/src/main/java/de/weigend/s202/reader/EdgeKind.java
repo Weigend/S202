@@ -28,6 +28,8 @@ public enum EdgeKind {
     EXTENDS,
     /** {@code class A implements B} (or interface extension) */
     IMPLEMENTS,
+    /** Source-level module import — especially relevant for Python module dependencies. */
+    IMPORTS,
     /** Constructor invocation — {@code new T(...)} (INVOKESPECIAL on {@code <init>}). */
     INSTANTIATES,
     /** Method invocation on the target class (excluding constructor calls). */

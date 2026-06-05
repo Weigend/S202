@@ -17,7 +17,7 @@ package de.weigend.s202.domain.debug;
 
 import de.weigend.s202.domain.DomainModel;
 import de.weigend.s202.domain.architecture.LevelCalculator;
-import de.weigend.s202.reader.InputAnalyzer;
+import de.weigend.s202.reader.java.InputAnalyzer;
 import de.weigend.s202.reader.DependencyModel;
 
 public class TestLevelCalculatorDebug {

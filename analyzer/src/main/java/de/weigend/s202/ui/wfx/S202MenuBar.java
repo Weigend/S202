@@ -130,6 +130,14 @@ public class S202MenuBar {
                 "file.open", "Open JAR...", e -> publish(new MenuRequestEvent.OpenJar(this)));
         openItem.setAccelerator(new KeyCodeCombination(KeyCode.O, KeyCombination.SHORTCUT_DOWN));
 
+        MenuItem openPythonItem = MenuUtil.createMenuItem(
+                "file.openPython", "Open Python Source...",
+                e -> publish(new MenuRequestEvent.OpenPythonSource(this)));
+
+        MenuItem openCItem = MenuUtil.createMenuItem(
+                "file.openC", "Open C Source...",
+                e -> publish(new MenuRequestEvent.OpenCSource(this)));
+
         MenuItem openMavenItem = MenuUtil.createMenuItem(
                 "file.openMaven", "Open Maven Project...",
                 e -> publish(new MenuRequestEvent.OpenMavenProject(this)));
@@ -148,7 +156,7 @@ public class S202MenuBar {
         Menu fileMenu = MenuUtil.createMenu("file", "File");
         fileMenu.getItems().addAll(saveProjectItem, loadProjectItem, closeProjectItem,
                 new SeparatorMenuItem(),
-                openItem, openMavenItem, openGradleItem,
+                openItem, openPythonItem, openCItem, openMavenItem, openGradleItem,
                 new SeparatorMenuItem(), exitItem);
 
         applicationWindow.getMenu().add(0, fileMenu);
@@ -300,7 +308,7 @@ public class S202MenuBar {
         Label title = new Label("S202 Code Analyzer");
         title.getStyleClass().add("about-title");
 
-        Label tagline = new Label("Java bytecode architecture viewer");
+        Label tagline = new Label("Java bytecode and Python source architecture viewer");
         tagline.getStyleClass().add("about-tagline");
 
         VBox titleBlock = new VBox(2, title, tagline);
@@ -310,7 +318,7 @@ public class S202MenuBar {
         header.setAlignment(Pos.CENTER_LEFT);
 
         Label description = new Label(
-                "Analyzes JAR files, extracts package and class dependencies, "
+                "Analyzes JAR files and Python source roots, extracts package and class dependencies, "
               + "detects cyclic dependencies (SCCs) and visualizes the layered "
               + "architecture.");
         description.setWrapText(true);

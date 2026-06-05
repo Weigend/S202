@@ -321,7 +321,7 @@ public class TopTanglesModule implements Module {
      * Build the scoped class-dependency graph, run Tarjan, take the largest
      * {@code topN} tangles and enumerate their internal edges for display.
      * The {@code rawModel} (may be null) is used to look up edge kinds —
-     * EXTENDS / IMPLEMENTS / CALLS / INSTANTIATES — for each from→to pair.
+     * EXTENDS / IMPLEMENTS / IMPORTS / CALLS / INSTANTIATES — for each from→to pair.
      */
     static List<TopTanglesView.Tangle> computeTopTangles(DomainModel model,
                                                         DependencyModel rawModel,
@@ -406,7 +406,7 @@ public class TopTanglesModule implements Module {
 
     /**
      * Decompose an edge into one entry per kind. {@link EdgeKind#CALLS}
-     * follows {@link EdgeKind#values()} (extends, implements, instantiates,
+     * follows {@link EdgeKind#values()} (extends, implements, imports, instantiates,
      * calls), so structural relations sit above call relations.
      */
     private static List<TopTanglesView.KindEntry> buildKindEntries(DependencyModel rawModel,

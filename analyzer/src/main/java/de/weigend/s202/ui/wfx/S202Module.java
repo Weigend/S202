@@ -25,10 +25,12 @@ import de.weigend.s202.domain.architecture.LevelCalculator;
 import de.weigend.s202.project.S202Project;
 import de.weigend.s202.project.S202ProjectMapper;
 import de.weigend.s202.project.S202ProjectStore;
+import de.weigend.s202.reader.c.CSourceAnalyzer;
 import de.weigend.s202.reader.DependencyModel;
-import de.weigend.s202.reader.GradleProjectScanner;
-import de.weigend.s202.reader.InputAnalyzer;
-import de.weigend.s202.reader.MavenProjectScanner;
+import de.weigend.s202.reader.java.GradleProjectScanner;
+import de.weigend.s202.reader.java.InputAnalyzer;
+import de.weigend.s202.reader.java.MavenProjectScanner;
+import de.weigend.s202.reader.python.PythonSourceAnalyzer;
 import de.weigend.s202.ui.ArchitectureView;
 import de.weigend.s202.ui.ArchitectureViewStyle;
 import de.weigend.s202.ui.layout.horizontal.HorizontalRowLayoutOptimizer;
@@ -72,6 +74,7 @@ import javafx.scene.control.SpinnerValueFactory;
 import javafx.scene.control.Tooltip;
 import javafx.scene.layout.HBox;
 import javafx.scene.paint.Color;
+import javafx.stage.DirectoryChooser;
 import javafx.stage.FileChooser;
 import javafx.util.Duration;
 import org.kordamp.ikonli.Ikon;
@@ -97,11 +100,11 @@ import java.util.stream.Collectors;
 
 /**
  * S202 platform module: wires the WFX shell (status bar, menus, toolbar,
- * preloader splash already provided by /splash/splash.fxml) and runs the JAR
+ * preloader splash already provided by /splash/splash.fxml) and runs the code
  * analysis pipeline. The status bar and menu bar live in their own classes;
  * this module wires them via the {@link EventBus} and reacts to
  * {@link MenuRequestEvent}s from the menu. The central docking area starts
- * empty; each Open JAR action registers a fresh {@link ArchitectureWfxView}
+ * empty; each source open action registers a fresh {@link ArchitectureWfxView}
  * with the {@link WindowManager} and loads its content on a background thread.
  */
 @Singleton
@@ -111,6 +114,8 @@ public class S202Module implements Module {
 
     private final ApplicationWindow applicationWindow;
     private final InputAnalyzer rawAnalyzer = new InputAnalyzer();
+    private final PythonSourceAnalyzer pythonAnalyzer = new PythonSourceAnalyzer();
+    private final CSourceAnalyzer cAnalyzer = new CSourceAnalyzer();
     private final ArchitectureNodeBuilder architectureNodeBuilder = new ArchitectureNodeBuilder();
     private final LayoutInvariantChecker invariantChecker = new LayoutInvariantChecker();
     private final S202ProjectStore projectStore = new S202ProjectStore();
@@ -177,8 +182,8 @@ public class S202Module implements Module {
     public void preload() throws PlatformException {
         waitForDemoPreloader();
         // No view registered up-front: the central docking area stays empty
-        // until the user loads a JAR (or invokes Windows → New). loadJarFiles()
-        // creates and registers the first tab on demand.
+        // until the user opens sources (or invokes Windows -> New). The
+        // analysis loaders create and register the first tab on demand.
     }
 
     private void waitForDemoPreloader() throws PlatformException {
@@ -265,7 +270,7 @@ public class S202Module implements Module {
 
         installToolbar();
 
-        statusBar.setMessage("Ready to analyze bytecode. Click 'Open JAR' to begin.");
+        statusBar.setMessage("Ready to analyze code. Open JARs or Python source roots to begin.");
     }
 
     private void subscribeToOpenTangle(EventBus<EventObject> bus) {
@@ -299,6 +304,8 @@ public class S202Module implements Module {
 
     private void subscribeToMenuRequests(EventBus<EventObject> bus) {
         bus.subscribe(MenuRequestEvent.OpenJar.class, ev -> { openJarChooser(); return true; });
+        bus.subscribe(MenuRequestEvent.OpenPythonSource.class, ev -> { openPythonSourceRoot(); return true; });
+        bus.subscribe(MenuRequestEvent.OpenCSource.class, ev -> { openCSourceRoot(); return true; });
         bus.subscribe(MenuRequestEvent.OpenMavenProject.class, ev -> { openMavenProject(); return true; });
         bus.subscribe(MenuRequestEvent.OpenGradleProject.class, ev -> { openGradleProject(); return true; });
         bus.subscribe(MenuRequestEvent.SaveProject.class, ev -> { saveProject(); return true; });
@@ -821,6 +828,38 @@ public class S202Module implements Module {
         loadJarSelection(fileChooser.showOpenMultipleDialog(applicationWindow.getStage()));
     }
 
+    private void openPythonSourceRoot() {
+        DirectoryChooser chooser = new DirectoryChooser();
+        chooser.setTitle("Select Python source root");
+        File initial = lastProjectDirectory != null && lastProjectDirectory.isDirectory()
+                ? lastProjectDirectory
+                : (lastDirectory != null && lastDirectory.isDirectory() ? lastDirectory : null);
+        if (initial != null) {
+            chooser.setInitialDirectory(initial);
+        }
+        File root = chooser.showDialog(applicationWindow.getStage());
+        if (root != null) {
+            lastProjectDirectory = root;
+            loadPythonSourceRoot(root);
+        }
+    }
+
+    private void openCSourceRoot() {
+        DirectoryChooser chooser = new DirectoryChooser();
+        chooser.setTitle("Select C source root");
+        File initial = lastProjectDirectory != null && lastProjectDirectory.isDirectory()
+                ? lastProjectDirectory
+                : (lastDirectory != null && lastDirectory.isDirectory() ? lastDirectory : null);
+        if (initial != null) {
+            chooser.setInitialDirectory(initial);
+        }
+        File root = chooser.showDialog(applicationWindow.getStage());
+        if (root != null) {
+            lastProjectDirectory = root;
+            loadCSourceRoot(root);
+        }
+    }
+
     private void openMavenProject() {
         File pom = chooseProjectFile("Select Maven project root pom.xml",
                 new FileChooser.ExtensionFilter("Maven POM", "pom.xml"));
@@ -1073,35 +1112,7 @@ public class S202Module implements Module {
                     publishProgress(String.format("Reading bytecode: %s (%d/%d classes)",
                             jarName, processed, total), bytecodeProgress);
                 });
-                if (rawModel.getAllClasses().isEmpty()) {
-                    return new AnalysisResult(rawModel, null, null, null, null, Set.of());
-                }
-
-                publishProgress("Calculating architectural levels...", 0.75);
-                LevelCalculator calculator = new LevelCalculator();
-                DomainModel calculated = calculator.calculate(rawModel);
-                Set<DependencyEdge> cycleBreakEdges = calculated.getClassBackEdges();
-
-                publishProgress("Building architecture tree...", 0.85);
-                ArchitectureNode root = architectureNodeBuilder.build(calculated);
-                new HorizontalRowLayoutOptimizer().assignHorizontalLayoutOrders(root);
-                de.weigend.s202.ui.consistency.ArchitectureConsistencyDevHook
-                        .runIfEnabled(calculated, root);
-
-                publishProgress("Preparing quality metrics...", 0.90);
-                QualityMetrics metrics = QualityMetrics.compute(calculated);
-
-                // Layout invariant check runs on the same background thread so
-                // findings reach the FX thread together with the rest of the
-                // result — the user sees one settled state, not a mid-render
-                // popup. Findings flagged here are real algorithm bugs in the
-                // level pipeline, not architectural violations (those already
-                // surface as red dependency edges).
-                publishProgress("Verifying layout invariants...", 0.95);
-                LayoutInvariantReport invariants = invariantChecker.check(
-                        calculated, rawModel,
-                        jarFiles.stream().map(File::getAbsolutePath).toList());
-                return new AnalysisResult(rawModel, root, metrics, calculated, invariants, cycleBreakEdges);
+                return buildAnalysisResult(rawModel, jarPaths);
             }
         };
 
@@ -1115,7 +1126,8 @@ public class S202Module implements Module {
             publishProgress("Building JavaFX architecture view...", 0.97);
 
             PauseTransition yieldToPulse = new PauseTransition(Duration.millis(50));
-            yieldToPulse.setOnFinished(event -> applyAnalysisResult(jarFiles, view, source, result));
+            AnalysisInputSummary summary = new AnalysisInputSummary("JAR(s)", jarFiles.size());
+            yieldToPulse.setOnFinished(event -> applyAnalysisResult(summary, view, source, result));
             yieldToPulse.play();
         });
         task.setOnFailed(e -> {
@@ -1131,7 +1143,131 @@ public class S202Module implements Module {
         analyzer.start();
     }
 
-    private void applyAnalysisResult(List<File> jarFiles, ArchitectureView view,
+    private void loadPythonSourceRoot(File root) {
+        if (root == null || !root.isDirectory()) {
+            return;
+        }
+        ArchitectureWfxView target = createArchitectureView("Python: " + root.getName());
+        registerArchitectureView(target);
+        final ArchitectureView view = target.getArchitectureView();
+        final String rootPath = root.getAbsolutePath();
+        final S202Project.Source source = new S202Project.Source("PYTHON", List.of(rootPath), rootPath);
+
+        publishProgress("Analyzing Python source: " + root.getName() + " (this may take a moment)...", -1);
+
+        Task<AnalysisResult> task = new Task<>() {
+            @Override
+            protected AnalysisResult call() throws Exception {
+                publishProgress("Reading Python ASTs...", 0.20);
+                DependencyModel rawModel = pythonAnalyzer.analyze(root.toPath());
+                return buildAnalysisResult(rawModel, List.of(rootPath));
+            }
+        };
+
+        task.setOnSucceeded(e -> {
+            AnalysisResult result = task.getValue();
+            if (result.rootNode() == null) {
+                publishProgress("Error: No Python modules found", 1);
+                showError("No Python Modules Found",
+                        "The selected source root does not contain analyzable .py files.");
+                return;
+            }
+            publishProgress("Building JavaFX architecture view...", 0.97);
+
+            PauseTransition yieldToPulse = new PauseTransition(Duration.millis(50));
+            AnalysisInputSummary summary = new AnalysisInputSummary("Python root(s)", 1);
+            yieldToPulse.setOnFinished(event -> applyAnalysisResult(summary, view, source, result));
+            yieldToPulse.play();
+        });
+        task.setOnFailed(e -> {
+            Throwable t = task.getException();
+            LOGGER.error("Python analysis failed", t);
+            String msg = t != null ? t.getMessage() : "unknown error";
+            publishProgress("Error: " + msg, 1);
+            showError("Python Analysis Error", "Failed to analyze Python source root:\n" + msg);
+        });
+
+        Thread analyzer = new Thread(task, "s202-python-analyzer");
+        analyzer.setDaemon(true);
+        analyzer.start();
+    }
+
+    private void loadCSourceRoot(File root) {
+        if (root == null || !root.isDirectory()) {
+            return;
+        }
+        ArchitectureWfxView target = createArchitectureView("C: " + root.getName());
+        registerArchitectureView(target);
+        final ArchitectureView view = target.getArchitectureView();
+        final String rootPath = root.getAbsolutePath();
+        final S202Project.Source source = new S202Project.Source("C", List.of(rootPath), rootPath);
+
+        publishProgress("Analyzing C source: " + root.getName() + " (this may take a moment)...", -1);
+
+        Task<AnalysisResult> task = new Task<>() {
+            @Override
+            protected AnalysisResult call() throws Exception {
+                publishProgress("Scanning C translation units...", 0.20);
+                DependencyModel rawModel = cAnalyzer.analyze(root.toPath());
+                return buildAnalysisResult(rawModel, List.of(rootPath));
+            }
+        };
+
+        task.setOnSucceeded(e -> {
+            AnalysisResult result = task.getValue();
+            if (result.rootNode() == null) {
+                publishProgress("Error: No C translation units found", 1);
+                showError("No C Sources Found",
+                        "The selected source root does not contain analyzable .c files.");
+                return;
+            }
+            publishProgress("Building JavaFX architecture view...", 0.97);
+
+            PauseTransition yieldToPulse = new PauseTransition(Duration.millis(50));
+            AnalysisInputSummary summary = new AnalysisInputSummary("C root(s)", 1);
+            yieldToPulse.setOnFinished(event -> applyAnalysisResult(summary, view, source, result));
+            yieldToPulse.play();
+        });
+        task.setOnFailed(e -> {
+            Throwable t = task.getException();
+            LOGGER.error("C analysis failed", t);
+            String msg = t != null ? t.getMessage() : "unknown error";
+            publishProgress("Error: " + msg, 1);
+            showError("C Analysis Error", "Failed to analyze C source root:\n" + msg);
+        });
+
+        Thread analyzer = new Thread(task, "s202-c-analyzer");
+        analyzer.setDaemon(true);
+        analyzer.start();
+    }
+
+    private AnalysisResult buildAnalysisResult(DependencyModel rawModel, List<String> sourcePaths) {
+        if (rawModel.getAllClasses().isEmpty()) {
+            return new AnalysisResult(rawModel, null, null, null, null, Set.of());
+        }
+
+        publishProgress("Calculating architectural levels...", 0.75);
+        LevelCalculator calculator = new LevelCalculator();
+        DomainModel calculated = calculator.calculate(rawModel);
+        Set<DependencyEdge> cycleBreakEdges = calculated.getClassBackEdges();
+
+        publishProgress("Building architecture tree...", 0.85);
+        ArchitectureNode root = architectureNodeBuilder.build(calculated);
+        new HorizontalRowLayoutOptimizer().assignHorizontalLayoutOrders(root);
+        de.weigend.s202.ui.consistency.ArchitectureConsistencyDevHook
+                .runIfEnabled(calculated, root);
+
+        publishProgress("Preparing quality metrics...", 0.90);
+        QualityMetrics metrics = QualityMetrics.compute(calculated);
+
+        // Layout invariant check runs on the same background thread so
+        // findings reach the FX thread together with the rest of the result.
+        publishProgress("Verifying layout invariants...", 0.95);
+        LayoutInvariantReport invariants = invariantChecker.check(calculated, rawModel, sourcePaths);
+        return new AnalysisResult(rawModel, root, metrics, calculated, invariants, cycleBreakEdges);
+    }
+
+    private void applyAnalysisResult(AnalysisInputSummary summary, ArchitectureView view,
                                      S202Project.Source source, AnalysisResult result) {
         refactoringPreviewCuts.clear();
         // Domain model first so listeners on architectureRoot/metrics can
@@ -1142,10 +1278,10 @@ public class S202Module implements Module {
         view.setArchitectureRootAsync(
                 result.rootNode(),
                 progress -> publishJavaFxBuildProgress("Building JavaFX architecture view", progress),
-                () -> finishAppliedAnalysisResult(jarFiles, view, source, result));
+                () -> finishAppliedAnalysisResult(summary, view, source, result));
     }
 
-    private void finishAppliedAnalysisResult(List<File> jarFiles, ArchitectureView view,
+    private void finishAppliedAnalysisResult(AnalysisInputSummary summary, ArchitectureView view,
                                              S202Project.Source source, AnalysisResult result) {
         view.setQualityMetrics(result.metrics());
         viewSources.put(view, source);
@@ -1154,8 +1290,9 @@ public class S202Module implements Module {
         LayoutInvariantReport invariants = result.invariants();
         String invariantSuffix = invariantSuffix(invariants);
         publishProgress(String.format(
-                "Loaded %d JAR(s) | %d classes | %d levels | Max level %d%s",
-                jarFiles.size(),
+                "Loaded %d %s | %d classes | %d levels | Max level %d%s",
+                summary.count(),
+                summary.label(),
                 result.rawModel().getAllClasses().size(),
                 result.rootNode().getLevelCount(),
                 result.rootNode().getMaxLevel(),
@@ -1301,7 +1438,7 @@ public class S202Module implements Module {
 
     private void closeProject() {
         resetProjectUi();
-        publishProgress("Ready to analyze bytecode. Click 'Open JAR' to begin.", 0);
+        publishProgress("Ready to analyze code. Open JARs, Python source roots, or C source roots to begin.", 0);
     }
 
     private void resetProjectUi() {
@@ -1361,6 +1498,8 @@ public class S202Module implements Module {
                                  ArchitectureNode rootNode,
                                  QualityMetrics metrics, LayoutInvariantReport invariants,
                                  Set<DependencyEdge> cycleBreakEdges) {}
+
+    private record AnalysisInputSummary(String label, int count) {}
 
     private record AnalysisResult(DependencyModel rawModel, ArchitectureNode rootNode,
                                   QualityMetrics metrics, DomainModel domainModel,

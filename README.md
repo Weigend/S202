@@ -2,7 +2,7 @@
 
 # S202 Code Analyzer
 
-A JavaFX-based tool for analyzing Java bytecode and visualizing code architecture.
+A JavaFX-based tool for analyzing Java bytecode and Python source code and visualizing code architecture.
 
 
 ![UI Screenshot](docs/image1.png)
@@ -10,7 +10,8 @@ A JavaFX-based tool for analyzing Java bytecode and visualizing code architectur
 ## Features
 
 - **Bytecode analysis**: Parses Java `.class` files with ASM 9.6
-- **Dependency detection**: Extracts class and package dependencies
+- **Python source analysis**: Analyzes Python source trees via CPython's `ast` module; maps modules to the same dependency model as Java (no extra tooling beyond a standard `python3` install)
+- **Dependency detection**: Extracts class/module and package dependencies (imports, calls, inheritance, type annotations)
 - **Cycle detection**: Finds cyclic dependencies (Strongly Connected Components)
 - **Architecture layering**: Topological ordering by dependency depth
 - **Hierarchical visualization**: JavaFX TreeView with expandable packages
@@ -53,6 +54,7 @@ Then use the **File** menu:
 - **Open JAR…** - one or more JARs (multi-selection opens a staging dialog)
 - **Open Maven Project…** - select the root `pom.xml`; all module JARs from `target/` are collected
 - **Open Gradle Project…** - select `settings.gradle(.kts)` or `build.gradle(.kts)`; all module JARs from `build/libs/` are collected
+- **Open Python Source…** - select a Python project root or package directory; requires `python3` in PATH (or set the `PYTHON` environment variable)
 
 The architecture is analyzed, visualized, and automatically checked against five layout invariants (plausibility alerts).
 
@@ -115,11 +117,40 @@ Component-specific findings are shown in the dependencies side view under **Comp
 
 The Component View is also useful for codebases that are **not yet component-oriented**. By manually marking API classes you can explore a what-if scenario: which packages could form a component, which API boundary would be needed to decouple them, and which existing callers would violate that boundary. JPMS (`module-info`) is therefore not a prerequisite or source of truth — it can be a *target*: once the Component View shows a clean boundary with no violations, introducing a JPMS module or an explicit API layer becomes a low-risk, well-scoped step.
 
+## Python Source Analysis
+
+Use **File → Open Python Source…** to load a Python project. S202 discovers all `.py` files, maps each module to a node in the dependency graph, and builds the same layered and component views used for Java.
+
+**What gets analyzed:**
+
+| Python construct | S202 edge |
+|---|---|
+| `import pkg.mod` | `IMPORTS` |
+| `from .model import Order` | `IMPORTS` |
+| `class Service(BaseService)` | `EXTENDS` |
+| Type annotations, decorators | `USES` |
+| Direct function/method calls | `CALLS` |
+| Constructor calls `Order(data)` | `INSTANTIATES` |
+
+**Module mapping:** Each `.py` file becomes one node. `src/shop/orders/service.py` becomes `shop.orders.service` with package `shop.orders`. `__init__.py` files become `pkg.__init__` and are included as regular nodes.
+
+**Source root discovery:** S202 automatically detects `src/` and `lib/` subdirectories as source roots. You can also select a package directory directly (e.g. `/usr/lib/python3/dist-packages/ansible`); S202 builds FQNs relative to the parent so cross-package imports resolve correctly.
+
+**Excluded directories:** `.venv`, `venv`, `env`, `.tox`, `__pycache__`, `.pytest_cache`, `.mypy_cache`, `site-packages`, `dist-packages`, `build`, `dist`, `.git`.
+
+**Call resolution:** S202 resolves import aliases, tracks `self.field` types from `__init__` assignments, and follows parameter annotations to connect `self.repo.save(order)` to the correct target module. Dynamic patterns (`getattr`, `importlib`, star-imports with re-exports) are conservatively skipped.
+
+**Python requirement:** A standard `python3` installation is required for AST parsing. S202 uses CPython's built-in `ast` module via a bundled helper script; no third-party Python packages are needed. The executable is resolved in this order:
+1. JVM system property `-Ds202.python.executable=<path>`
+2. `PYTHON` environment variable
+3. `python3` on the system PATH
+
 ## Requirements
 
 - **Java 21+**
 - **Maven 3.9+**
 - **JavaFX 21.0.5** (loaded automatically via Maven)
+- **Python 3** (optional — only required for Python source analysis)
 
 ## Project Structure
 
@@ -127,14 +158,17 @@ The Component View is also useful for codebases that are **not yet component-ori
 analyzer/src/main/java/de/weigend/s202/
 ├── analysis/       # Algorithms (SCC, level strategies)
 ├── domain/         # Core models (DomainModel, LevelCalculator)
-├── reader/         # JAR loading, dependency extraction
+├── reader/         # JAR loading + Python source analysis
+│   └── python/     # CPython AST bridge (ExternalPythonAstProvider, ParsedPythonModule)
 └── ui/             # JavaFX UI
 ```
 
+The bundled Python AST helper (`s202_py_ast.py`) lives in `analyzer/src/main/resources/python/` and is extracted to a temp file at runtime.
+
 ## Usage
 
-1. **Load code**: Use `File -> Open JAR…` for individual JARs, or `Open Maven Project…` / `Open Gradle Project…` for complete multi-module builds
-2. **Analyze**: Packages and classes are analyzed automatically; a layout invariant check reports plausibility alerts to the developer
+1. **Load code**: Use `File -> Open JAR…` for individual JARs, `Open Maven Project…` / `Open Gradle Project…` for complete multi-module builds, or `Open Python Source…` for Python projects
+2. **Analyze**: Packages and modules are analyzed automatically; a layout invariant check reports plausibility alerts to the developer
 3. **Navigate**: Expand and collapse packages or component boxes, inspect dependencies
 4. **Change views**: Open **View -> Component View** to inspect API-vs-implementation boundaries
 5. **Violations**: Bold dashed arrows show architectural problems (package aggregates use a filled circle to bundle the call count); for pipeline bugs, a reproducer dialog opens with a copy button

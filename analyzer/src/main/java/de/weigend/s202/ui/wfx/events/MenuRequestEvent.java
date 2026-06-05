@@ -33,6 +33,14 @@ public abstract class MenuRequestEvent extends EventObject {
         public OpenJar(Object source) { super(source); }
     }
 
+    public static final class OpenPythonSource extends MenuRequestEvent {
+        public OpenPythonSource(Object source) { super(source); }
+    }
+
+    public static final class OpenCSource extends MenuRequestEvent {
+        public OpenCSource(Object source) { super(source); }
+    }
+
     public static final class OpenMavenProject extends MenuRequestEvent {
         public OpenMavenProject(Object source) { super(source); }
     }

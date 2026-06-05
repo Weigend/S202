@@ -15,7 +15,7 @@
  */
 package de.weigend.s202.ui;
 
-import de.weigend.s202.reader.InputAnalyzer;
+import de.weigend.s202.reader.java.InputAnalyzer;
 import de.weigend.s202.reader.DependencyModel;
 import de.weigend.s202.domain.architecture.LevelCalculator;
 import de.weigend.s202.domain.DomainModel;

@@ -4,7 +4,7 @@ import de.weigend.s202.domain.DomainModel;
 import de.weigend.s202.domain.architecture.LevelCalculator;
 import de.weigend.s202.reader.DependencyModel;
 import de.weigend.s202.reader.EdgeKind;
-import de.weigend.s202.reader.InputAnalyzer;
+import de.weigend.s202.reader.java.InputAnalyzer;
 import org.junit.jupiter.api.Test;
 
 import java.io.*;
