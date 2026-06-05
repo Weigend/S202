@@ -300,3 +300,44 @@ sprechendere Namen wie `LayeredView`.
   den anderen
 
 ---
+
+## 8. `project` als Komponente — `ProjectStore`-Interface
+
+### Ist-Stand
+
+Alle drei Klassen des `project`-Pakets sind direkt von außen importiert:
+
+| Klasse | Rolle |
+|---|---|
+| `S202Project` | Record mit Persistenz-DTOs — das Dateiformat |
+| `S202ProjectStore` | `save`/`load` auf Disk (JSON) |
+| `S202ProjectMapper` | Konvertierung Domain ↔ DTOs |
+
+`S202Module` instanziiert `S202ProjectStore` und `S202ProjectMapper` direkt.
+
+### Ziel
+
+Ein Interface für die Store-Operation, der Mapper wird Implementierungsdetail:
+
+```java
+public interface ProjectStore {
+    void save(Path path, S202Project project) throws IOException;
+    S202Project load(Path path) throws IOException;
+}
+```
+
+`S202ProjectStore` implementiert `ProjectStore`. `S202ProjectMapper` ist
+nicht mehr public — er wird intern vom `S202ProjectStore` verwendet und
+verschwindet aus der API-Oberfläche.
+
+`S202Project` bleibt API-Datentyp, solange der Aufrufer das Projekt selbst
+zusammenstellt. Mittelfristig könnte der Store eine höhere Abstraktion
+anbieten (`save(DomainModel, ArchitectureAnnotations, ...)`) — dann wird
+auch `S202Project` zum Implementierungsdetail. Das ist ein separater Schritt.
+
+### Ergebnis
+
+- `project`-Komponente exportiert: `ProjectStore` (Interface), `S202Project` (Daten)
+- `S202ProjectMapper` und `S202ProjectStore` sind versteckte Impl
+
+---
