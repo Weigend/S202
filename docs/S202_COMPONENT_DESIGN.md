@@ -358,3 +358,38 @@ instanziiert, wird durch Interfaces ersetzt. Die UI selbst ändert ihre
 interne Struktur dabei nicht.
 
 ---
+
+## 10. Einheitliches Paketlayout für alle Komponenten
+
+### Konvention: `name` == API, `name.impl` == Implementierung
+
+Das Top-Level-Paket einer Komponente ist ihre öffentliche API.
+Implementierungsdetails liegen im Unterpaket `name.impl`.
+
+**Vorteile:**
+- API-Typen haben natürliche, kurze Importpfade ohne `.api.`-Rauschen
+- Durchsetzbar per `module-info.java`: `exports name` aber nicht `exports name.impl`
+- Passt zur bestehenden Struktur — `reader.java`, `reader.python`, `reader.c`
+  sind bereits natürliche Impl-Unterpakete, kein Umbenennen nötig
+
+### Anwendung auf alle Komponenten
+
+```
+de.weigend.s202.reader          ← API: LanguageAnalyzer, AnalyzerRegistry
+de.weigend.s202.reader.java     ← Impl (bleibt wie heute)
+de.weigend.s202.reader.python   ← Impl (bleibt wie heute)
+de.weigend.s202.reader.c        ← Impl (bleibt wie heute)
+
+de.weigend.s202.domain          ← API: Architecture, DomainComputer,
+                                       ArchitectureStyle, DomainModel,
+                                       SCCFinder, StronglyConnectedComponent,
+                                       Violation, Tangle, Element, ...
+de.weigend.s202.domain.impl     ← Impl: LevelCalculator, LocalLevelCalculator,
+                                        TarjanSCCFinder, alle Builder,
+                                        ComponentApiClassifier
+
+de.weigend.s202.project         ← API: ProjectStore, S202Project
+de.weigend.s202.project.impl    ← Impl: S202ProjectStore, S202ProjectMapper
+```
+
+---
