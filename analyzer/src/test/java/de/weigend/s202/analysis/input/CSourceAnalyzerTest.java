@@ -16,7 +16,7 @@
 package de.weigend.s202.analysis.input;
 
 import de.weigend.s202.domain.DomainModel;
-import de.weigend.s202.domain.architecture.LevelCalculator;
+import de.weigend.s202.domain.impl.LevelCalculator;
 import de.weigend.s202.reader.impl.c.CSourceAnalyzer;
 import de.weigend.s202.reader.DependencyModel;
 import de.weigend.s202.reader.EdgeKind;

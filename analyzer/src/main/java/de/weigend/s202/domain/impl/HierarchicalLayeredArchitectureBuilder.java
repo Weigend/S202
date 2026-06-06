@@ -13,10 +13,20 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package de.weigend.s202.domain.architecture;
+package de.weigend.s202.domain.impl;
 
 import de.weigend.s202.domain.DomainModel;
 import de.weigend.s202.domain.DomainModel.CalculatedElementInfo;
+import de.weigend.s202.domain.architecture.Architecture;
+import de.weigend.s202.domain.architecture.ArchitectureContext;
+import de.weigend.s202.domain.architecture.ArchitectureKind;
+import de.weigend.s202.domain.architecture.ArchitectureStyle;
+import de.weigend.s202.domain.architecture.Element;
+import de.weigend.s202.domain.architecture.HierarchicalLayeredArchitecture;
+import de.weigend.s202.domain.architecture.Tangle;
+import de.weigend.s202.domain.architecture.Violation;
+import de.weigend.s202.domain.architecture.ViolationKind;
+import jakarta.inject.Singleton;
 
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -50,7 +60,19 @@ import java.util.Set;
  *       level calculator marked as a back-edge (cycle member).</li>
  * </ul>
  */
-public final class HierarchicalLayeredArchitectureBuilder {
+@Singleton
+public final class HierarchicalLayeredArchitectureBuilder implements ArchitectureStyle {
+
+    @Override
+    public ArchitectureKind kind() {
+        return ArchitectureKind.LAYERED;
+    }
+
+    @Override
+    public Architecture build(ArchitectureContext context) {
+        Objects.requireNonNull(context, "context");
+        return build(context.domainModel());
+    }
 
     public Architecture build(DomainModel domain) {
         Objects.requireNonNull(domain, "domain");

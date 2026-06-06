@@ -15,6 +15,9 @@
  */
 package de.weigend.s202.ui.wfx;
 
+import de.weigend.s202.domain.DomainComputer;
+import de.weigend.s202.domain.architecture.ArchitectureKind;
+import de.weigend.s202.domain.architecture.ArchitectureStyle;
 import io.softwareecg.wfx.lookup.api.Lookup;
 import io.softwareecg.wfx.lookup.api.LookupStrategy;
 import io.softwareecg.wfx.lookup.avaje.AvajeLookupStrategy;
@@ -65,5 +68,17 @@ class WfxMigrationSmokeTest {
         List<ProjectScanner> scanners = Lookup.lookupAll(ProjectScanner.class);
         assertTrue(scanners.stream().anyMatch(scanner -> "Maven".equals(scanner.displayName())));
         assertTrue(scanners.stream().anyMatch(scanner -> "Gradle".equals(scanner.displayName())));
+    }
+
+    @Test
+    void avajeLookupProvidesDomainComponentBeans() {
+        Lookup.init();
+
+        assertNotNull(Lookup.lookup(DomainComputer.class));
+
+        List<ArchitectureStyle> styles = Lookup.lookupAll(ArchitectureStyle.class);
+        assertTrue(styles.stream().anyMatch(style -> style.kind() == ArchitectureKind.LAYERED));
+        assertTrue(styles.stream().anyMatch(style -> style.kind() == ArchitectureKind.COMPONENT));
+        assertTrue(styles.stream().anyMatch(style -> style.kind() == ArchitectureKind.HEXAGONAL));
     }
 }

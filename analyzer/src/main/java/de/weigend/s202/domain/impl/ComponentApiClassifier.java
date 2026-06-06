@@ -13,8 +13,9 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package de.weigend.s202.domain.architecture;
+package de.weigend.s202.domain.impl;
 
+import de.weigend.s202.domain.architecture.ArchitectureAnnotations;
 import de.weigend.s202.reader.DependencyModel;
 
 import java.util.Set;
@@ -25,7 +26,7 @@ import java.util.Set;
  * heuristics remain a fallback, but they do not promote classes from known
  * implementation packages unless the user marks them explicitly.
  */
-public final class ComponentApiClassifier {
+final class ComponentApiClassifier {
 
     private final ArchitectureAnnotations annotations;
     private final Set<String> exportedPackages;

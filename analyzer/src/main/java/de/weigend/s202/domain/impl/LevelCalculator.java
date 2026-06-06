@@ -13,13 +13,15 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package de.weigend.s202.domain.architecture;
+package de.weigend.s202.domain.impl;
 
+import de.weigend.s202.domain.DomainComputer;
 import de.weigend.s202.domain.DomainModel;
-import de.weigend.s202.domain.StronglyConnectedComponent;
 import de.weigend.s202.domain.SCCFinder;
+import de.weigend.s202.domain.StronglyConnectedComponent;
 import de.weigend.s202.reader.DependencyModel;
 import de.weigend.s202.reader.EdgeKind;
+import jakarta.inject.Singleton;
 
 import java.util.*;
 import java.util.logging.Logger;
@@ -55,9 +57,15 @@ import java.util.stream.Collectors;
  * Fall B — residual SCCs confined to equal-level packages have all internal
  *           edges removed; levels emerge from external dependencies.
  */
-public class LevelCalculator {
+@Singleton
+public class LevelCalculator implements DomainComputer {
 
     private static final Logger LOG = Logger.getLogger(LevelCalculator.class.getName());
+
+    @Override
+    public DomainModel compute(DependencyModel input) {
+        return calculate(input);
+    }
 
     public DomainModel calculate(DependencyModel rawModel) {
         DomainModel model = new DomainModel();

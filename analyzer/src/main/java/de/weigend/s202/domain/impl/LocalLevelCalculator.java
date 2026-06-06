@@ -13,7 +13,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package de.weigend.s202.domain.architecture;
+package de.weigend.s202.domain.impl;
 
 import de.weigend.s202.domain.DomainModel;
 import de.weigend.s202.domain.DomainModel.CalculatedElementInfo;
@@ -44,7 +44,7 @@ import java.util.TreeMap;
  * cycle-breaking fires in practice.  The rank-score SCC-break in
  * {@link #computeLayers} is retained as a safety net.
  */
-public class LocalLevelCalculator {
+final class LocalLevelCalculator {
 
     public void assign(DomainModel domain, DependencyModel rawModel) {
         Map<String, List<CalculatedElementInfo>> childrenByParent = groupChildrenByParent(domain);

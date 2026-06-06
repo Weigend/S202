@@ -13,11 +13,21 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package de.weigend.s202.domain.architecture;
+package de.weigend.s202.domain.impl;
 
 import de.weigend.s202.domain.DomainModel;
 import de.weigend.s202.domain.DomainModel.CalculatedElementInfo;
+import de.weigend.s202.domain.architecture.ArchitectureAnnotations;
+import de.weigend.s202.domain.architecture.ArchitectureContext;
+import de.weigend.s202.domain.architecture.ArchitectureKind;
+import de.weigend.s202.domain.architecture.ArchitectureStyle;
+import de.weigend.s202.domain.architecture.ComponentArchitecture;
+import de.weigend.s202.domain.architecture.HexagonalArchitecture;
+import de.weigend.s202.domain.architecture.Tangle;
+import de.weigend.s202.domain.architecture.Violation;
+import de.weigend.s202.domain.architecture.ViolationKind;
 import de.weigend.s202.reader.DependencyModel;
+import jakarta.inject.Singleton;
 
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -34,6 +44,7 @@ import java.util.Set;
  * domain model. The builder maps classes to radial rings and segments and then
  * classifies policy findings. It never changes architecture levels.
  */
+@Singleton
 public final class HexagonalArchitectureBuilder implements ArchitectureStyle {
 
     private static final List<HexagonalArchitecture.HexRing> DEFAULT_RINGS = List.of(

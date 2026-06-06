@@ -18,7 +18,7 @@ package de.weigend.s202.analysis.domain;
 import de.weigend.s202.reader.DependencyModel;
 import de.weigend.s202.reader.impl.java.InputAnalyzer;
 import de.weigend.s202.domain.DomainModel;
-import de.weigend.s202.domain.architecture.LevelCalculator;
+import de.weigend.s202.domain.impl.LevelCalculator;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 

@@ -19,9 +19,9 @@ import de.weigend.s202.analysis.invariants.LayoutInvariantChecker;
 import de.weigend.s202.analysis.invariants.LayoutInvariantReport;
 import de.weigend.s202.analysis.quality.QualityMetrics;
 import de.weigend.s202.domain.DependencyEdge;
+import de.weigend.s202.domain.DomainComputer;
 import de.weigend.s202.domain.DomainModel;
 import de.weigend.s202.domain.architecture.ArchitectureAnnotations;
-import de.weigend.s202.domain.architecture.LevelCalculator;
 import de.weigend.s202.project.S202Project;
 import de.weigend.s202.project.S202ProjectMapper;
 import de.weigend.s202.project.S202ProjectStore;
@@ -1305,14 +1305,21 @@ public class S202Module implements Module {
                 .orElseThrow(() -> new IllegalStateException("No project scanner registered for " + displayName));
     }
 
+    private static DomainComputer requireDomainComputer() {
+        DomainComputer computer = Lookup.lookup(DomainComputer.class);
+        if (computer == null) {
+            throw new IllegalStateException("No domain computer registered");
+        }
+        return computer;
+    }
+
     private AnalysisResult buildAnalysisResult(DependencyModel rawModel, List<String> sourcePaths) {
         if (rawModel.getAllClasses().isEmpty()) {
             return new AnalysisResult(rawModel, null, null, null, null, Set.of());
         }
 
         publishProgress("Calculating architectural levels...", 0.75);
-        LevelCalculator calculator = new LevelCalculator();
-        DomainModel calculated = calculator.calculate(rawModel);
+        DomainModel calculated = requireDomainComputer().compute(rawModel);
         Set<DependencyEdge> cycleBreakEdges = calculated.getClassBackEdges();
 
         publishProgress("Building architecture tree...", 0.85);

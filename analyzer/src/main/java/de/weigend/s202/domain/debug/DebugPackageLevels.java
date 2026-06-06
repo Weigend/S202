@@ -17,7 +17,7 @@ package de.weigend.s202.domain.debug;
 
 import de.weigend.s202.reader.DependencyModel;
 import de.weigend.s202.reader.LanguageAnalyzer;
-import de.weigend.s202.domain.architecture.LevelCalculator;
+import de.weigend.s202.domain.DomainComputer;
 import de.weigend.s202.domain.DomainModel;
 import de.weigend.s202.domain.SCCFinder;
 import de.weigend.s202.domain.StronglyConnectedComponent;
@@ -39,9 +39,8 @@ public class DebugPackageLevels {
         DependencyModel rawModel = javaBytecodeAnalyzer().analyze(List.of(Path.of(jarPath)));
         
         // Step 2: Calculate levels
-        LevelCalculator calculator = new LevelCalculator();
         System.out.println("[DEBUG] Before level calculation...");
-        DomainModel model = calculator.calculate(rawModel);
+        DomainModel model = domainComputer().compute(rawModel);
         
         System.out.println("\n=== FINAL RESULTS ===\n");
         System.out.println("Package Levels:");
@@ -116,5 +115,13 @@ public class DebugPackageLevels {
                 .filter(analyzer -> "Java bytecode".equals(analyzer.displayName()))
                 .findFirst()
                 .orElseThrow(() -> new IllegalStateException("No Java bytecode analyzer registered"));
+    }
+
+    private static DomainComputer domainComputer() {
+        DomainComputer computer = Lookup.lookup(DomainComputer.class);
+        if (computer == null) {
+            throw new IllegalStateException("No domain computer registered");
+        }
+        return computer;
     }
 }
