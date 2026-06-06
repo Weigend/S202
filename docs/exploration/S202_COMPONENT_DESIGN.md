@@ -114,8 +114,6 @@ zwischen API und Impl bedeutet.
 mehr. Alle eingehenden Abhängigkeiten zeigen nur noch auf API-Klassen,
 kein Pfeil geht in Gegenrichtung.
 
-![Finaler Zustand in der Schichtensicht: reader-Paket sauber strukturiert](component-images/01-6-commit-finish-reader-package.png)
-
 ---
 
 ## 2. `SCCVisualizationHelper` — Altlast, kann gelöscht werden
