@@ -306,6 +306,13 @@ ComponentApiClassifier                 ← intern in Buildern
 
 ![Nach Einführung der domain-Komponentengrenze: saubere API mit 19 Klassen, alle Builder und Calculator in domain.impl versteckt](component-images/06-nach-commit.png)
 
+Diese Darstellung ist das Gegenstück zur Gesamtübersicht am Anfang von
+Abschnitt 9 — nahezu alle Violations sind verschwunden. Die einzige
+verbleibende Verletzung ist die gestrichelte Linie von `SCCFinder` nach
+`TarjanSCCFinder`: das Interface nutzt `TarjanSCCFinder` noch als
+`default`-Implementierung und hält damit eine direkte Abhängigkeit auf
+eine Impl-Klasse. Das wird in einem Folgeschritt beseitigt.
+
 ---
 
 ## 7. `sealed Architecture` ablösen — offene Interface-Hierarchie
