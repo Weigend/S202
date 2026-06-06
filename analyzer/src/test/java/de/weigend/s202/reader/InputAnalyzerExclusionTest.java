@@ -15,7 +15,7 @@
  */
 package de.weigend.s202.reader;
 
-import de.weigend.s202.reader.java.InputAnalyzer;
+import de.weigend.s202.reader.impl.java.InputAnalyzer;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -88,6 +88,14 @@ class InputAnalyzerExclusionTest {
         assertTrue(InputAnalyzer.isExcludedClass("com.example.Foo$DI"));
         assertFalse(InputAnalyzer.isExcludedClass("com.example.FooDI"));
         assertFalse(InputAnalyzer.isExcludedClass("com.example.Foo"));
+    }
+
+    @Test
+    void avajeCompositionRootCanBeExcludedWithoutUiModule() throws IOException {
+        writeConfig(List.of("de.weigend.s202.S202Module"));
+        InputAnalyzer.reloadExcludedPrefixes();
+        assertTrue(InputAnalyzer.isExcludedClass("de.weigend.s202.S202Module"));
+        assertFalse(InputAnalyzer.isExcludedClass("de.weigend.s202.ui.wfx.S202Module"));
     }
 
     @Test

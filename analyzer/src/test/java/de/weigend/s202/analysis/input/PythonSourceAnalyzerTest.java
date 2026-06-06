@@ -19,7 +19,7 @@ import de.weigend.s202.domain.DomainModel;
 import de.weigend.s202.domain.architecture.LevelCalculator;
 import de.weigend.s202.reader.DependencyModel;
 import de.weigend.s202.reader.EdgeKind;
-import de.weigend.s202.reader.python.PythonSourceAnalyzer;
+import de.weigend.s202.reader.impl.python.PythonSourceAnalyzer;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 

@@ -154,7 +154,7 @@ public final class LayoutInvariantReport {
 
         sb.append('\n');
         sb.append("-- Reproducer hint --\n");
-        sb.append("Feed the input file(s) above into InputAnalyzer.analyzeMultiple() +\n");
+        sb.append("Feed the input file(s) above into the matching LanguageAnalyzer +\n");
         sb.append("LevelCalculator.calculate() + LayoutInvariantChecker.check();\n");
         sb.append("the listed (from → to) pairs should re-trigger the same findings.\n");
         return sb.toString();
