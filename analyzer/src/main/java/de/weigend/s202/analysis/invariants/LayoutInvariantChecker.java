@@ -15,8 +15,6 @@
  */
 package de.weigend.s202.analysis.invariants;
 
-import de.weigend.s202.graph.EdgeClassification;
-import de.weigend.s202.graph.EdgeClassification.EdgeType;
 import de.weigend.s202.graph.StronglyConnectedComponent;
 import de.weigend.s202.graph.TarjanSCCFinder;
 import de.weigend.s202.domain.DomainModel;
@@ -63,8 +61,8 @@ import java.util.Set;
  * </ul>
  *
  * <p>Edges removed by the level algorithm (back-edges from Fall A and Fall B)
- * are not findings — they already render as red violation edges in the view via
- * {@code EdgeClassification}.</p>
+ * are not findings — they already render as red violation edges in the view.
+ * R4 mirrors that classification locally.</p>
  *
  * <p>Pure, allocation-light, thread-safe — safe to invoke from a JavaFX
  * background {@code Task}.</p>
@@ -403,12 +401,10 @@ public final class LayoutInvariantChecker {
     // ---------------------------------------------------------------- R4
 
     /**
-     * Drift detector between the renderer's edge classification and the raw
-     * level/SCC state. {@link EdgeClassification} is what the dependency
-     * renderer uses to colour edges (NORMAL black, VIOLATION red, INTRA_SCC
-     * yellow). This rule asks the classifier the same question we'd derive
-     * from levels + multi-member SCC membership, and reports any disagreement
-     * — for instance, if a stale SCC map were ever passed in, or if the
+     * Drift detector between local edge classification and the raw level/SCC
+     * state. This rule asks the classifier the same question we'd derive from
+     * levels + multi-member SCC membership, and reports any disagreement —
+     * for instance, if a stale SCC map were ever passed in, or if the
      * classifier's logic diverged from the topo-sort convention.
      *
      * <p>The rule should never fire in healthy state — same intent as the
@@ -435,7 +431,7 @@ public final class LayoutInvariantChecker {
                 nodeToSccId.put(cls.fullName, scc.getId());
             }
         }
-        EdgeClassification classifier = new EdgeClassification(nodeToLevel, nodeToSccId, classGraph);
+        EdgeClassification classifier = new EdgeClassification(nodeToLevel, nodeToSccId);
 
         for (CalculatedElementInfo from : classes.values()) {
             if (from.dependencies == null) continue;
@@ -452,10 +448,10 @@ public final class LayoutInvariantChecker {
                         && fromScc.getSize() > 1
                         && fromScc.getId() == toScc.getId();
 
-                EdgeType expected;
-                if (sameMultiScc) expected = EdgeType.INTRA_SCC;
-                else if (from.architectureLevel <= to.architectureLevel) expected = EdgeType.VIOLATION;
-                else expected = EdgeType.NORMAL;
+                EdgeClassification.EdgeType expected;
+                if (sameMultiScc) expected = EdgeClassification.EdgeType.INTRA_SCC;
+                else if (from.architectureLevel <= to.architectureLevel) expected = EdgeClassification.EdgeType.VIOLATION;
+                else expected = EdgeClassification.EdgeType.NORMAL;
 
                 if (classified.type == expected) continue;
 
@@ -467,6 +463,65 @@ public final class LayoutInvariantChecker {
                         from.architectureLevel, to.architectureLevel,
                         toContainerOrFqn(from), toContainerOrFqn(to)));
             }
+        }
+    }
+
+    /**
+     * Internal classifier used by R4 to detect drift between dependency edge
+     * tagging and the current level/SCC state. Kept here because the logic is
+     * only meaningful in the context of {@link LayoutInvariantChecker}.
+     */
+    private static final class EdgeClassification {
+        private enum EdgeType {
+            NORMAL,
+            VIOLATION,
+            INTRA_SCC
+        }
+
+        private static final class ClassifiedEdge {
+            private final String from;
+            private final String to;
+            private final EdgeType type;
+
+            private ClassifiedEdge(String from, String to, EdgeType type) {
+                this.from = from;
+                this.to = to;
+                this.type = type;
+            }
+
+            @Override
+            public String toString() {
+                return String.format("%s -> %s [%s]", from, to, type);
+            }
+        }
+
+        private final Map<String, Integer> nodeToLevel;
+        private final Map<String, Integer> nodeToSccId;
+
+        private EdgeClassification(Map<String, Integer> nodeToLevel,
+                                   Map<String, Integer> nodeToSccId) {
+            this.nodeToLevel = nodeToLevel;
+            this.nodeToSccId = nodeToSccId;
+        }
+
+        private ClassifiedEdge classifyEdge(String from, String to) {
+            int fromLevel = nodeToLevel.getOrDefault(from, -1);
+            int toLevel = nodeToLevel.getOrDefault(to, -1);
+
+            int fromSccId = nodeToSccId.getOrDefault(from, -1);
+            int toSccId = nodeToSccId.getOrDefault(to, -1);
+
+            if (fromSccId == toSccId && fromSccId >= 0) {
+                return new ClassifiedEdge(from, to, EdgeType.INTRA_SCC);
+            }
+
+            if (fromLevel > toLevel) {
+                return new ClassifiedEdge(from, to, EdgeType.NORMAL);
+            }
+            if (fromLevel < toLevel) {
+                return new ClassifiedEdge(from, to, EdgeType.VIOLATION);
+            }
+            return new ClassifiedEdge(from, to, EdgeType.NORMAL);
         }
     }
 }
