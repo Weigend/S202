@@ -15,13 +15,16 @@
  */
 package de.weigend.s202.ui.debug;
 
-import de.weigend.s202.reader.java.InputAnalyzer;
+import de.weigend.s202.reader.AnalyzerRegistry;
 import de.weigend.s202.reader.DependencyModel;
 import de.weigend.s202.domain.architecture.LevelCalculator;
 import de.weigend.s202.domain.DomainModel;
 import de.weigend.s202.ui.model.ArchitectureNode;
 import de.weigend.s202.ui.model.ArchitectureNode.NodeType;
 import de.weigend.s202.ui.model.ArchitectureNodeBuilder;
+
+import java.nio.file.Path;
+import java.util.List;
 
 /**
  * Debug test to verify that package levels are correctly propagated to ArchitectureNode tree
@@ -33,8 +36,9 @@ public class DebugUIPackageLevels {
         System.out.println("=== TESTING UI PIPELINE WITH: " + jarPath + " ===\n");
         
         // Step 1: Analyze
-        InputAnalyzer analyzer = new InputAnalyzer();
-        DependencyModel rawModel = analyzer.analyze(jarPath);
+        DependencyModel rawModel = AnalyzerRegistry.createDefault()
+                .javaBytecodeAnalyzer()
+                .analyze(List.of(Path.of(jarPath)));
         
         // Step 2: Calculate levels
         LevelCalculator calculator = new LevelCalculator();

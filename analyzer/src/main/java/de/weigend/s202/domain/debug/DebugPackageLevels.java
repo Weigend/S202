@@ -15,13 +15,14 @@
  */
 package de.weigend.s202.domain.debug;
 
-import de.weigend.s202.reader.java.InputAnalyzer;
+import de.weigend.s202.reader.AnalyzerRegistry;
 import de.weigend.s202.reader.DependencyModel;
 import de.weigend.s202.domain.architecture.LevelCalculator;
 import de.weigend.s202.domain.DomainModel;
 import de.weigend.s202.graph.TarjanSCCFinder;
 import de.weigend.s202.graph.StronglyConnectedComponent;
 
+import java.nio.file.Path;
 import java.util.*;
 
 /**
@@ -34,8 +35,9 @@ public class DebugPackageLevels {
         System.out.println("=== ANALYZING JAR: " + jarPath + " ===\n");
         
         // Step 1: Analyze bytecode
-        InputAnalyzer analyzer = new InputAnalyzer();
-        DependencyModel rawModel = analyzer.analyze(jarPath);
+        DependencyModel rawModel = AnalyzerRegistry.createDefault()
+                .javaBytecodeAnalyzer()
+                .analyze(List.of(Path.of(jarPath)));
         
         // Step 2: Calculate levels
         LevelCalculator calculator = new LevelCalculator();

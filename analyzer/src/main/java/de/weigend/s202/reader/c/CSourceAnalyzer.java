@@ -17,6 +17,7 @@ package de.weigend.s202.reader.c;
 
 import de.weigend.s202.reader.DependencyModel;
 import de.weigend.s202.reader.EdgeKind;
+import de.weigend.s202.reader.LanguageAnalyzer;
 import de.weigend.s202.reader.PackageHierarchyBuilder;
 
 import java.io.IOException;
@@ -45,7 +46,7 @@ import java.util.regex.Pattern;
  * C functions to methods, project includes to IMPORTS edges, and direct
  * function calls to CALLS edges.
  */
-public class CSourceAnalyzer {
+public class CSourceAnalyzer implements LanguageAnalyzer {
 
     private static final Set<String> EXCLUDED_DIR_NAMES = Set.of(
             ".git", ".hg", ".svn",
@@ -63,10 +64,16 @@ public class CSourceAnalyzer {
     private static final Pattern CALL_PATTERN = Pattern.compile(
             "\\b([A-Za-z_][A-Za-z0-9_]*)\\s*\\(");
 
+    @Override
+    public String displayName() {
+        return "C";
+    }
+
     public DependencyModel analyze(Path sourceRootOrProjectRoot) throws IOException {
         return analyze(List.of(sourceRootOrProjectRoot));
     }
 
+    @Override
     public DependencyModel analyze(List<Path> roots) throws IOException {
         if (roots == null || roots.isEmpty()) {
             throw new IllegalArgumentException("at least one C source root is required");

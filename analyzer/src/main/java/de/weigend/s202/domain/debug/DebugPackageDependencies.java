@@ -15,9 +15,10 @@
  */
 package de.weigend.s202.domain.debug;
 
-import de.weigend.s202.reader.java.InputAnalyzer;
+import de.weigend.s202.reader.AnalyzerRegistry;
 import de.weigend.s202.reader.DependencyModel;
 
+import java.nio.file.Path;
 import java.util.*;
 
 public class DebugPackageDependencies {
@@ -26,8 +27,9 @@ public class DebugPackageDependencies {
         
         System.out.println("Analyzing: " + jarPath);
         
-        InputAnalyzer analyzer = new InputAnalyzer();
-        DependencyModel model = analyzer.analyze(jarPath);
+        DependencyModel model = AnalyzerRegistry.createDefault()
+                .javaBytecodeAnalyzer()
+                .analyze(List.of(Path.of(jarPath)));
         
         System.out.println("\n=== CLASS DEPENDENCIES ===");
         for (String className : new TreeSet<>(model.getAllClassNames())) {

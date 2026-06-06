@@ -17,6 +17,7 @@ package de.weigend.s202.reader.java;
 
 import de.weigend.s202.reader.DependencyModel;
 import de.weigend.s202.reader.EdgeKind;
+import de.weigend.s202.reader.LanguageAnalyzer;
 import de.weigend.s202.reader.PackageHierarchyBuilder;
 
 import org.objectweb.asm.ClassReader;
@@ -48,7 +49,7 @@ import java.util.regex.Pattern;
  * <p>External library prefixes are loaded from {@code excluded-prefixes.txt} in the
  * current working directory. If the file is not found, built-in defaults are used.</p>
  */
-public class InputAnalyzer {
+public class InputAnalyzer implements LanguageAnalyzer {
     
     private static final String EXCLUDED_PREFIXES_FILE = "excluded-prefixes.txt";
     
@@ -68,6 +69,11 @@ public class InputAnalyzer {
     private static List<Predicate<String>> exclusionMatchers;
 
     public record AnalysisProgress(String jarPath, String classEntryName, int processedClasses, int totalClasses) {}
+
+    @Override
+    public String displayName() {
+        return "Java bytecode";
+    }
 
     /**
      * Returns the list of excluded class prefixes.
@@ -203,6 +209,13 @@ public class InputAnalyzer {
         analyzeInto(jarPath, model);
         PackageHierarchyBuilder.buildPackageHierarchy(model);
         return model;
+    }
+
+    @Override
+    public DependencyModel analyze(List<Path> inputs) throws IOException {
+        return analyzeMultiple(inputs.stream()
+                .map(Path::toString)
+                .toList());
     }
 
     /**

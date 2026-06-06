@@ -25,12 +25,9 @@ import de.weigend.s202.domain.architecture.LevelCalculator;
 import de.weigend.s202.project.S202Project;
 import de.weigend.s202.project.S202ProjectMapper;
 import de.weigend.s202.project.S202ProjectStore;
-import de.weigend.s202.reader.c.CSourceAnalyzer;
+import de.weigend.s202.reader.AnalyzerRegistry;
 import de.weigend.s202.reader.DependencyModel;
-import de.weigend.s202.reader.java.GradleProjectScanner;
-import de.weigend.s202.reader.java.InputAnalyzer;
-import de.weigend.s202.reader.java.MavenProjectScanner;
-import de.weigend.s202.reader.python.PythonSourceAnalyzer;
+import de.weigend.s202.reader.LanguageAnalyzer;
 import de.weigend.s202.ui.ArchitectureView;
 import de.weigend.s202.ui.ArchitectureViewStyle;
 import de.weigend.s202.ui.layout.horizontal.HorizontalRowLayoutOptimizer;
@@ -76,6 +73,7 @@ import javafx.scene.layout.HBox;
 import javafx.scene.paint.Color;
 import javafx.stage.DirectoryChooser;
 import javafx.stage.FileChooser;
+import javafx.stage.Window;
 import javafx.util.Duration;
 import org.kordamp.ikonli.Ikon;
 import org.kordamp.ikonli.javafx.FontIcon;
@@ -94,6 +92,7 @@ import java.util.EventObject;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
@@ -113,9 +112,13 @@ public class S202Module implements Module {
     private static final Logger LOGGER = LoggerFactory.getLogger(S202Module.class);
 
     private final ApplicationWindow applicationWindow;
-    private final InputAnalyzer rawAnalyzer = new InputAnalyzer();
-    private final PythonSourceAnalyzer pythonAnalyzer = new PythonSourceAnalyzer();
-    private final CSourceAnalyzer cAnalyzer = new CSourceAnalyzer();
+    private final AnalyzerRegistry analyzerRegistry = AnalyzerRegistry.createDefault();
+    private final LanguageAnalyzer javaBytecodeAnalyzer =
+            analyzerRegistry.requireAnalyzer(AnalyzerRegistry.JAVA_BYTECODE);
+    private final LanguageAnalyzer pythonAnalyzer =
+            analyzerRegistry.requireAnalyzer(AnalyzerRegistry.PYTHON);
+    private final LanguageAnalyzer cAnalyzer =
+            analyzerRegistry.requireAnalyzer(AnalyzerRegistry.C);
     private final ArchitectureNodeBuilder architectureNodeBuilder = new ArchitectureNodeBuilder();
     private final LayoutInvariantChecker invariantChecker = new LayoutInvariantChecker();
     private final S202ProjectStore projectStore = new S202ProjectStore();
@@ -826,65 +829,157 @@ public class S202Module implements Module {
     }
 
     private void openJarChooser() {
-        FileChooser fileChooser = new FileChooser();
-        fileChooser.setTitle("Select JAR file(s) to analyze");
-        fileChooser.getExtensionFilters().addAll(
-                new FileChooser.ExtensionFilter("JAR Files", "*.jar"),
-                new FileChooser.ExtensionFilter("All Files", "*.*"));
-        if (lastDirectory != null && lastDirectory.isDirectory()) {
-            fileChooser.setInitialDirectory(lastDirectory);
+        List<Path> inputs = new JarFileLoader().chooseInput(applicationWindow.getStage());
+        if (!inputs.isEmpty()) {
+            loadJarFiles(toFiles(inputs));
         }
-        loadJarSelection(fileChooser.showOpenMultipleDialog(applicationWindow.getStage()));
     }
 
     private void openPythonSourceRoot() {
-        DirectoryChooser chooser = new DirectoryChooser();
-        chooser.setTitle("Select Python source root");
-        File initial = lastProjectDirectory != null && lastProjectDirectory.isDirectory()
-                ? lastProjectDirectory
-                : (lastDirectory != null && lastDirectory.isDirectory() ? lastDirectory : null);
-        if (initial != null) {
-            chooser.setInitialDirectory(initial);
-        }
-        File root = chooser.showDialog(applicationWindow.getStage());
-        if (root != null) {
-            lastProjectDirectory = root;
-            loadPythonSourceRoot(root);
+        List<Path> inputs = new GenericDirectoryLoader("Open Python Source", "Select Python source root")
+                .chooseInput(applicationWindow.getStage());
+        if (!inputs.isEmpty()) {
+            loadSourceRoot(pythonAnalyzer, inputs.getFirst(), "PYTHON", "Python",
+                    "Reading Python ASTs...", "No Python Modules Found",
+                    "The selected source root does not contain analyzable .py files.");
         }
     }
 
     private void openCSourceRoot() {
-        DirectoryChooser chooser = new DirectoryChooser();
-        chooser.setTitle("Select C source root");
-        File initial = lastProjectDirectory != null && lastProjectDirectory.isDirectory()
-                ? lastProjectDirectory
-                : (lastDirectory != null && lastDirectory.isDirectory() ? lastDirectory : null);
-        if (initial != null) {
-            chooser.setInitialDirectory(initial);
-        }
-        File root = chooser.showDialog(applicationWindow.getStage());
-        if (root != null) {
-            lastProjectDirectory = root;
-            loadCSourceRoot(root);
+        List<Path> inputs = new GenericDirectoryLoader("Open C Source", "Select C source root")
+                .chooseInput(applicationWindow.getStage());
+        if (!inputs.isEmpty()) {
+            loadSourceRoot(cAnalyzer, inputs.getFirst(), "C", "C",
+                    "Scanning C translation units...", "No C Sources Found",
+                    "The selected source root does not contain analyzable .c files.");
         }
     }
 
     private void openMavenProject() {
-        File pom = chooseProjectFile("Select Maven project root pom.xml",
-                new FileChooser.ExtensionFilter("Maven POM", "pom.xml"));
-        if (pom != null) {
-            scanMavenProjectAt(pom.getParentFile());
+        List<Path> inputs = new MavenProjectLoader().chooseInput(applicationWindow.getStage());
+        if (!inputs.isEmpty()) {
+            scanMavenProjectAt(inputs.getFirst().getParent().toFile());
         }
     }
 
     private void openGradleProject() {
-        File buildScript = chooseProjectFile("Select Gradle root settings.gradle or build.gradle",
-                new FileChooser.ExtensionFilter("Gradle settings/build script",
-                        "settings.gradle", "settings.gradle.kts",
-                        "build.gradle", "build.gradle.kts"));
-        if (buildScript != null) {
-            scanGradleProjectAt(buildScript.getParentFile());
+        List<Path> inputs = new GradleProjectLoader().chooseInput(applicationWindow.getStage());
+        if (!inputs.isEmpty()) {
+            scanGradleProjectAt(inputs.getFirst().getParent().toFile());
         }
+    }
+
+    private interface FileLoader {
+        String menuLabel();
+
+        List<Path> chooseInput(Window owner);
+    }
+
+    private final class JarFileLoader implements FileLoader {
+        @Override
+        public String menuLabel() {
+            return "Open JAR";
+        }
+
+        @Override
+        public List<Path> chooseInput(Window owner) {
+            FileChooser fileChooser = new FileChooser();
+            fileChooser.setTitle("Select JAR file(s) to analyze");
+            fileChooser.getExtensionFilters().addAll(
+                    new FileChooser.ExtensionFilter("JAR Files", "*.jar"),
+                    new FileChooser.ExtensionFilter("All Files", "*.*"));
+            if (lastDirectory != null && lastDirectory.isDirectory()) {
+                fileChooser.setInitialDirectory(lastDirectory);
+            }
+            List<File> picked = fileChooser.showOpenMultipleDialog(owner);
+            if (picked == null || picked.isEmpty()) {
+                return List.of();
+            }
+            lastDirectory = picked.get(0).getParentFile();
+            if (picked.size() == 1) {
+                return picked.stream().map(File::toPath).toList();
+            }
+            return SourceSetDialog.chooseSourceSet(applicationWindow.getStage(), lastDirectory, picked)
+                    .map(selected -> {
+                        if (selected.isEmpty()) {
+                            return List.<Path>of();
+                        }
+                        lastDirectory = selected.get(0).getParentFile();
+                        return selected.stream().map(File::toPath).toList();
+                    })
+                    .orElseGet(List::of);
+        }
+    }
+
+    private final class MavenProjectLoader implements FileLoader {
+        @Override
+        public String menuLabel() {
+            return "Open Maven Project";
+        }
+
+        @Override
+        public List<Path> chooseInput(Window owner) {
+            File pom = chooseProjectFile("Select Maven project root pom.xml",
+                    new FileChooser.ExtensionFilter("Maven POM", "pom.xml"));
+            return pom == null ? List.of() : List.of(pom.toPath());
+        }
+    }
+
+    private final class GradleProjectLoader implements FileLoader {
+        @Override
+        public String menuLabel() {
+            return "Open Gradle Project";
+        }
+
+        @Override
+        public List<Path> chooseInput(Window owner) {
+            File buildScript = chooseProjectFile("Select Gradle root settings.gradle or build.gradle",
+                    new FileChooser.ExtensionFilter("Gradle settings/build script",
+                            "settings.gradle", "settings.gradle.kts",
+                            "build.gradle", "build.gradle.kts"));
+            return buildScript == null ? List.of() : List.of(buildScript.toPath());
+        }
+    }
+
+    private final class GenericDirectoryLoader implements FileLoader {
+        private final String menuLabel;
+        private final String title;
+
+        private GenericDirectoryLoader(String menuLabel, String title) {
+            this.menuLabel = menuLabel;
+            this.title = title;
+        }
+
+        @Override
+        public String menuLabel() {
+            return menuLabel;
+        }
+
+        @Override
+        public List<Path> chooseInput(Window owner) {
+            DirectoryChooser chooser = new DirectoryChooser();
+            chooser.setTitle(title);
+            File initial = initialSourceDirectory();
+            if (initial != null) {
+                chooser.setInitialDirectory(initial);
+            }
+            File root = chooser.showDialog(owner);
+            if (root == null) {
+                return List.of();
+            }
+            lastProjectDirectory = root;
+            return List.of(root.toPath());
+        }
+    }
+
+    private File initialSourceDirectory() {
+        return lastProjectDirectory != null && lastProjectDirectory.isDirectory()
+                ? lastProjectDirectory
+                : (lastDirectory != null && lastDirectory.isDirectory() ? lastDirectory : null);
+    }
+
+    private static List<File> toFiles(List<Path> paths) {
+        return paths.stream().map(Path::toFile).toList();
     }
 
     /**
@@ -971,8 +1066,8 @@ public class S202Module implements Module {
         lastProjectDirectory = root;
         runProjectScan("Maven", root,
                 () -> {
-                    var r = new MavenProjectScanner().scan(root);
-                    return new ScanResult(r.jars(), r.missingArtifactModules(), r.scannedModuleCount());
+                    var r = analyzerRegistry.scanMavenProject(root.toPath());
+                    return new ScanResult(toFiles(r.jars()), r.missingArtifactModules(), r.scannedModuleCount());
                 },
                 "mvn package");
     }
@@ -981,8 +1076,8 @@ public class S202Module implements Module {
         lastProjectDirectory = root;
         runProjectScan("Gradle", root,
                 () -> {
-                    var r = new GradleProjectScanner().scan(root);
-                    return new ScanResult(r.jars(), r.missingArtifactModules(), r.scannedModuleCount());
+                    var r = analyzerRegistry.scanGradleProject(root.toPath());
+                    return new ScanResult(toFiles(r.jars()), r.missingArtifactModules(), r.scannedModuleCount());
                 },
                 "gradle build");
     }
@@ -1102,25 +1197,15 @@ public class S202Module implements Module {
         final ArchitectureView view = target.getArchitectureView();
         final String fileNames = jarFiles.stream().map(File::getName).collect(Collectors.joining(", "));
         final List<String> jarPaths = jarFiles.stream().map(File::getAbsolutePath).toList();
+        final List<Path> jarInputPaths = jarFiles.stream().map(File::toPath).toList();
 
         publishProgress("Analyzing: " + fileNames + " (this may take a moment)...", -1);
 
         Task<AnalysisResult> task = new Task<>() {
             @Override
             protected AnalysisResult call() throws Exception {
-                final int[] lastReportedClass = {-1};
-                DependencyModel rawModel = rawAnalyzer.analyzeMultiple(jarPaths, progress -> {
-                    int total = progress.totalClasses();
-                    int processed = progress.processedClasses();
-                    if (total <= 0 || (processed != total && processed - lastReportedClass[0] < 25)) {
-                        return;
-                    }
-                    lastReportedClass[0] = processed;
-                    double bytecodeProgress = Math.min(0.70, 0.70 * processed / total);
-                    String jarName = progress.jarPath() == null ? fileNames : new File(progress.jarPath()).getName();
-                    publishProgress(String.format("Reading bytecode: %s (%d/%d classes)",
-                            jarName, processed, total), bytecodeProgress);
-                });
+                publishProgress("Reading bytecode: " + fileNames, 0.20);
+                DependencyModel rawModel = javaBytecodeAnalyzer.analyze(jarInputPaths);
                 return buildAnalysisResult(rawModel, jarPaths);
             }
         };
@@ -1152,23 +1237,26 @@ public class S202Module implements Module {
         analyzer.start();
     }
 
-    private void loadPythonSourceRoot(File root) {
-        if (root == null || !root.isDirectory()) {
+    private void loadSourceRoot(LanguageAnalyzer analyzer, Path root, String sourceKind, String titlePrefix,
+                                String readerProgress, String emptyTitle, String emptyMessage) {
+        if (root == null || !root.toFile().isDirectory()) {
             return;
         }
-        ArchitectureWfxView target = createArchitectureView("Python: " + root.getName());
+        File rootFile = root.toFile();
+        ArchitectureWfxView target = createArchitectureView(titlePrefix + ": " + rootFile.getName());
         registerArchitectureView(target);
         final ArchitectureView view = target.getArchitectureView();
-        final String rootPath = root.getAbsolutePath();
-        final S202Project.Source source = new S202Project.Source("PYTHON", List.of(rootPath), rootPath);
+        final String rootPath = rootFile.getAbsolutePath();
+        final S202Project.Source source = new S202Project.Source(sourceKind, List.of(rootPath), rootPath);
 
-        publishProgress("Analyzing Python source: " + root.getName() + " (this may take a moment)...", -1);
+        publishProgress("Analyzing " + analyzer.displayName() + " source: "
+                + rootFile.getName() + " (this may take a moment)...", -1);
 
         Task<AnalysisResult> task = new Task<>() {
             @Override
             protected AnalysisResult call() throws Exception {
-                publishProgress("Reading Python ASTs...", 0.20);
-                DependencyModel rawModel = pythonAnalyzer.analyze(root.toPath());
+                publishProgress(readerProgress, 0.20);
+                DependencyModel rawModel = analyzer.analyze(List.of(root));
                 return buildAnalysisResult(rawModel, List.of(rootPath));
             }
         };
@@ -1176,78 +1264,29 @@ public class S202Module implements Module {
         task.setOnSucceeded(e -> {
             AnalysisResult result = task.getValue();
             if (result.rootNode() == null) {
-                publishProgress("Error: No Python modules found", 1);
-                showError("No Python Modules Found",
-                        "The selected source root does not contain analyzable .py files.");
+                publishProgress("Error: " + emptyTitle, 1);
+                showError(emptyTitle, emptyMessage);
                 return;
             }
             publishProgress("Building JavaFX architecture view...", 0.97);
 
             PauseTransition yieldToPulse = new PauseTransition(Duration.millis(50));
-            AnalysisInputSummary summary = new AnalysisInputSummary("Python root(s)", 1);
+            AnalysisInputSummary summary = new AnalysisInputSummary(analyzer.displayName() + " root(s)", 1);
             yieldToPulse.setOnFinished(event -> applyAnalysisResult(summary, view, source, result));
             yieldToPulse.play();
         });
         task.setOnFailed(e -> {
             Throwable t = task.getException();
-            LOGGER.error("Python analysis failed", t);
+            LOGGER.error("{} analysis failed", analyzer.displayName(), t);
             String msg = t != null ? t.getMessage() : "unknown error";
             publishProgress("Error: " + msg, 1);
-            showError("Python Analysis Error", "Failed to analyze Python source root:\n" + msg);
+            showError(titlePrefix + " Analysis Error",
+                    "Failed to analyze " + analyzer.displayName() + " source root:\n" + msg);
         });
 
-        Thread analyzer = new Thread(task, "s202-python-analyzer");
-        analyzer.setDaemon(true);
-        analyzer.start();
-    }
-
-    private void loadCSourceRoot(File root) {
-        if (root == null || !root.isDirectory()) {
-            return;
-        }
-        ArchitectureWfxView target = createArchitectureView("C: " + root.getName());
-        registerArchitectureView(target);
-        final ArchitectureView view = target.getArchitectureView();
-        final String rootPath = root.getAbsolutePath();
-        final S202Project.Source source = new S202Project.Source("C", List.of(rootPath), rootPath);
-
-        publishProgress("Analyzing C source: " + root.getName() + " (this may take a moment)...", -1);
-
-        Task<AnalysisResult> task = new Task<>() {
-            @Override
-            protected AnalysisResult call() throws Exception {
-                publishProgress("Scanning C translation units...", 0.20);
-                DependencyModel rawModel = cAnalyzer.analyze(root.toPath());
-                return buildAnalysisResult(rawModel, List.of(rootPath));
-            }
-        };
-
-        task.setOnSucceeded(e -> {
-            AnalysisResult result = task.getValue();
-            if (result.rootNode() == null) {
-                publishProgress("Error: No C translation units found", 1);
-                showError("No C Sources Found",
-                        "The selected source root does not contain analyzable .c files.");
-                return;
-            }
-            publishProgress("Building JavaFX architecture view...", 0.97);
-
-            PauseTransition yieldToPulse = new PauseTransition(Duration.millis(50));
-            AnalysisInputSummary summary = new AnalysisInputSummary("C root(s)", 1);
-            yieldToPulse.setOnFinished(event -> applyAnalysisResult(summary, view, source, result));
-            yieldToPulse.play();
-        });
-        task.setOnFailed(e -> {
-            Throwable t = task.getException();
-            LOGGER.error("C analysis failed", t);
-            String msg = t != null ? t.getMessage() : "unknown error";
-            publishProgress("Error: " + msg, 1);
-            showError("C Analysis Error", "Failed to analyze C source root:\n" + msg);
-        });
-
-        Thread analyzer = new Thread(task, "s202-c-analyzer");
-        analyzer.setDaemon(true);
-        analyzer.start();
+        Thread analyzerThread = new Thread(task, "s202-" + sourceKind.toLowerCase(Locale.ROOT) + "-analyzer");
+        analyzerThread.setDaemon(true);
+        analyzerThread.start();
     }
 
     private AnalysisResult buildAnalysisResult(DependencyModel rawModel, List<String> sourcePaths) {

@@ -17,8 +17,11 @@ package de.weigend.s202.domain.debug;
 
 import de.weigend.s202.domain.DomainModel;
 import de.weigend.s202.domain.architecture.LevelCalculator;
-import de.weigend.s202.reader.java.InputAnalyzer;
+import de.weigend.s202.reader.AnalyzerRegistry;
 import de.weigend.s202.reader.DependencyModel;
+
+import java.nio.file.Path;
+import java.util.List;
 
 public class TestLevelCalculatorDebug {
     public static void main(String[] args) throws Exception {
@@ -27,8 +30,9 @@ public class TestLevelCalculatorDebug {
         System.out.println("=== TESTING LEVEL CALCULATOR ===\n");
         
         // Step 1: Analyze
-        InputAnalyzer analyzer = new InputAnalyzer();
-        DependencyModel rawModel = analyzer.analyze(jarPath);
+        DependencyModel rawModel = AnalyzerRegistry.createDefault()
+                .javaBytecodeAnalyzer()
+                .analyze(List.of(Path.of(jarPath)));
         System.out.println("Raw packages: " + rawModel.getAllPackageNames());
         
         // Step 2: Calculate

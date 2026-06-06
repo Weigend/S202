@@ -183,7 +183,7 @@ class InputAnalyzerTest {
 
     @Test
     void testAnalyzeNullPathThrowsException() {
-        assertThrows(NullPointerException.class, () -> analyzer.analyze(null),
+        assertThrows(NullPointerException.class, () -> analyzer.analyze((String) null),
             "Should throw exception for null path");
     }
 
