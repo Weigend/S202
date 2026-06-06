@@ -98,6 +98,14 @@ optional einen passenden `FileLoader` dazuregistrieren.
 - Der `FileLoader`-Gedanke bleibt in der UI und arbeitet gegen
   `LanguageAnalyzer.displayName()`.
 
+### Ergebnisnachweis
+
+![Nach Einführung der Interfaces: API-Grenze sichtbar, Impl-Zugriffe noch vorhanden](component-images/01-4-commit-nach-einfuehrung-interfaces.png)
+
+![Nach Einführung des impl-Unterpakets: alle Implementierungsklassen versteckt](component-images/01-5-1c-commit-no-violations.png)
+
+![Finaler Zustand: reader-Paket mit sauberer API-Grenze, keine Violations](component-images/01-6-commit-finish-reader-package.png)
+
 ---
 
 ## 2. `SCCVisualizationHelper` — Altlast, kann gelöscht werden
@@ -120,6 +128,10 @@ im Namen gehört nicht ins `graph`-Paket (Domain-Graph-Infrastruktur).
 
 **Aktion:** Datei löschen.
 
+### Ergebnisnachweis
+
+![Nach Löschen von SCCVisualizationHelper: graph-Paket ohne toten Code](component-images/02-commit.png)
+
 ---
 
 ## 3. `SCCDAGBuilder` — Altlast, kann gelöscht werden
@@ -137,6 +149,10 @@ beides nicht und würde allein keine korrekten Architekturlevels liefern.
 
 **Aktion:** Klasse und begleitenden `SCCDAGBuilderTest` löschen.
 
+### Ergebnisnachweis
+
+![Nach Löschen von SCCDAGBuilder: graph-Paket nur noch mit TarjanSCCFinder, EdgeClassification und StronglyConnectedComponent](component-images/03-commit.png)
+
 ---
 
 ## 4. `EdgeClassification` — verschieben, nicht löschen
@@ -153,6 +169,10 @@ ein Implementierungsdetail der Invariantenprüfung.
 **Aktion:** Als `private static` Hilfsklasse in `LayoutInvariantChecker`
 verschieben (oder package-private im `analysis.invariants`-Paket, falls
 der Checker zu groß wird). Aus dem `graph`-Paket entfernen.
+
+### Ergebnisnachweis
+
+![Nach Verschieben von EdgeClassification: graph-Paket enthält nur noch TarjanSCCFinder und StronglyConnectedComponent](component-images/04-commit.png)
 
 ---
 
@@ -198,6 +218,10 @@ public interface SCCFinder {
 - Alle bisherigen Aufrufer (`LevelCalculator`, `LayoutInvariantChecker`,
   `SCCRenderer`, etc.) importieren künftig aus `domain` statt aus `graph`.
 - `TarjanSCCFinder` ist nicht mehr direkt instanziierbar von außen.
+
+### Ergebnisnachweis
+
+![Nach Auflösung des graph-Pakets: SCCFinder und StronglyConnectedComponent in der domain-API, TarjanSCCFinder in domain.impl](component-images/05-commit-nach-aufloesung-graph-pkg-commit.png)
 
 ---
 
@@ -269,6 +293,10 @@ ComponentArchitectureBuilder           ← impl ArchitectureStyle
 HexagonalArchitectureBuilder           ← impl ArchitectureStyle
 ComponentApiClassifier                 ← intern in Buildern
 ```
+
+### Ergebnisnachweis
+
+![Nach Einführung der domain-Komponentengrenze: saubere API mit 19 Klassen, alle Builder und Calculator in domain.impl versteckt](component-images/06-nach-commit.png)
 
 ---
 
