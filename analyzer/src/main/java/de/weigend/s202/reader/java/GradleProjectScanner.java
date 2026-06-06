@@ -15,8 +15,13 @@
  */
 package de.weigend.s202.reader.java;
 
+import de.weigend.s202.reader.ProjectScanner;
+
+import jakarta.inject.Singleton;
+
 import java.io.File;
 import java.io.IOException;
+import java.nio.file.Path;
 import java.nio.file.Files;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -45,7 +50,8 @@ import java.util.regex.Pattern;
  * run {@code gradle build} (or equivalent) beforehand; modules without a
  * {@code build/libs/*.jar} are reported via {@link Result#missingArtifactModules()}.</p>
  */
-public final class GradleProjectScanner {
+@Singleton
+public final class GradleProjectScanner implements ProjectScanner {
 
     /**
      * Captures {@code include} statements in both Groovy and Kotlin DSL.
@@ -73,6 +79,25 @@ public final class GradleProjectScanner {
     public record Result(List<File> jars,
                          List<String> missingArtifactModules,
                          int scannedModuleCount) {}
+
+    @Override
+    public String displayName() {
+        return "Gradle";
+    }
+
+    @Override
+    public String buildHint() {
+        return "gradle build";
+    }
+
+    @Override
+    public ProjectScanResult scan(Path projectRoot) throws IOException {
+        Result result = scan(projectRoot.toFile());
+        return new ProjectScanResult(
+                result.jars().stream().map(File::toPath).toList(),
+                result.missingArtifactModules(),
+                result.scannedModuleCount());
+    }
 
     public Result scan(File projectRoot) throws IOException {
         if (projectRoot == null || !projectRoot.isDirectory()) {

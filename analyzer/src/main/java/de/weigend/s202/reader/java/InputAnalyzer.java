@@ -18,8 +18,9 @@ package de.weigend.s202.reader.java;
 import de.weigend.s202.reader.DependencyModel;
 import de.weigend.s202.reader.EdgeKind;
 import de.weigend.s202.reader.LanguageAnalyzer;
-import de.weigend.s202.reader.PackageHierarchyBuilder;
+import de.weigend.s202.reader.impl.PackageHierarchyBuilder;
 
+import jakarta.inject.Singleton;
 import org.objectweb.asm.ClassReader;
 import org.objectweb.asm.ClassVisitor;
 import org.objectweb.asm.FieldVisitor;
@@ -49,6 +50,7 @@ import java.util.regex.Pattern;
  * <p>External library prefixes are loaded from {@code excluded-prefixes.txt} in the
  * current working directory. If the file is not found, built-in defaults are used.</p>
  */
+@Singleton
 public class InputAnalyzer implements LanguageAnalyzer {
     
     private static final String EXCLUDED_PREFIXES_FILE = "excluded-prefixes.txt";

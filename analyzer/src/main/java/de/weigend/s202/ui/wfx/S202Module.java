@@ -25,9 +25,9 @@ import de.weigend.s202.domain.architecture.LevelCalculator;
 import de.weigend.s202.project.S202Project;
 import de.weigend.s202.project.S202ProjectMapper;
 import de.weigend.s202.project.S202ProjectStore;
-import de.weigend.s202.reader.AnalyzerRegistry;
 import de.weigend.s202.reader.DependencyModel;
 import de.weigend.s202.reader.LanguageAnalyzer;
+import de.weigend.s202.reader.ProjectScanner;
 import de.weigend.s202.ui.ArchitectureView;
 import de.weigend.s202.ui.ArchitectureViewStyle;
 import de.weigend.s202.ui.layout.horizontal.HorizontalRowLayoutOptimizer;
@@ -110,15 +110,13 @@ import java.util.stream.Collectors;
 public class S202Module implements Module {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(S202Module.class);
+    private static final String JAVA_BYTECODE_ANALYZER = "Java bytecode";
+    private static final String PYTHON_ANALYZER = "Python";
+    private static final String C_ANALYZER = "C";
+    private static final String MAVEN_SCANNER = "Maven";
+    private static final String GRADLE_SCANNER = "Gradle";
 
     private final ApplicationWindow applicationWindow;
-    private final AnalyzerRegistry analyzerRegistry = AnalyzerRegistry.createDefault();
-    private final LanguageAnalyzer javaBytecodeAnalyzer =
-            analyzerRegistry.requireAnalyzer(AnalyzerRegistry.JAVA_BYTECODE);
-    private final LanguageAnalyzer pythonAnalyzer =
-            analyzerRegistry.requireAnalyzer(AnalyzerRegistry.PYTHON);
-    private final LanguageAnalyzer cAnalyzer =
-            analyzerRegistry.requireAnalyzer(AnalyzerRegistry.C);
     private final ArchitectureNodeBuilder architectureNodeBuilder = new ArchitectureNodeBuilder();
     private final LayoutInvariantChecker invariantChecker = new LayoutInvariantChecker();
     private final S202ProjectStore projectStore = new S202ProjectStore();
@@ -839,7 +837,7 @@ public class S202Module implements Module {
         List<Path> inputs = new GenericDirectoryLoader("Open Python Source", "Select Python source root")
                 .chooseInput(applicationWindow.getStage());
         if (!inputs.isEmpty()) {
-            loadSourceRoot(pythonAnalyzer, inputs.getFirst(), "PYTHON", "Python",
+            loadSourceRoot(requireLanguageAnalyzer(PYTHON_ANALYZER), inputs.getFirst(), "PYTHON", "Python",
                     "Reading Python ASTs...", "No Python Modules Found",
                     "The selected source root does not contain analyzable .py files.");
         }
@@ -849,7 +847,7 @@ public class S202Module implements Module {
         List<Path> inputs = new GenericDirectoryLoader("Open C Source", "Select C source root")
                 .chooseInput(applicationWindow.getStage());
         if (!inputs.isEmpty()) {
-            loadSourceRoot(cAnalyzer, inputs.getFirst(), "C", "C",
+            loadSourceRoot(requireLanguageAnalyzer(C_ANALYZER), inputs.getFirst(), "C", "C",
                     "Scanning C translation units...", "No C Sources Found",
                     "The selected source root does not contain analyzable .c files.");
         }
@@ -1064,22 +1062,18 @@ public class S202Module implements Module {
 
     private void scanMavenProjectAt(File root) {
         lastProjectDirectory = root;
-        runProjectScan("Maven", root,
-                () -> {
-                    var r = analyzerRegistry.scanMavenProject(root.toPath());
-                    return new ScanResult(toFiles(r.jars()), r.missingArtifactModules(), r.scannedModuleCount());
-                },
-                "mvn package");
+        ProjectScanner scanner = requireProjectScanner(MAVEN_SCANNER);
+        runProjectScan(scanner.displayName(), root,
+                () -> toScanResult(scanner.scan(root.toPath())),
+                scanner.buildHint());
     }
 
     private void scanGradleProjectAt(File root) {
         lastProjectDirectory = root;
-        runProjectScan("Gradle", root,
-                () -> {
-                    var r = analyzerRegistry.scanGradleProject(root.toPath());
-                    return new ScanResult(toFiles(r.jars()), r.missingArtifactModules(), r.scannedModuleCount());
-                },
-                "gradle build");
+        ProjectScanner scanner = requireProjectScanner(GRADLE_SCANNER);
+        runProjectScan(scanner.displayName(), root,
+                () -> toScanResult(scanner.scan(root.toPath())),
+                scanner.buildHint());
     }
 
     private File chooseProjectFile(String title, FileChooser.ExtensionFilter filter) {
@@ -1102,6 +1096,13 @@ public class S202Module implements Module {
      * record types into S202Module.
      */
     private record ScanResult(List<File> jars, List<String> missingArtifactModules, int scannedModuleCount) {}
+
+    private static ScanResult toScanResult(ProjectScanner.ProjectScanResult result) {
+        return new ScanResult(
+                toFiles(result.jars()),
+                result.missingArtifactModules(),
+                result.scannedModuleCount());
+    }
 
     @FunctionalInterface
     private interface ScanCallable {
@@ -1198,6 +1199,7 @@ public class S202Module implements Module {
         final String fileNames = jarFiles.stream().map(File::getName).collect(Collectors.joining(", "));
         final List<String> jarPaths = jarFiles.stream().map(File::getAbsolutePath).toList();
         final List<Path> jarInputPaths = jarFiles.stream().map(File::toPath).toList();
+        final LanguageAnalyzer languageAnalyzer = requireLanguageAnalyzer(JAVA_BYTECODE_ANALYZER);
 
         publishProgress("Analyzing: " + fileNames + " (this may take a moment)...", -1);
 
@@ -1205,7 +1207,7 @@ public class S202Module implements Module {
             @Override
             protected AnalysisResult call() throws Exception {
                 publishProgress("Reading bytecode: " + fileNames, 0.20);
-                DependencyModel rawModel = javaBytecodeAnalyzer.analyze(jarInputPaths);
+                DependencyModel rawModel = languageAnalyzer.analyze(jarInputPaths);
                 return buildAnalysisResult(rawModel, jarPaths);
             }
         };
@@ -1287,6 +1289,20 @@ public class S202Module implements Module {
         Thread analyzerThread = new Thread(task, "s202-" + sourceKind.toLowerCase(Locale.ROOT) + "-analyzer");
         analyzerThread.setDaemon(true);
         analyzerThread.start();
+    }
+
+    private static LanguageAnalyzer requireLanguageAnalyzer(String displayName) {
+        return Lookup.lookupAll(LanguageAnalyzer.class).stream()
+                .filter(analyzer -> displayName.equalsIgnoreCase(analyzer.displayName()))
+                .findFirst()
+                .orElseThrow(() -> new IllegalStateException("No language analyzer registered for " + displayName));
+    }
+
+    private static ProjectScanner requireProjectScanner(String displayName) {
+        return Lookup.lookupAll(ProjectScanner.class).stream()
+                .filter(scanner -> displayName.equalsIgnoreCase(scanner.displayName()))
+                .findFirst()
+                .orElseThrow(() -> new IllegalStateException("No project scanner registered for " + displayName));
     }
 
     private AnalysisResult buildAnalysisResult(DependencyModel rawModel, List<String> sourcePaths) {

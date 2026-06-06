@@ -15,6 +15,9 @@
  */
 package de.weigend.s202.reader.java;
 
+import de.weigend.s202.reader.ProjectScanner;
+
+import jakarta.inject.Singleton;
 import org.w3c.dom.Document;
 import org.w3c.dom.Element;
 import org.w3c.dom.Node;
@@ -26,6 +29,7 @@ import javax.xml.parsers.DocumentBuilderFactory;
 import javax.xml.parsers.ParserConfigurationException;
 import java.io.File;
 import java.io.IOException;
+import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.LinkedHashSet;
@@ -46,7 +50,8 @@ import java.util.Set;
  * via {@link Result#missingArtifactModules()} so the caller can prompt the
  * user to run {@code mvn package} first.</p>
  */
-public final class MavenProjectScanner {
+@Singleton
+public final class MavenProjectScanner implements ProjectScanner {
 
     /**
      * A scan result carrying the resolved JAR list plus diagnostics about
@@ -61,6 +66,25 @@ public final class MavenProjectScanner {
     public record Result(List<File> jars,
                          List<String> missingArtifactModules,
                          int scannedModuleCount) {}
+
+    @Override
+    public String displayName() {
+        return "Maven";
+    }
+
+    @Override
+    public String buildHint() {
+        return "mvn package";
+    }
+
+    @Override
+    public ProjectScanResult scan(Path projectRoot) throws IOException {
+        Result result = scan(projectRoot.toFile());
+        return new ProjectScanResult(
+                result.jars().stream().map(File::toPath).toList(),
+                result.missingArtifactModules(),
+                result.scannedModuleCount());
+    }
 
     /**
      * Scan starting from {@code projectRoot}, which must contain a

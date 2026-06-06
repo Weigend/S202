@@ -17,8 +17,9 @@ package de.weigend.s202.domain.debug;
 
 import de.weigend.s202.domain.DomainModel;
 import de.weigend.s202.domain.architecture.LevelCalculator;
-import de.weigend.s202.reader.AnalyzerRegistry;
 import de.weigend.s202.reader.DependencyModel;
+import de.weigend.s202.reader.LanguageAnalyzer;
+import io.softwareecg.wfx.lookup.api.Lookup;
 
 import java.nio.file.Path;
 import java.util.List;
@@ -30,9 +31,7 @@ public class TestLevelCalculatorDebug {
         System.out.println("=== TESTING LEVEL CALCULATOR ===\n");
         
         // Step 1: Analyze
-        DependencyModel rawModel = AnalyzerRegistry.createDefault()
-                .javaBytecodeAnalyzer()
-                .analyze(List.of(Path.of(jarPath)));
+        DependencyModel rawModel = javaBytecodeAnalyzer().analyze(List.of(Path.of(jarPath)));
         System.out.println("Raw packages: " + rawModel.getAllPackageNames());
         
         // Step 2: Calculate
@@ -44,5 +43,13 @@ public class TestLevelCalculatorDebug {
         for (DomainModel.CalculatedElementInfo pkg : domainModel.getAllPackages().values()) {
             System.out.println("  " + pkg.fullName + " -> L" + pkg.architectureLevel);
         }
+    }
+
+    private static LanguageAnalyzer javaBytecodeAnalyzer() {
+        Lookup.init();
+        return Lookup.lookupAll(LanguageAnalyzer.class).stream()
+                .filter(analyzer -> "Java bytecode".equals(analyzer.displayName()))
+                .findFirst()
+                .orElseThrow(() -> new IllegalStateException("No Java bytecode analyzer registered"));
     }
 }

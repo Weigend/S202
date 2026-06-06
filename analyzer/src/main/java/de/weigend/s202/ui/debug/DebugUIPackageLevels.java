@@ -15,13 +15,14 @@
  */
 package de.weigend.s202.ui.debug;
 
-import de.weigend.s202.reader.AnalyzerRegistry;
 import de.weigend.s202.reader.DependencyModel;
+import de.weigend.s202.reader.LanguageAnalyzer;
 import de.weigend.s202.domain.architecture.LevelCalculator;
 import de.weigend.s202.domain.DomainModel;
 import de.weigend.s202.ui.model.ArchitectureNode;
 import de.weigend.s202.ui.model.ArchitectureNode.NodeType;
 import de.weigend.s202.ui.model.ArchitectureNodeBuilder;
+import io.softwareecg.wfx.lookup.api.Lookup;
 
 import java.nio.file.Path;
 import java.util.List;
@@ -36,9 +37,7 @@ public class DebugUIPackageLevels {
         System.out.println("=== TESTING UI PIPELINE WITH: " + jarPath + " ===\n");
         
         // Step 1: Analyze
-        DependencyModel rawModel = AnalyzerRegistry.createDefault()
-                .javaBytecodeAnalyzer()
-                .analyze(List.of(Path.of(jarPath)));
+        DependencyModel rawModel = javaBytecodeAnalyzer().analyze(List.of(Path.of(jarPath)));
         
         // Step 2: Calculate levels
         LevelCalculator calculator = new LevelCalculator();
@@ -64,5 +63,13 @@ public class DebugUIPackageLevels {
         for (ArchitectureNode child : node.getChildren()) {
             printPackageNodes(child, indent + "  ");
         }
+    }
+
+    private static LanguageAnalyzer javaBytecodeAnalyzer() {
+        Lookup.init();
+        return Lookup.lookupAll(LanguageAnalyzer.class).stream()
+                .filter(analyzer -> "Java bytecode".equals(analyzer.displayName()))
+                .findFirst()
+                .orElseThrow(() -> new IllegalStateException("No Java bytecode analyzer registered"));
     }
 }

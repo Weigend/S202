@@ -13,7 +13,9 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package de.weigend.s202.reader;
+package de.weigend.s202.reader.impl;
+
+import de.weigend.s202.reader.DependencyModel;
 
 import java.util.LinkedHashMap;
 import java.util.Map;

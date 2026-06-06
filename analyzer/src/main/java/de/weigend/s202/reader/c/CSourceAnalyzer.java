@@ -18,7 +18,9 @@ package de.weigend.s202.reader.c;
 import de.weigend.s202.reader.DependencyModel;
 import de.weigend.s202.reader.EdgeKind;
 import de.weigend.s202.reader.LanguageAnalyzer;
-import de.weigend.s202.reader.PackageHierarchyBuilder;
+import de.weigend.s202.reader.impl.PackageHierarchyBuilder;
+
+import jakarta.inject.Singleton;
 
 import java.io.IOException;
 import java.nio.charset.MalformedInputException;
@@ -46,6 +48,7 @@ import java.util.regex.Pattern;
  * C functions to methods, project includes to IMPORTS edges, and direct
  * function calls to CALLS edges.
  */
+@Singleton
 public class CSourceAnalyzer implements LanguageAnalyzer {
 
     private static final Set<String> EXCLUDED_DIR_NAMES = Set.of(

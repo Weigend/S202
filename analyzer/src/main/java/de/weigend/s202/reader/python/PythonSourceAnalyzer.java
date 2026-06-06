@@ -18,8 +18,10 @@ package de.weigend.s202.reader.python;
 import de.weigend.s202.reader.DependencyModel;
 import de.weigend.s202.reader.EdgeKind;
 import de.weigend.s202.reader.LanguageAnalyzer;
-import de.weigend.s202.reader.PackageHierarchyBuilder;
+import de.weigend.s202.reader.impl.PackageHierarchyBuilder;
 
+import jakarta.inject.Inject;
+import jakarta.inject.Singleton;
 
 import java.io.IOException;
 import java.nio.file.FileVisitResult;
@@ -42,6 +44,7 @@ import java.util.Set;
 /**
  * Analyzes Python source trees and maps modules/files onto S202's DependencyModel.
  */
+@Singleton
 public class PythonSourceAnalyzer implements LanguageAnalyzer {
 
     private static final List<String> COMMON_SOURCE_ROOTS = List.of("src", "lib");
@@ -56,6 +59,7 @@ public class PythonSourceAnalyzer implements LanguageAnalyzer {
 
     private final PythonAstProvider astProvider;
 
+    @Inject
     public PythonSourceAnalyzer() {
         this(new ExternalPythonAstProvider());
     }

@@ -15,12 +15,13 @@
  */
 package de.weigend.s202.domain.debug;
 
-import de.weigend.s202.reader.AnalyzerRegistry;
 import de.weigend.s202.reader.DependencyModel;
+import de.weigend.s202.reader.LanguageAnalyzer;
 import de.weigend.s202.domain.architecture.LevelCalculator;
 import de.weigend.s202.domain.DomainModel;
 import de.weigend.s202.graph.TarjanSCCFinder;
 import de.weigend.s202.graph.StronglyConnectedComponent;
+import io.softwareecg.wfx.lookup.api.Lookup;
 
 import java.nio.file.Path;
 import java.util.*;
@@ -35,9 +36,7 @@ public class DebugPackageLevels {
         System.out.println("=== ANALYZING JAR: " + jarPath + " ===\n");
         
         // Step 1: Analyze bytecode
-        DependencyModel rawModel = AnalyzerRegistry.createDefault()
-                .javaBytecodeAnalyzer()
-                .analyze(List.of(Path.of(jarPath)));
+        DependencyModel rawModel = javaBytecodeAnalyzer().analyze(List.of(Path.of(jarPath)));
         
         // Step 2: Calculate levels
         LevelCalculator calculator = new LevelCalculator();
@@ -110,5 +109,13 @@ public class DebugPackageLevels {
                 }
             }
         }
+    }
+
+    private static LanguageAnalyzer javaBytecodeAnalyzer() {
+        Lookup.init();
+        return Lookup.lookupAll(LanguageAnalyzer.class).stream()
+                .filter(analyzer -> "Java bytecode".equals(analyzer.displayName()))
+                .findFirst()
+                .orElseThrow(() -> new IllegalStateException("No Java bytecode analyzer registered"));
     }
 }
