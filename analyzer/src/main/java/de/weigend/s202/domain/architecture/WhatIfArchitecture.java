@@ -17,8 +17,8 @@ package de.weigend.s202.domain.architecture;
 
 import de.weigend.s202.domain.DomainModel;
 import de.weigend.s202.domain.DomainModel.CalculatedElementInfo;
-import de.weigend.s202.graph.StronglyConnectedComponent;
-import de.weigend.s202.graph.TarjanSCCFinder;
+import de.weigend.s202.domain.StronglyConnectedComponent;
+import de.weigend.s202.domain.SCCFinder;
 
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -185,7 +185,7 @@ public final class WhatIfArchitecture implements Architecture {
             packageGraph.computeIfAbsent(targetPackage, ignored -> new LinkedHashSet<>());
         }
 
-        return new TarjanSCCFinder(packageGraph).findSCCs().stream()
+        return SCCFinder.defaultFinder().findSCCs(packageGraph).stream()
                 .filter(StronglyConnectedComponent::isTangle)
                 .map(scc -> new Tangle(scc.getMembers()))
                 .toList();

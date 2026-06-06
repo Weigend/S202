@@ -17,8 +17,8 @@ package de.weigend.s202.domain.architecture;
 
 import de.weigend.s202.domain.DomainModel;
 import de.weigend.s202.domain.DomainModel.CalculatedElementInfo;
-import de.weigend.s202.graph.StronglyConnectedComponent;
-import de.weigend.s202.graph.TarjanSCCFinder;
+import de.weigend.s202.domain.StronglyConnectedComponent;
+import de.weigend.s202.domain.SCCFinder;
 import de.weigend.s202.reader.DependencyModel;
 
 import java.util.ArrayList;
@@ -188,7 +188,7 @@ public class LocalLevelCalculator {
         boolean changed = true;
         while (changed) {
             changed = false;
-            for (StronglyConnectedComponent scc : new TarjanSCCFinder(graph).findSCCs()) {
+            for (StronglyConnectedComponent scc : SCCFinder.defaultFinder().findSCCs(graph)) {
                 if (scc.getSize() < 2) continue;
                 Set<String> members = scc.getMembers();
 

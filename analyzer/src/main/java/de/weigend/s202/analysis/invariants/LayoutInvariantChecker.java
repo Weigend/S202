@@ -15,8 +15,8 @@
  */
 package de.weigend.s202.analysis.invariants;
 
-import de.weigend.s202.graph.StronglyConnectedComponent;
-import de.weigend.s202.graph.TarjanSCCFinder;
+import de.weigend.s202.domain.StronglyConnectedComponent;
+import de.weigend.s202.domain.SCCFinder;
 import de.weigend.s202.domain.DomainModel;
 import de.weigend.s202.domain.DomainModel.CalculatedElementInfo;
 import de.weigend.s202.reader.DependencyModel;
@@ -159,7 +159,7 @@ public final class LayoutInvariantChecker {
             Map<String, Set<String>> classGraph) {
         Map<String, StronglyConnectedComponent> map = new HashMap<>(classGraph.size());
         if (classGraph.isEmpty()) return map;
-        List<StronglyConnectedComponent> sccs = new TarjanSCCFinder(classGraph).findSCCs();
+        List<StronglyConnectedComponent> sccs = SCCFinder.defaultFinder().findSCCs(classGraph);
         for (StronglyConnectedComponent scc : sccs) {
             for (String member : scc.getMembers()) {
                 map.put(member, scc);
@@ -354,7 +354,7 @@ public final class LayoutInvariantChecker {
         }
         if (pkgGraph.isEmpty()) return;
 
-        List<StronglyConnectedComponent> pkgSccs = new TarjanSCCFinder(pkgGraph).findSCCs();
+        List<StronglyConnectedComponent> pkgSccs = SCCFinder.defaultFinder().findSCCs(pkgGraph);
         for (StronglyConnectedComponent scc : pkgSccs) {
             Set<String> members = scc.getMembers();
             if (members.size() <= 1) continue;

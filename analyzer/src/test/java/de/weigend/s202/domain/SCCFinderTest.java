@@ -13,7 +13,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package de.weigend.s202.graph;
+package de.weigend.s202.domain;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -22,10 +22,11 @@ import static org.junit.jupiter.api.Assertions.*;
 import java.util.*;
 
 /**
- * Tests for Tarjan's SCC finder algorithm.
+ * Tests for the SCC finder contract.
  */
-public class TarjanSCCFinderTest {
+class SCCFinderTest {
     
+    private final SCCFinder finder = SCCFinder.defaultFinder();
     private Map<String, Set<String>> graph;
     
     @BeforeEach
@@ -40,8 +41,7 @@ public class TarjanSCCFinderTest {
         graph.put("B", new HashSet<>(Arrays.asList("C")));
         graph.put("C", new HashSet<>(Arrays.asList("A")));
         
-        TarjanSCCFinder finder = new TarjanSCCFinder(graph);
-        List<StronglyConnectedComponent> sccs = finder.findSCCs();
+        List<StronglyConnectedComponent> sccs = finder.findSCCs(graph);
         
         assertEquals(1, sccs.size(), "Should find one SCC containing all three nodes");
         assertTrue(sccs.get(0).isTangle(), "SCC with 3 nodes should be a tangle");
@@ -55,8 +55,7 @@ public class TarjanSCCFinderTest {
         graph.put("B", new HashSet<>(Arrays.asList("C")));
         graph.put("C", new HashSet<>());
         
-        TarjanSCCFinder finder = new TarjanSCCFinder(graph);
-        List<StronglyConnectedComponent> sccs = finder.findSCCs();
+        List<StronglyConnectedComponent> sccs = finder.findSCCs(graph);
         
         assertEquals(3, sccs.size(), "Should find three separate SCCs");
         for (StronglyConnectedComponent scc : sccs) {
@@ -75,8 +74,7 @@ public class TarjanSCCFinderTest {
         graph.put("C", new HashSet<>(Arrays.asList("D")));
         graph.put("D", new HashSet<>(Arrays.asList("C")));
         
-        TarjanSCCFinder finder = new TarjanSCCFinder(graph);
-        List<StronglyConnectedComponent> sccs = finder.findSCCs();
+        List<StronglyConnectedComponent> sccs = finder.findSCCs(graph);
         
         assertEquals(2, sccs.size(), "Should find two separate SCCs");
         for (StronglyConnectedComponent scc : sccs) {
@@ -90,8 +88,7 @@ public class TarjanSCCFinderTest {
         // A -> A (self-loop)
         graph.put("A", new HashSet<>(Arrays.asList("A")));
         
-        TarjanSCCFinder finder = new TarjanSCCFinder(graph);
-        List<StronglyConnectedComponent> sccs = finder.findSCCs();
+        List<StronglyConnectedComponent> sccs = finder.findSCCs(graph);
         
         assertEquals(1, sccs.size(), "Should find one SCC");
         // Note: Self-loop creates size-1 SCC, not a tangle (tangle requires size > 1)
@@ -107,8 +104,7 @@ public class TarjanSCCFinderTest {
         graph.put("4", new HashSet<>(Arrays.asList("5")));
         graph.put("5", new HashSet<>());
         
-        TarjanSCCFinder finder = new TarjanSCCFinder(graph);
-        List<StronglyConnectedComponent> sccs = finder.findSCCs();
+        List<StronglyConnectedComponent> sccs = finder.findSCCs(graph);
         
         // Expected SCCs: {1}, {2,3}, {4}, {5} = 4 SCCs
         assertEquals(4, sccs.size(), "Should find one tangle (2-3) and three single nodes");
@@ -119,8 +115,7 @@ public class TarjanSCCFinderTest {
     
     @Test
     public void testEmptyGraph() {
-        TarjanSCCFinder finder = new TarjanSCCFinder(graph);
-        List<StronglyConnectedComponent> sccs = finder.findSCCs();
+        List<StronglyConnectedComponent> sccs = finder.findSCCs(graph);
         
         assertEquals(0, sccs.size(), "Empty graph should have no SCCs");
     }

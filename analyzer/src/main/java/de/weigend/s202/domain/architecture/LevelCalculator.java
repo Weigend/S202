@@ -16,8 +16,8 @@
 package de.weigend.s202.domain.architecture;
 
 import de.weigend.s202.domain.DomainModel;
-import de.weigend.s202.graph.StronglyConnectedComponent;
-import de.weigend.s202.graph.TarjanSCCFinder;
+import de.weigend.s202.domain.StronglyConnectedComponent;
+import de.weigend.s202.domain.SCCFinder;
 import de.weigend.s202.reader.DependencyModel;
 import de.weigend.s202.reader.EdgeKind;
 
@@ -156,7 +156,7 @@ public class LevelCalculator {
         boolean changed = true;
         while (changed) {
             changed = false;
-            for (StronglyConnectedComponent scc : new TarjanSCCFinder(graph).findSCCs()) {
+            for (StronglyConnectedComponent scc : SCCFinder.defaultFinder().findSCCs(graph)) {
                 if (scc.getSize() < 2) continue;
                 Set<String> members = scc.getMembers();
                 for (String from : members) {
@@ -181,7 +181,7 @@ public class LevelCalculator {
         boolean fallBChanged = true;
         while (fallBChanged) {
             fallBChanged = false;
-            for (StronglyConnectedComponent scc : new TarjanSCCFinder(graph).findSCCs()) {
+            for (StronglyConnectedComponent scc : SCCFinder.defaultFinder().findSCCs(graph)) {
                 if (scc.getSize() < 2) continue;
                 Set<String> members = scc.getMembers();
                 for (String from : sortedFiltered(new ArrayList<>(graph.keySet()), members)) {
@@ -199,7 +199,7 @@ public class LevelCalculator {
         model.setClassBackEdges(hypothesisBackEdgeKeys);
 
         // Phase 3: SCC-collapsed longest-path on the cleaned DAG.
-        List<StronglyConnectedComponent> classSccs = new TarjanSCCFinder(graph).findSCCs();
+        List<StronglyConnectedComponent> classSccs = SCCFinder.defaultFinder().findSCCs(graph);
         Map<String, StronglyConnectedComponent> classToScc = new HashMap<>();
         for (StronglyConnectedComponent scc : classSccs) {
             for (String m : scc.getMembers()) classToScc.put(m, scc);
@@ -277,7 +277,7 @@ public class LevelCalculator {
                 }
             }
         }
-        model.setPackageTangles(new TarjanSCCFinder(directPkgGraph).findSCCs().stream()
+        model.setPackageTangles(SCCFinder.defaultFinder().findSCCs(directPkgGraph).stream()
                 .filter(StronglyConnectedComponent::isTangle)
                 .map(StronglyConnectedComponent::getMembers)
                 .collect(Collectors.toList()));
@@ -296,7 +296,7 @@ public class LevelCalculator {
         boolean changed = true;
         while (changed) {
             changed = false;
-            for (StronglyConnectedComponent scc : new TarjanSCCFinder(graph).findSCCs()) {
+            for (StronglyConnectedComponent scc : SCCFinder.defaultFinder().findSCCs(graph)) {
                 if (scc.getSize() < 2) continue;
                 Set<String> members = scc.getMembers();
 
@@ -343,7 +343,7 @@ public class LevelCalculator {
         }
 
         // Assign package levels: SCC-collapsed DAG → longest-path
-        List<StronglyConnectedComponent> sccs = new TarjanSCCFinder(graph).findSCCs();
+        List<StronglyConnectedComponent> sccs = SCCFinder.defaultFinder().findSCCs(graph);
         Map<String, StronglyConnectedComponent> pkgToScc = new HashMap<>();
         for (StronglyConnectedComponent scc : sccs) {
             for (String m : scc.getMembers()) pkgToScc.put(m, scc);

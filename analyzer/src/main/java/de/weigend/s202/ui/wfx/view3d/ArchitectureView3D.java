@@ -18,8 +18,8 @@ package de.weigend.s202.ui.wfx.view3d;
 import de.weigend.s202.domain.architecture.Architecture;
 import de.weigend.s202.domain.architecture.EndpointPair;
 import de.weigend.s202.domain.architecture.Violation;
-import de.weigend.s202.graph.StronglyConnectedComponent;
-import de.weigend.s202.graph.TarjanSCCFinder;
+import de.weigend.s202.domain.StronglyConnectedComponent;
+import de.weigend.s202.domain.SCCFinder;
 import de.weigend.s202.ui.model.ArchitectureNode;
 import io.softwareecg.wfx.windowmanager.api.Position;
 import io.softwareecg.wfx.windowmanager.api.View;
@@ -500,7 +500,7 @@ public class ArchitectureView3D implements View {
             return List.of();
         }
         List<Edge> edges = new ArrayList<>();
-        for (StronglyConnectedComponent scc : new TarjanSCCFinder(graph).findSCCs()) {
+        for (StronglyConnectedComponent scc : SCCFinder.defaultFinder().findSCCs(graph)) {
             if (!scc.isTangle()) {
                 continue;
             }
