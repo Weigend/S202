@@ -244,6 +244,15 @@ public class S202Module implements Module {
         if (focused instanceof ArchitectureWfxView a) {
             return a;
         }
+        // When a tool panel (Outline, Quality, …) is focused, fall back to the
+        // last architecture view that held focus rather than blindly picking the
+        // first registered one.  This keeps toolbar actions and node-selection
+        // events targeting the view the user was working in before switching to
+        // the side panel.
+        View last = wm.getLastFocusedView();
+        if (last instanceof ArchitectureWfxView a) {
+            return a;
+        }
         return wm.getRegisteredViews().stream()
                 .filter(ArchitectureWfxView.class::isInstance)
                 .map(ArchitectureWfxView.class::cast)
