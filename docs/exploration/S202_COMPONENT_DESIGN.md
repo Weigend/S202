@@ -237,6 +237,14 @@ public interface SCCFinder {
 
 ![Verletzungen der domain-Komponentengrenze: externe Zugriffe auf Impl-Klassen](component-images/06-domain-as-component-violations.png)
 
+S202 hat die Komponentengrenze automatisch geschnitten. Die Darstellung
+zeigt, dass nahezu alle Klassen von der UI-Seite direkt verwendet werden.
+Die Architektur-Interfaces (`Architecture`, `ArchitectureStyle`, `Element`)
+waren bereits vorbereitet, wurden aber noch nicht konsequent genutzt.
+Die vielen Violations entstehen, weil S202 Zugriffe von außen auf den
+Impl-Teil einer Komponente als Verletzung wertet — erlaubt ist nur der
+Zugriff über die Schnittstelle.
+
 ### Problem
 
 `domain` ist heute kein Komponent sondern ein Paket-Namespace. `S202Module`
