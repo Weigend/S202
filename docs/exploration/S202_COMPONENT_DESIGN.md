@@ -100,11 +100,21 @@ optional einen passenden `FileLoader` dazuregistrieren.
 
 ### Ergebnisnachweis
 
-![Nach Einführung der Interfaces: API-Grenze sichtbar, Impl-Zugriffe noch vorhanden](component-images/01-4-commit-nach-einfuehrung-interfaces.png)
+![Schritt 1: Interfaces und API-Grenze eingeführt](component-images/01-4-commit-nach-einfuehrung-interfaces.png)
 
-![Nach Einführung des impl-Unterpakets: alle Implementierungsklassen versteckt](component-images/01-5-1c-commit-no-violations.png)
+`LanguageAnalyzer` und `AnalyzerRegistry` bilden die API. `AnalyzerRegistry`
+kennt jedoch noch die konkreten Analyzer — die gestrichelten Pfeile zeigen
+Abhängigkeiten aus der Impl-Ebene in die API, was eine zyklische Kopplung
+zwischen API und Impl bedeutet.
 
-![Finaler Zustand: reader-Paket mit sauberer API-Grenze, keine Violations](component-images/01-6-commit-finish-reader-package.png)
+![Schritt 2: AnalyzerRegistry durch Avaje-Lookup ersetzt, keine Cycles](component-images/01-5-1c-commit-no-violations.png)
+
+`AnalyzerRegistry` ist verschwunden. Die konkrete Analyzer-Registrierung
+übernimmt Avaje Inject per Service-Lookup — die API kennt die Impl nicht
+mehr. Alle eingehenden Abhängigkeiten zeigen nur noch auf API-Klassen,
+kein Pfeil geht in Gegenrichtung.
+
+![Finaler Zustand in der Schichtensicht: reader-Paket sauber strukturiert](component-images/01-6-commit-finish-reader-package.png)
 
 ---
 
