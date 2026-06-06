@@ -25,6 +25,12 @@ realen Codebasen leisten kann.
 
 ## 1. `reader` als Komponente mit versteckter Implementierung
 
+![Ist-Stand: alle Implementierungsklassen des reader-Pakets sind direkt sichtbar](component-images/01-1-reader-package.png)
+
+![reader als Komponente mit sichtbarer API-Grenze](component-images/01-2-reader-as-component.png)
+
+![Verletzungen der Komponentengrenze: externe Zugriffe auf reader-Implementierungsklassen](component-images/01-3-reader-as-component-violations.png)
+
 ### Problem
 
 `S202Module` kennt alle Interna des `reader`-Pakets:
@@ -96,6 +102,8 @@ optional einen passenden `FileLoader` dazuregistrieren.
 
 ## 2. `SCCVisualizationHelper` — Altlast, kann gelöscht werden
 
+![S202 zeigt: SCCVisualizationHelper hat keine eingehenden Abhängigkeiten — toter Code](component-images/02-scc-visualizationhelper-no-incoming-dep.png)
+
 `de.weigend.s202.graph.SCCVisualizationHelper` hat keinen einzigen Aufrufer
 außerhalb seiner eigenen Klassendefinition. Die Klasse ist toter Code.
 
@@ -116,6 +124,8 @@ im Namen gehört nicht ins `graph`-Paket (Domain-Graph-Infrastruktur).
 
 ## 3. `SCCDAGBuilder` — Altlast, kann gelöscht werden
 
+![SCCDAGBuilder ohne Aufrufer im Produktionscode — toter Code](component-images/03-1-sccdagbuilder-no-incoming-dep.png)
+
 `de.weigend.s202.graph.SCCDAGBuilder` wird im Produktionscode nirgendwo
 aufgerufen. Einziger Aufrufer ist `SCCDAGBuilderTest`, der die Klasse
 künstlich am Leben hält.
@@ -131,6 +141,8 @@ beides nicht und würde allein keine korrekten Architekturlevels liefern.
 
 ## 4. `EdgeClassification` — verschieben, nicht löschen
 
+![EdgeClassification im graph-Paket, einziger Aufrufer LayoutInvariantChecker sitzt in analysis.invariants](component-images/04-1-edge-classification-wrong-package.png)
+
 `de.weigend.s202.graph.EdgeClassification` hat genau einen Aufrufer im
 Produktionscode: `LayoutInvariantChecker`. Kein anderer Code braucht sie.
 
@@ -145,6 +157,8 @@ der Checker zu groß wird). Aus dem `graph`-Paket entfernen.
 ---
 
 ## 5. `graph`-Paket auflösen — Inhalt in `domain` überführen
+
+![graph-Inhalt als Unterpaket in der domain-Komponente](component-images/05-graph-in-domain.png)
 
 Nach den Löschungen aus Punkt 2–4 verbleiben im `graph`-Paket nur noch
 zwei Klassen: `TarjanSCCFinder` und `StronglyConnectedComponent`.
@@ -188,6 +202,8 @@ public interface SCCFinder {
 ---
 
 ## 6. `domain` als Komponente — API-Schnitt
+
+![Verletzungen der domain-Komponentengrenze: externe Zugriffe auf Impl-Klassen](component-images/06-domain-as-component-violations.png)
 
 ### Problem
 
@@ -323,6 +339,8 @@ sprechendere Namen wie `LayeredView`.
 
 ### Ist-Stand
 
+![project-Paket: alle drei Klassen direkt sichtbar, keine API-Grenze](component-images/08-project-as-component.png)
+
 Alle drei Klassen des `project`-Pakets sind direkt von außen importiert:
 
 | Klasse | Rolle |
@@ -361,6 +379,8 @@ auch `S202Project` zum Implementierungsdetail. Das ist ein separater Schritt.
 ---
 
 ## 9. UI — bewusst außerhalb dieses Schritts
+
+![Gesamtübersicht: Verletzungen aller vier Komponenten im aktuellen Stand](component-images/09-all-components-violations.png)
 
 Die UI-Schicht (`de.weigend.s202.ui`) bleibt in diesem Schritt monolithisch.
 Sie wird nicht als Komponente neu geschnitten.
