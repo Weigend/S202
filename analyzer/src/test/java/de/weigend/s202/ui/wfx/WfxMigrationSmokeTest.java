@@ -20,7 +20,6 @@ import de.weigend.s202.domain.architecture.ArchitectureKind;
 import de.weigend.s202.domain.architecture.ArchitectureStyle;
 import io.softwareecg.wfx.lookup.api.Lookup;
 import io.softwareecg.wfx.lookup.api.LookupStrategy;
-import io.softwareecg.wfx.lookup.avaje.AvajeLookupStrategy;
 import io.softwareecg.wfx.platform.api.Module;
 import io.softwareecg.wfx.windowmanager.api.ApplicationWindow;
 import io.softwareecg.wfx.windowmanager.api.WindowManager;
@@ -38,7 +37,6 @@ class WfxMigrationSmokeTest {
 
     @AfterEach
     void tearDown() {
-        AvajeLookupStrategy.shutdownLookup();
         Lookup.init((LookupStrategy) null);
     }
 

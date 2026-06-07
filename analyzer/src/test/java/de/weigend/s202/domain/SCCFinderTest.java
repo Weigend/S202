@@ -16,7 +16,6 @@
 package de.weigend.s202.domain;
 
 import io.softwareecg.wfx.lookup.api.Lookup;
-import io.softwareecg.wfx.lookup.avaje.AvajeLookupStrategy;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
@@ -37,8 +36,7 @@ class SCCFinderTest {
 
     @AfterAll
     static void shutdownLookup() {
-        AvajeLookupStrategy.shutdownLookup();
-        Lookup.init((io.softwareecg.wfx.lookup.api.LookupStrategy) null);
+        Lookup.shutdown();
     }
 
     private final SCCFinder finder = Lookup.lookup(SCCFinder.class);

@@ -17,7 +17,6 @@ package de.weigend.s202.ui.rendering;
 
 import de.weigend.s202.ui.model.ArchitectureNode;
 import io.softwareecg.wfx.lookup.api.Lookup;
-import io.softwareecg.wfx.lookup.avaje.AvajeLookupStrategy;
 import javafx.scene.layout.Pane;
 import javafx.scene.paint.Color;
 import javafx.scene.shape.Line;
@@ -42,8 +41,7 @@ class SCCRendererTest {
 
     @AfterAll
     static void shutdownLookup() {
-        AvajeLookupStrategy.shutdownLookup();
-        Lookup.init((io.softwareecg.wfx.lookup.api.LookupStrategy) null);
+        Lookup.shutdown();
     }
 
     @Test
