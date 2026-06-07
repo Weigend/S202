@@ -2,7 +2,7 @@
 
 # S202 Code Analyzer
 
-A JavaFX-based tool for analyzing Java bytecode and Python source code and visualizing code architecture.
+A JavaFX-based tool for analyzing code across multiple languages and visualizing software architecture.
 
 > **→ [The Tool That Fixed Itself — S202 Case Study](docs/s202/CASE_STUDY.md)**
 > *We pointed S202 at its own codebase. No source code was read. Here's what happened.*
@@ -12,17 +12,44 @@ A JavaFX-based tool for analyzing Java bytecode and Python source code and visua
 
 ## Features
 
-- **Bytecode analysis**: Parses Java `.class` files with ASM 9.6
-- **Python source analysis**: Analyzes Python source trees via CPython's `ast` module; maps modules to the same dependency model as Java (no extra tooling beyond a standard `python3` install)
-- **Dependency detection**: Extracts class/module and package dependencies (imports, calls, inheritance, type annotations)
-- **Cycle detection**: Detects two independent kinds of cycles — **class cycles** (red overlay: SCCs at the class level) and **package cycles** (orange overlay: tangles at the package level); both are separately togglable because they answer different questions
-- **Architecture layering**: Topological ordering by dependency depth
-- **Hierarchical visualization**: JavaFX TreeView with expandable packages
-- **Component View**: Shows top-level components with an explicit API area above the implementation packages
-- **Violation detection**: Marks architectural violations (backward dependencies)
-- **Component policy checks**: Detects calls into another component's implementation and API classes depending on implementation classes
-- **Multi-project import**: Load Maven (`pom.xml`) and Gradle (`settings.gradle`) multi-module projects directly; all module JARs are collected automatically
-- **Layout invariant check**: Five machine-checkable invariants act as plausibility alerts for developers; four of them (R1/R2/R3/R5) never fire on a correct pipeline and report algorithm bugs with a copyable reproducer block, while R1-visual fires only on remaining edges of broken cycles and shows real architectural violations
+- **Readers**: Java bytecode (ASM 9.6), Maven and Gradle multi-module projects, Python source (CPython AST), C source (PoC); Go, TypeScript, Rust planned
+- **Dependency detection**: Class/module and package dependencies — imports, calls, inheritance, type annotations
+- **Class cycle detection**: SCCs at class level (red overlay)
+- **Package tangle detection**: Mutual package dependencies (orange overlay); both overlays are independently togglable
+- **View: Layered Architecture**: Topological ordering by dependency depth; backward dependencies highlighted as violations
+- **View: Tangle**: Focused cycle visualization with method-level cut function for concrete refactoring plans
+- **View: Component**: API/impl split with explicit boundary; checks for cross-component access and API-on-impl coupling
+- **View: Hexagonal**: Port/adapter layout derived from annotations and naming conventions (PoC)
+- **Layout invariant checks**: Five plausibility alerts for the layout pipeline; four catch algorithm bugs, one shows real violations
+
+## Feature Status
+
+> **Stable** · **Beta** · **Alpha** · **PoC** · **Planned**
+
+<small>
+
+| Feature | Description | Status |
+|---|---|---|
+| **Reader: Java (JAR)** | Bytecode analysis via ASM 9.6 | **Stable** |
+| **Reader: Maven** | Multi-module via `pom.xml` | **Stable** |
+| **Reader: Gradle** | Multi-module via `settings.gradle(.kts)` | **Beta** |
+| **Reader: Python** | Source analysis via CPython `ast` | **Alpha** |
+| **Reader: C** | Source analysis via AST | **PoC** |
+| **Reader: Go** | Source analysis | **Planned** |
+| **Reader: TypeScript** | Source analysis | **Planned** |
+| **Reader: Rust** | Source analysis (on request) | **Planned** |
+| **View: Layered Architecture** | Topological package layout; violation and cycle overlays | **Stable** |
+| **View: Tangle** | Cycle visualization with method-level cut function | **Stable** |
+| **View: Component** | API/impl split with boundary violation checks | **Beta** |
+| **View: Hexagonal** | Port/adapter layout from annotations and naming conventions | **PoC** |
+| **Analysis: Dependencies** | Class/package dependencies (imports, calls, inheritance, annotations) | **Stable** |
+| **Analysis: Class cycles** | SCCs at class level (red overlay) | **Stable** |
+| **Analysis: Package tangles** | Mutual package dependencies (orange overlay) | **Stable** |
+| **Analysis: Violations** | Backward dependencies across layer boundaries | **Stable** |
+| **Analysis: Component checks** | Cross-component impl access and API-on-impl coupling | **Beta** |
+| **Analysis: Layout invariants** | Five plausibility alerts for the layout pipeline | **Beta** |
+
+</small>
 
 ## Quick Start
 
@@ -104,7 +131,9 @@ The user decides which edges to cut — guided by what is easiest to implement, 
 
 The **Component View** is available from the **View -> Component View** menu after loading a JAR or project. It keeps the normal layered package ordering, but projects packages with a public API into component boxes: the API is shown in a blue section at the top, and both API and implementation keep their regular nested package layout. Local levels inside the API are recalculated from API-only dependencies.
 
-![Component View showing WFX modules](docs/wfx/wfx-architecture.png)
+The screenshot below shows S202 analyzing its own codebase — four components (project, analysis, domain, reader) arranged in layers, each with a blue API area at the top and a yellow implementation area below.
+
+![Component View showing S202 components](docs/10-component-architecture-final-all-deps.png)
 
 Component roots are top-level packages that contain API classes. Components are not nested into other components; packages inside the implementation area remain collapsible and use the same local hierarchy as the normal architecture view.
 
