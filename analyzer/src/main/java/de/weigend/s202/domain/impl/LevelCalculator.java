@@ -164,7 +164,7 @@ public class LevelCalculator implements DomainComputer {
         boolean changed = true;
         while (changed) {
             changed = false;
-            for (StronglyConnectedComponent scc : TarjanSCCFinder.create().findSCCs(graph)) {
+            for (StronglyConnectedComponent scc : new TarjanSCCFinder().findSCCs(graph)) {
                 if (scc.getSize() < 2) continue;
                 Set<String> members = scc.getMembers();
                 for (String from : members) {
@@ -189,7 +189,7 @@ public class LevelCalculator implements DomainComputer {
         boolean fallBChanged = true;
         while (fallBChanged) {
             fallBChanged = false;
-            for (StronglyConnectedComponent scc : TarjanSCCFinder.create().findSCCs(graph)) {
+            for (StronglyConnectedComponent scc : new TarjanSCCFinder().findSCCs(graph)) {
                 if (scc.getSize() < 2) continue;
                 Set<String> members = scc.getMembers();
                 for (String from : sortedFiltered(new ArrayList<>(graph.keySet()), members)) {
@@ -207,7 +207,7 @@ public class LevelCalculator implements DomainComputer {
         model.setClassBackEdges(hypothesisBackEdgeKeys);
 
         // Phase 3: SCC-collapsed longest-path on the cleaned DAG.
-        List<StronglyConnectedComponent> classSccs = TarjanSCCFinder.create().findSCCs(graph);
+        List<StronglyConnectedComponent> classSccs = new TarjanSCCFinder().findSCCs(graph);
         Map<String, StronglyConnectedComponent> classToScc = new HashMap<>();
         for (StronglyConnectedComponent scc : classSccs) {
             for (String m : scc.getMembers()) classToScc.put(m, scc);
@@ -285,7 +285,7 @@ public class LevelCalculator implements DomainComputer {
                 }
             }
         }
-        model.setPackageTangles(TarjanSCCFinder.create().findSCCs(directPkgGraph).stream()
+        model.setPackageTangles(new TarjanSCCFinder().findSCCs(directPkgGraph).stream()
                 .filter(StronglyConnectedComponent::isTangle)
                 .map(StronglyConnectedComponent::getMembers)
                 .collect(Collectors.toList()));
@@ -304,7 +304,7 @@ public class LevelCalculator implements DomainComputer {
         boolean changed = true;
         while (changed) {
             changed = false;
-            for (StronglyConnectedComponent scc : TarjanSCCFinder.create().findSCCs(graph)) {
+            for (StronglyConnectedComponent scc : new TarjanSCCFinder().findSCCs(graph)) {
                 if (scc.getSize() < 2) continue;
                 Set<String> members = scc.getMembers();
 
@@ -351,7 +351,7 @@ public class LevelCalculator implements DomainComputer {
         }
 
         // Assign package levels: SCC-collapsed DAG → longest-path
-        List<StronglyConnectedComponent> sccs = TarjanSCCFinder.create().findSCCs(graph);
+        List<StronglyConnectedComponent> sccs = new TarjanSCCFinder().findSCCs(graph);
         Map<String, StronglyConnectedComponent> pkgToScc = new HashMap<>();
         for (StronglyConnectedComponent scc : sccs) {
             for (String m : scc.getMembers()) pkgToScc.put(m, scc);

@@ -19,6 +19,10 @@ import de.weigend.s202.domain.DomainModel;
 import de.weigend.s202.domain.impl.LevelCalculator;
 import de.weigend.s202.reader.DependencyModel;
 import de.weigend.s202.reader.impl.java.InputAnalyzer;
+import io.softwareecg.wfx.lookup.api.Lookup;
+import io.softwareecg.wfx.lookup.avaje.AvajeLookupStrategy;
+import org.junit.jupiter.api.AfterAll;
+import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 
 import java.io.File;
@@ -28,6 +32,17 @@ import java.util.List;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
 public class MinecraftInvariantCheckTest {
+
+    @BeforeAll
+    static void initLookup() {
+        Lookup.init();
+    }
+
+    @AfterAll
+    static void shutdownLookup() {
+        AvajeLookupStrategy.shutdownLookup();
+        Lookup.init((io.softwareecg.wfx.lookup.api.LookupStrategy) null);
+    }
 
     @Test
     public void minecraftPipelinePassesAllInvariants() throws Exception {

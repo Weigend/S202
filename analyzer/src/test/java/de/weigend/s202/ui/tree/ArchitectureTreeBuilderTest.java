@@ -19,6 +19,8 @@ import de.weigend.s202.domain.architecture.ArchitectureAnnotations;
 import de.weigend.s202.domain.architecture.ComponentArchitecture;
 import de.weigend.s202.domain.impl.ComponentArchitectureModel;
 import de.weigend.s202.domain.architecture.Element;
+import io.softwareecg.wfx.lookup.api.Lookup;
+import io.softwareecg.wfx.lookup.avaje.AvajeLookupStrategy;
 import de.weigend.s202.ui.ArchitectureView;
 import de.weigend.s202.ui.ArchitectureViewStyle;
 import de.weigend.s202.ui.LevelClassBox;
@@ -60,7 +62,14 @@ public class ArchitectureTreeBuilderTest {
 
     @BeforeAll
     static void initJavaFX() {
+        Lookup.init();
         startJavaFx();
+    }
+
+    @AfterAll
+    static void shutdownLookup() {
+        AvajeLookupStrategy.shutdownLookup();
+        Lookup.init((io.softwareecg.wfx.lookup.api.LookupStrategy) null);
     }
 
     @AfterAll

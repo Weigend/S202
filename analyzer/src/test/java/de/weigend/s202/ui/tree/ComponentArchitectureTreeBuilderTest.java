@@ -22,6 +22,10 @@ import de.weigend.s202.reader.DependencyModel;
 import de.weigend.s202.ui.model.ArchitectureNode;
 import de.weigend.s202.ui.model.ArchitectureNode.NodeType;
 import de.weigend.s202.ui.model.ArchitectureNodeLocalLevelCalculator;
+import io.softwareecg.wfx.lookup.api.Lookup;
+import io.softwareecg.wfx.lookup.avaje.AvajeLookupStrategy;
+import org.junit.jupiter.api.AfterAll;
+import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 
 import java.util.HashMap;
@@ -36,6 +40,17 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class ComponentArchitectureTreeBuilderTest {
+
+    @BeforeAll
+    static void initLookup() {
+        Lookup.init();
+    }
+
+    @AfterAll
+    static void shutdownLookup() {
+        AvajeLookupStrategy.shutdownLookup();
+        Lookup.init((io.softwareecg.wfx.lookup.api.LookupStrategy) null);
+    }
 
     @Test
     void topLevelElementsMatchTheRegularPackageProjection() {

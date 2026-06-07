@@ -17,6 +17,7 @@ package de.weigend.s202.domain.impl;
 
 import de.weigend.s202.domain.architecture.Element;
 import de.weigend.s202.domain.architecture.LayeredArchitecture;
+import de.weigend.s202.domain.architecture.WhatIfArchitecture;
 import de.weigend.s202.domain.architecture.Tangle;
 import de.weigend.s202.domain.architecture.Violation;
 import de.weigend.s202.domain.architecture.ViolationKind;
@@ -55,16 +56,16 @@ import java.util.Set;
  * {@code List<List<Element>>} snapshots so external consumers keep the
  * existing API contract.
  */
-public final class WhatIfArchitecture implements LayeredArchitecture {
+public final class WhatIfArchitectureModel implements WhatIfArchitecture {
 
-    private final HierarchicalLayeredArchitecture original;
+    private final LayeredArchitecture original;
     /** Snapshot of class-to-class edges captured at construction. */
     private final List<StaticEdge> staticEdges;
 
     /** Mutable root — its {@code rows} are the top-level rows of the architecture. */
     private final Node root = new Node("", true);
 
-    public WhatIfArchitecture(HierarchicalLayeredArchitecture original, DomainModel domain) {
+    public WhatIfArchitectureModel(LayeredArchitecture original, DomainModel domain) {
         this.original = Objects.requireNonNull(original, "original");
         Objects.requireNonNull(domain, "domain");
         this.staticEdges = extractStaticEdges(domain);
@@ -190,7 +191,7 @@ public final class WhatIfArchitecture implements LayeredArchitecture {
             packageGraph.computeIfAbsent(targetPackage, ignored -> new LinkedHashSet<>());
         }
 
-        return TarjanSCCFinder.create().findSCCs(packageGraph).stream()
+        return new TarjanSCCFinder().findSCCs(packageGraph).stream()
                 .filter(StronglyConnectedComponent::isTangle)
                 .map(scc -> new Tangle(scc.getMembers()))
                 .toList();

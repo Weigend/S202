@@ -15,7 +15,10 @@
  */
 package de.weigend.s202.domain;
 
-import de.weigend.s202.domain.impl.TarjanSCCFinder;
+import io.softwareecg.wfx.lookup.api.Lookup;
+import io.softwareecg.wfx.lookup.avaje.AvajeLookupStrategy;
+import org.junit.jupiter.api.AfterAll;
+import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import static org.junit.jupiter.api.Assertions.*;
@@ -26,8 +29,19 @@ import java.util.*;
  * Tests for the SCC finder contract.
  */
 class SCCFinderTest {
-    
-    private final SCCFinder finder = TarjanSCCFinder.create();
+
+    @BeforeAll
+    static void initLookup() {
+        Lookup.init();
+    }
+
+    @AfterAll
+    static void shutdownLookup() {
+        AvajeLookupStrategy.shutdownLookup();
+        Lookup.init((io.softwareecg.wfx.lookup.api.LookupStrategy) null);
+    }
+
+    private final SCCFinder finder = Lookup.lookup(SCCFinder.class);
     private Map<String, Set<String>> graph;
     
     @BeforeEach

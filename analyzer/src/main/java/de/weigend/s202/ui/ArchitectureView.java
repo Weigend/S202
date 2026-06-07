@@ -25,9 +25,9 @@ import de.weigend.s202.domain.architecture.ArchitectureKind;
 import de.weigend.s202.domain.architecture.ArchitectureStyle;
 import de.weigend.s202.domain.architecture.ComponentArchitecture;
 import de.weigend.s202.domain.architecture.HexagonalArchitecture;
-import de.weigend.s202.domain.impl.HierarchicalLayeredArchitecture;
+import de.weigend.s202.domain.architecture.LayeredArchitecture;
 import de.weigend.s202.domain.architecture.ViolationKind;
-import de.weigend.s202.domain.impl.WhatIfArchitecture;
+import de.weigend.s202.domain.architecture.WhatIfArchitecture;
 import de.weigend.s202.reader.DependencyModel;
 import de.weigend.s202.ui.component.ComponentBox;
 import de.weigend.s202.ui.model.ArchitectureNode;
@@ -1219,8 +1219,8 @@ public class ArchitectureView extends BorderPane {
             original = requireArchitectureStyle(ArchitectureKind.LAYERED).build(context);
         }
         architecture.set(original);
-        whatIfArchitecture.set(original instanceof HierarchicalLayeredArchitecture hla
-                ? new WhatIfArchitecture(hla, model)
+        whatIfArchitecture.set(original instanceof LayeredArchitecture la
+                ? la.toWhatIf(model)
                 : null);
         updateSccRendererTangles();
     }

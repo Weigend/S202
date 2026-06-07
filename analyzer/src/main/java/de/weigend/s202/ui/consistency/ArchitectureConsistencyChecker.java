@@ -17,7 +17,7 @@ package de.weigend.s202.ui.consistency;
 
 import de.weigend.s202.domain.architecture.Architecture;
 import de.weigend.s202.domain.architecture.Element;
-import de.weigend.s202.domain.impl.HierarchicalLayeredArchitecture;
+import de.weigend.s202.domain.architecture.LayeredArchitecture;
 import de.weigend.s202.ui.model.ArchitectureNode;
 import de.weigend.s202.ui.model.ArchitectureNode.NodeType;
 
@@ -33,7 +33,7 @@ import java.util.TreeMap;
 
 /**
  * Temporary verification scaffold (C3 of ADR_ARCHITECTURE_AS_DOMAIN_CONCEPT):
- * cross-checks a {@link HierarchicalLayeredArchitecture} produced by the new
+ * cross-checks a {@link LayeredArchitecture} produced by the new
  * domain pipeline against the {@link ArchitectureNode} tree the existing UI
  * pipeline builds. Both consume the same {@link de.weigend.s202.domain.DomainModel},
  * so structural equivalence proves the domain model carries enough information
@@ -60,9 +60,9 @@ public final class ArchitectureConsistencyChecker {
     public List<Discrepancy> check(Architecture arch, ArchitectureNode uiRoot) {
         Objects.requireNonNull(arch, "arch");
         Objects.requireNonNull(uiRoot, "uiRoot");
-        if (!(arch instanceof HierarchicalLayeredArchitecture hla)) {
+        if (!(arch instanceof LayeredArchitecture hla)) {
             return List.of(new Discrepancy("<root>",
-                    "expected HierarchicalLayeredArchitecture, got " + arch.getClass().getSimpleName()));
+                    "expected LayeredArchitecture, got " + arch.getClass().getSimpleName()));
         }
         List<Discrepancy> out = new ArrayList<>();
         ArchitectureNode effective = skipTransparentPassthroughs(uiRoot);

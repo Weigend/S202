@@ -17,6 +17,8 @@ package de.weigend.s202.domain.impl;
 
 import de.weigend.s202.domain.SCCFinder;
 import de.weigend.s202.domain.StronglyConnectedComponent;
+import jakarta.inject.Inject;
+import jakarta.inject.Singleton;
 
 import java.util.*;
 
@@ -27,15 +29,11 @@ import java.util.*;
  * 
  * The algorithm identifies all cycles in a directed graph by finding SCCs.
  */
+@Singleton
 public final class TarjanSCCFinder implements SCCFinder {
 
-    private static final SCCFinder INSTANCE = new TarjanSCCFinder();
-
-    private TarjanSCCFinder() {
-    }
-
-    public static SCCFinder create() {
-        return INSTANCE;
+    @Inject
+    TarjanSCCFinder() {
     }
 
     @Override

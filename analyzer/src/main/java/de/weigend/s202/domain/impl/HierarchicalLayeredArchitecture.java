@@ -15,10 +15,12 @@
  */
 package de.weigend.s202.domain.impl;
 
+import de.weigend.s202.domain.DomainModel;
 import de.weigend.s202.domain.architecture.Element;
 import de.weigend.s202.domain.architecture.LayeredArchitecture;
 import de.weigend.s202.domain.architecture.Tangle;
 import de.weigend.s202.domain.architecture.Violation;
+import de.weigend.s202.domain.architecture.WhatIfArchitecture;
 
 import java.util.List;
 
@@ -48,6 +50,11 @@ public record HierarchicalLayeredArchitecture(
         rows = copyDeepImmutable(rows);
         violations = List.copyOf(violations);
         tangles = List.copyOf(tangles);
+    }
+
+    @Override
+    public WhatIfArchitecture toWhatIf(DomainModel domain) {
+        return new WhatIfArchitectureModel(this, domain);
     }
 
     private static List<List<Element>> copyDeepImmutable(List<List<Element>> rows) {
