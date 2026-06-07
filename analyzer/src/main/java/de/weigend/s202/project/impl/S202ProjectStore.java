@@ -18,6 +18,7 @@ package de.weigend.s202.project.impl;
 import de.weigend.s202.project.ProjectStore;
 import de.weigend.s202.project.S202Project;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import jakarta.inject.Singleton;
 import com.fasterxml.jackson.databind.SerializationFeature;
 
 import java.io.IOException;
@@ -26,6 +27,7 @@ import java.nio.file.Path;
 /**
  * Reads and writes Structure202 project files.
  */
+@Singleton
 public final class S202ProjectStore implements ProjectStore {
 
     private final ObjectMapper mapper;

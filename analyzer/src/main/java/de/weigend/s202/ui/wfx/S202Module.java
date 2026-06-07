@@ -22,10 +22,9 @@ import de.weigend.s202.domain.DependencyEdge;
 import de.weigend.s202.domain.DomainComputer;
 import de.weigend.s202.domain.DomainModel;
 import de.weigend.s202.domain.architecture.ArchitectureAnnotations;
+import de.weigend.s202.project.ProjectMapper;
 import de.weigend.s202.project.ProjectStore;
 import de.weigend.s202.project.S202Project;
-import de.weigend.s202.project.impl.S202ProjectMapper;
-import de.weigend.s202.project.impl.S202ProjectStore;
 import de.weigend.s202.reader.DependencyModel;
 import de.weigend.s202.reader.LanguageAnalyzer;
 import de.weigend.s202.reader.ProjectScanner;
@@ -120,8 +119,8 @@ public class S202Module implements Module {
     private final ApplicationWindow applicationWindow;
     private final ArchitectureNodeBuilder architectureNodeBuilder = new ArchitectureNodeBuilder();
     private final LayoutInvariantChecker invariantChecker = new LayoutInvariantChecker();
-    private final ProjectStore projectStore = new S202ProjectStore();
-    private final S202ProjectMapper projectMapper = new S202ProjectMapper();
+    private final ProjectStore projectStore = Lookup.lookup(ProjectStore.class);
+    private final ProjectMapper projectMapper = Lookup.lookup(ProjectMapper.class);
 
     private int viewCounter;
     private File lastDirectory;

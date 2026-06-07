@@ -15,8 +15,10 @@
  */
 package de.weigend.s202.project.impl;
 
+import de.weigend.s202.project.ProjectMapper;
 import de.weigend.s202.project.S202Project;
 import de.weigend.s202.analysis.invariants.InvariantFinding;
+import jakarta.inject.Singleton;
 import de.weigend.s202.analysis.invariants.LayoutInvariantReport;
 import de.weigend.s202.domain.DependencyEdge;
 import de.weigend.s202.domain.DomainModel;
@@ -39,7 +41,8 @@ import java.util.stream.Collectors;
  * Converts between mutable runtime models and the stable serializable project
  * schema. The DTO is intentionally separate from rendering and shell state.
  */
-public final class S202ProjectMapper {
+@Singleton
+public final class S202ProjectMapper implements ProjectMapper {
 
     public S202Project toProject(String appVersion,
                                  S202Project.Source source,
