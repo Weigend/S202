@@ -482,6 +482,18 @@ Study ist abgeschlossen.
 
 ---
 
+## Abschluss: Komponentenarchitektur mit vollständigen Abhängigkeiten
+
+![Finale Komponentenarchitektur: project, analysis, domain und reader mit sauberen Schnittstellen und allen Abhängigkeiten](component-images/10-component-architecture-final-all-deps.png)
+
+Die Darstellung zeigt die vier Komponenten in der Schichtenansicht mit allen
+eingehenden und ausgehenden Abhängigkeiten. Kein einziger Violations-Pfeil
+ist mehr sichtbar — alle Zugriffe laufen über die definierten API-Interfaces.
+Die Architektur ist messbar sauber, und das Tool hat sich dabei selbst analysiert
+und verbessert.
+
+---
+
 ## 10. Einheitliches Paketlayout für alle Komponenten
 
 ### Konvention: `name` == API, `name.impl` == Implementierung
