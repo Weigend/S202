@@ -22,6 +22,7 @@ import de.weigend.s202.domain.architecture.ArchitectureContext;
 import de.weigend.s202.domain.architecture.ArchitectureKind;
 import de.weigend.s202.domain.architecture.ArchitectureStyle;
 import de.weigend.s202.domain.architecture.ComponentArchitecture;
+import de.weigend.s202.domain.architecture.ComponentArchitectureModel;
 import de.weigend.s202.domain.architecture.Element;
 import de.weigend.s202.domain.architecture.Tangle;
 import de.weigend.s202.domain.architecture.Violation;
@@ -95,7 +96,7 @@ public final class ComponentArchitectureBuilder implements ArchitectureStyle {
             registerMembership(root.rootPackageFqn(), index, apiFqns, membershipByClass);
         }
 
-        return new ComponentArchitecture(
+        return new ComponentArchitectureModel(
                 components,
                 detectViolations(domain, membershipByClass),
                 detectTangles(domain));

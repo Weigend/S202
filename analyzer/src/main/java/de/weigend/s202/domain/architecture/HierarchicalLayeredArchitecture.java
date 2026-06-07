@@ -37,7 +37,7 @@ import java.util.List;
 public record HierarchicalLayeredArchitecture(
         List<List<Element>> rows,
         List<Violation> violations,
-        List<Tangle> tangles) implements Architecture {
+        List<Tangle> tangles) implements LayeredArchitecture {
 
     public HierarchicalLayeredArchitecture {
         rows = copyDeepImmutable(rows);

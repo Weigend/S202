@@ -20,7 +20,7 @@ import de.weigend.s202.domain.architecture.Architecture;
 import de.weigend.s202.domain.architecture.ArchitectureContext;
 import de.weigend.s202.domain.architecture.ArchitectureKind;
 import de.weigend.s202.domain.architecture.ArchitectureStyle;
-import de.weigend.s202.domain.architecture.HierarchicalLayeredArchitecture;
+import de.weigend.s202.domain.architecture.LayeredArchitecture;
 import de.weigend.s202.ui.model.ArchitectureNode;
 import io.softwareecg.wfx.lookup.api.Lookup;
 import org.slf4j.Logger;
@@ -63,8 +63,8 @@ public final class ArchitectureConsistencyDevHook {
 
         if (diffs.isEmpty()) {
             int violationCount = arch.violations().size();
-            int tangleCount = arch instanceof HierarchicalLayeredArchitecture hla
-                    ? hla.tangles().size() : 0;
+            int tangleCount = arch instanceof LayeredArchitecture la
+                    ? la.tangles().size() : 0;
             LOGGER.info("Architecture consistency check: PASS — {} violations, {} tangles",
                     violationCount, tangleCount);
             return;

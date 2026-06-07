@@ -17,6 +17,7 @@ package de.weigend.s202.ui.tree;
 
 import de.weigend.s202.domain.architecture.ArchitectureAnnotations;
 import de.weigend.s202.domain.architecture.ComponentArchitecture;
+import de.weigend.s202.domain.architecture.ComponentArchitectureModel;
 import de.weigend.s202.domain.architecture.Element;
 import de.weigend.s202.ui.ArchitectureView;
 import de.weigend.s202.ui.ArchitectureViewStyle;
@@ -407,7 +408,7 @@ public class ArchitectureTreeBuilderTest {
             root.addChild(payment);
             root.addChild(shipping);
 
-            ComponentArchitecture architecture = new ComponentArchitecture(
+            ComponentArchitecture architecture = new ComponentArchitectureModel(
                     List.of(new ComponentArchitecture.ComponentElement(
                             "payment",
                             "Payment",

@@ -50,7 +50,7 @@ import java.util.Set;
  * {@code List<List<Element>>} snapshots so external consumers keep the
  * existing API contract.
  */
-public final class WhatIfArchitecture implements Architecture {
+public final class WhatIfArchitecture implements LayeredArchitecture {
 
     private final HierarchicalLayeredArchitecture original;
     /** Snapshot of class-to-class edges captured at construction. */

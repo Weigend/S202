@@ -23,6 +23,7 @@ import de.weigend.s202.domain.architecture.ArchitectureKind;
 import de.weigend.s202.domain.architecture.ArchitectureStyle;
 import de.weigend.s202.domain.architecture.ComponentArchitecture;
 import de.weigend.s202.domain.architecture.HexagonalArchitecture;
+import de.weigend.s202.domain.architecture.HexagonalArchitectureModel;
 import de.weigend.s202.domain.architecture.Tangle;
 import de.weigend.s202.domain.architecture.Violation;
 import de.weigend.s202.domain.architecture.ViolationKind;
@@ -121,7 +122,7 @@ public final class HexagonalArchitectureBuilder implements ArchitectureStyle {
             }
         }
 
-        return new HexagonalArchitecture(
+        return new HexagonalArchitectureModel(
                 DEFAULT_RINGS,
                 roots.stream()
                         .map(root -> new HexagonalArchitecture.HexSegment(
