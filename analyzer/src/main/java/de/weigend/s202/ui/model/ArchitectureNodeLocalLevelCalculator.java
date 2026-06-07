@@ -16,6 +16,7 @@
 package de.weigend.s202.ui.model;
 
 import de.weigend.s202.domain.SCCFinder;
+import de.weigend.s202.domain.impl.TarjanSCCFinder;
 import de.weigend.s202.domain.StronglyConnectedComponent;
 import de.weigend.s202.reader.DependencyModel;
 
@@ -128,7 +129,7 @@ public final class ArchitectureNodeLocalLevelCalculator {
         boolean changed = true;
         while (changed) {
             changed = false;
-            for (StronglyConnectedComponent scc : SCCFinder.defaultFinder().findSCCs(graph)) {
+            for (StronglyConnectedComponent scc : TarjanSCCFinder.create().findSCCs(graph)) {
                 if (scc.getSize() < 2) {
                     continue;
                 }

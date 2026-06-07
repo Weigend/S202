@@ -188,7 +188,7 @@ final class LocalLevelCalculator {
         boolean changed = true;
         while (changed) {
             changed = false;
-            for (StronglyConnectedComponent scc : SCCFinder.defaultFinder().findSCCs(graph)) {
+            for (StronglyConnectedComponent scc : TarjanSCCFinder.create().findSCCs(graph)) {
                 if (scc.getSize() < 2) continue;
                 Set<String> members = scc.getMembers();
 

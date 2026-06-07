@@ -20,6 +20,7 @@ import de.weigend.s202.domain.architecture.EndpointPair;
 import de.weigend.s202.domain.architecture.Violation;
 import de.weigend.s202.domain.StronglyConnectedComponent;
 import de.weigend.s202.domain.SCCFinder;
+import de.weigend.s202.domain.impl.TarjanSCCFinder;
 import de.weigend.s202.ui.model.ArchitectureNode;
 import io.softwareecg.wfx.windowmanager.api.Position;
 import io.softwareecg.wfx.windowmanager.api.View;
@@ -500,7 +501,7 @@ public class ArchitectureView3D implements View {
             return List.of();
         }
         List<Edge> edges = new ArrayList<>();
-        for (StronglyConnectedComponent scc : SCCFinder.defaultFinder().findSCCs(graph)) {
+        for (StronglyConnectedComponent scc : TarjanSCCFinder.create().findSCCs(graph)) {
             if (!scc.isTangle()) {
                 continue;
             }

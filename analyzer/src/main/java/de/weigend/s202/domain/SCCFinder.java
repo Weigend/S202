@@ -15,8 +15,6 @@
  */
 package de.weigend.s202.domain;
 
-import de.weigend.s202.domain.impl.TarjanSCCFinder;
-
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -27,8 +25,4 @@ import java.util.Set;
 public interface SCCFinder {
 
     List<StronglyConnectedComponent> findSCCs(Map<String, Set<String>> graph);
-
-    static SCCFinder defaultFinder() {
-        return TarjanSCCFinder.create();
-    }
 }

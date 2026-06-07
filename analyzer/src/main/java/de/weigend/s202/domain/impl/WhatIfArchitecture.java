@@ -190,7 +190,7 @@ public final class WhatIfArchitecture implements LayeredArchitecture {
             packageGraph.computeIfAbsent(targetPackage, ignored -> new LinkedHashSet<>());
         }
 
-        return SCCFinder.defaultFinder().findSCCs(packageGraph).stream()
+        return TarjanSCCFinder.create().findSCCs(packageGraph).stream()
                 .filter(StronglyConnectedComponent::isTangle)
                 .map(scc -> new Tangle(scc.getMembers()))
                 .toList();

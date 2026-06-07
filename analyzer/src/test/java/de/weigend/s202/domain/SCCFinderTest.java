@@ -15,6 +15,7 @@
  */
 package de.weigend.s202.domain;
 
+import de.weigend.s202.domain.impl.TarjanSCCFinder;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import static org.junit.jupiter.api.Assertions.*;
@@ -26,7 +27,7 @@ import java.util.*;
  */
 class SCCFinderTest {
     
-    private final SCCFinder finder = SCCFinder.defaultFinder();
+    private final SCCFinder finder = TarjanSCCFinder.create();
     private Map<String, Set<String>> graph;
     
     @BeforeEach

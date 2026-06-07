@@ -20,6 +20,7 @@ import de.weigend.s202.reader.LanguageAnalyzer;
 import de.weigend.s202.domain.DomainComputer;
 import de.weigend.s202.domain.DomainModel;
 import de.weigend.s202.domain.SCCFinder;
+import de.weigend.s202.domain.impl.TarjanSCCFinder;
 import de.weigend.s202.domain.StronglyConnectedComponent;
 import io.softwareecg.wfx.lookup.api.Lookup;
 
@@ -79,7 +80,7 @@ public class DebugPackageLevels {
             classDeps.put(classInfo.fullName, internalDeps);
         }
         
-        List<StronglyConnectedComponent> sccs = SCCFinder.defaultFinder().findSCCs(classDeps);
+        List<StronglyConnectedComponent> sccs = TarjanSCCFinder.create().findSCCs(classDeps);
         
         System.out.println("Found " + sccs.size() + " SCCs");
         for (StronglyConnectedComponent scc : sccs) {

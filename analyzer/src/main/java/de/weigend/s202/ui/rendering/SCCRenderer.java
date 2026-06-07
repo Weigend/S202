@@ -17,6 +17,7 @@ package de.weigend.s202.ui.rendering;
 
 import de.weigend.s202.domain.StronglyConnectedComponent;
 import de.weigend.s202.domain.SCCFinder;
+import de.weigend.s202.domain.impl.TarjanSCCFinder;
 import de.weigend.s202.ui.model.ArchitectureNode;
 import javafx.geometry.Bounds;
 import javafx.scene.Node;
@@ -184,7 +185,7 @@ public class SCCRenderer {
         }
 
         // Step 2: Find SCCs
-        List<StronglyConnectedComponent> sccs = SCCFinder.defaultFinder().findSCCs(classDependencies);
+        List<StronglyConnectedComponent> sccs = TarjanSCCFinder.create().findSCCs(classDependencies);
 
         // Step 3: Draw red lines for strict class-level SCCs (size > 1)
         Set<String> classSccMembers = new HashSet<>();
