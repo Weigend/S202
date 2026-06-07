@@ -144,6 +144,32 @@ class ComponentArchitectureBuilderTest {
     }
 
     @Test
+    void s202PackageAnnotationPreventsComponentDetection() {
+        DomainModel domain = new DomainModel();
+        pkg(domain, "com", 0);
+        pkg(domain, "com.acme", 0);
+        pkg(domain, "com.acme.ui", 1);
+        pkg(domain, "com.acme.payment", 1);
+        pkg(domain, "com.acme.payment.impl", 0);
+        cls(domain, "com.acme.ui.MainView", true, 1, Set.of());
+        cls(domain, "com.acme.payment.impl.PaymentService", false, 1, Set.of());
+
+        DependencyModel rawModel = new DependencyModel();
+        rawModel.addPlainPackage("com.acme.ui");
+
+        ComponentArchitecture architecture = new ComponentArchitectureBuilder()
+                .build(new ArchitectureContext(rawModel, domain, ArchitectureAnnotations.empty()));
+
+        List<String> roots = architecture.components().stream()
+                .map(ComponentArchitecture.ComponentElement::rootPackageFqn)
+                .toList();
+        assertFalse(roots.contains("com.acme.ui"),
+                "@S202Package must prevent heuristic component detection");
+        assertTrue(roots.contains("com.acme.payment"),
+                "non-excluded package with impl sub-package should still be detected");
+    }
+
+    @Test
     void packageWithImplSubPackageIsDetectedAsComponentRoot() {
         DomainModel domain = new DomainModel();
         pkg(domain, "com", 0);

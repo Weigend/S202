@@ -104,8 +104,12 @@ public final class ComponentArchitectureBuilder implements ArchitectureStyle {
                                                DependencyModel rawModel) {
         Map<String, ComponentRoot> roots = new LinkedHashMap<>();
         String effectiveRoot = skipTransparentPassthroughs(index);
+        Set<String> plainPackages = rawModel != null ? rawModel.getPlainPackages() : Set.of();
         for (CalculatedElementInfo child : sortedChildren(index, effectiveRoot)) {
             if (!"PACKAGE".equals(child.type)) {
+                continue;
+            }
+            if (plainPackages.contains(child.fullName)) {
                 continue;
             }
             boolean hasApiClasses = !selectedApiClasses(child.fullName, index, classifier).isEmpty();

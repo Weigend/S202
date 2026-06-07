@@ -18,6 +18,7 @@ package de.weigend.s202.reader.impl.java;
 import de.weigend.s202.reader.DependencyModel;
 import de.weigend.s202.annotation.S202Api;
 import de.weigend.s202.annotation.S202Component;
+import de.weigend.s202.annotation.S202Package;
 import de.weigend.s202.reader.EdgeKind;
 import de.weigend.s202.reader.LanguageAnalyzer;
 import de.weigend.s202.reader.impl.PackageHierarchyBuilder;
@@ -348,6 +349,7 @@ public class InputAnalyzer implements LanguageAnalyzer {
     private static class PackageAnnotationExtractor extends ClassVisitor {
         private static final String S202_COMPONENT_DESC = Type.getDescriptor(S202Component.class);
         private static final String S202_API_DESC = Type.getDescriptor(S202Api.class);
+        private static final String S202_PACKAGE_DESC = Type.getDescriptor(S202Package.class);
         private final DependencyModel model;
         private String packageFqn;
 
@@ -369,6 +371,8 @@ public class InputAnalyzer implements LanguageAnalyzer {
                 model.addComponentAnnotatedPackage(packageFqn);
             } else if (S202_API_DESC.equals(descriptor)) {
                 model.addApiAnnotatedPackage(packageFqn);
+            } else if (S202_PACKAGE_DESC.equals(descriptor)) {
+                model.addPlainPackage(packageFqn);
             }
             return null;
         }
