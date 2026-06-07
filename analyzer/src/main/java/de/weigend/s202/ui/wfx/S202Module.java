@@ -25,10 +25,10 @@ import de.weigend.s202.domain.architecture.ArchitectureAnnotations;
 import de.weigend.s202.project.ProjectMapper;
 import de.weigend.s202.project.ProjectStore;
 import de.weigend.s202.project.S202Project;
-import de.weigend.s202.report.quality.QualityReportHtmlWriter;
+import de.weigend.s202.report.quality.QualityReportExporter;
 import de.weigend.s202.report.quality.QualityReportInput;
 import de.weigend.s202.report.quality.QualityReportModel;
-import de.weigend.s202.report.quality.QualityReportModelBuilder;
+import de.weigend.s202.report.quality.QualityReportOptions;
 import de.weigend.s202.reader.DependencyModel;
 import de.weigend.s202.reader.LanguageAnalyzer;
 import de.weigend.s202.reader.ProjectScanner;
@@ -47,8 +47,8 @@ import de.weigend.s202.ui.wfx.events.MenuRequestEvent;
 import de.weigend.s202.ui.wfx.events.OpenScopeEvent;
 import de.weigend.s202.ui.wfx.events.OpenTangleEvent;
 import de.weigend.s202.ui.wfx.events.RestoreTangleEdgeEvent;
-import de.weigend.s202.ui.wfx.report.JavaFxQualityReportImageRenderer;
 import de.weigend.s202.ui.wfx.report.QualityReportView;
+import de.weigend.s202.ui.wfx.report.impl.JavaFxQualityReportImageRenderer;
 import de.weigend.s202.ui.wfx.tangles.TangleFilter;
 import io.softwareecg.wfx.lookup.api.Lookup;
 import io.softwareecg.wfx.platform.api.EventBus;
@@ -1492,12 +1492,18 @@ public class S202Module implements Module {
         publishProgress(scopeImageLimit < 5
                 ? "Preparing quality report (large codebase: limiting JavaFX screenshots)..."
                 : "Preparing quality report...", REPORT_PROGRESS_PREPARED);
+        QualityReportExporter qualityReportExporter = Lookup.lookup(QualityReportExporter.class);
+        if (qualityReportExporter == null) {
+            showError("Quality Report", "No quality report exporter is registered.");
+            return;
+        }
+        QualityReportOptions reportOptions = new QualityReportOptions("png", scopeImageLimit);
 
         Task<QualityReportModel> task = new Task<>() {
             @Override
             protected QualityReportModel call() {
                 publishProgress("Building quality report model...", REPORT_PROGRESS_MODEL * 0.5);
-                return new QualityReportModelBuilder("png", scopeImageLimit).build(input);
+                return qualityReportExporter.build(input, reportOptions);
             }
         };
         task.setOnSucceeded(e -> {
@@ -1515,7 +1521,7 @@ public class S202Module implements Module {
                             message,
                             REPORT_PROGRESS_IMAGES_START
                                     + (REPORT_PROGRESS_IMAGES_END - REPORT_PROGRESS_IMAGES_START) * imageProgress),
-                    () -> writeQualityReportHtml(model, outputDirectory),
+                    () -> writeQualityReportHtml(qualityReportExporter, model, outputDirectory),
                     failure -> {
                         LOGGER.error("Could not render quality report screenshots to {}", outputDirectory, failure);
                         String msg = failure.getMessage() == null ? failure.toString() : failure.getMessage();
@@ -1536,12 +1542,14 @@ public class S202Module implements Module {
         exporter.start();
     }
 
-    private void writeQualityReportHtml(QualityReportModel model, Path outputDirectory) {
+    private void writeQualityReportHtml(QualityReportExporter exporter,
+                                        QualityReportModel model,
+                                        Path outputDirectory) {
         Task<Path> writer = new Task<>() {
             @Override
             protected Path call() throws IOException {
                 publishProgress("Writing quality report HTML...", REPORT_PROGRESS_HTML);
-                return new QualityReportHtmlWriter().write(model, outputDirectory);
+                return exporter.write(model, outputDirectory);
             }
         };
         writer.setOnSucceeded(e -> {

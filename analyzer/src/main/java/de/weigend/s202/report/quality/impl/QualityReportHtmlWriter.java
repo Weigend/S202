@@ -13,8 +13,9 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package de.weigend.s202.report.quality;
+package de.weigend.s202.report.quality.impl;
 
+import de.weigend.s202.report.quality.QualityReportModel;
 import de.weigend.s202.reader.EdgeKind;
 
 import java.io.IOException;
@@ -29,7 +30,7 @@ import java.util.Map;
 /**
  * Writes the static HTML report and its SVG/CSS assets.
  */
-public final class QualityReportHtmlWriter {
+final class QualityReportHtmlWriter {
 
     public Path write(QualityReportModel model, Path outputDir) throws IOException {
         Files.createDirectories(outputDir);

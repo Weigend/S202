@@ -13,26 +13,24 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package de.weigend.s202.report.quality;
+package de.weigend.s202.report.quality.impl;
 
 import de.weigend.s202.analysis.invariants.LayoutInvariantReport;
 import de.weigend.s202.analysis.quality.QualityMetrics;
 import de.weigend.s202.domain.DomainModel;
 import de.weigend.s202.domain.DomainModel.CalculatedElementInfo;
-import de.weigend.s202.domain.SCCFinder;
 import de.weigend.s202.domain.StronglyConnectedComponent;
-import de.weigend.s202.domain.architecture.Architecture;
 import de.weigend.s202.domain.architecture.ArchitectureAnnotations;
+import de.weigend.s202.domain.architecture.ArchitectureInsightsProvider;
 import de.weigend.s202.domain.architecture.ComponentArchitecture;
 import de.weigend.s202.domain.architecture.Element;
 import de.weigend.s202.domain.architecture.Violation;
 import de.weigend.s202.domain.architecture.ViolationKind;
-import de.weigend.s202.domain.impl.ComponentArchitectureBuilder;
-import de.weigend.s202.domain.impl.HierarchicalLayeredArchitectureBuilder;
 import de.weigend.s202.project.S202Project;
+import de.weigend.s202.report.quality.QualityReportInput;
+import de.weigend.s202.report.quality.QualityReportModel;
 import de.weigend.s202.reader.DependencyModel;
 import de.weigend.s202.reader.EdgeKind;
-import io.softwareecg.wfx.lookup.api.Lookup;
 
 import java.time.OffsetDateTime;
 import java.time.format.DateTimeFormatter;
@@ -53,22 +51,17 @@ import java.util.stream.Collectors;
 /**
  * Builds the report snapshot from existing S202 analysis models.
  */
-public final class QualityReportModelBuilder {
+final class QualityReportModelBuilder {
 
     private static final int TOP_LIMIT = 10;
-    private static final int DEFAULT_SCOPE_IMAGE_LIMIT = 5;
+    private final ArchitectureInsightsProvider architectureInsights;
     private final String scopeImageExtension;
     private final int scopeImageLimit;
 
-    public QualityReportModelBuilder() {
-        this("svg");
-    }
-
-    public QualityReportModelBuilder(String scopeImageExtension) {
-        this(scopeImageExtension, DEFAULT_SCOPE_IMAGE_LIMIT);
-    }
-
-    public QualityReportModelBuilder(String scopeImageExtension, int scopeImageLimit) {
+    QualityReportModelBuilder(ArchitectureInsightsProvider architectureInsights,
+                              String scopeImageExtension,
+                              int scopeImageLimit) {
+        this.architectureInsights = Objects.requireNonNull(architectureInsights, "architectureInsights");
         this.scopeImageExtension = normalizeExtension(scopeImageExtension);
         this.scopeImageLimit = Math.max(0, scopeImageLimit);
     }
@@ -79,8 +72,7 @@ public final class QualityReportModelBuilder {
         DomainModel domain = input.domainModel();
         ArchitectureAnnotations annotations = input.annotations();
 
-        Architecture layered = new HierarchicalLayeredArchitectureBuilder().build(domain);
-        List<Violation> upwardViolations = layered.violations().stream()
+        List<Violation> upwardViolations = architectureInsights.layered(domain).violations().stream()
                 .filter(v -> v.kind() == ViolationKind.UPWARD)
                 .toList();
 
@@ -610,8 +602,7 @@ public final class QualityReportModelBuilder {
 
     private List<QualityReportModel.CycleFinding> classCycles(DependencyModel rawModel, DomainModel domain) {
         Map<String, Set<String>> graph = classGraph(domain);
-        SCCFinder finder = Lookup.lookup(SCCFinder.class);
-        List<StronglyConnectedComponent> sccs = finder.findSCCs(graph).stream()
+        List<StronglyConnectedComponent> sccs = architectureInsights.classSccs(domain).stream()
                 .filter(StronglyConnectedComponent::isTangle)
                 .toList();
 
@@ -683,8 +674,7 @@ public final class QualityReportModelBuilder {
     private QualityReportModel.ComponentFindings componentFindings(DependencyModel rawModel,
                                                                    DomainModel domain,
                                                                    ArchitectureAnnotations annotations) {
-        ComponentArchitecture architecture =
-                new ComponentArchitectureBuilder().build(domain, annotations, rawModel);
+        ComponentArchitecture architecture = architectureInsights.component(domain, annotations, rawModel);
         List<ComponentArchitecture.ComponentElement> components = architecture.components();
         Set<String> coveredClasses = new TreeSet<>();
         List<QualityReportModel.ComponentStat> stats = new ArrayList<>();

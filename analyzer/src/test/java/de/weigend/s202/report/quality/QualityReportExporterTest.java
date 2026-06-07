@@ -33,6 +33,7 @@ import java.util.List;
 import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class QualityReportExporterTest {
@@ -64,7 +65,10 @@ class QualityReportExporterTest {
                 null,
                 null);
 
-        Path html = new QualityReportExporter().export(input, tempDir);
+        QualityReportExporter exporter = Lookup.lookup(QualityReportExporter.class);
+        assertNotNull(exporter);
+
+        Path html = exporter.export(input, tempDir);
 
         assertTrue(Files.exists(html));
         assertTrue(Files.exists(tempDir.resolve("assets/quality.svg")));

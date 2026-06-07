@@ -19,43 +19,24 @@ import java.io.IOException;
 import java.nio.file.Path;
 
 /**
- * Facade for building and writing a complete quality report.
+ * API boundary for building and writing quality reports.
  */
-public final class QualityReportExporter {
+public interface QualityReportExporter {
 
-    private final QualityReportModelBuilder modelBuilder;
-    private final QualityReportHtmlWriter htmlWriter;
+    QualityReportModel build(QualityReportInput input);
 
-    public QualityReportExporter() {
-        this(new QualityReportModelBuilder(), new QualityReportHtmlWriter());
-    }
+    QualityReportModel build(QualityReportInput input, QualityReportOptions options);
 
-    public QualityReportExporter(String scopeImageExtension) {
-        this(new QualityReportModelBuilder(scopeImageExtension), new QualityReportHtmlWriter());
-    }
+    Path write(QualityReportModel model, Path outputDirectory) throws IOException;
 
-    public QualityReportExporter(String scopeImageExtension, int scopeImageLimit) {
-        this(new QualityReportModelBuilder(scopeImageExtension, scopeImageLimit), new QualityReportHtmlWriter());
-    }
+    Path export(QualityReportInput input, Path outputDirectory) throws IOException;
 
-    QualityReportExporter(QualityReportModelBuilder modelBuilder,
-                          QualityReportHtmlWriter htmlWriter) {
-        this.modelBuilder = modelBuilder;
-        this.htmlWriter = htmlWriter;
-    }
+    Path export(QualityReportInput input,
+                Path outputDirectory,
+                QualityReportImageRenderer imageRenderer) throws IOException;
 
-    public Path export(QualityReportInput input, Path outputDirectory) throws IOException {
-        QualityReportModel model = modelBuilder.build(input);
-        return htmlWriter.write(model, outputDirectory);
-    }
-
-    public Path export(QualityReportInput input,
-                       Path outputDirectory,
-                       QualityReportImageRenderer imageRenderer) throws IOException {
-        QualityReportModel model = modelBuilder.build(input);
-        if (imageRenderer != null) {
-            imageRenderer.renderImages(model, input, outputDirectory);
-        }
-        return htmlWriter.write(model, outputDirectory);
-    }
+    Path export(QualityReportInput input,
+                Path outputDirectory,
+                QualityReportImageRenderer imageRenderer,
+                QualityReportOptions options) throws IOException;
 }

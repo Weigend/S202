@@ -13,7 +13,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package de.weigend.s202.ui.wfx.report;
+package de.weigend.s202.ui.wfx.report.impl;
 
 import de.weigend.s202.domain.DependencyEdge;
 import de.weigend.s202.report.quality.QualityReportImageRenderer;
