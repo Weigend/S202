@@ -4,6 +4,9 @@
 
 A JavaFX-based tool for analyzing Java bytecode and Python source code and visualizing code architecture.
 
+> **→ [The Tool That Fixed Itself — S202 Case Study](docs/s202/CASE_STUDY.md)**
+> *We pointed S202 at its own codebase. No source code was read. Here's what happened.*
+
 
 ![UI Screenshot](docs/image1.png)
 
@@ -184,6 +187,8 @@ code .
 Details: [docs/VS_CODE_SETUP.md](docs/VS_CODE_SETUP.md)
 
 ## Case Studies
+
+**[→ The Tool That Fixed Itself](docs/s202/CASE_STUDY.md)** — S202 analyzed its own codebase. Dead code, wrong packages, missing interfaces — all found without reading a single line of source. With before/after screenshots.
 
 **[→ docs/wfx/S202_CASE_STUDY_WFX.md](docs/wfx/S202_CASE_STUDY_WFX.md)** — Real-world codebases analyzed with S202: which architectural problems became visible and which refactoring decisions follow.
 
