@@ -14,6 +14,7 @@
     <description>Parent POM for S202 Code Analyzer and Test Examples</description>
 
     <modules>
+        <module>s202-annotations</module>
         <module>test-example</module>
         <module>analyzer</module>
     </modules>
