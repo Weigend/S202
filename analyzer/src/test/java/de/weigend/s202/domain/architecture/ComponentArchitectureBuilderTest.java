@@ -117,6 +117,33 @@ class ComponentArchitectureBuilderTest {
     }
 
     @Test
+    void s202ApiAnnotationPromotesSubPackageClassesToApi() {
+        DomainModel domain = new DomainModel();
+        pkg(domain, "com", 0);
+        pkg(domain, "com.acme", 0);
+        pkg(domain, "com.acme.payment", 1);
+        pkg(domain, "com.acme.payment.contract", 1);
+        pkg(domain, "com.acme.payment.impl", 0);
+        pkg(domain, "com.acme.catalog", 1);
+        // contract is annotated @S202Api — its classes become API even without interfaces
+        cls(domain, "com.acme.payment.contract.PaymentFacade", false, 1, Set.of());
+        cls(domain, "com.acme.payment.impl.PaymentService", false, 1, Set.of());
+        cls(domain, "com.acme.catalog.CatalogService", false, 1, Set.of());
+
+        DependencyModel rawModel = new DependencyModel();
+        rawModel.addApiAnnotatedPackage("com.acme.payment.contract");
+
+        ComponentArchitecture architecture = new ComponentArchitectureBuilder()
+                .build(new ArchitectureContext(rawModel, domain, ArchitectureAnnotations.empty()));
+
+        Set<String> apiFqns = apiFqns(architecture, "com.acme.payment");
+        assertTrue(apiFqns.contains("com.acme.payment.contract.PaymentFacade"),
+                "@S202Api sub-package class should be promoted to API");
+        assertFalse(apiFqns.contains("com.acme.payment.impl.PaymentService"),
+                "impl class must not be API");
+    }
+
+    @Test
     void packageWithImplSubPackageIsDetectedAsComponentRoot() {
         DomainModel domain = new DomainModel();
         pkg(domain, "com", 0);

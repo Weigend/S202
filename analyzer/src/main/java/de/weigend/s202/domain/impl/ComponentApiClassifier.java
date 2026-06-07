@@ -30,6 +30,7 @@ final class ComponentApiClassifier {
 
     private final ArchitectureAnnotations annotations;
     private final Set<String> exportedPackages;
+    private final Set<String> apiAnnotatedPackages;
 
     public ComponentApiClassifier(ArchitectureAnnotations annotations) {
         this(annotations, null);
@@ -38,6 +39,11 @@ final class ComponentApiClassifier {
     public ComponentApiClassifier(ArchitectureAnnotations annotations, DependencyModel rawModel) {
         this.annotations = annotations == null ? ArchitectureAnnotations.empty() : annotations;
         this.exportedPackages = rawModel == null ? Set.of() : Set.copyOf(rawModel.getExportedPackageNames());
+        this.apiAnnotatedPackages = rawModel == null ? Set.of() : Set.copyOf(rawModel.getApiAnnotatedPackages());
+    }
+
+    public boolean isApiAnnotatedPackage(String packageFqn) {
+        return apiAnnotatedPackages.contains(packageFqn);
     }
 
     public boolean isSelectedApiClass(String fqn,

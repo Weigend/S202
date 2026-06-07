@@ -162,7 +162,8 @@ public final class ComponentArchitectureBuilder implements ArchitectureStyle {
         for (CalculatedElementInfo child : children) {
             boolean inApiPackage = inheritedApiPackage
                     || ("PACKAGE".equals(child.type)
-                    && ComponentApiClassifier.isApiPackageName(child.simpleName));
+                    && (ComponentApiClassifier.isApiPackageName(child.simpleName)
+                        || classifier.isApiAnnotatedPackage(child.fullName)));
             boolean inImplementationPackage = inheritedImplementationPackage
                     || ("PACKAGE".equals(child.type)
                     && ComponentApiClassifier.isImplementationPackageName(child.simpleName));

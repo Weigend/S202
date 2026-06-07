@@ -16,6 +16,7 @@
 package de.weigend.s202.reader.impl.java;
 
 import de.weigend.s202.reader.DependencyModel;
+import de.weigend.s202.annotation.S202Api;
 import de.weigend.s202.annotation.S202Component;
 import de.weigend.s202.reader.EdgeKind;
 import de.weigend.s202.reader.LanguageAnalyzer;
@@ -345,8 +346,8 @@ public class InputAnalyzer implements LanguageAnalyzer {
      * metadata; consumers decide which descriptor entries are policy-relevant.
      */
     private static class PackageAnnotationExtractor extends ClassVisitor {
-        private static final String S202_COMPONENT_DESC =
-                Type.getDescriptor(S202Component.class);
+        private static final String S202_COMPONENT_DESC = Type.getDescriptor(S202Component.class);
+        private static final String S202_API_DESC = Type.getDescriptor(S202Api.class);
         private final DependencyModel model;
         private String packageFqn;
 
@@ -358,14 +359,16 @@ public class InputAnalyzer implements LanguageAnalyzer {
         @Override
         public void visit(int version, int access, String name, String signature,
                           String superName, String[] interfaces) {
-            // name is e.g. "de/weigend/s202/reader/package-info"
             packageFqn = name.replace('/', '.').replace(".package-info", "");
         }
 
         @Override
         public org.objectweb.asm.AnnotationVisitor visitAnnotation(String descriptor, boolean visible) {
-            if (S202_COMPONENT_DESC.equals(descriptor) && packageFqn != null) {
+            if (packageFqn == null) return null;
+            if (S202_COMPONENT_DESC.equals(descriptor)) {
                 model.addComponentAnnotatedPackage(packageFqn);
+            } else if (S202_API_DESC.equals(descriptor)) {
+                model.addApiAnnotatedPackage(packageFqn);
             }
             return null;
         }

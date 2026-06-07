@@ -27,6 +27,7 @@ public class DependencyModel {
     private final Map<String, ModuleInfo> modules = new HashMap<>();
     private Map<String, PackageInfo> packages = new HashMap<>();
     private final Set<String> componentAnnotatedPackages = new LinkedHashSet<>();
+    private final Set<String> apiAnnotatedPackages = new LinkedHashSet<>();
 
     /**
      * Information about a single Java class.
@@ -235,6 +236,16 @@ public class DependencyModel {
 
     public Set<String> getComponentAnnotatedPackages() {
         return Collections.unmodifiableSet(componentAnnotatedPackages);
+    }
+
+    public void addApiAnnotatedPackage(String packageFqn) {
+        if (packageFqn != null && !packageFqn.isBlank()) {
+            apiAnnotatedPackages.add(packageFqn);
+        }
+    }
+
+    public Set<String> getApiAnnotatedPackages() {
+        return Collections.unmodifiableSet(apiAnnotatedPackages);
     }
 
     public Map<String, ClassInfo> getAllClasses() {
