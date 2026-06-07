@@ -446,6 +446,13 @@ auch `S202Project` zum Implementierungsdetail. Das ist ein separater Schritt.
 
 ![project-Komponente mit sauberer API-Grenze: ProjectMapper und ProjectStore in API, S202ProjectMapper und S202ProjectStore in impl](component-images/08-after-commit.png)
 
+Die Komponente hat eine klare API/Impl-Trennung. Die gestrichelten Linien
+zeigen jedoch noch Direktzugriffe von `S202Module` auf die Impl-Klassen
+`S202ProjectStore` und `S202ProjectMapper`. Diese wurden im Folgeschritt
+ebenfalls durch das Lookup-Pattern entkoppelt: `S202Module` nutzt
+ausschließlich `ProjectStore` und `ProjectMapper` via `Lookup.lookup()`.
+Das Ergebnis ist in der Gesamtansicht von Abschnitt 9 zu sehen.
+
 ---
 
 ## 9. UI — bewusst außerhalb dieses Schritts
@@ -468,6 +475,10 @@ interne Struktur dabei nicht.
 ### Ergebnisnachweis
 
 ![Finaler Zustand: alle vier Komponenten (project, analysis, domain, reader) ohne Component-Violations](component-images/09-after-commit-no-component-violations.png)
+
+Die Gesamtansicht bestätigt: alle Direktzugriffe auf Impl-Klassen sind
+beseitigt. Sämtliche Komponentengrenzen werden eingehalten — die Case
+Study ist abgeschlossen.
 
 ---
 
