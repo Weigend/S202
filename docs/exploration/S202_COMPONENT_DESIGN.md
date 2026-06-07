@@ -388,9 +388,16 @@ sprechendere Namen wie `LayeredView`.
 
 ### Ergebnisnachweis
 
-![Nach Einführung der typisierten Sub-Interfaces: 18 API-Klassen, konkrete Impl-Klassen in domain.impl, noch Violations durch direkte Impl-Zugriffe von außen](component-images/07-after-architecture-interfaces.png)
+![Nach Einführung der typisierten Sub-Interfaces: 18 API-Klassen, konkrete Impl-Klassen in domain.impl](component-images/07-after-architecture-interfaces.png)
 
-![Nach Entkopplung von TarjanSCCFinder und WhatIfArchitecture via Lookup und Interface: domain-Komponente ohne Violations](component-images/07-after-tarjan-fix.png)
+Die konkreten Architekturklassen sind in `domain.impl` versteckt, die
+Interfaces bilden die saubere API. Es sind jedoch noch Paketzyklen
+sichtbar: ein Default-Interface-Method in `SCCFinder` erzeugte direkt
+eine `TarjanSCCFinder`-Instanz und zog damit die API-Ebene in eine
+Abhängigkeit auf die Impl-Ebene. Das wurde im nächsten Schritt per
+Lookup-Pattern aufgelöst.
+
+![Nach Entkopplung via Lookup: alle Paketzyklen verschwunden, domain-Komponente ohne Violations](component-images/07-after-tarjan-fix.png)
 
 ---
 
