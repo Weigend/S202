@@ -40,6 +40,7 @@ A JavaFX-based tool for analyzing code across multiple languages and visualizing
 <tr><td><small><b>View: Tangle</b></small></td><td><small>Cycle visualization with method-level cut function</small></td><td><small><b>Stable</b></small></td></tr>
 <tr><td><small><b>View: Component</b></small></td><td><small>API/impl split with boundary violation checks</small></td><td><small><b>Beta</b></small></td></tr>
 <tr><td><small><b>View: Hexagonal</b></small></td><td><small>Port/adapter layout from annotations and naming conventions</small></td><td><small><b>PoC</b></small></td></tr>
+<tr><td><small><b>View: Quality Report</b></small></td><td><small>Structural health score with assessment drivers and recommended focus</small></td><td><small><b>Beta</b></small></td></tr>
 <tr><td><small><b>Analysis: Dependencies</b></small></td><td><small>Class/package dependencies (imports, calls, inheritance, annotations)</small></td><td><small><b>Stable</b></small></td></tr>
 <tr><td><small><b>Analysis: Class cycles</b></small></td><td><small>SCCs at class level (red overlay)</small></td><td><small><b>Stable</b></small></td></tr>
 <tr><td><small><b>Analysis: Package tangles</b></small></td><td><small>Mutual package dependencies (orange overlay)</small></td><td><small><b>Stable</b></small></td></tr>
@@ -146,6 +147,14 @@ You can also drag packages or classes between the API area and the implementatio
 Component-specific findings are shown in the dependencies side view under **Component violations** while the Component View is active. The current checks flag calls from outside a component into its implementation and API classes that depend on implementation classes. Regular package-layer violations and package tangles are still shown separately, because the Component View does not change the underlying dependency graph or level calculation.
 
 The Component View is also useful for codebases that are **not yet component-oriented**. By manually marking API classes you can explore a what-if scenario: which packages could form a component, which API boundary would be needed to decouple them, and which existing callers would violate that boundary. JPMS (`module-info`) is therefore not a prerequisite or source of truth — it can be a *target*: once the Component View shows a clean boundary with no violations, introducing a JPMS module or an explicit API layer becomes a low-risk, well-scoped step.
+
+## Quality Report
+
+The **Quality Report** gives a one-page structural health summary of a loaded codebase. Open it via **File → Analyze Quality**.
+
+![S202 Quality Report dashboard](docs/S202-Quality-Report.png)
+
+The report combines several signals from the dependency model into a single **Overall Quality Score** (0–100) with a written assessment and a prioritized **Recommended Focus** list. The **Executive Summary** shows the raw numbers at a glance: class and package count, total dependencies, tangle density, layering violations, and package/class cycles. Individual findings link back to the relevant view so problems can be inspected immediately.
 
 ## Python Source Analysis
 

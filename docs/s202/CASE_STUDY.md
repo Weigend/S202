@@ -305,11 +305,11 @@ and visible to every developer who opens `package-info.java`.
 
 | Metric | Before | After |
 |---|---|---|
-| Component violations | Dozens | **0** |
+| Component violations | 61 | **0** |
 | Dead classes found & deleted | — | **2** |
 | Misplaced classes moved | — | **2** |
 | Zombie packages dissolved | — | **1** (`graph`) |
-| Public impl classes exposed | Many | **0** |
+| Public impl classes exposed | 22 | **0** |
 | Lines of source code read to find all issues | — | **0** |
 
 ---

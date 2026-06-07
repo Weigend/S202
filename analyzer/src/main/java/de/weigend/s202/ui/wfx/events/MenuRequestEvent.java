@@ -53,6 +53,10 @@ public abstract class MenuRequestEvent extends EventObject {
         public SaveProject(Object source) { super(source); }
     }
 
+    public static final class ExportQualityReport extends MenuRequestEvent {
+        public ExportQualityReport(Object source) { super(source); }
+    }
+
     public static final class LoadProject extends MenuRequestEvent {
         public LoadProject(Object source) { super(source); }
     }
