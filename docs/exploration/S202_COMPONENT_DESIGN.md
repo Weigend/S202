@@ -325,6 +325,8 @@ eine Impl-Klasse. Das wird in einem Folgeschritt beseitigt.
 
 ## 7. `sealed Architecture` ablösen — offene Interface-Hierarchie
 
+![IST-Stand: domain-Komponente mit direkten Zugriffen auf Impl-Klassen und Violations zur Architecture-Hierarchie](component-images/07-vor-refactoring.png)
+
 ### Problem
 
 `Architecture` ist aktuell ein `sealed interface` das nur explizit
@@ -384,6 +386,12 @@ sprechendere Namen wie `LayeredView`.
 - Wächst ein Stil fachlich, wächst sein Interface — unabhängig von
   den anderen
 
+### Ergebnisnachweis
+
+![Nach Einführung der typisierten Sub-Interfaces: 18 API-Klassen, konkrete Impl-Klassen in domain.impl, noch Violations durch direkte Impl-Zugriffe von außen](component-images/07-after-architecture-interfaces.png)
+
+![Nach Entkopplung von TarjanSCCFinder und WhatIfArchitecture via Lookup und Interface: domain-Komponente ohne Violations](component-images/07-after-tarjan-fix.png)
+
 ---
 
 ## 8. `project` als Komponente — `ProjectStore`-Interface
@@ -427,6 +435,10 @@ auch `S202Project` zum Implementierungsdetail. Das ist ein separater Schritt.
 - `project`-Komponente exportiert: `ProjectStore` (Interface), `S202Project` (Daten)
 - `S202ProjectMapper` und `S202ProjectStore` sind versteckte Impl
 
+### Ergebnisnachweis
+
+![project-Komponente mit sauberer API-Grenze: ProjectMapper und ProjectStore in API, S202ProjectMapper und S202ProjectStore in impl](component-images/08-after-commit.png)
+
 ---
 
 ## 9. UI — bewusst außerhalb dieses Schritts
@@ -445,6 +457,10 @@ Die UI-Schicht bekommt saubere Gegenstücke: `LanguageAnalyzer`, `ProjectStore`,
 `DomainComputer`, `ArchitectureStyle` — alles was sie heute direkt
 instanziiert, wird durch Interfaces ersetzt. Die UI selbst ändert ihre
 interne Struktur dabei nicht.
+
+### Ergebnisnachweis
+
+![Finaler Zustand: alle vier Komponenten (project, analysis, domain, reader) ohne Component-Violations](component-images/09-after-commit-no-component-violations.png)
 
 ---
 
