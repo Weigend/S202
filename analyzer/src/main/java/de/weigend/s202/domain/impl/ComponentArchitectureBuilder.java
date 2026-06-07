@@ -79,9 +79,6 @@ public final class ComponentArchitectureBuilder implements ArchitectureStyle {
 
         for (ComponentRoot root : roots) {
             List<CalculatedElementInfo> apiClasses = selectedApiClasses(root.rootPackageFqn(), index, classifier);
-            if (apiClasses.isEmpty()) {
-                continue;
-            }
             Set<String> apiFqns = new LinkedHashSet<>();
             List<Element> api = new ArrayList<>(apiClasses.size());
             for (CalculatedElementInfo cls : apiClasses) {
@@ -110,7 +107,9 @@ public final class ComponentArchitectureBuilder implements ArchitectureStyle {
             if (!"PACKAGE".equals(child.type)) {
                 continue;
             }
-            if (!selectedApiClasses(child.fullName, index, classifier).isEmpty()) {
+            boolean hasApiClasses = !selectedApiClasses(child.fullName, index, classifier).isEmpty();
+            boolean hasImplSubPackage = hasDirectImplSubPackage(child.fullName, index);
+            if (hasApiClasses || hasImplSubPackage) {
                 roots.put(child.fullName, new ComponentRoot(
                         child.fullName, child.simpleName, child.fullName));
             }
@@ -141,11 +140,15 @@ public final class ComponentArchitectureBuilder implements ArchitectureStyle {
                                                   boolean inheritedImplementationPackage,
                                                   List<CalculatedElementInfo> api) {
         List<CalculatedElementInfo> children = sortedChildren(index, parentFqn);
-        // If this package directly contains interfaces, all sibling classes at this
-        // level are also API — the package as a whole is the public contract.
-        // This does not propagate into sub-packages; each sub-package is evaluated independently.
+        // Promote all direct classes to API if the package signals it is a component:
+        // either by containing interfaces (public contract) or by having an impl sub-package
+        // (explicit API/impl split). Neither signal propagates into sub-packages.
         boolean packageHasInterfaces = !inheritedImplementationPackage
                 && children.stream().anyMatch(c -> "CLASS".equals(c.type) && c.interfaceType);
+        boolean packageHasImplSubPackage = !inheritedImplementationPackage
+                && children.stream().anyMatch(c -> "PACKAGE".equals(c.type)
+                && ComponentApiClassifier.isImplementationPackageName(c.simpleName));
+        boolean promoteToApi = packageHasInterfaces || packageHasImplSubPackage;
         for (CalculatedElementInfo child : children) {
             boolean inApiPackage = inheritedApiPackage
                     || ("PACKAGE".equals(child.type)
@@ -158,7 +161,7 @@ public final class ComponentArchitectureBuilder implements ArchitectureStyle {
                         child.fullName,
                         child.simpleName,
                         child.interfaceType,
-                        inApiPackage || packageHasInterfaces,
+                        inApiPackage || promoteToApi,
                         inImplementationPackage)) {
                     api.add(child);
                 }
@@ -297,6 +300,12 @@ public final class ComponentArchitectureBuilder implements ArchitectureStyle {
         return domain.getPackageTangles().stream()
                 .map(Tangle::new)
                 .toList();
+    }
+
+    private static boolean hasDirectImplSubPackage(String packageFqn, ModelIndex index) {
+        return sortedChildren(index, packageFqn).stream()
+                .anyMatch(c -> "PACKAGE".equals(c.type)
+                        && ComponentApiClassifier.isImplementationPackageName(c.simpleName));
     }
 
     private static String skipTransparentPassthroughs(ModelIndex index) {

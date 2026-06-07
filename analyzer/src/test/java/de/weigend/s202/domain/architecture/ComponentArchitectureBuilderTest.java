@@ -117,6 +117,50 @@ class ComponentArchitectureBuilderTest {
     }
 
     @Test
+    void packageWithImplSubPackageIsDetectedAsComponentRoot() {
+        DomainModel domain = new DomainModel();
+        pkg(domain, "com", 0);
+        pkg(domain, "com.acme", 0);
+        pkg(domain, "com.acme.payment", 1);
+        pkg(domain, "com.acme.payment.impl", 0);
+        pkg(domain, "com.acme.catalog", 1);
+        // payment has only an impl sub-package — no interfaces, no *Api classes
+        cls(domain, "com.acme.payment.impl.PaymentService", false, 1, Set.of());
+        cls(domain, "com.acme.catalog.CatalogService", false, 1, Set.of());
+
+        ComponentArchitecture architecture = new ComponentArchitectureBuilder()
+                .build(domain, ArchitectureAnnotations.empty());
+
+        List<String> roots = architecture.components().stream()
+                .map(ComponentArchitecture.ComponentElement::rootPackageFqn)
+                .toList();
+        assertTrue(roots.contains("com.acme.payment"),
+                "package with impl sub-package should be detected as component root");
+    }
+
+    @Test
+    void nonInterfaceClassesArePromotedToApiWhenPackageHasImplSubPackage() {
+        DomainModel domain = new DomainModel();
+        pkg(domain, "com", 0);
+        pkg(domain, "com.acme", 0);
+        pkg(domain, "com.acme.payment", 1);
+        pkg(domain, "com.acme.payment.impl", 0);
+        pkg(domain, "com.acme.catalog", 1);
+        // Money is not an interface, but co-located with an impl sub-package → becomes API
+        cls(domain, "com.acme.payment.Money", false, 1, Set.of());
+        cls(domain, "com.acme.payment.impl.PaymentService", false, 1, Set.of());
+        cls(domain, "com.acme.catalog.CatalogService", false, 1, Set.of());
+
+        ComponentArchitecture architecture = new ComponentArchitectureBuilder()
+                .build(domain, ArchitectureAnnotations.empty());
+
+        Set<String> apiFqns = apiFqns(architecture, "com.acme.payment");
+        assertTrue(apiFqns.contains("com.acme.payment.Money"),
+                "non-interface class alongside impl sub-package should be promoted to API");
+        assertFalse(apiFqns.contains("com.acme.payment.impl.PaymentService"));
+    }
+
+    @Test
     void nonInterfaceClassesArePromotedToApiWhenPackageContainsInterface() {
         DomainModel domain = new DomainModel();
         pkg(domain, "com", 0);
