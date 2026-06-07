@@ -26,30 +26,27 @@ A JavaFX-based tool for analyzing code across multiple languages and visualizing
 
 > **Stable** · **Beta** · **Alpha** · **PoC** · **Planned**
 
-<small>
-
-| Feature | Description | Status |
-|---|---|---|
-| **Reader: Java (JAR)** | Bytecode analysis via ASM 9.6 | **Stable** |
-| **Reader: Maven** | Multi-module via `pom.xml` | **Stable** |
-| **Reader: Gradle** | Multi-module via `settings.gradle(.kts)` | **Beta** |
-| **Reader: Python** | Source analysis via CPython `ast` | **Alpha** |
-| **Reader: C** | Source analysis via AST | **PoC** |
-| **Reader: Go** | Source analysis | **Planned** |
-| **Reader: TypeScript** | Source analysis | **Planned** |
-| **Reader: Rust** | Source analysis (on request) | **Planned** |
-| **View: Layered Architecture** | Topological package layout; violation and cycle overlays | **Stable** |
-| **View: Tangle** | Cycle visualization with method-level cut function | **Stable** |
-| **View: Component** | API/impl split with boundary violation checks | **Beta** |
-| **View: Hexagonal** | Port/adapter layout from annotations and naming conventions | **PoC** |
-| **Analysis: Dependencies** | Class/package dependencies (imports, calls, inheritance, annotations) | **Stable** |
-| **Analysis: Class cycles** | SCCs at class level (red overlay) | **Stable** |
-| **Analysis: Package tangles** | Mutual package dependencies (orange overlay) | **Stable** |
-| **Analysis: Violations** | Backward dependencies across layer boundaries | **Stable** |
-| **Analysis: Component checks** | Cross-component impl access and API-on-impl coupling | **Beta** |
-| **Analysis: Layout invariants** | Five plausibility alerts for the layout pipeline | **Beta** |
-
-</small>
+<table>
+<tr><th>Feature</th><th>Description</th><th>Status</th></tr>
+<tr><td><small><b>Reader: Java (JAR)</b></small></td><td><small>Bytecode analysis via ASM 9.6</small></td><td><small><b>Stable</b></small></td></tr>
+<tr><td><small><b>Reader: Maven</b></small></td><td><small>Multi-module via <code>pom.xml</code></small></td><td><small><b>Stable</b></small></td></tr>
+<tr><td><small><b>Reader: Gradle</b></small></td><td><small>Multi-module via <code>settings.gradle(.kts)</code></small></td><td><small><b>Beta</b></small></td></tr>
+<tr><td><small><b>Reader: Python</b></small></td><td><small>Source analysis via CPython <code>ast</code></small></td><td><small><b>Alpha</b></small></td></tr>
+<tr><td><small><b>Reader: C</b></small></td><td><small>Source analysis via AST</small></td><td><small><b>PoC</b></small></td></tr>
+<tr><td><small><b>Reader: Go</b></small></td><td><small>Source analysis</small></td><td><small><b>Planned</b></small></td></tr>
+<tr><td><small><b>Reader: TypeScript</b></small></td><td><small>Source analysis</small></td><td><small><b>Planned</b></small></td></tr>
+<tr><td><small><b>Reader: Rust</b></small></td><td><small>Source analysis (on request)</small></td><td><small><b>Planned</b></small></td></tr>
+<tr><td><small><b>View: Layered Architecture</b></small></td><td><small>Topological package layout; violation and cycle overlays</small></td><td><small><b>Stable</b></small></td></tr>
+<tr><td><small><b>View: Tangle</b></small></td><td><small>Cycle visualization with method-level cut function</small></td><td><small><b>Stable</b></small></td></tr>
+<tr><td><small><b>View: Component</b></small></td><td><small>API/impl split with boundary violation checks</small></td><td><small><b>Beta</b></small></td></tr>
+<tr><td><small><b>View: Hexagonal</b></small></td><td><small>Port/adapter layout from annotations and naming conventions</small></td><td><small><b>PoC</b></small></td></tr>
+<tr><td><small><b>Analysis: Dependencies</b></small></td><td><small>Class/package dependencies (imports, calls, inheritance, annotations)</small></td><td><small><b>Stable</b></small></td></tr>
+<tr><td><small><b>Analysis: Class cycles</b></small></td><td><small>SCCs at class level (red overlay)</small></td><td><small><b>Stable</b></small></td></tr>
+<tr><td><small><b>Analysis: Package tangles</b></small></td><td><small>Mutual package dependencies (orange overlay)</small></td><td><small><b>Stable</b></small></td></tr>
+<tr><td><small><b>Analysis: Violations</b></small></td><td><small>Backward dependencies across layer boundaries</small></td><td><small><b>Stable</b></small></td></tr>
+<tr><td><small><b>Analysis: Component checks</b></small></td><td><small>Cross-component impl access and API-on-impl coupling</small></td><td><small><b>Beta</b></small></td></tr>
+<tr><td><small><b>Analysis: Layout invariants</b></small></td><td><small>Five plausibility alerts for the layout pipeline</small></td><td><small><b>Beta</b></small></td></tr>
+</table>
 
 ## Quick Start
 
