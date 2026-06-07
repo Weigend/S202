@@ -15,8 +15,9 @@
  */
 package de.weigend.s202.analysis.quality;
 
-import de.weigend.s202.graph.StronglyConnectedComponent;
-import de.weigend.s202.graph.TarjanSCCFinder;
+import de.weigend.s202.domain.StronglyConnectedComponent;
+import io.softwareecg.wfx.lookup.api.Lookup;
+import de.weigend.s202.domain.SCCFinder;
 import de.weigend.s202.domain.DomainModel;
 import de.weigend.s202.domain.DomainModel.CalculatedElementInfo;
 
@@ -118,7 +119,7 @@ public final class QualityMetrics {
 
         int intraScc = 0;
         if (totalDeps > 0) {
-            for (StronglyConnectedComponent scc : new TarjanSCCFinder(graph).findSCCs()) {
+            for (StronglyConnectedComponent scc : Lookup.lookup(SCCFinder.class).findSCCs(graph)) {
                 if (!scc.isTangle()) {
                     continue;
                 }

@@ -17,6 +17,10 @@ package de.weigend.s202.domain.architecture;
 
 import de.weigend.s202.domain.DomainModel;
 import de.weigend.s202.domain.DomainModel.CalculatedElementInfo;
+import de.weigend.s202.domain.impl.HierarchicalLayeredArchitecture;
+import de.weigend.s202.domain.impl.HierarchicalLayeredArchitectureBuilder;
+import de.weigend.s202.domain.architecture.WhatIfArchitecture;
+import de.weigend.s202.domain.impl.WhatIfArchitectureModel;
 import org.junit.jupiter.api.Test;
 
 import java.util.HashSet;
@@ -24,7 +28,6 @@ import java.util.Map;
 import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -40,7 +43,7 @@ class WhatIfArchitectureTest {
         DomainModel domain = layered();
         HierarchicalLayeredArchitecture original =
                 (HierarchicalLayeredArchitecture) new HierarchicalLayeredArchitectureBuilder().build(domain);
-        WhatIfArchitecture wif = new WhatIfArchitecture(original, domain);
+        WhatIfArchitecture wif = new WhatIfArchitectureModel(original, domain);
 
         // Original: ui at top, domain at bottom — ui.View → domain.Model is downward, no violation.
         assertTrue(wif.violations().isEmpty(),
@@ -52,7 +55,7 @@ class WhatIfArchitectureTest {
         DomainModel domain = layered();
         HierarchicalLayeredArchitecture original =
                 (HierarchicalLayeredArchitecture) new HierarchicalLayeredArchitectureBuilder().build(domain);
-        WhatIfArchitecture wif = new WhatIfArchitecture(original, domain);
+        WhatIfArchitecture wif = new WhatIfArchitectureModel(original, domain);
 
         // After analysis: rows = [[ui], [domain]]. Drag ui into a new row
         // below domain — stack drop at index 2 means a new row appears
@@ -76,7 +79,7 @@ class WhatIfArchitectureTest {
         domain.setClassBackEdges(Set.of("ui.View\0domain.Model"));
         HierarchicalLayeredArchitecture original =
                 (HierarchicalLayeredArchitecture) new HierarchicalLayeredArchitectureBuilder().build(domain);
-        WhatIfArchitecture wif = new WhatIfArchitecture(original, domain);
+        WhatIfArchitecture wif = new WhatIfArchitectureModel(original, domain);
 
         wif.moveElementAsNewRow("ui", "", 1);
 
@@ -90,7 +93,7 @@ class WhatIfArchitectureTest {
         DomainModel domain = layered();
         HierarchicalLayeredArchitecture original =
                 (HierarchicalLayeredArchitecture) new HierarchicalLayeredArchitectureBuilder().build(domain);
-        WhatIfArchitecture wif = new WhatIfArchitecture(original, domain);
+        WhatIfArchitecture wif = new WhatIfArchitectureModel(original, domain);
 
         // Move 1: swap ui below domain. Expect: violation.
         wif.moveElementAsNewRow("ui", "", 1);
@@ -128,7 +131,7 @@ class WhatIfArchitectureTest {
 
         HierarchicalLayeredArchitecture original =
                 (HierarchicalLayeredArchitecture) new HierarchicalLayeredArchitectureBuilder().build(domain);
-        WhatIfArchitecture wif = new WhatIfArchitecture(original, domain);
+        WhatIfArchitecture wif = new WhatIfArchitectureModel(original, domain);
 
         assertTrue(wif.violations().isEmpty(),
                 "fresh: ui above domain — no upward edge");
@@ -146,7 +149,7 @@ class WhatIfArchitectureTest {
         DomainModel domain = layered();
         HierarchicalLayeredArchitecture original =
                 (HierarchicalLayeredArchitecture) new HierarchicalLayeredArchitectureBuilder().build(domain);
-        WhatIfArchitecture wif = new WhatIfArchitecture(original, domain);
+        WhatIfArchitecture wif = new WhatIfArchitectureModel(original, domain);
 
         wif.moveElementAsNewRow("ui", "", 1);
         assertEquals(1, wif.violations().size());
@@ -172,7 +175,7 @@ class WhatIfArchitectureTest {
         domain.setPackageBackEdges(Set.of());
         HierarchicalLayeredArchitecture original =
                 (HierarchicalLayeredArchitecture) new HierarchicalLayeredArchitectureBuilder().build(domain);
-        WhatIfArchitecture wif = new WhatIfArchitecture(original, domain);
+        WhatIfArchitecture wif = new WhatIfArchitectureModel(original, domain);
         wif.moveElementAsNewRow("ui", "", 1);
 
         // Three class-level UPWARD edges total: A→X, A→Y, B→X — all
@@ -195,7 +198,7 @@ class WhatIfArchitectureTest {
         DomainModel domain = layered();
         HierarchicalLayeredArchitecture original =
                 (HierarchicalLayeredArchitecture) new HierarchicalLayeredArchitectureBuilder().build(domain);
-        WhatIfArchitecture wif = new WhatIfArchitecture(original, domain);
+        WhatIfArchitecture wif = new WhatIfArchitectureModel(original, domain);
         wif.moveElementAsNewRow("ui", "", 1);
         assertEquals(1, wif.violations().size(), "one upward edge after swap");
 
@@ -210,17 +213,36 @@ class WhatIfArchitectureTest {
     }
 
     @Test
-    void tanglesAreInheritedFromOriginalAndStayStableAcrossMoves() {
+    void packageTanglesAreRemovedWhenClassMoveMakesEdgesIntraPackage() {
         DomainModel domain = withCycle();
         HierarchicalLayeredArchitecture original =
                 (HierarchicalLayeredArchitecture) new HierarchicalLayeredArchitectureBuilder().build(domain);
-        WhatIfArchitecture wif = new WhatIfArchitecture(original, domain);
+        WhatIfArchitecture wif = new WhatIfArchitectureModel(original, domain);
 
-        assertEquals(original.tangles(), wif.tangles());
+        assertEquals(1, wif.tangles().size());
+        assertEquals(Set.of("a", "b"), wif.tangles().get(0).members());
 
-        wif.moveElementAsNewRow("a", "", 0);
-        assertEquals(original.tangles(), wif.tangles(),
-                "tangles are static — moving boxes around does not change them");
+        wif.moveElement("a.X", "b", 0, 1);
+
+        assertEquals("b", wif.packageOf("a.X"));
+        assertTrue(wif.tangles().isEmpty(),
+                "both class edges are now inside package b, so the package cycle disappears");
+    }
+
+    @Test
+    void packageTanglesCanAppearAfterMovingClassBetweenPackages() {
+        DomainModel domain = moveCreatesCycle();
+        HierarchicalLayeredArchitecture original =
+                (HierarchicalLayeredArchitecture) new HierarchicalLayeredArchitectureBuilder().build(domain);
+        WhatIfArchitecture wif = new WhatIfArchitectureModel(original, domain);
+
+        assertTrue(wif.tangles().isEmpty(), "original package graph is acyclic");
+
+        wif.moveElement("c.C", "b", 0, 1);
+
+        assertEquals("b", wif.packageOf("c.C"));
+        assertEquals(1, wif.tangles().size());
+        assertEquals(Set.of("a", "b"), wif.tangles().get(0).members());
     }
 
     // ----------------------------------------------------- fixtures
@@ -250,6 +272,21 @@ class WhatIfArchitectureTest {
                 "a", Map.of("b", 1),
                 "b", Map.of("a", 1)));
         domain.setPackageBackEdges(Set.of("b\0a"));
+        return domain;
+    }
+
+    private static DomainModel moveCreatesCycle() {
+        DomainModel domain = new DomainModel();
+        addPackage(domain, "a", 0);
+        addPackage(domain, "b", 0);
+        addPackage(domain, "c", 0);
+        addClass(domain, "a.A", 0, Set.of("b.B"));
+        addClass(domain, "b.B", 0, Set.of());
+        addClass(domain, "c.C", 0, Set.of("a.A"));
+        domain.setPackageEdgeWeights(Map.of(
+                "a", Map.of("b", 1),
+                "c", Map.of("a", 1)));
+        domain.setPackageBackEdges(Set.of());
         return domain;
     }
 

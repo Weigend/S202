@@ -16,15 +16,21 @@
 package de.weigend.s202.ui.tree;
 
 import de.weigend.s202.domain.architecture.ArchitectureAnnotations;
+import de.weigend.s202.domain.architecture.ComponentArchitecture;
+import de.weigend.s202.domain.architecture.Element;
 import de.weigend.s202.reader.DependencyModel;
 import de.weigend.s202.ui.model.ArchitectureNode;
 import de.weigend.s202.ui.model.ArchitectureNode.NodeType;
 import de.weigend.s202.ui.model.ArchitectureNodeLocalLevelCalculator;
+import io.softwareecg.wfx.lookup.api.Lookup;
+import org.junit.jupiter.api.AfterAll;
+import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 
 import java.util.HashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -33,6 +39,16 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class ComponentArchitectureTreeBuilderTest {
+
+    @BeforeAll
+    static void initLookup() {
+        Lookup.init();
+    }
+
+    @AfterAll
+    static void shutdownLookup() {
+        Lookup.shutdown();
+    }
 
     @Test
     void topLevelElementsMatchTheRegularPackageProjection() {
@@ -190,6 +206,41 @@ class ComponentArchitectureTreeBuilderTest {
         assertEquals(8, bridge.getLevel(), "The source tree must keep its analyzed local levels");
     }
 
+    @Test
+    void domainProjectionAdapterUsesComponentArchitectureAsSourceOfApiAndImplementation() {
+        ArchitectureNode root = sourceRoot();
+        Map<String, ArchitectureNode> sourceIndex = new HashMap<>();
+        index(root, sourceIndex);
+        ComponentArchitecture.ComponentElement component =
+                new ComponentArchitecture.ComponentElement(
+                        "payment",
+                        "Payment",
+                        "com.acme.payment",
+                        List.of(new Element.ClassElement(
+                                "com.acme.payment.contract.PaymentFacade", 2, 0)),
+                        List.of(List.of(
+                                new Element.ClassElement(
+                                        "com.acme.payment.PaymentApi", 2, 0),
+                                new Element.PackageElement(
+                                        "com.acme.payment.internal", 1, 0,
+                                        List.of(List.of(new Element.ClassElement(
+                                                "com.acme.payment.internal.PaymentService", 1, 0)))))));
+
+        ArchitectureNode apiProjection =
+                ComponentArchitectureTreeBuilder.apiProjectionRoot(component, sourceIndex);
+        ArchitectureNode implementationProjection =
+                ComponentArchitectureTreeBuilder.implementationProjectionRoot(component, sourceIndex);
+
+        assertTrue(contains(apiProjection, "com.acme.payment.contract.PaymentFacade"));
+        assertTrue(contains(apiProjection, "com.acme.payment.contract"));
+        assertFalse(contains(apiProjection, "com.acme.payment.PaymentApi"),
+                "UI heuristics must not put PaymentApi into the API projection");
+
+        assertTrue(contains(implementationProjection, "com.acme.payment.PaymentApi"));
+        assertTrue(contains(implementationProjection, "com.acme.payment.internal.PaymentService"));
+        assertFalse(contains(implementationProjection, "com.acme.payment.contract.PaymentFacade"));
+    }
+
     private static ArchitectureNode sourceRoot() {
         ArchitectureNode root = pkg("root", "root");
         ArchitectureNode com = pkg("com", "com");
@@ -253,6 +304,13 @@ class ComponentArchitectureTreeBuilderTest {
             }
         }
         return null;
+    }
+
+    private static void index(ArchitectureNode node, Map<String, ArchitectureNode> index) {
+        index.put(node.getFullName(), node);
+        for (ArchitectureNode child : node.getChildren()) {
+            index(child, index);
+        }
     }
 
     private static ArchitectureNode pkg(String fullName, String simpleName) {

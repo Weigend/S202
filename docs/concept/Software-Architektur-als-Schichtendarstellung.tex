@@ -43,8 +43,9 @@
 \begin{abstract}
 S202 berechnet aus Bytecode eine hierarchische Schichtendarstellung von
 Java-Systemen. Das Werkzeug leitet eine Architekturhypothese aus den
-beobachteten Klassenabh\"angigkeiten ab, macht Zyklen und R\"uckkanten als
-explizite Befunde sichtbar und pr\"uft die fertige Darstellung redundant
+beobachteten Klassenabh\"angigkeiten ab, unterscheidet zwei Arten von
+Zyklen~-- Klassenzyklen und Paketzyklen~--, macht beide als getrennt
+schaltbare Befunde sichtbar und pr\"uft die fertige Darstellung redundant
 gegen Konsistenzregeln. Dieses Dokument beschreibt die typischen Fehler
 bei der Berechnung solcher Layouts, erkl\"art die konzeptionelle L\"osung
 und zeigt, wie die Darstellung als Arbeitswerkzeug f\"ur
@@ -268,6 +269,52 @@ Entscheidend ist, dass die geschnittenen Kanten nicht verschwinden. Sie m\"ussen
 sichtbar bleiben, weil genau sie erkl\"aren, warum die berechnete Ordnung nur
 als Architekturhypothese gilt.
 
+\section{Zwei Arten von Zyklen}
+
+S202 unterscheidet zwei grundlegend verschiedene Arten von Zyklen und macht
+beide als getrennt schaltbare Overlays sichtbar:
+
+\begin{description}
+  \item[Klassenzyklen (rot)] Stark zusammenh\"angende Komponenten auf Klassenebene.
+        Zwei oder mehr Klassen, die direkt oder transitiv voneinander abh\"angen,
+        bilden einen solchen Zyklus. Klassenzyklen zeigen implementierungsebene
+        Kopplung, die eine strikt lineare Ordnung einzelner Klassen verhindert.
+        Sie werden mit dem Tarjan-Algorithmus auf dem Klassenabh\"angigkeitsgraphen
+        erkannt.
+  \item[Paketzyklen (orange)] Tangles auf Paketebene, erkannt am aggregierten
+        Paketgraphen. Ein Paketzyklus bedeutet, dass zwei oder mehr Pakete als
+        Gruppe voneinander abh\"angen~-- unabh\"angig davon, welche konkreten
+        Klassen daf\"ur verantwortlich sind. Paketzyklen zeigen Kopplung auf
+        architektonischer Ebene: Die Paketstruktur selbst hat zirkul\"are
+        Abh\"angigkeiten.
+\end{description}
+
+Der Unterschied ist wichtig, weil die beiden Arten verschiedene Fragen beantworten:
+
+\begin{itemize}
+  \item Ein \emph{Klassenzyklus} zeigt, welche konkreten Klassen entwirrt werden
+        m\"ussen. Die Aufl\"osung erfordert oft das Verschieben einer Methode,
+        das Extrahieren eines Interfaces oder das Umkehren einer Abh\"angigkeit
+        zwischen zwei bestimmten Klassen.
+  \item Ein \emph{Paketzyklus} zeigt, wo die Paketgrenzen selbst gebrochen sind.
+        Die Aufl\"osung kann eine gr\"o\ss{}ere Umstrukturierung erfordern~--
+        etwa das Zusammenf\"uhren zweier Pakete, das Einf\"uhren eines neuen oder
+        die Neudefinition des Modulschnitts.
+\end{itemize}
+
+Ein Paketzyklus kann existieren, auch wenn kein einzelner Klassenzyklus sichtbar
+ist~-- zum Beispiel wenn sich zwei Pakete \"uber verschiedene Klassen gegenseitig
+aufrufen, die jeweils f\"ur sich azyklisch sind. Umgekehrt bedeutet ein
+Klassenzyklus, der vollst\"andig innerhalb eines einzigen Pakets liegt, nicht
+zwingend einen Paketzyklus.
+
+Da die beiden Overlays verschiedene Fragen beantworten, h\"alt S202 sie als
+unabh\"angige Schalter vor. Beide gleichzeitig zu aktivieren ist m\"oglich und
+hilfreich, wenn man die Ursache eines architektonischen Problems sucht; jedes
+Overlay ist aber auch allein aussagekr\"aftig: Das Paket-Zyklus-Overlay zeigt
+die strukturelle Form des Problems, das Klassen-Zyklus-Overlay zeigt die
+konkreten Kanten, die es verursachen.
+
 \section{Der Paketgraph als Architekturhypothese}
 
 Die von S202 gew\"ahlte L\"osung besteht darin, Analyse, Ordnungsbildung und
@@ -483,14 +530,16 @@ Die Pr\"ufung betrachtet drei Ebenen:
   \item \textbf{Klassengraph:} F\"ur normale Klassenabh\"angigkeiten muss
         gelten: Wenn $A \to B$, dann steht $A$ auf einem h\"oheren Level als
         $B$. Ausnahmen m\"ussen explizit klassifiziert sein, zum Beispiel als
-        Back-Edge oder als Kante innerhalb einer SCC.
+        Back-Edge oder als Kante innerhalb einer Klassen-SCC. Auf Klassenebene
+        erkannte Zyklen entsprechen dem roten Overlay in der Benutzeroberfl\"ache.
   \item \textbf{Paketgraph:} Die berechnete Paketordnung muss konsistent mit
         den gewichteten Paketabh\"angigkeiten sein. F\"ur jede
         Paketabh\"angigkeit $P \to Q$, die nicht als Paket-Back-Edge
         klassifiziert ist, muss $P$ strikt oberhalb von $Q$ in der berechneten
         Ordnung liegen. Kanten, die beim Aufbrechen einer Paket-SCC geschnitten
         werden, m\"ussen als Paket-Back-Edges klassifiziert sein und sind von
-        dieser Pr\"ufung ausgenommen.
+        dieser Pr\"ufung ausgenommen. Auf Paketebene erkannte Zyklen entsprechen
+        dem orangenen Overlay in der Benutzeroberfl\"ache.
   \item \textbf{Sichtbare Darstellung:} Die sichtbare Anordnung muss zum berechneten
         Modell passen. Paketcontainer, lokale Klassenpositionen und
         verschachtelte Levels d\"urfen die berechnete Architekturhypothese nicht
@@ -610,7 +659,9 @@ vorliegen, die diese Position begr\"unden.
 Kurz gefasst:
 
 \begin{lstlisting}
-Bytecode -> Klassengraph -> SCCs -> Paketgraph -> Paket-architectureLevel
+Bytecode -> Klassengraph -> Klassen-SCCs (rotes Overlay)
+         -> Paketgraph -> Paket-SCCs / Tangles (orangenes Overlay)
+         -> Paket-architectureLevel
          -> Klassen-architectureLevel -> localLevel -> Konsistenzregeln
 \end{lstlisting}
 
@@ -623,13 +674,24 @@ Paketabh\"angigkeiten liefern eine belastbare Ordnung, Back-Edges machen
 notwendige Br\"uche sichtbar, und Konsistenzregeln pr\"ufen, ob die fertige
 Darstellung ihre eigene Aussage einh\"alt.
 
+Eine wichtige Entwurfsentscheidung ist die explizite Trennung zweier
+Zyklus-Arten. Klassenzyklen und Paketzyklen werden unabh\"angig voneinander
+erkannt, als getrennte Befunde gespeichert und \"uber separate Schalter in der
+Benutzeroberfl\"ache sichtbar gemacht. Klassenzyklen (rot) zeigen, welche
+konkreten Klassen zyklische Abh\"angigkeitsketten bilden; Paketzyklen (orange)
+zeigen, welche Pakete auf architektonischer Ebene gegenseitig abh\"angen. Da
+beide Ansichten gleichzeitig verf\"ugbar sind, kann das Werkzeug zwei
+verschiedene Fragen gleichzeitig beantworten: \emph{Wo} in der Paketstruktur
+liegt die zirkul\"are Kopplung, und \emph{welche konkreten Klassenabh\"angigkeiten}
+verursachen sie.
+
 Der wichtigste Beitrag liegt deshalb nicht in einer optisch verbesserten
 Grafik, sondern in der Verbindung von Darstellung, Erkl\"arung und
-Ver\"anderbarkeit. Die
-Schichtung zeigt eine m\"ogliche Ordnung. Die markierten Befunde erkl\"aren,
-wo diese Ordnung durch konkrete Abh\"angigkeiten gebrochen wird. What-If-Verschiebungen
-und manuelle CUTs machen sichtbar, welche Refactorings diese Br\"uche reduzieren
-oder Zyklen tats\"achlich aufl\"osen k\"onnen.
+Ver\"anderbarkeit. Die Schichtung zeigt eine m\"ogliche Ordnung. Die markierten
+Befunde erkl\"aren, wo diese Ordnung durch konkrete Abh\"angigkeiten gebrochen
+wird. What-If-Verschiebungen und manuelle CUTs machen sichtbar, welche
+Refactorings diese Br\"uche reduzieren oder Zyklen tats\"achlich aufl\"osen
+k\"onnen.
 
 Damit ist die Visualisierung mehr als ein Layout. Sie ist ein erkl\"arbares
 Arbeitsmodell: Jede Position und jede hervorgehobene Kante muss auf eine

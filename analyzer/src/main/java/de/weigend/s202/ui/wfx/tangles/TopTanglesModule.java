@@ -16,8 +16,8 @@
 package de.weigend.s202.ui.wfx.tangles;
 
 import de.weigend.s202.domain.DependencyEdge;
-import de.weigend.s202.graph.StronglyConnectedComponent;
-import de.weigend.s202.graph.TarjanSCCFinder;
+import de.weigend.s202.domain.StronglyConnectedComponent;
+import de.weigend.s202.domain.SCCFinder;
 import de.weigend.s202.domain.DomainModel;
 import de.weigend.s202.reader.DependencyModel;
 import de.weigend.s202.reader.EdgeKind;
@@ -348,7 +348,7 @@ public class TopTanglesModule implements Module {
             graph.put(fqn, deps);
         }
 
-        List<StronglyConnectedComponent> sccs = new TarjanSCCFinder(graph).findSCCs();
+        List<StronglyConnectedComponent> sccs = Lookup.lookup(SCCFinder.class).findSCCs(graph);
         return sccs.stream()
                 .filter(StronglyConnectedComponent::isTangle)
                 .sorted(Comparator.comparingInt(StronglyConnectedComponent::getSize).reversed())

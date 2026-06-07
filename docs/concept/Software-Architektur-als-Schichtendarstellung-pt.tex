@@ -43,8 +43,9 @@
 \begin{abstract}
 S202 calcula, a partir de bytecode, uma representa\c{c}\~ao hier\'arquica em
 camadas de sistemas Java. A ferramenta deriva uma hip\'otese arquitetural das
-depend\^encias observadas entre classes, torna ciclos e back edges vis\'iveis
-como achados expl\'icitos e verifica a representa\c{c}\~ao final de forma
+depend\^encias observadas entre classes, distingue dois tipos de ciclos~--
+ciclos de classes e ciclos de pacotes~--, torna ambos vis\'iveis como achados
+ativados separadamente e verifica a representa\c{c}\~ao final de forma
 redundante contra regras de consist\^encia. Este documento descreve erros
 t\'ipicos no c\'alculo desses layouts, explica a solu\c{c}\~ao conceitual e
 mostra como a representa\c{c}\~ao pode ser usada como ferramenta de trabalho
@@ -272,6 +273,52 @@ O ponto decisivo \'e que as arestas cortadas n\~ao podem desaparecer. Elas
 precisam permanecer vis\'iveis, porque explicam por que a ordem calculada vale
 apenas como hip\'otese arquitetural.
 
+\section{Dois Tipos de Ciclos}
+
+S202 distingue dois tipos fundamentalmente diferentes de ciclos e torna ambos
+vis\'iveis como overlays ativados separadamente:
+
+\begin{description}
+  \item[Ciclos de classes (vermelho)] Componentes fortemente conexas no n\'ivel
+        de classes. Duas ou mais classes que dependem uma da outra direta ou
+        transitivamente formam tal ciclo. Ciclos de classes revelam acoplamento
+        no n\'ivel de implementa\c{c}\~ao que impede uma ordem linear estrita de
+        classes individuais. Eles s\~ao detectados pelo algoritmo de Tarjan sobre
+        o grafo de depend\^encias de classes.
+  \item[Ciclos de pacotes (laranja)] Tangles no n\'ivel de pacotes, detectados
+        sobre o grafo agregado de pacotes. Um ciclo de pacotes significa que dois
+        ou mais pacotes dependem uns dos outros como grupo, independentemente de
+        quais classes concretas s\~ao respons\'aveis. Ciclos de pacotes revelam
+        acoplamento no n\'ivel arquitetural: a pr\'opria estrutura de pacotes tem
+        depend\^encias circulares.
+\end{description}
+
+A distin\c{c}\~ao importa porque os dois tipos respondem a perguntas diferentes:
+
+\begin{itemize}
+  \item Um \emph{ciclo de classes} mostra quais classes concretas precisam ser
+        desembaraladas. Dissolv\^e-lo frequentemente exige mover um m\'etodo,
+        extrair uma interface ou inverter uma depend\^encia entre duas classes
+        espec\'ificas.
+  \item Um \emph{ciclo de pacotes} mostra onde os pr\'oprios limites de pacotes
+        est\~ao quebrados. Resolv\^e-lo pode exigir uma reestrutura\c{c}\~ao
+        maior~-- como mesclar dois pacotes, introduzir um novo, ou redefinir
+        inteiramente a divis\~ao de m\'odulos.
+\end{itemize}
+
+Um ciclo de pacotes pode existir mesmo quando nenhum ciclo de classes individual
+\'e vis\'ivel~-- por exemplo, quando dois pacotes se chamam mutuamente por meio
+de classes diferentes que s\~ao individualmente ac\'iclicas. Por outro lado, um
+ciclo de classes inteiramente contido em um \'unico pacote n\~ao implica
+necessariamente um ciclo de pacotes.
+
+Como os dois overlays respondem a perguntas diferentes, S202 os mant\'em como
+chaves independentes. Ativar ambos ao mesmo tempo \'e poss\'ivel e \'util ao
+buscar a causa raiz de um problema arquitetural, mas cada overlay tamb\'em \'e
+significativo por si s\'o: o overlay de ciclos de pacotes revela a forma
+estrutural do problema, enquanto o overlay de ciclos de classes revela as
+arestas concretas que o causam.
+
 \section{O Grafo de Pacotes como Hip\'otese Arquitetural}
 
 A solu\c{c}\~ao escolhida pelo S202 consiste em separar de forma consequente a
@@ -493,14 +540,17 @@ A verifica\c{c}\~ao considera tr\^es n\'iveis:
   \item \textbf{Grafo de classes:} Para depend\^encias normais entre classes
         deve valer: se $A \to B$, ent\~ao $A$ est\'a em um n\'ivel mais alto
         que $B$. Exce\c{c}\~oes precisam ser classificadas explicitamente, por
-        exemplo como back edge ou como aresta dentro de uma SCC.
+        exemplo como back edge ou como aresta dentro de uma SCC de classes.
+        Ciclos detectados no n\'ivel de classes correspondem ao overlay vermelho
+        na interface.
   \item \textbf{Grafo de pacotes:} A ordem de pacotes calculada precisa ser
         consistente com as depend\^encias ponderadas entre pacotes. Para cada
         depend\^encia de pacote $P \to Q$ que n\~ao est\'a classificada como
         back edge de pacote, $P$ deve ficar estritamente acima de $Q$ na ordem
         calculada. Arestas cortadas ao quebrar uma SCC de pacotes precisam ser
         classificadas como back edges de pacotes e est\~ao isentas dessa
-        verifica\c{c}\~ao.
+        verifica\c{c}\~ao. Ciclos detectados no n\'ivel de pacotes correspondem
+        ao overlay laranja na interface.
   \item \textbf{Representa\c{c}\~ao vis\'ivel:} A disposi\c{c}\~ao vis\'ivel
         precisa corresponder ao modelo calculado. Cont\^eineres de pacotes,
         posi\c{c}\~oes locais de classes e n\'iveis aninhados n\~ao podem
@@ -624,7 +674,9 @@ estejam dispon\'iveis as informa\c{c}\~oes que justificam essa posi\c{c}\~ao.
 Em resumo:
 
 \begin{lstlisting}
-Bytecode -> grafo de classes -> SCCs -> grafo de pacotes -> architectureLevel de pacotes
+Bytecode -> grafo de classes -> SCCs de classes (overlay vermelho)
+         -> grafo de pacotes -> SCCs / tangles de pacotes (overlay laranja)
+         -> architectureLevel de pacotes
          -> architectureLevel de classes -> localLevel -> regras de consistencia
 \end{lstlisting}
 
@@ -637,6 +689,17 @@ fornecem o grafo, depend\^encias entre pacotes fornecem uma ordem robusta, back
 edges tornam vis\'iveis as quebras necess\'arias, e regras de consist\^encia
 verificam se a representa\c{c}\~ao final cumpre sua pr\'opria
 afirma\c{c}\~ao.
+
+Uma decis\~ao de projeto fundamental \'e a separa\c{c}\~ao expl\'icita de dois
+tipos de ciclos. Ciclos de classes e ciclos de pacotes s\~ao detectados
+independentemente, armazenados como achados distintos e expostos por meio de
+chaves separadas na interface. Ciclos de classes (vermelho) mostram quais classes
+concretas formam cadeias c\'iclicas de depend\^encia; ciclos de pacotes (laranja)
+mostram quais pacotes s\~ao mutuamente dependentes no n\'ivel arquitetural. Como
+ambas as vis\~oes est\~ao dispon\'iveis simultaneamente, a ferramenta pode
+responder a duas perguntas diferentes ao mesmo tempo: \emph{onde} na estrutura
+de pacotes est\'a o acoplamento circular, e \emph{quais depend\^encias concretas
+entre classes} o causam.
 
 A contribui\c{c}\~ao mais importante, portanto, n\~ao est\'a em uma figura
 visualmente melhorada, mas na conex\~ao entre representa\c{c}\~ao,

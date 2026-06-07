@@ -28,6 +28,8 @@ public interface DependencyRendererStrategy {
 
     void setCoordinateContext(Pane zoomableContent, Pane overlayPane, ScrollPane scrollPane);
 
+    void setSelectedFullName(String selectedFullName);
+
     void drawDependencyArrows(ArchitectureNode rootNode);
 
     void clearDependencyArrows();

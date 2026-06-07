@@ -356,31 +356,27 @@ public final class WhatIfUpwardEdgeRenderer {
 
     /**
      * Returns {@code [minX, minY, maxX, maxY]} of {@code node}'s bounding
-     * box in the zoomable-content coordinate space, or {@code null} if the
-     * transform can't be computed. Walks the parent chain accumulating
-     * per-node {@code boundsInParent} offsets so the result reflects any
-     * zoom/scale applied above the node.
+     * box in the overlay pane's coordinate space, or {@code null} if the
+     * transform can't be computed. Uses JavaFX's scene transform APIs instead
+     * of manually walking bounds, which avoids stale offsets after layout/CSS
+     * changes.
      */
     private double[] boundsInPane(Node node) {
         try {
-            Bounds localBounds = node.getBoundsInLocal();
-            double minX = localBounds.getMinX();
-            double minY = localBounds.getMinY();
-            double maxX = localBounds.getMaxX();
-            double maxY = localBounds.getMaxY();
-            Node current = node;
-            while (current != null && current != zoomableContent) {
-                Bounds boundsInParent = current.getBoundsInParent();
-                Bounds localB = current.getBoundsInLocal();
-                double dx = boundsInParent.getMinX() - localB.getMinX();
-                double dy = boundsInParent.getMinY() - localB.getMinY();
-                minX += dx;
-                maxX += dx;
-                minY += dy;
-                maxY += dy;
-                current = current.getParent();
+            if (node == null || pane == null || node.getScene() != pane.getScene()) {
+                return null;
             }
-            return new double[]{minX, minY, maxX, maxY};
+            Bounds bounds = pane.sceneToLocal(node.localToScene(node.getBoundsInLocal()));
+            if (bounds == null
+                    || !Double.isFinite(bounds.getMinX())
+                    || !Double.isFinite(bounds.getMinY())
+                    || !Double.isFinite(bounds.getWidth())
+                    || !Double.isFinite(bounds.getHeight())
+                    || bounds.getWidth() <= 1.0
+                    || bounds.getHeight() <= 1.0) {
+                return null;
+            }
+            return new double[]{bounds.getMinX(), bounds.getMinY(), bounds.getMaxX(), bounds.getMaxY()};
         } catch (Exception ex) {
             return null;
         }

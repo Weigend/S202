@@ -4,6 +4,9 @@
 
 A JavaFX-based tool for analyzing Java bytecode and Python source code and visualizing code architecture.
 
+> **→ [The Tool That Fixed Itself — S202 Case Study](docs/s202/CASE_STUDY.md)**
+> *We pointed S202 at its own codebase. No source code was read. Here's what happened.*
+
 
 ![UI Screenshot](docs/image1.png)
 
@@ -12,7 +15,7 @@ A JavaFX-based tool for analyzing Java bytecode and Python source code and visua
 - **Bytecode analysis**: Parses Java `.class` files with ASM 9.6
 - **Python source analysis**: Analyzes Python source trees via CPython's `ast` module; maps modules to the same dependency model as Java (no extra tooling beyond a standard `python3` install)
 - **Dependency detection**: Extracts class/module and package dependencies (imports, calls, inheritance, type annotations)
-- **Cycle detection**: Finds cyclic dependencies (Strongly Connected Components)
+- **Cycle detection**: Detects two independent kinds of cycles — **class cycles** (red overlay: SCCs at the class level) and **package cycles** (orange overlay: tangles at the package level); both are separately togglable because they answer different questions
 - **Architecture layering**: Topological ordering by dependency depth
 - **Hierarchical visualization**: JavaFX TreeView with expandable packages
 - **Component View**: Shows top-level components with an explicit API area above the implementation packages
@@ -62,13 +65,14 @@ The architecture is analyzed, visualized, and automatically checked against five
 
 The **Layered Architecture View** is the default view after loading a JAR or project. It arranges packages in horizontal layers according to their dependency depth: packages that depend on nothing sit at the bottom (level 0), and each layer above depends only on layers below it.
 
-![Layered Architecture View showing WFX modules](docs/wfx-layered-architecture.png)
+![Layered Architecture View showing WFX modules](docs/wfx/wfx-layered-architecture.png)
 
 **What the view checks:**
 
 - **Direction**: Every valid dependency points downward. An arrow that points upward or sideways is a layering violation and is highlighted in red as a dashed arrow.
 - **Violations**: Backward dependencies (calls from a lower layer to a higher layer) are displayed prominently so they can be identified and resolved.
-- **Cycles / Tangles**: Packages involved in cyclic dependencies are grouped and marked separately; their internal cross-edges are shown as a tangle.
+- **Class cycles** (red): classes that form SCCs — shows which concrete class dependencies create the cycle.
+- **Package cycles** (orange): packages that are mutually dependent as a group — shows where package boundaries themselves are broken. Both overlays are toggled independently; activating both at once reveals where in the package structure the circular coupling sits and which class edges cause it.
 
 **Navigating dependencies:**
 
@@ -80,7 +84,7 @@ The **Layered Architecture View** is the default view after loading a JAR or pro
 
 Packages involved in cyclic dependencies form **tangles** — groups of classes and packages that are mutually dependent and cannot be cleanly layered. The main view lists the largest tangles ranked by size (**Top Tangles**). A double-click on any tangle entry opens the **Tangle View**, a focused sub-view that shows only the classes and packages involved in that specific cycle.
 
-![Tangle View showing a cyclic dependency cluster](docs/wfx-tangle-view.png)
+![Tangle View showing a cyclic dependency cluster](docs/wfx/wfx-tangle-view.png)
 
 **Cutting edges to resolve the tangle:**
 
@@ -90,7 +94,7 @@ For cases where an entire class dependency should be removed in one step, **Cut 
 
 The goal is a cycle-free graph like the one below, where every remaining arrow points in a consistent direction:
 
-![Tangle resolved — cycle-free result](docs/wfx-tangle-resolved.png)
+![Tangle resolved — cycle-free result](docs/wfx/wfx-tangle-resolved.png)
 
 **Using the cut list as a refactoring plan:**
 
@@ -100,7 +104,7 @@ The user decides which edges to cut — guided by what is easiest to implement, 
 
 The **Component View** is available from the **View -> Component View** menu after loading a JAR or project. It keeps the normal layered package ordering, but projects packages with a public API into component boxes: the API is shown in a blue section at the top, and both API and implementation keep their regular nested package layout. Local levels inside the API are recalculated from API-only dependencies.
 
-![Component View showing WFX modules](docs/wfx-architecture.png)
+![Component View showing WFX modules](docs/wfx/wfx-architecture.png)
 
 Component roots are top-level packages that contain API classes. Components are not nested into other components; packages inside the implementation area remain collapsible and use the same local hierarchy as the normal architecture view.
 
@@ -184,7 +188,9 @@ Details: [docs/VS_CODE_SETUP.md](docs/VS_CODE_SETUP.md)
 
 ## Case Studies
 
-**[→ docs/S202_CASE_STUDIES.md](docs/S202_CASE_STUDIES.md)** — Real-world codebases analyzed with S202: which architectural problems became visible and which refactoring decisions follow.
+**[→ The Tool That Fixed Itself](docs/s202/CASE_STUDY.md)** — S202 analyzed its own codebase. Dead code, wrong packages, missing interfaces — all found without reading a single line of source. With before/after screenshots.
+
+**[→ docs/wfx/S202_CASE_STUDY_WFX.md](docs/wfx/S202_CASE_STUDY_WFX.md)** — Real-world codebases analyzed with S202: which architectural problems became visible and which refactoring decisions follow.
 
 ## Documentation
 

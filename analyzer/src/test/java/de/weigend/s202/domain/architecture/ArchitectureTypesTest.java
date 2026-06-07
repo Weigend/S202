@@ -15,6 +15,7 @@
  */
 package de.weigend.s202.domain.architecture;
 
+import de.weigend.s202.domain.impl.HierarchicalLayeredArchitecture;
 import org.junit.jupiter.api.Test;
 
 import java.util.ArrayList;

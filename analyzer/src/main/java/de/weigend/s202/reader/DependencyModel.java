@@ -26,6 +26,9 @@ public class DependencyModel {
     private final Set<String> allClassNames = new HashSet<>();
     private final Map<String, ModuleInfo> modules = new HashMap<>();
     private Map<String, PackageInfo> packages = new HashMap<>();
+    private final Set<String> componentAnnotatedPackages = new LinkedHashSet<>();
+    private final Set<String> apiAnnotatedPackages = new LinkedHashSet<>();
+    private final Set<String> plainPackages = new LinkedHashSet<>();
 
     /**
      * Information about a single Java class.
@@ -224,6 +227,36 @@ public class DependencyModel {
 
     public boolean isPackageExported(String packageName) {
         return packageName != null && getExportedPackageNames().contains(packageName);
+    }
+
+    public void addComponentAnnotatedPackage(String packageFqn) {
+        if (packageFqn != null && !packageFqn.isBlank()) {
+            componentAnnotatedPackages.add(packageFqn);
+        }
+    }
+
+    public Set<String> getComponentAnnotatedPackages() {
+        return Collections.unmodifiableSet(componentAnnotatedPackages);
+    }
+
+    public void addApiAnnotatedPackage(String packageFqn) {
+        if (packageFqn != null && !packageFqn.isBlank()) {
+            apiAnnotatedPackages.add(packageFqn);
+        }
+    }
+
+    public Set<String> getApiAnnotatedPackages() {
+        return Collections.unmodifiableSet(apiAnnotatedPackages);
+    }
+
+    public void addPlainPackage(String packageFqn) {
+        if (packageFqn != null && !packageFqn.isBlank()) {
+            plainPackages.add(packageFqn);
+        }
+    }
+
+    public Set<String> getPlainPackages() {
+        return Collections.unmodifiableSet(plainPackages);
     }
 
     public Map<String, ClassInfo> getAllClasses() {

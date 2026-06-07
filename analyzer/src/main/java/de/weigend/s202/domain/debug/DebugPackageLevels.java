@@ -15,13 +15,15 @@
  */
 package de.weigend.s202.domain.debug;
 
-import de.weigend.s202.reader.java.InputAnalyzer;
 import de.weigend.s202.reader.DependencyModel;
-import de.weigend.s202.domain.architecture.LevelCalculator;
+import de.weigend.s202.reader.LanguageAnalyzer;
+import de.weigend.s202.domain.DomainComputer;
 import de.weigend.s202.domain.DomainModel;
-import de.weigend.s202.graph.TarjanSCCFinder;
-import de.weigend.s202.graph.StronglyConnectedComponent;
+import de.weigend.s202.domain.SCCFinder;
+import de.weigend.s202.domain.StronglyConnectedComponent;
+import io.softwareecg.wfx.lookup.api.Lookup;
 
+import java.nio.file.Path;
 import java.util.*;
 
 /**
@@ -34,13 +36,11 @@ public class DebugPackageLevels {
         System.out.println("=== ANALYZING JAR: " + jarPath + " ===\n");
         
         // Step 1: Analyze bytecode
-        InputAnalyzer analyzer = new InputAnalyzer();
-        DependencyModel rawModel = analyzer.analyze(jarPath);
+        DependencyModel rawModel = javaBytecodeAnalyzer().analyze(List.of(Path.of(jarPath)));
         
         // Step 2: Calculate levels
-        LevelCalculator calculator = new LevelCalculator();
         System.out.println("[DEBUG] Before level calculation...");
-        DomainModel model = calculator.calculate(rawModel);
+        DomainModel model = domainComputer().compute(rawModel);
         
         System.out.println("\n=== FINAL RESULTS ===\n");
         System.out.println("Package Levels:");
@@ -79,8 +79,7 @@ public class DebugPackageLevels {
             classDeps.put(classInfo.fullName, internalDeps);
         }
         
-        TarjanSCCFinder finder = new TarjanSCCFinder(classDeps);
-        List<StronglyConnectedComponent> sccs = finder.findSCCs();
+        List<StronglyConnectedComponent> sccs = Lookup.lookup(SCCFinder.class).findSCCs(classDeps);
         
         System.out.println("Found " + sccs.size() + " SCCs");
         for (StronglyConnectedComponent scc : sccs) {
@@ -108,5 +107,21 @@ public class DebugPackageLevels {
                 }
             }
         }
+    }
+
+    private static LanguageAnalyzer javaBytecodeAnalyzer() {
+        Lookup.init();
+        return Lookup.lookupAll(LanguageAnalyzer.class).stream()
+                .filter(analyzer -> "Java bytecode".equals(analyzer.displayName()))
+                .findFirst()
+                .orElseThrow(() -> new IllegalStateException("No Java bytecode analyzer registered"));
+    }
+
+    private static DomainComputer domainComputer() {
+        DomainComputer computer = Lookup.lookup(DomainComputer.class);
+        if (computer == null) {
+            throw new IllegalStateException("No domain computer registered");
+        }
+        return computer;
     }
 }

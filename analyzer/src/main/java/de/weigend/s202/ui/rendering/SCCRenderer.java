@@ -15,8 +15,9 @@
  */
 package de.weigend.s202.ui.rendering;
 
-import de.weigend.s202.graph.StronglyConnectedComponent;
-import de.weigend.s202.graph.TarjanSCCFinder;
+import de.weigend.s202.domain.StronglyConnectedComponent;
+import io.softwareecg.wfx.lookup.api.Lookup;
+import de.weigend.s202.domain.SCCFinder;
 import de.weigend.s202.ui.model.ArchitectureNode;
 import javafx.geometry.Bounds;
 import javafx.scene.Node;
@@ -28,6 +29,7 @@ import javafx.scene.shape.Line;
 
 import java.util.*;
 import java.util.function.Consumer;
+import java.util.function.Function;
 
 /**
  * Renders SCC (Strongly Connected Components) visualization.
@@ -54,11 +56,12 @@ public class SCCRenderer {
     private final Map<String, Node> elementRegistry;
     private final Consumer<String> statusCallback;
 
-    /** Package tangles from DomainModel — used to draw cross-package cycle contributions. */
+    /** Package tangles for the active architecture — used to draw cross-package cycle contributions. */
     private List<Set<String>> packageTangles = List.of();
+    private Function<String, String> packageResolver = SCCRenderer::staticPackage;
 
-    private boolean showClassScc = true;
-    private boolean showPackageCycles = true;
+    private boolean showClassScc = false;
+    private boolean showPackageCycles = false;
 
     private final List<Line> sccLines = new ArrayList<>();
     private boolean sccLinesDrawn = false;
@@ -66,11 +69,6 @@ public class SCCRenderer {
     /** Currently highlighted edge (sourceName, targetName), or null when none. */
     private String highlightFrom;
     private String highlightTo;
-
-    // Dynamic references set by ArchitectureView
-    private Pane zoomableContent;
-    private Pane overlayPane;
-    private ScrollPane scrollPane;
 
     /**
      * Creates a new SCCRenderer.
@@ -85,21 +83,19 @@ public class SCCRenderer {
         this.statusCallback = Objects.requireNonNull(statusCallback, "statusCallback cannot be null");
     }
 
-    /**
-     * Sets dynamic references needed for coordinate calculations.
-     * Must be called before drawing.
-     */
     public void setPackageTangles(List<Set<String>> packageTangles) {
         this.packageTangles = packageTangles == null ? List.of() : List.copyOf(packageTangles);
+    }
+
+    public void setPackageResolver(Function<String, String> packageResolver) {
+        this.packageResolver = packageResolver == null ? SCCRenderer::staticPackage : packageResolver;
     }
 
     public void setShowClassScc(boolean show) { this.showClassScc = show; }
     public void setShowPackageCycles(boolean show) { this.showPackageCycles = show; }
 
     public void setCoordinateContext(Pane zoomableContent, Pane overlayPane, ScrollPane scrollPane) {
-        this.zoomableContent = zoomableContent;
-        this.overlayPane = overlayPane;
-        this.scrollPane = scrollPane;
+        // Kept for existing callers. SCC coordinates are derived from sccPane directly.
     }
 
     /**
@@ -188,9 +184,8 @@ public class SCCRenderer {
             return;
         }
 
-        // Step 2: Find SCCs using Tarjan algorithm
-        TarjanSCCFinder sccFinder = new TarjanSCCFinder(classDependencies);
-        List<StronglyConnectedComponent> sccs = sccFinder.findSCCs();
+        // Step 2: Find SCCs
+        List<StronglyConnectedComponent> sccs = Lookup.lookup(SCCFinder.class).findSCCs(classDependencies);
 
         // Step 3: Draw red lines for strict class-level SCCs (size > 1)
         Set<String> classSccMembers = new HashSet<>();
@@ -259,10 +254,11 @@ public class SCCRenderer {
         int count = 0;
         for (Set<String> tangle : packageTangles) {
             for (String cls : classDeps.keySet()) {
-                if (!tangle.contains(pkg(cls))) continue;
+                String clsPkg = packageOf(cls);
+                if (!tangle.contains(clsPkg)) continue;
                 for (String dep : classDeps.getOrDefault(cls, Set.of())) {
-                    String depPkg = pkg(dep);
-                    if (!tangle.contains(depPkg) || depPkg.equals(pkg(cls))) continue;
+                    String depPkg = packageOf(dep);
+                    if (!tangle.contains(depPkg) || depPkg.equals(clsPkg)) continue;
                     if (skipClasses.contains(cls) && skipClasses.contains(dep)) continue;
                     Node src = elementRegistry.get(cls);
                     Node tgt = elementRegistry.get(dep);
@@ -276,7 +272,12 @@ public class SCCRenderer {
         return count;
     }
 
-    private static String pkg(String fqn) {
+    private String packageOf(String fqn) {
+        String packageName = packageResolver.apply(fqn);
+        return packageName == null ? staticPackage(fqn) : packageName;
+    }
+
+    private static String staticPackage(String fqn) {
         int dot = fqn == null ? -1 : fqn.lastIndexOf('.');
         return dot < 0 ? "" : fqn.substring(0, dot);
     }
@@ -320,18 +321,23 @@ public class SCCRenderer {
 
     private void createSccLine(Node source, Node target, String sourceName, String targetName, Color color) {
         try {
-            // Get coordinates
-            double[] sourceCenter = getNodeCenterInPane(source);
-            double[] targetCenter = getNodeCenterInPane(target);
+            double[] sourceBounds = getBoundsInPane(source);
+            double[] targetBounds = getBoundsInPane(target);
 
-            if (sourceCenter == null || targetCenter == null) {
+            if (sourceBounds == null || targetBounds == null) {
                 return;
             }
 
-            double startX = sourceCenter[0];
-            double startY = sourceCenter[1];
-            double endX = targetCenter[0];
-            double endY = targetCenter[1];
+            double sourceCenterX = (sourceBounds[0] + sourceBounds[2]) / 2.0;
+            double sourceCenterY = (sourceBounds[1] + sourceBounds[3]) / 2.0;
+            double targetCenterX = (targetBounds[0] + targetBounds[2]) / 2.0;
+            double targetCenterY = (targetBounds[1] + targetBounds[3]) / 2.0;
+            double[] start = edgePoint(sourceBounds, targetCenterX, targetCenterY);
+            double[] end = edgePoint(targetBounds, sourceCenterX, sourceCenterY);
+            double startX = start[0];
+            double startY = start[1];
+            double endX = end[0];
+            double endY = end[1];
 
             // Create the line
             double scaledWidth = getScaledLineWidth();
@@ -416,38 +422,49 @@ public class SCCRenderer {
     }
 
     /**
-     * Calculates the center point of a node relative to the overlay pane.
+     * Returns [minX, minY, maxX, maxY] in the SCC pane's coordinate space.
      */
-    private double[] getNodeCenterInPane(Node node) {
+    private double[] getBoundsInPane(Node node) {
         try {
-            if (zoomableContent == null || overlayPane == null) {
+            if (node == null || sccPane == null || node.getScene() != sccPane.getScene()) {
                 return null;
             }
-
-            // Get bounds in local coordinates
-            Bounds localBounds = node.getBoundsInLocal();
-
-            // Transform to zoomableContent's coordinate space
-            Node current = node;
-            double centerX = localBounds.getMinX() + localBounds.getWidth() / 2;
-            double centerY = localBounds.getMinY() + localBounds.getHeight() / 2;
-
-            // Walk up the parent chain to zoomableContent, accumulating transforms
-            while (current != null && current != zoomableContent) {
-                Bounds boundsInParent = current.getBoundsInParent();
-                Bounds localB = current.getBoundsInLocal();
-
-                // Adjust for the offset from local to parent bounds
-                centerX = centerX - localB.getMinX() + boundsInParent.getMinX();
-                centerY = centerY - localB.getMinY() + boundsInParent.getMinY();
-
-                current = current.getParent();
+            Bounds bounds = sccPane.sceneToLocal(node.localToScene(node.getBoundsInLocal()));
+            if (!isUsable(bounds)) {
+                return null;
             }
-
-            return new double[]{centerX, centerY};
+            return new double[]{bounds.getMinX(), bounds.getMinY(), bounds.getMaxX(), bounds.getMaxY()};
         } catch (Exception e) {
             return null;
         }
+    }
+
+    private static boolean isUsable(Bounds bounds) {
+        return bounds != null
+                && Double.isFinite(bounds.getMinX())
+                && Double.isFinite(bounds.getMinY())
+                && Double.isFinite(bounds.getWidth())
+                && Double.isFinite(bounds.getHeight())
+                && bounds.getWidth() > 1.0
+                && bounds.getHeight() > 1.0;
+    }
+
+    private static double[] edgePoint(double[] box, double towardX, double towardY) {
+        double minX = box[0];
+        double minY = box[1];
+        double maxX = box[2];
+        double maxY = box[3];
+        double cx = (minX + maxX) / 2.0;
+        double cy = (minY + maxY) / 2.0;
+        double dx = towardX - cx;
+        double dy = towardY - cy;
+        if (Math.abs(dx) < 0.0001 && Math.abs(dy) < 0.0001) {
+            return new double[]{cx, cy};
+        }
+        double halfW = (maxX - minX) / 2.0;
+        double halfH = (maxY - minY) / 2.0;
+        double scale = 1.0 / Math.max(Math.abs(dx) / halfW, Math.abs(dy) / halfH);
+        return new double[]{cx + dx * scale, cy + dy * scale};
     }
 
     /**

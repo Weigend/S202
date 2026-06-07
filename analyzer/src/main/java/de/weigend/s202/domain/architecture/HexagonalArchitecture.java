@@ -18,28 +18,20 @@ package de.weigend.s202.domain.architecture;
 import java.util.List;
 
 /**
- * Domain projection for a first hexagonal architecture prototype. The
- * projection keeps calculated levels intact and maps classes into radial rings,
- * top-level segments, and optional port sockets.
+ * Architecture style that maps elements to radial rings, top-level segments,
+ * and optional port sockets following the Ports-and-Adapters pattern.
  */
-public record HexagonalArchitecture(
-        List<HexRing> rings,
-        List<HexSegment> segments,
-        List<HexPort> ports,
-        List<HexElement> elements,
-        List<Violation> violations,
-        List<Tangle> tangles) implements Architecture {
+public interface HexagonalArchitecture extends Architecture {
 
-    public HexagonalArchitecture {
-        rings = rings == null ? List.of() : List.copyOf(rings);
-        segments = segments == null ? List.of() : List.copyOf(segments);
-        ports = ports == null ? List.of() : List.copyOf(ports);
-        elements = elements == null ? List.of() : List.copyOf(elements);
-        violations = violations == null ? List.of() : List.copyOf(violations);
-        tangles = tangles == null ? List.of() : List.copyOf(tangles);
-    }
+    List<HexRing> rings();
 
-    public record HexRing(String id, String label, RingRole role) {
+    List<HexSegment> segments();
+
+    List<HexPort> ports();
+
+    List<HexElement> elements();
+
+    record HexRing(String id, String label, RingRole role) {
         public HexRing {
             if (id == null || id.isBlank()) {
                 throw new IllegalArgumentException("id must be non-empty");
@@ -49,13 +41,13 @@ public record HexagonalArchitecture(
         }
     }
 
-    public enum RingRole {
+    enum RingRole {
         CORE,
         APPLICATION,
         ADAPTER
     }
 
-    public record HexSegment(String id, String label, String rootFqn, boolean explicit) {
+    record HexSegment(String id, String label, String rootFqn, boolean explicit) {
         public HexSegment {
             if (id == null || id.isBlank()) {
                 throw new IllegalArgumentException("id must be non-empty");
@@ -67,11 +59,11 @@ public record HexagonalArchitecture(
         }
     }
 
-    public record HexPort(String id,
-                          String classFqn,
-                          String segmentId,
-                          ArchitectureAnnotations.PortDirection direction,
-                          boolean explicit) {
+    record HexPort(String id,
+                   String classFqn,
+                   String segmentId,
+                   ArchitectureAnnotations.PortDirection direction,
+                   boolean explicit) {
         public HexPort {
             if (id == null || id.isBlank()) {
                 throw new IllegalArgumentException("id must be non-empty");
@@ -86,17 +78,17 @@ public record HexagonalArchitecture(
         }
     }
 
-    public record HexElement(String fqn,
-                             String simpleName,
-                             boolean classElement,
-                             String segmentId,
-                             RingRole ringRole,
-                             ArchitectureAnnotations.ElementRole elementRole,
-                             int architectureLevel,
-                             int localLevel,
-                             boolean componentApi,
-                             boolean portCandidate,
-                             boolean explicitPort) {
+    record HexElement(String fqn,
+                      String simpleName,
+                      boolean classElement,
+                      String segmentId,
+                      RingRole ringRole,
+                      ArchitectureAnnotations.ElementRole elementRole,
+                      int architectureLevel,
+                      int localLevel,
+                      boolean componentApi,
+                      boolean portCandidate,
+                      boolean explicitPort) {
         public HexElement {
             if (fqn == null || fqn.isBlank()) {
                 throw new IllegalArgumentException("fqn must be non-empty");

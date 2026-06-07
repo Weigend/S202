@@ -16,7 +16,7 @@
 package de.weigend.s202.analysis.input;
 
 import de.weigend.s202.reader.DependencyModel;
-import de.weigend.s202.reader.java.InputAnalyzer;
+import de.weigend.s202.reader.impl.java.InputAnalyzer;
 import org.junit.jupiter.api.io.TempDir;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -183,7 +183,7 @@ class InputAnalyzerTest {
 
     @Test
     void testAnalyzeNullPathThrowsException() {
-        assertThrows(NullPointerException.class, () -> analyzer.analyze(null),
+        assertThrows(NullPointerException.class, () -> analyzer.analyze((String) null),
             "Should throw exception for null path");
     }
 
