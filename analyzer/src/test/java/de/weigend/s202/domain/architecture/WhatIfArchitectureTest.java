@@ -17,7 +17,9 @@ package de.weigend.s202.domain.architecture;
 
 import de.weigend.s202.domain.DomainModel;
 import de.weigend.s202.domain.DomainModel.CalculatedElementInfo;
+import de.weigend.s202.domain.impl.HierarchicalLayeredArchitecture;
 import de.weigend.s202.domain.impl.HierarchicalLayeredArchitectureBuilder;
+import de.weigend.s202.domain.impl.WhatIfArchitecture;
 import org.junit.jupiter.api.Test;
 
 import java.util.HashSet;

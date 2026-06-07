@@ -13,26 +13,24 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package de.weigend.s202.domain.architecture;
+package de.weigend.s202.domain.impl;
+
+import de.weigend.s202.domain.architecture.ComponentArchitecture;
+import de.weigend.s202.domain.architecture.Tangle;
+import de.weigend.s202.domain.architecture.Violation;
 
 import java.util.List;
 
 /**
- * Immutable implementation of {@link HexagonalArchitecture}.
+ * Immutable implementation of {@link ComponentArchitecture}.
  */
-public record HexagonalArchitectureModel(
-        List<HexagonalArchitecture.HexRing> rings,
-        List<HexagonalArchitecture.HexSegment> segments,
-        List<HexagonalArchitecture.HexPort> ports,
-        List<HexagonalArchitecture.HexElement> elements,
+public record ComponentArchitectureModel(
+        List<ComponentArchitecture.ComponentElement> components,
         List<Violation> violations,
-        List<Tangle> tangles) implements HexagonalArchitecture {
+        List<Tangle> tangles) implements ComponentArchitecture {
 
-    public HexagonalArchitectureModel {
-        rings = rings == null ? List.of() : List.copyOf(rings);
-        segments = segments == null ? List.of() : List.copyOf(segments);
-        ports = ports == null ? List.of() : List.copyOf(ports);
-        elements = elements == null ? List.of() : List.copyOf(elements);
+    public ComponentArchitectureModel {
+        components = components == null ? List.of() : List.copyOf(components);
         violations = violations == null ? List.of() : List.copyOf(violations);
         tangles = tangles == null ? List.of() : List.copyOf(tangles);
     }

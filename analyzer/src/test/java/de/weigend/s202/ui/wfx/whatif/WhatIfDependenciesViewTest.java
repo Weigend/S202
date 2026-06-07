@@ -17,7 +17,7 @@ package de.weigend.s202.ui.wfx.whatif;
 
 import de.weigend.s202.domain.architecture.Architecture;
 import de.weigend.s202.domain.architecture.EndpointPair;
-import de.weigend.s202.domain.architecture.HierarchicalLayeredArchitecture;
+import de.weigend.s202.domain.impl.HierarchicalLayeredArchitecture;
 import de.weigend.s202.domain.architecture.Tangle;
 import de.weigend.s202.domain.architecture.Violation;
 import de.weigend.s202.domain.architecture.ViolationKind;

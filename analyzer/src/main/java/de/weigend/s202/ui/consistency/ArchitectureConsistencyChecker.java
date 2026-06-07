@@ -17,7 +17,7 @@ package de.weigend.s202.ui.consistency;
 
 import de.weigend.s202.domain.architecture.Architecture;
 import de.weigend.s202.domain.architecture.Element;
-import de.weigend.s202.domain.architecture.HierarchicalLayeredArchitecture;
+import de.weigend.s202.domain.impl.HierarchicalLayeredArchitecture;
 import de.weigend.s202.ui.model.ArchitectureNode;
 import de.weigend.s202.ui.model.ArchitectureNode.NodeType;
 

@@ -13,7 +13,12 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package de.weigend.s202.domain.architecture;
+package de.weigend.s202.domain.impl;
+
+import de.weigend.s202.domain.architecture.Element;
+import de.weigend.s202.domain.architecture.LayeredArchitecture;
+import de.weigend.s202.domain.architecture.Tangle;
+import de.weigend.s202.domain.architecture.Violation;
 
 import java.util.List;
 
