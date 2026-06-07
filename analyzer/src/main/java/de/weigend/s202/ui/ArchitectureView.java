@@ -21,12 +21,11 @@ import de.weigend.s202.domain.DomainModel;
 import de.weigend.s202.domain.architecture.Architecture;
 import de.weigend.s202.domain.architecture.ArchitectureAnnotations;
 import de.weigend.s202.domain.architecture.ArchitectureContext;
+import de.weigend.s202.domain.architecture.ArchitectureKind;
+import de.weigend.s202.domain.architecture.ArchitectureStyle;
 import de.weigend.s202.domain.architecture.ComponentArchitecture;
-import de.weigend.s202.domain.architecture.ComponentArchitectureBuilder;
 import de.weigend.s202.domain.architecture.HexagonalArchitecture;
-import de.weigend.s202.domain.architecture.HexagonalArchitectureBuilder;
-import de.weigend.s202.domain.architecture.HierarchicalLayeredArchitecture;
-import de.weigend.s202.domain.architecture.HierarchicalLayeredArchitectureBuilder;
+import de.weigend.s202.domain.architecture.LayeredArchitecture;
 import de.weigend.s202.domain.architecture.ViolationKind;
 import de.weigend.s202.domain.architecture.WhatIfArchitecture;
 import de.weigend.s202.reader.DependencyModel;
@@ -43,6 +42,7 @@ import de.weigend.s202.ui.tree.ArchitectureTreeBuilder;
 import de.weigend.s202.ui.tree.ComponentArchitectureTreeBuilder;
 import de.weigend.s202.ui.tree.HexagonalArchitectureTreeBuilder;
 import de.weigend.s202.ui.zoom.ZoomController;
+import io.softwareecg.wfx.lookup.api.Lookup;
 import javafx.collections.FXCollections;
 import javafx.collections.ObservableList;
 import javafx.collections.transformation.FilteredList;
@@ -1207,24 +1207,30 @@ public class ArchitectureView extends BorderPane {
             return;
         }
         Architecture original;
+        ArchitectureContext context = new ArchitectureContext(
+                rawDependencyModel.get(),
+                model,
+                getArchitectureAnnotations());
         if (viewStyle == ArchitectureViewStyle.COMPONENT) {
-            original = new ComponentArchitectureBuilder().build(new ArchitectureContext(
-                    rawDependencyModel.get(),
-                    model,
-                    getArchitectureAnnotations()));
+            original = requireArchitectureStyle(ArchitectureKind.COMPONENT).build(context);
         } else if (viewStyle == ArchitectureViewStyle.HEXAGONAL) {
-            original = new HexagonalArchitectureBuilder().build(new ArchitectureContext(
-                    rawDependencyModel.get(),
-                    model,
-                    getArchitectureAnnotations()));
+            original = requireArchitectureStyle(ArchitectureKind.HEXAGONAL).build(context);
         } else {
-            original = new HierarchicalLayeredArchitectureBuilder().build(model);
+            original = requireArchitectureStyle(ArchitectureKind.LAYERED).build(context);
         }
         architecture.set(original);
-        whatIfArchitecture.set(original instanceof HierarchicalLayeredArchitecture hla
-                ? new WhatIfArchitecture(hla, model)
+        whatIfArchitecture.set(original instanceof LayeredArchitecture la
+                ? la.toWhatIf(model)
                 : null);
         updateSccRendererTangles();
+    }
+
+    private static ArchitectureStyle requireArchitectureStyle(ArchitectureKind kind) {
+        List<ArchitectureStyle> styles = Lookup.findAll(ArchitectureStyle.class);
+        return styles.stream()
+                .filter(style -> style.kind() == kind)
+                .findFirst()
+                .orElseThrow(() -> new IllegalStateException("No architecture style registered for " + kind));
     }
 
     private void updateSccRendererTangles() {

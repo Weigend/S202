@@ -42,8 +42,10 @@ kotlin.
 scala.
 groovy.
 #
-# Framework-generated wiring code (Avaje DI auto-generates a *Module class
-# per package containing @Singleton beans). Comment out if you analyze a
+# Framework-generated wiring code (Avaje DI auto-generates *$DI classes and
+# a top-level S202Module composition root). Comment out if you analyze a
 # project where the pattern conflicts with hand-written classes of the same
 # name.
+*$DI
+de.weigend.s202.S202Module
 *.WfxModule

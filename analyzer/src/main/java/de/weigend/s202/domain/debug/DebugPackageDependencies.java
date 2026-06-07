@@ -15,9 +15,11 @@
  */
 package de.weigend.s202.domain.debug;
 
-import de.weigend.s202.reader.java.InputAnalyzer;
 import de.weigend.s202.reader.DependencyModel;
+import de.weigend.s202.reader.LanguageAnalyzer;
+import io.softwareecg.wfx.lookup.api.Lookup;
 
+import java.nio.file.Path;
 import java.util.*;
 
 public class DebugPackageDependencies {
@@ -26,8 +28,7 @@ public class DebugPackageDependencies {
         
         System.out.println("Analyzing: " + jarPath);
         
-        InputAnalyzer analyzer = new InputAnalyzer();
-        DependencyModel model = analyzer.analyze(jarPath);
+        DependencyModel model = javaBytecodeAnalyzer().analyze(List.of(Path.of(jarPath)));
         
         System.out.println("\n=== CLASS DEPENDENCIES ===");
         for (String className : new TreeSet<>(model.getAllClassNames())) {
@@ -72,5 +73,13 @@ public class DebugPackageDependencies {
                 }
             }
         }
+    }
+
+    private static LanguageAnalyzer javaBytecodeAnalyzer() {
+        Lookup.init();
+        return Lookup.lookupAll(LanguageAnalyzer.class).stream()
+                .filter(analyzer -> "Java bytecode".equals(analyzer.displayName()))
+                .findFirst()
+                .orElseThrow(() -> new IllegalStateException("No Java bytecode analyzer registered"));
     }
 }

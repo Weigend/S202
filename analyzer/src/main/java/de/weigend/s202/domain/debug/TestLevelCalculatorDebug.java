@@ -16,9 +16,13 @@
 package de.weigend.s202.domain.debug;
 
 import de.weigend.s202.domain.DomainModel;
-import de.weigend.s202.domain.architecture.LevelCalculator;
-import de.weigend.s202.reader.java.InputAnalyzer;
+import de.weigend.s202.domain.DomainComputer;
 import de.weigend.s202.reader.DependencyModel;
+import de.weigend.s202.reader.LanguageAnalyzer;
+import io.softwareecg.wfx.lookup.api.Lookup;
+
+import java.nio.file.Path;
+import java.util.List;
 
 public class TestLevelCalculatorDebug {
     public static void main(String[] args) throws Exception {
@@ -27,18 +31,32 @@ public class TestLevelCalculatorDebug {
         System.out.println("=== TESTING LEVEL CALCULATOR ===\n");
         
         // Step 1: Analyze
-        InputAnalyzer analyzer = new InputAnalyzer();
-        DependencyModel rawModel = analyzer.analyze(jarPath);
+        DependencyModel rawModel = javaBytecodeAnalyzer().analyze(List.of(Path.of(jarPath)));
         System.out.println("Raw packages: " + rawModel.getAllPackageNames());
         
         // Step 2: Calculate
-        LevelCalculator calc = new LevelCalculator();
-        DomainModel domainModel = calc.calculate(rawModel);
+        DomainModel domainModel = domainComputer().compute(rawModel);
         
         System.out.println("\n=== FINAL RESULT ===");
         System.out.println("DomainModel packages: " + domainModel.getAllPackages().size());
         for (DomainModel.CalculatedElementInfo pkg : domainModel.getAllPackages().values()) {
             System.out.println("  " + pkg.fullName + " -> L" + pkg.architectureLevel);
         }
+    }
+
+    private static LanguageAnalyzer javaBytecodeAnalyzer() {
+        Lookup.init();
+        return Lookup.lookupAll(LanguageAnalyzer.class).stream()
+                .filter(analyzer -> "Java bytecode".equals(analyzer.displayName()))
+                .findFirst()
+                .orElseThrow(() -> new IllegalStateException("No Java bytecode analyzer registered"));
+    }
+
+    private static DomainComputer domainComputer() {
+        DomainComputer computer = Lookup.lookup(DomainComputer.class);
+        if (computer == null) {
+            throw new IllegalStateException("No domain computer registered");
+        }
+        return computer;
     }
 }

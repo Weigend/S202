@@ -26,6 +26,12 @@
     </properties>
 
     <dependencies>
+        <dependency>
+            <groupId>de.weigend</groupId>
+            <artifactId>s202-annotations</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+
         <!-- WFX Rich Client Platform modules.
              Keep these explicit so migrated windowmanager modules are not mixed
              with the legacy windowmtg packages still present in older wfx-all jars. -->

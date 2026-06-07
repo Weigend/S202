@@ -17,9 +17,12 @@ package de.weigend.s202.ui.consistency;
 
 import de.weigend.s202.domain.DomainModel;
 import de.weigend.s202.domain.architecture.Architecture;
-import de.weigend.s202.domain.architecture.HierarchicalLayeredArchitecture;
-import de.weigend.s202.domain.architecture.HierarchicalLayeredArchitectureBuilder;
+import de.weigend.s202.domain.architecture.ArchitectureContext;
+import de.weigend.s202.domain.architecture.ArchitectureKind;
+import de.weigend.s202.domain.architecture.ArchitectureStyle;
+import de.weigend.s202.domain.architecture.LayeredArchitecture;
 import de.weigend.s202.ui.model.ArchitectureNode;
+import io.softwareecg.wfx.lookup.api.Lookup;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -46,14 +49,22 @@ public final class ArchitectureConsistencyDevHook {
             return;
         }
 
-        Architecture arch = new HierarchicalLayeredArchitectureBuilder().build(domain);
+        ArchitectureStyle layered = Lookup.findAll(ArchitectureStyle.class).stream()
+                .filter(style -> style.kind() == ArchitectureKind.LAYERED)
+                .findFirst()
+                .orElse(null);
+        if (layered == null) {
+            return;
+        }
+
+        Architecture arch = layered.build(new ArchitectureContext(null, domain, null));
         List<ArchitectureConsistencyChecker.Discrepancy> diffs =
                 new ArchitectureConsistencyChecker().check(arch, uiRoot);
 
         if (diffs.isEmpty()) {
             int violationCount = arch.violations().size();
-            int tangleCount = arch instanceof HierarchicalLayeredArchitecture hla
-                    ? hla.tangles().size() : 0;
+            int tangleCount = arch instanceof LayeredArchitecture la
+                    ? la.tangles().size() : 0;
             LOGGER.info("Architecture consistency check: PASS — {} violations, {} tangles",
                     violationCount, tangleCount);
             return;

@@ -19,6 +19,9 @@ import de.weigend.s202.domain.DependencyEdge;
 import de.weigend.s202.domain.DomainModel;
 import de.weigend.s202.reader.DependencyModel;
 import de.weigend.s202.reader.EdgeKind;
+import io.softwareecg.wfx.lookup.api.Lookup;
+import org.junit.jupiter.api.AfterAll;
+import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
@@ -28,6 +31,16 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class TopTanglesModuleTest {
+
+    @BeforeAll
+    static void initLookup() {
+        Lookup.init();
+    }
+
+    @AfterAll
+    static void shutdownLookup() {
+        Lookup.shutdown();
+    }
 
     @Test
     void computeTopTanglesMarksCycleBreakEdges() {

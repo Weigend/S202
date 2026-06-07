@@ -19,22 +19,15 @@ import java.util.ArrayList;
 import java.util.List;
 
 /**
- * Domain projection for the component architecture style. Components are
- * semantic top-level package roots with a marked API surface and an
- * implementation body that reuses the existing local package layering.
+ * Architecture style that organises elements as named components with an
+ * explicit API surface and an implementation body. Accesses from outside a
+ * component that bypass the API are reported as violations.
  */
-public record ComponentArchitecture(
-        List<ComponentElement> components,
-        List<Violation> violations,
-        List<Tangle> tangles) implements Architecture {
+public interface ComponentArchitecture extends Architecture {
 
-    public ComponentArchitecture {
-        components = components == null ? List.of() : List.copyOf(components);
-        violations = violations == null ? List.of() : List.copyOf(violations);
-        tangles = tangles == null ? List.of() : List.copyOf(tangles);
-    }
+    List<ComponentElement> components();
 
-    public record ComponentElement(
+    record ComponentElement(
             String id,
             String displayName,
             String rootPackageFqn,

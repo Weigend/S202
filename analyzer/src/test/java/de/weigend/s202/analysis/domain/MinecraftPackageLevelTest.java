@@ -1,8 +1,8 @@
 package de.weigend.s202.analysis.domain;
 
 import de.weigend.s202.domain.DomainModel;
-import de.weigend.s202.domain.architecture.LevelCalculator;
-import de.weigend.s202.reader.java.InputAnalyzer;
+import de.weigend.s202.domain.impl.LevelCalculator;
+import de.weigend.s202.reader.impl.java.InputAnalyzer;
 import org.junit.jupiter.api.Test;
 
 import java.io.*;

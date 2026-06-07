@@ -17,7 +17,6 @@ package de.weigend.s202.ui.tree;
 
 import de.weigend.s202.domain.architecture.ArchitectureAnnotations;
 import de.weigend.s202.domain.architecture.ComponentArchitecture;
-import de.weigend.s202.domain.architecture.ComponentApiClassifier;
 import de.weigend.s202.domain.architecture.Element;
 import de.weigend.s202.reader.DependencyModel;
 import de.weigend.s202.ui.ArchitectureDragController;
@@ -65,7 +64,7 @@ public class ComponentArchitectureTreeBuilder {
     private final Map<String, Node> elementRegistry;
     private final Consumer<String> selectionChangeSink;
     private final ArchitectureAnnotations annotations;
-    private final ComponentApiClassifier apiClassifier;
+    private final Set<String> exportedPackages;
     private final DependencyModel rawModel;
     private final ComponentArchitecture componentArchitecture;
     private final java.util.function.BiConsumer<ArchitectureAnnotations, String> apiChangeSink;
@@ -101,7 +100,7 @@ public class ComponentArchitectureTreeBuilder {
         this.selectionChangeSink = selectionChangeSink;
         this.annotations = annotations == null ? ArchitectureAnnotations.empty() : annotations;
         this.rawModel = rawModel;
-        this.apiClassifier = new ComponentApiClassifier(this.annotations, rawModel);
+        this.exportedPackages = rawModel == null ? Set.of() : Set.copyOf(rawModel.getExportedPackageNames());
         this.componentArchitecture = componentArchitecture;
         this.apiChangeSink = apiChangeSink != null ? apiChangeSink : (next, message) -> {};
     }
@@ -581,31 +580,42 @@ public class ComponentArchitectureTreeBuilder {
 
     List<ArchitectureNode> selectedApiClasses(ArchitectureNode component) {
         List<ArchitectureNode> api = new ArrayList<>();
-        collectSelectedApiClasses(component, api, false);
+        collectSelectedApiClasses(component, api, false, false);
         api.sort(Comparator.comparing(ArchitectureNode::getFullName, String.CASE_INSENSITIVE_ORDER));
         return api;
     }
 
     private void collectSelectedApiClasses(ArchitectureNode node,
                                            List<ArchitectureNode> api,
-                                           boolean inheritedApiPackage) {
+                                           boolean inheritedApiPackage,
+                                           boolean inheritedImplementationPackage) {
         boolean inApiPackage = inheritedApiPackage
                 || (node.getType() == NodeType.PACKAGE && isApiPackageName(node.getSimpleName()));
-        if (node.getType() == NodeType.CLASS && isSelectedApiClass(node, inApiPackage)) {
+        boolean inImplementationPackage = inheritedImplementationPackage
+                || (node.getType() == NodeType.PACKAGE && isImplementationPackageName(node.getSimpleName()));
+        if (node.getType() == NodeType.CLASS && isSelectedApiClass(node, inApiPackage, inImplementationPackage)) {
             api.add(node);
             return;
         }
         for (ArchitectureNode child : node.getChildren()) {
-            collectSelectedApiClasses(child, api, inApiPackage);
+            collectSelectedApiClasses(child, api, inApiPackage, inImplementationPackage);
         }
     }
 
-    private boolean isSelectedApiClass(ArchitectureNode node, boolean inApiPackage) {
-        return apiClassifier.isSelectedApiClass(
-                node.getFullName(),
-                node.getSimpleName(),
-                node.isInterfaceType(),
-                inApiPackage);
+    private boolean isSelectedApiClass(ArchitectureNode node,
+                                       boolean inApiPackage,
+                                       boolean inImplementationPackage) {
+        Boolean explicit = annotations.explicitComponentApiDecision(node.getFullName());
+        if (explicit != null) {
+            return explicit;
+        }
+        if (exportedPackages.contains(parentOf(node.getFullName()))) {
+            return true;
+        }
+        if (inImplementationPackage) {
+            return false;
+        }
+        return inApiPackage || isApiClass(node);
     }
 
     private void installApiMenus(Map<String, Node> registry) {
@@ -723,11 +733,24 @@ public class ComponentArchitectureTreeBuilder {
         if (node.getType() != NodeType.CLASS) {
             return false;
         }
-        return ComponentApiClassifier.isHeuristicApiClass(node.getSimpleName(), node.isInterfaceType());
+        String name = node.getSimpleName() == null ? "" : node.getSimpleName();
+        return node.isInterfaceType() || name.endsWith("Api") || name.endsWith("API");
     }
 
     private static boolean isApiPackageName(String simpleName) {
-        return ComponentApiClassifier.isApiPackageName(simpleName);
+        String normalized = simpleName == null ? "" : simpleName.toLowerCase();
+        return normalized.equals("api")
+                || normalized.equals("apis")
+                || normalized.equals("port")
+                || normalized.equals("ports");
+    }
+
+    private static boolean isImplementationPackageName(String simpleName) {
+        String normalized = simpleName == null ? "" : simpleName.toLowerCase();
+        return normalized.equals("impl")
+                || normalized.equals("implementation")
+                || normalized.equals("internal")
+                || normalized.equals("private");
     }
 
     static ArchitectureNode cloneImplementation(ArchitectureNode node,

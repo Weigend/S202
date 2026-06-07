@@ -17,6 +17,7 @@ package de.weigend.s202.domain.architecture;
 
 import de.weigend.s202.domain.DomainModel;
 import de.weigend.s202.domain.DomainModel.CalculatedElementInfo;
+import de.weigend.s202.domain.impl.ComponentArchitectureBuilder;
 import de.weigend.s202.reader.DependencyModel;
 import org.junit.jupiter.api.Test;
 
@@ -113,6 +114,127 @@ class ComponentArchitectureBuilderTest {
         assertTrue(apiFqns.contains("com.acme.payment.PaymentApi"));
         assertFalse(apiFqns.contains("com.acme.payment.contract.internal.InternalDto"));
         assertFalse(apiFqns.contains("com.acme.payment.reflect.ReflectionHook"));
+    }
+
+    @Test
+    void s202ApiAnnotationPromotesSubPackageClassesToApi() {
+        DomainModel domain = new DomainModel();
+        pkg(domain, "com", 0);
+        pkg(domain, "com.acme", 0);
+        pkg(domain, "com.acme.payment", 1);
+        pkg(domain, "com.acme.payment.contract", 1);
+        pkg(domain, "com.acme.payment.impl", 0);
+        pkg(domain, "com.acme.catalog", 1);
+        // contract is annotated @S202Api — its classes become API even without interfaces
+        cls(domain, "com.acme.payment.contract.PaymentFacade", false, 1, Set.of());
+        cls(domain, "com.acme.payment.impl.PaymentService", false, 1, Set.of());
+        cls(domain, "com.acme.catalog.CatalogService", false, 1, Set.of());
+
+        DependencyModel rawModel = new DependencyModel();
+        rawModel.addApiAnnotatedPackage("com.acme.payment.contract");
+
+        ComponentArchitecture architecture = new ComponentArchitectureBuilder()
+                .build(new ArchitectureContext(rawModel, domain, ArchitectureAnnotations.empty()));
+
+        Set<String> apiFqns = apiFqns(architecture, "com.acme.payment");
+        assertTrue(apiFqns.contains("com.acme.payment.contract.PaymentFacade"),
+                "@S202Api sub-package class should be promoted to API");
+        assertFalse(apiFqns.contains("com.acme.payment.impl.PaymentService"),
+                "impl class must not be API");
+    }
+
+    @Test
+    void s202PackageAnnotationPreventsComponentDetection() {
+        DomainModel domain = new DomainModel();
+        pkg(domain, "com", 0);
+        pkg(domain, "com.acme", 0);
+        pkg(domain, "com.acme.ui", 1);
+        pkg(domain, "com.acme.payment", 1);
+        pkg(domain, "com.acme.payment.impl", 0);
+        cls(domain, "com.acme.ui.MainView", true, 1, Set.of());
+        cls(domain, "com.acme.payment.impl.PaymentService", false, 1, Set.of());
+
+        DependencyModel rawModel = new DependencyModel();
+        rawModel.addPlainPackage("com.acme.ui");
+
+        ComponentArchitecture architecture = new ComponentArchitectureBuilder()
+                .build(new ArchitectureContext(rawModel, domain, ArchitectureAnnotations.empty()));
+
+        List<String> roots = architecture.components().stream()
+                .map(ComponentArchitecture.ComponentElement::rootPackageFqn)
+                .toList();
+        assertFalse(roots.contains("com.acme.ui"),
+                "@S202Package must prevent heuristic component detection");
+        assertTrue(roots.contains("com.acme.payment"),
+                "non-excluded package with impl sub-package should still be detected");
+    }
+
+    @Test
+    void packageWithImplSubPackageIsDetectedAsComponentRoot() {
+        DomainModel domain = new DomainModel();
+        pkg(domain, "com", 0);
+        pkg(domain, "com.acme", 0);
+        pkg(domain, "com.acme.payment", 1);
+        pkg(domain, "com.acme.payment.impl", 0);
+        pkg(domain, "com.acme.catalog", 1);
+        // payment has only an impl sub-package — no interfaces, no *Api classes
+        cls(domain, "com.acme.payment.impl.PaymentService", false, 1, Set.of());
+        cls(domain, "com.acme.catalog.CatalogService", false, 1, Set.of());
+
+        ComponentArchitecture architecture = new ComponentArchitectureBuilder()
+                .build(domain, ArchitectureAnnotations.empty());
+
+        List<String> roots = architecture.components().stream()
+                .map(ComponentArchitecture.ComponentElement::rootPackageFqn)
+                .toList();
+        assertTrue(roots.contains("com.acme.payment"),
+                "package with impl sub-package should be detected as component root");
+    }
+
+    @Test
+    void nonInterfaceClassesArePromotedToApiWhenPackageHasImplSubPackage() {
+        DomainModel domain = new DomainModel();
+        pkg(domain, "com", 0);
+        pkg(domain, "com.acme", 0);
+        pkg(domain, "com.acme.payment", 1);
+        pkg(domain, "com.acme.payment.impl", 0);
+        pkg(domain, "com.acme.catalog", 1);
+        // Money is not an interface, but co-located with an impl sub-package → becomes API
+        cls(domain, "com.acme.payment.Money", false, 1, Set.of());
+        cls(domain, "com.acme.payment.impl.PaymentService", false, 1, Set.of());
+        cls(domain, "com.acme.catalog.CatalogService", false, 1, Set.of());
+
+        ComponentArchitecture architecture = new ComponentArchitectureBuilder()
+                .build(domain, ArchitectureAnnotations.empty());
+
+        Set<String> apiFqns = apiFqns(architecture, "com.acme.payment");
+        assertTrue(apiFqns.contains("com.acme.payment.Money"),
+                "non-interface class alongside impl sub-package should be promoted to API");
+        assertFalse(apiFqns.contains("com.acme.payment.impl.PaymentService"));
+    }
+
+    @Test
+    void nonInterfaceClassesArePromotedToApiWhenPackageContainsInterface() {
+        DomainModel domain = new DomainModel();
+        pkg(domain, "com", 0);
+        pkg(domain, "com.acme", 0);
+        pkg(domain, "com.acme.payment", 1);
+        pkg(domain, "com.acme.payment.internal", 0);
+        pkg(domain, "com.acme.catalog", 1);
+        // PaymentPort is an interface → all siblings at this level become API
+        cls(domain, "com.acme.payment.PaymentPort", true, 2, Set.of());
+        cls(domain, "com.acme.payment.Money", false, 1, Set.of());
+        // Sub-package class is NOT promoted — each package is evaluated independently
+        cls(domain, "com.acme.payment.internal.PaymentService", false, 1, Set.of());
+        cls(domain, "com.acme.catalog.CatalogService", false, 1, Set.of());
+
+        ComponentArchitecture architecture = new ComponentArchitectureBuilder()
+                .build(domain, ArchitectureAnnotations.empty());
+
+        Set<String> apiFqns = apiFqns(architecture, "com.acme.payment");
+        assertTrue(apiFqns.contains("com.acme.payment.PaymentPort"));
+        assertTrue(apiFqns.contains("com.acme.payment.Money"));
+        assertFalse(apiFqns.contains("com.acme.payment.internal.PaymentService"));
     }
 
     @Test
