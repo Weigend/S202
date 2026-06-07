@@ -150,7 +150,7 @@ The Component View is also useful for codebases that are **not yet component-ori
 
 ## Quality Report
 
-The **Quality Report** gives a one-page structural health summary of a loaded codebase. Open it via **View → Quality Report**.
+The **Quality Report** gives a one-page structural health summary of a loaded codebase. Open it via **File → Analyze Quality**.
 
 ![S202 Quality Report dashboard](docs/S202-Quality-Report.png)
 
