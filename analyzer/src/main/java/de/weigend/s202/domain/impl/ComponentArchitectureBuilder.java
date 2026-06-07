@@ -140,7 +140,13 @@ public final class ComponentArchitectureBuilder implements ArchitectureStyle {
                                                   boolean inheritedApiPackage,
                                                   boolean inheritedImplementationPackage,
                                                   List<CalculatedElementInfo> api) {
-        for (CalculatedElementInfo child : sortedChildren(index, parentFqn)) {
+        List<CalculatedElementInfo> children = sortedChildren(index, parentFqn);
+        // If this package directly contains interfaces, all sibling classes at this
+        // level are also API — the package as a whole is the public contract.
+        // This does not propagate into sub-packages; each sub-package is evaluated independently.
+        boolean packageHasInterfaces = !inheritedImplementationPackage
+                && children.stream().anyMatch(c -> "CLASS".equals(c.type) && c.interfaceType);
+        for (CalculatedElementInfo child : children) {
             boolean inApiPackage = inheritedApiPackage
                     || ("PACKAGE".equals(child.type)
                     && ComponentApiClassifier.isApiPackageName(child.simpleName));
@@ -152,7 +158,7 @@ public final class ComponentArchitectureBuilder implements ArchitectureStyle {
                         child.fullName,
                         child.simpleName,
                         child.interfaceType,
-                        inApiPackage,
+                        inApiPackage || packageHasInterfaces,
                         inImplementationPackage)) {
                     api.add(child);
                 }

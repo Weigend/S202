@@ -117,6 +117,30 @@ class ComponentArchitectureBuilderTest {
     }
 
     @Test
+    void nonInterfaceClassesArePromotedToApiWhenPackageContainsInterface() {
+        DomainModel domain = new DomainModel();
+        pkg(domain, "com", 0);
+        pkg(domain, "com.acme", 0);
+        pkg(domain, "com.acme.payment", 1);
+        pkg(domain, "com.acme.payment.internal", 0);
+        pkg(domain, "com.acme.catalog", 1);
+        // PaymentPort is an interface → all siblings at this level become API
+        cls(domain, "com.acme.payment.PaymentPort", true, 2, Set.of());
+        cls(domain, "com.acme.payment.Money", false, 1, Set.of());
+        // Sub-package class is NOT promoted — each package is evaluated independently
+        cls(domain, "com.acme.payment.internal.PaymentService", false, 1, Set.of());
+        cls(domain, "com.acme.catalog.CatalogService", false, 1, Set.of());
+
+        ComponentArchitecture architecture = new ComponentArchitectureBuilder()
+                .build(domain, ArchitectureAnnotations.empty());
+
+        Set<String> apiFqns = apiFqns(architecture, "com.acme.payment");
+        assertTrue(apiFqns.contains("com.acme.payment.PaymentPort"));
+        assertTrue(apiFqns.contains("com.acme.payment.Money"));
+        assertFalse(apiFqns.contains("com.acme.payment.internal.PaymentService"));
+    }
+
+    @Test
     void implementationPackageInterfacesAreNotPromotedToApiByHeuristic() {
         DomainModel domain = jpmsDomainModel();
         cls(domain, "com.acme.payment.impl.MultiWindowManager", true, 1, Set.of());
