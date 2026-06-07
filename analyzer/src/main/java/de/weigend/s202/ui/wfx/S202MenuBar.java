@@ -122,6 +122,10 @@ public class S202MenuBar {
                 "file.loadProject", "Load Project...",
                 e -> publish(new MenuRequestEvent.LoadProject(this)));
 
+        MenuItem exportQualityReportItem = MenuUtil.createMenuItem(
+                "file.exportQualityReport", "Analyze Quality",
+                e -> publish(new MenuRequestEvent.ExportQualityReport(this)));
+
         MenuItem closeProjectItem = MenuUtil.createMenuItem(
                 "file.closeProject", "Close Project",
                 e -> publish(new MenuRequestEvent.CloseProject(this)));
@@ -154,7 +158,7 @@ public class S202MenuBar {
         exitItem.setAccelerator(new KeyCodeCombination(KeyCode.Q, KeyCombination.SHORTCUT_DOWN));
 
         Menu fileMenu = MenuUtil.createMenu("file", "File");
-        fileMenu.getItems().addAll(saveProjectItem, loadProjectItem, closeProjectItem,
+        fileMenu.getItems().addAll(saveProjectItem, loadProjectItem, exportQualityReportItem, closeProjectItem,
                 new SeparatorMenuItem(),
                 openItem, openPythonItem, openCItem, openMavenItem, openGradleItem,
                 new SeparatorMenuItem(), exitItem);

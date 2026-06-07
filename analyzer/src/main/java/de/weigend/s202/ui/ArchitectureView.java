@@ -58,6 +58,7 @@ import javafx.beans.property.ReadOnlyStringWrapper;
 import javafx.beans.property.SimpleBooleanProperty;
 import javafx.beans.property.SimpleIntegerProperty;
 import javafx.beans.property.SimpleObjectProperty;
+import javafx.geometry.Bounds;
 import javafx.geometry.Pos;
 import javafx.scene.control.ButtonBar;
 import javafx.scene.control.ButtonType;
@@ -1658,6 +1659,45 @@ public class ArchitectureView extends BorderPane {
         getScene().getRoot().layout();
         redrawVisibleArrows();
         redrawTick.set(redrawTick.get() + 1);
+    }
+
+    /**
+     * Force CSS, layout, and all currently enabled overlays into a stable
+     * state before a JavaFX snapshot is taken. Used by the quality report
+     * exporter so report evidence images are screenshots of this real view
+     * pipeline, not a separate renderer.
+     */
+    public void prepareForSnapshot() {
+        applyCss();
+        layout();
+        if (zoomableContent != null) {
+            zoomableContent.applyCss();
+            zoomableContent.requestLayout();
+            zoomableContent.layout();
+        }
+        if (getScene() != null && getScene().getRoot() != null) {
+            getScene().getRoot().applyCss();
+            getScene().getRoot().layout();
+        }
+        redrawVisibleArrows();
+    }
+
+    /**
+     * Returns the full architecture content node for report screenshots. This
+     * bypasses the ScrollPane viewport so exports capture the complete evidence
+     * view, including overlays, instead of only the currently visible window.
+     */
+    public javafx.scene.Node snapshotContentNode() {
+        return zoomableContent == null ? this : zoomableContent;
+    }
+
+    public Bounds snapshotContentBounds() {
+        javafx.scene.Node node = snapshotContentNode();
+        Bounds bounds = node.getBoundsInLocal();
+        if (bounds == null || bounds.getWidth() <= 1.0 || bounds.getHeight() <= 1.0) {
+            bounds = node.getLayoutBounds();
+        }
+        return bounds;
     }
 
     private void drawDependencyArrows() {
