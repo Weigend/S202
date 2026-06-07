@@ -13,8 +13,10 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package de.weigend.s202.project;
+package de.weigend.s202.project.impl;
 
+import de.weigend.s202.project.ProjectStore;
+import de.weigend.s202.project.S202Project;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.SerializationFeature;
 
@@ -24,7 +26,7 @@ import java.nio.file.Path;
 /**
  * Reads and writes Structure202 project files.
  */
-public final class S202ProjectStore {
+public final class S202ProjectStore implements ProjectStore {
 
     private final ObjectMapper mapper;
 

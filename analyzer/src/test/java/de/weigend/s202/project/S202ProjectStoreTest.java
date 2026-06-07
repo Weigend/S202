@@ -15,6 +15,8 @@
  */
 package de.weigend.s202.project;
 
+import de.weigend.s202.project.impl.S202ProjectMapper;
+import de.weigend.s202.project.impl.S202ProjectStore;
 import de.weigend.s202.analysis.invariants.InvariantFinding;
 import de.weigend.s202.analysis.invariants.LayoutInvariantReport;
 import de.weigend.s202.domain.DependencyEdge;

@@ -13,8 +13,9 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package de.weigend.s202.project;
+package de.weigend.s202.project.impl;
 
+import de.weigend.s202.project.S202Project;
 import de.weigend.s202.analysis.invariants.InvariantFinding;
 import de.weigend.s202.analysis.invariants.LayoutInvariantReport;
 import de.weigend.s202.domain.DependencyEdge;
