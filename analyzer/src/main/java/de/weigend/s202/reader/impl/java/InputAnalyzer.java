@@ -16,6 +16,7 @@
 package de.weigend.s202.reader.impl.java;
 
 import de.weigend.s202.reader.DependencyModel;
+import de.weigend.s202.annotation.S202Component;
 import de.weigend.s202.reader.EdgeKind;
 import de.weigend.s202.reader.LanguageAnalyzer;
 import de.weigend.s202.reader.impl.PackageHierarchyBuilder;
@@ -259,14 +260,16 @@ public class InputAnalyzer implements LanguageAnalyzer {
             Enumeration<JarEntry> entries = jarFile.entries();
             while (entries.hasMoreElements()) {
                 JarEntry entry = entries.nextElement();
-                if (!entry.getName().endsWith(".class") || entry.isDirectory()
-                        || entry.getName().endsWith("package-info.class")) {
+                if (!entry.getName().endsWith(".class") || entry.isDirectory()) {
                     continue;
                 }
 
                 try {
                     byte[] classBytes = jarFile.getInputStream(entry).readAllBytes();
-                    if (entry.getName().endsWith("module-info.class")) {
+                    if (entry.getName().endsWith("package-info.class")) {
+                        analyzePackageInfo(classBytes, model);
+                        continue;
+                    } else if (entry.getName().endsWith("module-info.class")) {
                         analyzeModule(entry.getName(), classBytes, model);
                     } else {
                         analyzeClass(entry.getName(), classBytes, model);
@@ -302,6 +305,16 @@ public class InputAnalyzer implements LanguageAnalyzer {
     /**
      * Analyzes a single class file and extracts its information.
      */
+    private void analyzePackageInfo(byte[] bytecode, DependencyModel model) {
+        try {
+            ClassReader reader = new ClassReader(bytecode);
+            reader.accept(new PackageAnnotationExtractor(model),
+                    ClassReader.SKIP_CODE | ClassReader.SKIP_DEBUG | ClassReader.SKIP_FRAMES);
+        } catch (Exception e) {
+            System.err.println("Error analyzing package-info: " + e.getMessage());
+        }
+    }
+
     private void analyzeClass(String classPath, byte[] bytecode, DependencyModel model) {
         try {
             ClassReader reader = new ClassReader(bytecode);
@@ -331,6 +344,33 @@ public class InputAnalyzer implements LanguageAnalyzer {
      * ASM visitor for module-info.class. Stores exports and opens as raw
      * metadata; consumers decide which descriptor entries are policy-relevant.
      */
+    private static class PackageAnnotationExtractor extends ClassVisitor {
+        private static final String S202_COMPONENT_DESC =
+                Type.getDescriptor(S202Component.class);
+        private final DependencyModel model;
+        private String packageFqn;
+
+        PackageAnnotationExtractor(DependencyModel model) {
+            super(Opcodes.ASM9);
+            this.model = model;
+        }
+
+        @Override
+        public void visit(int version, int access, String name, String signature,
+                          String superName, String[] interfaces) {
+            // name is e.g. "de/weigend/s202/reader/package-info"
+            packageFqn = name.replace('/', '.').replace(".package-info", "");
+        }
+
+        @Override
+        public org.objectweb.asm.AnnotationVisitor visitAnnotation(String descriptor, boolean visible) {
+            if (S202_COMPONENT_DESC.equals(descriptor) && packageFqn != null) {
+                model.addComponentAnnotatedPackage(packageFqn);
+            }
+            return null;
+        }
+    }
+
     private static class ModuleDescriptorExtractor extends ClassVisitor {
         private final DependencyModel model;
 

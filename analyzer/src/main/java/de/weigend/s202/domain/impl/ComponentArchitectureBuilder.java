@@ -73,7 +73,7 @@ public final class ComponentArchitectureBuilder implements ArchitectureStyle {
         ComponentApiClassifier classifier = new ComponentApiClassifier(effectiveAnnotations, rawModel);
         ModelIndex index = ModelIndex.of(domain);
 
-        List<ComponentRoot> roots = componentRoots(index, effectiveAnnotations, classifier);
+        List<ComponentRoot> roots = componentRoots(index, effectiveAnnotations, classifier, rawModel);
         List<ComponentArchitecture.ComponentElement> components = new ArrayList<>();
         Map<String, Membership> membershipByClass = new LinkedHashMap<>();
 
@@ -100,7 +100,8 @@ public final class ComponentArchitectureBuilder implements ArchitectureStyle {
 
     private List<ComponentRoot> componentRoots(ModelIndex index,
                                                ArchitectureAnnotations annotations,
-                                               ComponentApiClassifier classifier) {
+                                               ComponentApiClassifier classifier,
+                                               DependencyModel rawModel) {
         Map<String, ComponentRoot> roots = new LinkedHashMap<>();
         String effectiveRoot = skipTransparentPassthroughs(index);
         for (CalculatedElementInfo child : sortedChildren(index, effectiveRoot)) {
@@ -112,6 +113,15 @@ public final class ComponentArchitectureBuilder implements ArchitectureStyle {
             if (hasApiClasses || hasImplSubPackage) {
                 roots.put(child.fullName, new ComponentRoot(
                         child.fullName, child.simpleName, child.fullName));
+            }
+        }
+        if (rawModel != null) {
+            for (String packageFqn : rawModel.getComponentAnnotatedPackages()) {
+                CalculatedElementInfo pkg = index.packages().get(packageFqn);
+                if (pkg != null) {
+                    roots.putIfAbsent(packageFqn, new ComponentRoot(
+                            pkg.simpleName, pkg.simpleName, packageFqn));
+                }
             }
         }
         for (ArchitectureAnnotations.ComponentSpec spec : annotations.components()) {
