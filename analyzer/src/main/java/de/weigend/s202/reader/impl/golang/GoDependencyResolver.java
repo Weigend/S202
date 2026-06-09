@@ -147,15 +147,19 @@ public class GoDependencyResolver {
                             .ifPresent(t -> ownerClass.addDependency(t, EdgeKind.USES));
                 }
 
-                // Underlying type for type-definitions (e.g. type Book []Page → Book USES Page)
+                // Underlying type for type-definitions (e.g. type Book []Page → Book IMPORTS Page)
+                // IMPORTS (not USES) so the LevelCalculator includes this structural dependency.
                 if ("type".equals(type.kind()) && !type.baseType().isBlank()) {
                     resolveTypeRef(type.baseType(), pkgFQN, model, functionOwnerIndex)
                             .filter(t -> !t.equals(ownerFQN))
-                            .ifPresent(t -> ownerClass.addDependency(t, EdgeKind.USES));
+                            .ifPresent(t -> ownerClass.addDependency(t, EdgeKind.IMPORTS));
                 }
             }
 
-            // Function signature types → USES on the owning ClassInfo
+            // Function signature types → IMPORTS on the owning ClassInfo.
+            // Using IMPORTS (not USES) so the LevelCalculator treats these as structural
+            // dependencies. Within a package there are no explicit import statements, but
+            // these type references are the architectural equivalent.
             for (ParsedGoFile.FunctionDecl fn : file.functions()) {
                 String ownerFQN = resolveFunctionOwnerFQN(fn, pkgFQN, functionOwnerIndex);
                 if (ownerFQN == null) continue;
@@ -168,7 +172,7 @@ public class GoDependencyResolver {
                 for (String typeRef : sigTypes) {
                     resolveTypeRef(typeRef, pkgFQN, model, functionOwnerIndex)
                             .filter(t -> !t.equals(ownerFQN))
-                            .ifPresent(t -> ownerClass.addDependency(t, EdgeKind.USES));
+                            .ifPresent(t -> ownerClass.addDependency(t, EdgeKind.IMPORTS));
                 }
             }
 

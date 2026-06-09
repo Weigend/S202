@@ -576,8 +576,8 @@ class GoSourceAnalyzerTest {
         DependencyModel.ClassInfo book = model.getClass("basics.index.Book");
         assertNotNull(book);
         assertTrue(book.dependencies.contains("basics.index.Page"),
-                "Book must USES Page via underlying type []Page");
-        assertTrue(book.getKinds("basics.index.Page").contains(EdgeKind.USES));
+                "Book must IMPORTS Page via underlying type []Page");
+        assertTrue(book.getKinds("basics.index.Page").contains(EdgeKind.IMPORTS));
         // Index uses int — stdlib, must be ignored
         assertFalse(model.getClass("basics.index.Index").dependencies.contains("int"));
     }
@@ -611,11 +611,11 @@ class GoSourceAnalyzerTest {
         DependencyModel.ClassInfo index = model.getClass("basics.index.Index");
         assertNotNull(index);
         assertTrue(index.dependencies.contains("basics.index.Book"),
-                "Index must USES Book (MakeIndex parameter)");
+                "Index must IMPORTS Book (MakeIndex parameter)");
 
         DependencyModel.ClassInfo book = model.getClass("basics.index.Book");
         assertTrue(book.dependencies.contains("basics.index.Page"),
-                "Book must USES Page (MakeBook parameter []Page and underlying type)");
+                "Book must IMPORTS Page (MakeBook parameter []Page and underlying type)");
     }
 
     // ══════════════════════════════════════════════════════════════════════════
