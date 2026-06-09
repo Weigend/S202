@@ -619,6 +619,58 @@ class GoSourceAnalyzerTest {
     }
 
     // ══════════════════════════════════════════════════════════════════════════
+    // Concept point 24: unqualified same-package calls resolved via empty calleePkg
+    // ══════════════════════════════════════════════════════════════════════════
+    @Test
+    void samePackageCallCreatesCallsEdge() {
+        // TestIndex calls MakeIndex, MakeBook, MakePage — all same package, no qualifier
+        ParsedGoFile indexFile = new ParsedGoFile(
+                "basics/index/index.go", "index",
+                "github.com/jweigend/concepts-of-programming-languages/basics/index",
+                List.of(),
+                List.of(
+                        new ParsedGoFile.TypeDecl("Page",  "type", List.of(), "[]string",   List.of(), List.of()),
+                        new ParsedGoFile.TypeDecl("Book",  "type", List.of(), "[]Page",     List.of(), List.of()),
+                        new ParsedGoFile.TypeDecl("Index", "type", List.of(), "map[string][]int", List.of(), List.of())),
+                List.of(
+                        new ParsedGoFile.FunctionDecl("MakePage",  "", List.of(), List.of("[]string"), List.of("Page")),
+                        new ParsedGoFile.FunctionDecl("MakeBook",  "", List.of(), List.of("[]Page"),   List.of("Book")),
+                        new ParsedGoFile.FunctionDecl("MakeIndex", "", List.of(), List.of("Book"),     List.of("Index"))),
+                List.of(), List.of());
+
+        ParsedGoFile testFile = new ParsedGoFile(
+                "basics/index/index_test.go", "index",
+                "github.com/jweigend/concepts-of-programming-languages/basics/index",
+                List.of(),
+                List.of(),
+                List.of(new ParsedGoFile.FunctionDecl("TestIndex", "", List.of(),
+                        List.of("*testing.T"), List.of())),
+                List.of(),
+                List.of(
+                        new ParsedGoFile.CallRef("TestIndex", "", "MakePage",  false),
+                        new ParsedGoFile.CallRef("TestIndex", "", "MakeBook",  false),
+                        new ParsedGoFile.CallRef("TestIndex", "", "MakeIndex", false)));
+
+        DependencyModel model = resolve(
+                "github.com/jweigend/concepts-of-programming-languages", List.of(indexFile, testFile));
+
+        // DefaultClass for test file (no local types)
+        DependencyModel.ClassInfo testClass = model.getClass("basics.index.index_test");
+        assertNotNull(testClass, "DefaultClass for index_test.go must exist");
+
+        // MakePage is owned by Page → CALLS from testClass to Page
+        assertTrue(testClass.dependencies.contains("basics.index.Page"),
+                "TestIndex must CALLS Page (via MakePage)");
+        assertTrue(testClass.getKinds("basics.index.Page").contains(EdgeKind.CALLS));
+
+        // MakeBook → Book, MakeIndex → Index
+        assertTrue(testClass.dependencies.contains("basics.index.Book"),
+                "TestIndex must CALLS Book (via MakeBook)");
+        assertTrue(testClass.dependencies.contains("basics.index.Index"),
+                "TestIndex must CALLS Index (via MakeIndex)");
+    }
+
+    // ══════════════════════════════════════════════════════════════════════════
     // Helper: unwrapBaseType unit tests
     // ══════════════════════════════════════════════════════════════════════════
     @Test

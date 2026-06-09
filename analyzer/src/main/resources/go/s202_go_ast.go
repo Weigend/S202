@@ -432,19 +432,38 @@ func callerFunctionName(fd *ast.FuncDecl) string {
 }
 
 func resolveCall(call *ast.CallExpr, caller string, aliases map[string]string) *CallRef {
-	sel, ok := call.Fun.(*ast.SelectorExpr)
-	if !ok {
+	switch fun := call.Fun.(type) {
+	case *ast.SelectorExpr:
+		// Qualified call: pkg.Func() or recv.Method()
+		ident, ok := fun.X.(*ast.Ident)
+		if !ok {
+			return nil
+		}
+		name := fun.Sel.Name
+		if importPath, found := aliases[ident.Name]; found {
+			// Cross-package call via import alias
+			return &CallRef{
+				CallerFunction: caller,
+				CalleePkg:      importPath,
+				CalleeName:     name,
+				IsNewPattern:   strings.HasPrefix(name, "New"),
+			}
+		}
+		// Not an import alias — method call on a variable (can't resolve without type info)
 		return nil
-	}
-	ident, ok := sel.X.(*ast.Ident)
-	if !ok {
-		return nil
-	}
-	if importPath, found := aliases[ident.Name]; found {
-		name := sel.Sel.Name
+
+	case *ast.Ident:
+		// Unqualified same-package call: MakePage(...), MakeIndex(...)
+		name := fun.Name
+		// Skip built-ins and keywords that look like calls
+		switch name {
+		case "make", "new", "append", "copy", "delete", "len", "cap",
+			"close", "panic", "recover", "print", "println":
+			return nil
+		}
 		return &CallRef{
 			CallerFunction: caller,
-			CalleePkg:      importPath,
+			CalleePkg:      "", // empty = same package
 			CalleeName:     name,
 			IsNewPattern:   strings.HasPrefix(name, "New"),
 		}
