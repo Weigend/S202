@@ -403,6 +403,15 @@ func inferTypeFromRHS(expr ast.Expr, aliases map[string]string) (typeRef, qualPk
 // ── Calls ─────────────────────────────────────────────────────────────────────
 
 func extractCalls(f *ast.File, aliases map[string]string) []CallRef {
+	// Functions defined in THIS file — unqualified calls to these are
+	// intra-file implementation details, not architectural dependencies.
+	sameFile := make(map[string]bool)
+	for _, decl := range f.Decls {
+		if fd, ok := decl.(*ast.FuncDecl); ok {
+			sameFile[fd.Name.Name] = true
+		}
+	}
+
 	var result []CallRef
 	for _, decl := range f.Decls {
 		fd, ok := decl.(*ast.FuncDecl)
@@ -415,7 +424,7 @@ func extractCalls(f *ast.File, aliases map[string]string) []CallRef {
 			if !ok {
 				return true
 			}
-			if cr := resolveCall(call, callerName, aliases); cr != nil {
+			if cr := resolveCall(call, callerName, aliases, sameFile); cr != nil {
 				result = append(result, *cr)
 			}
 			return true
@@ -431,7 +440,7 @@ func callerFunctionName(fd *ast.FuncDecl) string {
 	return receiverTypeName(fd.Recv.List[0].Type) + "." + fd.Name.Name
 }
 
-func resolveCall(call *ast.CallExpr, caller string, aliases map[string]string) *CallRef {
+func resolveCall(call *ast.CallExpr, caller string, aliases map[string]string, sameFile map[string]bool) *CallRef {
 	switch fun := call.Fun.(type) {
 	case *ast.SelectorExpr:
 		// Qualified call: pkg.Func() or recv.Method()
@@ -455,15 +464,20 @@ func resolveCall(call *ast.CallExpr, caller string, aliases map[string]string) *
 	case *ast.Ident:
 		// Unqualified same-package call: MakePage(...), MakeIndex(...)
 		name := fun.Name
-		// Skip built-ins and keywords that look like calls
+		// Skip built-ins
 		switch name {
 		case "make", "new", "append", "copy", "delete", "len", "cap",
 			"close", "panic", "recover", "print", "println":
 			return nil
 		}
+		// Skip calls to functions defined in the same file — those are
+		// intra-file implementation details, not architectural dependencies.
+		if sameFile[name] {
+			return nil
+		}
 		return &CallRef{
 			CallerFunction: caller,
-			CalleePkg:      "", // empty = same package
+			CalleePkg:      "", // empty = same package, different file
 			CalleeName:     name,
 			IsNewPattern:   strings.HasPrefix(name, "New"),
 		}
