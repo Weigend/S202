@@ -403,12 +403,21 @@ func inferTypeFromRHS(expr ast.Expr, aliases map[string]string) (typeRef, qualPk
 // ── Calls ─────────────────────────────────────────────────────────────────────
 
 func extractCalls(f *ast.File, aliases map[string]string) []CallRef {
-	// Functions defined in THIS file — unqualified calls to these are
-	// intra-file implementation details, not architectural dependencies.
+	// Functions AND types defined in THIS file.
+	// Unqualified calls to these names are either intra-file implementation
+	// details (function calls) or type conversions T(x) — both are not
+	// architectural dependencies.
 	sameFile := make(map[string]bool)
 	for _, decl := range f.Decls {
-		if fd, ok := decl.(*ast.FuncDecl); ok {
-			sameFile[fd.Name.Name] = true
+		switch d := decl.(type) {
+		case *ast.FuncDecl:
+			sameFile[d.Name.Name] = true
+		case *ast.GenDecl:
+			for _, spec := range d.Specs {
+				if ts, ok := spec.(*ast.TypeSpec); ok {
+					sameFile[ts.Name.Name] = true
+				}
+			}
 		}
 	}
 
@@ -464,10 +473,14 @@ func resolveCall(call *ast.CallExpr, caller string, aliases map[string]string, s
 	case *ast.Ident:
 		// Unqualified same-package call: MakePage(...), MakeIndex(...)
 		name := fun.Name
-		// Skip built-ins
+		// Skip Go built-in functions and predeclared types used as conversions
 		switch name {
 		case "make", "new", "append", "copy", "delete", "len", "cap",
-			"close", "panic", "recover", "print", "println":
+			"close", "panic", "recover", "print", "println",
+			"bool", "byte", "rune", "string", "error",
+			"int", "int8", "int16", "int32", "int64",
+			"uint", "uint8", "uint16", "uint32", "uint64", "uintptr",
+			"float32", "float64", "complex64", "complex128", "any":
 			return nil
 		}
 		// Skip calls to functions defined in the same file — those are
