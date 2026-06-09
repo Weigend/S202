@@ -166,11 +166,13 @@ public class S202MenuBar {
 
         Menu fileMenu = MenuUtil.createMenu("file", "File");
         fileMenu.getItems().addAll(
-                saveProjectItem, loadProjectItem, exportQualityReportItem, closeProjectItem,
-                new SeparatorMenuItem(),
                 openItem, openMavenItem, openGradleItem,
                 new SeparatorMenuItem(),
                 openSourceMenu,
+                new SeparatorMenuItem(),
+                exportQualityReportItem,
+                new SeparatorMenuItem(),
+                saveProjectItem, loadProjectItem, closeProjectItem,
                 new SeparatorMenuItem(),
                 exitItem);
 
