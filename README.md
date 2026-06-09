@@ -4,6 +4,14 @@
 
 A JavaFX-based tool for analyzing code across multiple languages and visualizing software architecture.
 
+![Java](https://img.shields.io/badge/Java-Stable-brightgreen)
+![Maven](https://img.shields.io/badge/Maven-Stable-brightgreen)
+![Gradle](https://img.shields.io/badge/Gradle-Beta-yellow)
+![Python](https://img.shields.io/badge/Python-Alpha-orange)
+![Go](https://img.shields.io/badge/Go-Alpha-orange)
+![C](https://img.shields.io/badge/C-PoC-blueviolet)
+![License](https://img.shields.io/badge/License-Apache%202.0-blue)
+
 > **→ [The Tool That Fixed Itself — S202 Case Study](docs/s202/CASE_STUDY.md)**
 > *We pointed S202 at its own codebase. No source code was read. Here's what happened.*
 
