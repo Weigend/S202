@@ -340,7 +340,7 @@ public class S202MenuBar {
         Label title = new Label("S202 Code Analyzer");
         title.getStyleClass().add("about-title");
 
-        Label tagline = new Label("Java bytecode and Python source architecture viewer");
+        Label tagline = new Label("Multi-language software architecture analyzer");
         tagline.getStyleClass().add("about-tagline");
 
         VBox titleBlock = new VBox(2, title, tagline);
@@ -350,9 +350,9 @@ public class S202MenuBar {
         header.setAlignment(Pos.CENTER_LEFT);
 
         Label description = new Label(
-                "Analyzes JAR files and Python source roots, extracts package and class dependencies, "
-              + "detects cyclic dependencies (SCCs) and visualizes the layered "
-              + "architecture.");
+                "Analyzes Java bytecode (JAR/Maven/Gradle), Go modules, Python and C source trees. "
+              + "Extracts package and class dependencies, detects cyclic dependencies (tangles) "
+              + "and visualizes the layered architecture.");
         description.setWrapText(true);
         description.getStyleClass().add("about-description");
         description.setMaxWidth(420);
