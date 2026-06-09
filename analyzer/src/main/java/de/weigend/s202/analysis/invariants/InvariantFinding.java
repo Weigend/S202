@@ -17,11 +17,6 @@ package de.weigend.s202.analysis.invariants;
 
 /**
  * One concrete invariant violation, ready to drop into a reproducer test.
- * Ported from the Software City C# project (LayoutInvariantChecker.cs):
- * since the 2D layout uses the same level integers as the 3D city (only the
- * Y-axis "height" is missing), the rule output and finding shape transfer
- * 1-to-1 — only Unity's (x, y, z) ground/height coordinate system has been
- * left behind.
  *
  * @param ruleId        rule identifier (R1, R2, R3, R4)
  * @param message       human-readable message including a classification reason

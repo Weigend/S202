@@ -211,8 +211,8 @@ public final class S202ProjectMapper implements ProjectMapper {
         return new LayoutInvariantReport(
                 nullToList(dto.sourcePaths()),
                 dto.maxLevel(),
-                dto.districtCount(),
-                dto.buildingCount(),
+                dto.packageCount(),
+                dto.classCount(),
                 dto.dependencyCount(),
                 dto.identifiedBackEdgeCount(),
                 findings);
@@ -411,8 +411,8 @@ public final class S202ProjectMapper implements ProjectMapper {
         return new S202Project.LayoutInvariantReportDto(
                 report.sourcePaths(),
                 report.maxLevel(),
-                report.districtCount(),
-                report.buildingCount(),
+                report.packageCount(),
+                report.classCount(),
                 report.dependencyCount(),
                 report.identifiedBackEdgeCount(),
                 report.findings().stream()
