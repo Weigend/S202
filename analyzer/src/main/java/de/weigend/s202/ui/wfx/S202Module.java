@@ -66,9 +66,14 @@ import javafx.concurrent.Task;
 import javafx.geometry.Pos;
 import javafx.beans.property.ReadOnlyDoubleProperty;
 import javafx.beans.value.ChangeListener;
+import javafx.scene.Group;
 import javafx.scene.Node;
+import javafx.scene.SnapshotParameters;
 import javafx.scene.control.Alert;
 import javafx.scene.control.Button;
+import javafx.scene.image.WritableImage;
+import javafx.scene.shape.Circle;
+import javafx.scene.shape.Polygon;
 import javafx.scene.control.CheckBox;
 import javafx.scene.control.Label;
 import javafx.scene.control.Separator;
@@ -281,6 +286,7 @@ public class S202Module implements Module {
     @SuppressWarnings("unchecked")
     public void start() {
         installSceneStylesheet();
+        installWindowIcon();
 
         EventBus<EventObject> bus = Lookup.lookup(EventBus.class);
 
@@ -367,6 +373,31 @@ public class S202Module implements Module {
             view.selectByFullName(ev.getFullName());
             return true;
         });
+    }
+
+    private void installWindowIcon() {
+        var stage = applicationWindow.getStage();
+        if (stage == null) return;
+        Color yellow = Color.web("#ffd54f");
+        double r = 26.0;
+        double cx = r, cy = r;
+        Polygon hex = new Polygon();
+        for (int i = 0; i < 6; i++) {
+            double a = Math.toRadians(60 * i - 90);
+            hex.getPoints().addAll(cx + r * Math.cos(a), cy + r * Math.sin(a));
+        }
+        hex.setFill(Color.TRANSPARENT);
+        hex.setStroke(yellow);
+        hex.setStrokeWidth(3.5);
+        Circle innerCircle = new Circle(cx, cy, r * 0.38);
+        innerCircle.setFill(Color.TRANSPARENT);
+        innerCircle.setStroke(yellow);
+        innerCircle.setStrokeWidth(3.0);
+        Group icon = new Group(hex, innerCircle);
+        SnapshotParameters params = new SnapshotParameters();
+        params.setFill(Color.TRANSPARENT);
+        WritableImage img = icon.snapshot(params, null);
+        stage.getIcons().setAll(img);
     }
 
     private void installSceneStylesheet() {
