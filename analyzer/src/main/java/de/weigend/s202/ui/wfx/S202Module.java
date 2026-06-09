@@ -121,6 +121,7 @@ public class S202Module implements Module {
     private static final String JAVA_BYTECODE_ANALYZER = "Java bytecode";
     private static final String PYTHON_ANALYZER = "Python";
     private static final String C_ANALYZER = "C";
+    private static final String GO_ANALYZER = "Go";
     private static final String MAVEN_SCANNER = "Maven";
     private static final String GRADLE_SCANNER = "Gradle";
     private static final double REPORT_PROGRESS_PREPARED = 0.05;
@@ -331,6 +332,7 @@ public class S202Module implements Module {
         bus.subscribe(MenuRequestEvent.OpenJar.class, ev -> { openJarChooser(); return true; });
         bus.subscribe(MenuRequestEvent.OpenPythonSource.class, ev -> { openPythonSourceRoot(); return true; });
         bus.subscribe(MenuRequestEvent.OpenCSource.class, ev -> { openCSourceRoot(); return true; });
+        bus.subscribe(MenuRequestEvent.OpenGoSource.class, ev -> { openGoModuleRoot(); return true; });
         bus.subscribe(MenuRequestEvent.OpenMavenProject.class, ev -> { openMavenProject(); return true; });
         bus.subscribe(MenuRequestEvent.OpenGradleProject.class, ev -> { openGradleProject(); return true; });
         bus.subscribe(MenuRequestEvent.SaveProject.class, ev -> { saveProject(); return true; });
@@ -866,6 +868,16 @@ public class S202Module implements Module {
             loadSourceRoot(requireLanguageAnalyzer(C_ANALYZER), inputs.getFirst(), "C", "C",
                     "Scanning C translation units...", "No C Sources Found",
                     "The selected source root does not contain analyzable .c files.");
+        }
+    }
+
+    private void openGoModuleRoot() {
+        List<Path> inputs = new GenericDirectoryLoader("Open Go Module", "Select Go module root (directory with go.mod)")
+                .chooseInput(applicationWindow.getStage());
+        if (!inputs.isEmpty()) {
+            loadSourceRoot(requireLanguageAnalyzer(GO_ANALYZER), inputs.getFirst(), "GO", "Go",
+                    "Scanning Go packages...", "No Go Sources Found",
+                    "The selected directory does not contain a go.mod file or analyzable .go files.");
         }
     }
 

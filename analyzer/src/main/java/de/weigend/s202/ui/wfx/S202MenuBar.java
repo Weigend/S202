@@ -44,8 +44,9 @@ import javafx.scene.layout.VBox;
 import javafx.scene.paint.Color;
 import javafx.scene.text.Text;
 import javafx.scene.text.TextFlow;
-import org.kordamp.ikonli.javafx.FontIcon;
-import org.kordamp.ikonli.materialdesign2.MaterialDesignS;
+import javafx.scene.Group;
+import javafx.scene.shape.Circle;
+import javafx.scene.shape.Polygon;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -142,6 +143,10 @@ public class S202MenuBar {
                 "file.openC", "Open C Source...",
                 e -> publish(new MenuRequestEvent.OpenCSource(this)));
 
+        MenuItem openGoItem = MenuUtil.createMenuItem(
+                "file.openGo", "Open Go Module...",
+                e -> publish(new MenuRequestEvent.OpenGoSource(this)));
+
         MenuItem openMavenItem = MenuUtil.createMenuItem(
                 "file.openMaven", "Open Maven Project...",
                 e -> publish(new MenuRequestEvent.OpenMavenProject(this)));
@@ -157,11 +162,20 @@ public class S202MenuBar {
                 });
         exitItem.setAccelerator(new KeyCodeCombination(KeyCode.Q, KeyCombination.SHORTCUT_DOWN));
 
+        Menu openSourceMenu = MenuUtil.createMenu("file.openSource", "Open Source Code");
+        openSourceMenu.getItems().addAll(openGoItem, openPythonItem, openCItem);
+
         Menu fileMenu = MenuUtil.createMenu("file", "File");
-        fileMenu.getItems().addAll(saveProjectItem, loadProjectItem, exportQualityReportItem, closeProjectItem,
+        fileMenu.getItems().addAll(
+                openItem, openMavenItem, openGradleItem,
                 new SeparatorMenuItem(),
-                openItem, openPythonItem, openCItem, openMavenItem, openGradleItem,
-                new SeparatorMenuItem(), exitItem);
+                openSourceMenu,
+                new SeparatorMenuItem(),
+                exportQualityReportItem,
+                new SeparatorMenuItem(),
+                saveProjectItem, loadProjectItem, closeProjectItem,
+                new SeparatorMenuItem(),
+                exitItem);
 
         applicationWindow.getMenu().add(0, fileMenu);
     }
@@ -305,14 +319,28 @@ public class S202MenuBar {
         pane.setHeader(null);
         pane.setHeaderText(null);
 
-        FontIcon logo = new FontIcon(MaterialDesignS.SITEMAP);
-        logo.setIconSize(56);
-        logo.setIconColor(Color.web("#ffd54f"));
+        // Yellow hexagon (pointy-top) with inner circle
+        Color yellow = Color.web("#ffd54f");
+        double r = 26.0;   // outer radius
+        double cx = r, cy = r;
+        Polygon hex = new Polygon();
+        for (int i = 0; i < 6; i++) {
+            double a = Math.toRadians(60 * i - 90);
+            hex.getPoints().addAll(cx + r * Math.cos(a), cy + r * Math.sin(a));
+        }
+        hex.setFill(Color.TRANSPARENT);
+        hex.setStroke(yellow);
+        hex.setStrokeWidth(3.5);
+        Circle innerCircle = new Circle(cx, cy, r * 0.38);
+        innerCircle.setFill(Color.TRANSPARENT);
+        innerCircle.setStroke(yellow);
+        innerCircle.setStrokeWidth(3.0);
+        Group logo = new Group(hex, innerCircle);
 
         Label title = new Label("S202 Code Analyzer");
         title.getStyleClass().add("about-title");
 
-        Label tagline = new Label("Java bytecode and Python source architecture viewer");
+        Label tagline = new Label("Multi-language architecture visualization");
         tagline.getStyleClass().add("about-tagline");
 
         VBox titleBlock = new VBox(2, title, tagline);
@@ -322,9 +350,9 @@ public class S202MenuBar {
         header.setAlignment(Pos.CENTER_LEFT);
 
         Label description = new Label(
-                "Analyzes JAR files and Python source roots, extracts package and class dependencies, "
-              + "detects cyclic dependencies (SCCs) and visualizes the layered "
-              + "architecture.");
+                "Extracts structural dependencies from Java, Go, Python and C source trees. "
+              + "Detects architectural violations, dependency cycles and smells — "
+              + "and visualizes the layered architecture of your codebase.");
         description.setWrapText(true);
         description.getStyleClass().add("about-description");
         description.setMaxWidth(420);
