@@ -109,24 +109,6 @@ public class LevelCalculator implements DomainComputer {
         // siblings within each parent's box.
         new LocalLevelCalculator().assign(model, rawModel);
 
-        // ---- DEMO_ALERT_INJECTION (review demo for M. Philippsen, 2026-05-19) ----
-        // When system property s202.demo.injectAlert=true, deliberately corrupt
-        // both the architecture level and the local level of com.example.A so
-        // the bug is visible in the UI (A is rendered above C, even though
-        // B depends on A and C depends on B) AND the layout-invariant checker
-        // catches the inconsistency, popping up the implausibility alert
-        // dialog. Tests run without the property and stay green. Remove this
-        // block once the demo session is over.
-        if (Boolean.getBoolean("s202.demo.injectAlert")) {
-            DomainModel.CalculatedElementInfo demoA = model.getClass("com.example.A");
-            DomainModel.CalculatedElementInfo demoC = model.getClass("com.example.C");
-            if (demoA != null && demoC != null) {
-                demoA.setArchitectureLevel(demoC.architectureLevel);
-                demoA.setLocalLevel(demoC.localLevel + 1);
-            }
-        }
-        // ---- END DEMO_ALERT_INJECTION ----
-
         return model;
     }
 
