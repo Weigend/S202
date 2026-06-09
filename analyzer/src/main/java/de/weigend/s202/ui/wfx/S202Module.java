@@ -66,14 +66,13 @@ import javafx.concurrent.Task;
 import javafx.geometry.Pos;
 import javafx.beans.property.ReadOnlyDoubleProperty;
 import javafx.beans.value.ChangeListener;
-import javafx.scene.Group;
 import javafx.scene.Node;
 import javafx.scene.SnapshotParameters;
+import javafx.scene.canvas.Canvas;
+import javafx.scene.canvas.GraphicsContext;
 import javafx.scene.control.Alert;
 import javafx.scene.control.Button;
 import javafx.scene.image.WritableImage;
-import javafx.scene.shape.Circle;
-import javafx.scene.shape.Polygon;
 import javafx.scene.control.CheckBox;
 import javafx.scene.control.Label;
 import javafx.scene.control.Separator;
@@ -378,25 +377,28 @@ public class S202Module implements Module {
     private void installWindowIcon() {
         var stage = applicationWindow.getStage();
         if (stage == null) return;
-        Color yellow = Color.web("#ffd54f");
-        double r = 26.0;
-        double cx = r, cy = r;
-        Polygon hex = new Polygon();
+        int size = 64;
+        Canvas canvas = new Canvas(size, size);
+        GraphicsContext gc = canvas.getGraphicsContext2D();
+        double cx = size / 2.0, cy = size / 2.0;
+        double r = size / 2.0 - 4;
+        // hexagon
+        double[] xs = new double[6], ys = new double[6];
         for (int i = 0; i < 6; i++) {
             double a = Math.toRadians(60 * i - 90);
-            hex.getPoints().addAll(cx + r * Math.cos(a), cy + r * Math.sin(a));
+            xs[i] = cx + r * Math.cos(a);
+            ys[i] = cy + r * Math.sin(a);
         }
-        hex.setFill(Color.TRANSPARENT);
-        hex.setStroke(yellow);
-        hex.setStrokeWidth(3.5);
-        Circle innerCircle = new Circle(cx, cy, r * 0.38);
-        innerCircle.setFill(Color.TRANSPARENT);
-        innerCircle.setStroke(yellow);
-        innerCircle.setStrokeWidth(3.0);
-        Group icon = new Group(hex, innerCircle);
+        gc.setStroke(Color.web("#ffd54f"));
+        gc.setLineWidth(3.5);
+        gc.strokePolygon(xs, ys, 6);
+        // inner circle
+        double cr = r * 0.38;
+        gc.setLineWidth(3.0);
+        gc.strokeOval(cx - cr, cy - cr, cr * 2, cr * 2);
         SnapshotParameters params = new SnapshotParameters();
         params.setFill(Color.TRANSPARENT);
-        WritableImage img = icon.snapshot(params, null);
+        WritableImage img = canvas.snapshot(params, null);
         stage.getIcons().setAll(img);
     }
 
