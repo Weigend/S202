@@ -161,11 +161,18 @@ public class S202MenuBar {
                 });
         exitItem.setAccelerator(new KeyCodeCombination(KeyCode.Q, KeyCombination.SHORTCUT_DOWN));
 
+        Menu openSourceMenu = MenuUtil.createMenu("file.openSource", "Open Source Code");
+        openSourceMenu.getItems().addAll(openGoItem, openPythonItem, openCItem);
+
         Menu fileMenu = MenuUtil.createMenu("file", "File");
-        fileMenu.getItems().addAll(saveProjectItem, loadProjectItem, exportQualityReportItem, closeProjectItem,
+        fileMenu.getItems().addAll(
+                saveProjectItem, loadProjectItem, exportQualityReportItem, closeProjectItem,
                 new SeparatorMenuItem(),
-                openItem, openPythonItem, openCItem, openGoItem, openMavenItem, openGradleItem,
-                new SeparatorMenuItem(), exitItem);
+                openItem, openMavenItem, openGradleItem,
+                new SeparatorMenuItem(),
+                openSourceMenu,
+                new SeparatorMenuItem(),
+                exitItem);
 
         applicationWindow.getMenu().add(0, fileMenu);
     }
