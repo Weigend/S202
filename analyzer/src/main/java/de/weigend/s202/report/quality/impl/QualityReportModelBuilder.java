@@ -236,10 +236,11 @@ final class QualityReportModelBuilder {
         drivers.add(distributionDriver(distribution, distributionPenalty));
         drivers.add(anomalyDriver(quality, anomalyPenalty));
         if (quality.componentViolationCount() > 0) {
-            drivers.add("A reportable component architecture was detected and shows "
-                    + quality.componentViolationCount() + " API boundary violation(s).");
+            drivers.add("A component architecture was detected with "
+                    + quality.componentViolationCount() + " API boundary violation(s) — "
+                    + "shown in the report for reference, not included in the score.");
         } else {
-            drivers.add("No component API violations contribute to this score.");
+            drivers.add("No component architecture violations were detected.");
         }
 
         List<String> actions = followUpActions(codebase, distribution, quality);
@@ -330,9 +331,9 @@ final class QualityReportModelBuilder {
         } else if (cyclicDependencyRatio >= 0.05) {
             penalty += 4;
         }
-        if (quality.componentViolationCount() > 0) {
-            penalty += Math.min(10, 3 + quality.componentViolationCount());
-        }
+        // Component violations are intentionally excluded from the score:
+        // without an explicitly defined component architecture the detection
+        // is unreliable. Findings are still shown in the report for information.
         return penalty;
     }
 
