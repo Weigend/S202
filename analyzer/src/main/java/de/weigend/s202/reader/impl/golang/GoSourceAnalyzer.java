@@ -2,6 +2,7 @@ package de.weigend.s202.reader.impl.golang;
 
 import de.weigend.s202.reader.DependencyModel;
 import de.weigend.s202.reader.LanguageAnalyzer;
+import jakarta.inject.Singleton;
 
 import java.io.IOException;
 import java.nio.file.Path;
@@ -24,6 +25,7 @@ import java.util.List;
  * Configure the executable via the system property {@code s202.go.executable},
  * the environment variable {@code GO}, or rely on the default {@code "go"}.
  */
+@Singleton
 public class GoSourceAnalyzer implements LanguageAnalyzer {
 
     private final GoAstProvider    astProvider;

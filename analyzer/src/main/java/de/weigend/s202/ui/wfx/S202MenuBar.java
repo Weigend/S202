@@ -142,6 +142,10 @@ public class S202MenuBar {
                 "file.openC", "Open C Source...",
                 e -> publish(new MenuRequestEvent.OpenCSource(this)));
 
+        MenuItem openGoItem = MenuUtil.createMenuItem(
+                "file.openGo", "Open Go Module...",
+                e -> publish(new MenuRequestEvent.OpenGoSource(this)));
+
         MenuItem openMavenItem = MenuUtil.createMenuItem(
                 "file.openMaven", "Open Maven Project...",
                 e -> publish(new MenuRequestEvent.OpenMavenProject(this)));
@@ -160,7 +164,7 @@ public class S202MenuBar {
         Menu fileMenu = MenuUtil.createMenu("file", "File");
         fileMenu.getItems().addAll(saveProjectItem, loadProjectItem, exportQualityReportItem, closeProjectItem,
                 new SeparatorMenuItem(),
-                openItem, openPythonItem, openCItem, openMavenItem, openGradleItem,
+                openItem, openPythonItem, openCItem, openGoItem, openMavenItem, openGradleItem,
                 new SeparatorMenuItem(), exitItem);
 
         applicationWindow.getMenu().add(0, fileMenu);
