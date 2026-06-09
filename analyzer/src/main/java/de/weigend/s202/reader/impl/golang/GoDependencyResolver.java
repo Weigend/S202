@@ -5,6 +5,7 @@ import de.weigend.s202.reader.EdgeKind;
 import de.weigend.s202.reader.impl.PackageHierarchyBuilder;
 
 import java.util.*;
+import java.util.ArrayList;
 
 /**
  * Resolves a list of {@link ParsedGoFile}s into a {@link DependencyModel}.
@@ -143,6 +144,30 @@ public class GoDependencyResolver {
                 // Field types → USES
                 for (ParsedGoFile.FieldDecl field : type.fields()) {
                     resolveFieldRef(field, pkgFQN, model, functionOwnerIndex)
+                            .ifPresent(t -> ownerClass.addDependency(t, EdgeKind.USES));
+                }
+
+                // Underlying type for type-definitions (e.g. type Book []Page → Book USES Page)
+                if ("type".equals(type.kind()) && !type.baseType().isBlank()) {
+                    resolveTypeRef(type.baseType(), pkgFQN, model, functionOwnerIndex)
+                            .filter(t -> !t.equals(ownerFQN))
+                            .ifPresent(t -> ownerClass.addDependency(t, EdgeKind.USES));
+                }
+            }
+
+            // Function signature types → USES on the owning ClassInfo
+            for (ParsedGoFile.FunctionDecl fn : file.functions()) {
+                String ownerFQN = resolveFunctionOwnerFQN(fn, pkgFQN, functionOwnerIndex);
+                if (ownerFQN == null) continue;
+                DependencyModel.ClassInfo ownerClass = model.getClass(ownerFQN);
+                if (ownerClass == null) continue;
+
+                List<String> sigTypes = new ArrayList<>();
+                sigTypes.addAll(fn.params());
+                sigTypes.addAll(fn.results());
+                for (String typeRef : sigTypes) {
+                    resolveTypeRef(typeRef, pkgFQN, model, functionOwnerIndex)
+                            .filter(t -> !t.equals(ownerFQN))
                             .ifPresent(t -> ownerClass.addDependency(t, EdgeKind.USES));
                 }
             }
@@ -355,6 +380,15 @@ public class GoDependencyResolver {
         String candidate = callerPkgFQN + "." + base;
         if (model.getClass(candidate) != null) return Optional.of(candidate);
         return Optional.empty();
+    }
+
+    private String resolveFunctionOwnerFQN(ParsedGoFile.FunctionDecl fn, String pkgFQN,
+                                            Map<String, String> fnOwnerIndex) {
+        if (fn.receiver() != null && !fn.receiver().isEmpty()) {
+            String key = pkgFQN + "." + fn.receiver() + "." + fn.name();
+            return fnOwnerIndex.getOrDefault(key, fnOwnerIndex.get(pkgFQN + "." + fn.receiver()));
+        }
+        return fnOwnerIndex.get(pkgFQN + "." + fn.name());
     }
 
     private String resolveCallerFQN(String callerFunction, String pkgFQN,

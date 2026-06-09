@@ -140,6 +140,7 @@ public class ExternalGoAstProvider implements GoAstProvider {
             list.add(new ParsedGoFile.TypeDecl(
                     r.name, r.kind,
                     r.typeParams == null ? List.of() : List.of(r.typeParams),
+                    r.baseType  == null ? "" : r.baseType,
                     r.embeds    == null ? List.of() : List.of(r.embeds),
                     toFields(r.fields)));
         }
@@ -202,7 +203,7 @@ public class ExternalGoAstProvider implements GoAstProvider {
 
     @JsonIgnoreProperties(ignoreUnknown = true)
     private static class RawType {
-        public String   name, kind;
+        public String   name, kind, baseType;
         public String[] typeParams, embeds;
         public RawField[] fields;
     }

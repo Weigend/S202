@@ -30,7 +30,7 @@ class GoSourceAnalyzerTest {
                                               String importPath, String typeName, String typeKind) {
         return new ParsedGoFile(filePath, pkgName, importPath,
                 List.of(),
-                List.of(new ParsedGoFile.TypeDecl(typeName, typeKind, List.of(), List.of(), List.of())),
+                List.of(new ParsedGoFile.TypeDecl(typeName, typeKind, List.of(), "", List.of(), List.of())),
                 List.of(), List.of(), List.of());
     }
 
@@ -73,7 +73,7 @@ class GoSourceAnalyzerTest {
         ParsedGoFile file = new ParsedGoFile(
                 "client/v3/client.go", "v3", "go.etcd.io/etcd/v3/client/v3",
                 List.of(),
-                List.of(new ParsedGoFile.TypeDecl("Client", "struct", List.of(), List.of(), List.of())),
+                List.of(new ParsedGoFile.TypeDecl("Client", "struct", List.of(), "", List.of(), List.of())),
                 List.of(new ParsedGoFile.FunctionDecl("New", "", List.of(),
                         List.of("*Config"), List.of("*Client"))),
                 List.of(), List.of());
@@ -93,7 +93,7 @@ class GoSourceAnalyzerTest {
         ParsedGoFile file = new ParsedGoFile(
                 "client/v3/client.go", "v3", "go.etcd.io/etcd/v3/client/v3",
                 List.of(),
-                List.of(new ParsedGoFile.TypeDecl("Client", "struct", List.of(), List.of(), List.of())),
+                List.of(new ParsedGoFile.TypeDecl("Client", "struct", List.of(), "", List.of(), List.of())),
                 List.of(new ParsedGoFile.FunctionDecl("New", "", List.of(),
                         List.of("*Config"), List.of("*Client", "error"))),
                 List.of(), List.of());
@@ -112,7 +112,7 @@ class GoSourceAnalyzerTest {
         ParsedGoFile file = new ParsedGoFile(
                 "client/v3/client.go", "v3", "go.etcd.io/etcd/v3/client/v3",
                 List.of(),
-                List.of(new ParsedGoFile.TypeDecl("Client", "struct", List.of(), List.of(), List.of())),
+                List.of(new ParsedGoFile.TypeDecl("Client", "struct", List.of(), "", List.of(), List.of())),
                 List.of(new ParsedGoFile.FunctionDecl("NewList", "", List.of(),
                         List.of(), List.of("[]*Client"))),
                 List.of(), List.of());
@@ -130,7 +130,7 @@ class GoSourceAnalyzerTest {
         ParsedGoFile file = new ParsedGoFile(
                 "client/v3/client.go", "v3", "go.etcd.io/etcd/v3/client/v3",
                 List.of(),
-                List.of(new ParsedGoFile.TypeDecl("Config", "struct", List.of(), List.of(), List.of())),
+                List.of(new ParsedGoFile.TypeDecl("Config", "struct", List.of(), "", List.of(), List.of())),
                 List.of(new ParsedGoFile.FunctionDecl("processConfig", "", List.of(),
                         List.of("*Config"), List.of("error"))),
                 List.of(), List.of());
@@ -151,8 +151,8 @@ class GoSourceAnalyzerTest {
                 "client/v3/client.go", "v3", "go.etcd.io/etcd/v3/client/v3",
                 List.of(),
                 List.of(
-                        new ParsedGoFile.TypeDecl("Client", "struct", List.of(), List.of(), List.of()),
-                        new ParsedGoFile.TypeDecl("Config", "struct", List.of(), List.of(), List.of())),
+                        new ParsedGoFile.TypeDecl("Client", "struct", List.of(), "", List.of(), List.of()),
+                        new ParsedGoFile.TypeDecl("Config", "struct", List.of(), "", List.of(), List.of())),
                 List.of(new ParsedGoFile.FunctionDecl("Convert", "", List.of(),
                         List.of("*Config"), List.of("*Client"))),
                 List.of(), List.of());
@@ -173,7 +173,7 @@ class GoSourceAnalyzerTest {
         ParsedGoFile file = new ParsedGoFile(
                 "client/v3/client.go", "v3", "go.etcd.io/etcd/v3/client/v3",
                 List.of(),
-                List.of(new ParsedGoFile.TypeDecl("Client", "struct", List.of(), List.of(), List.of())),
+                List.of(new ParsedGoFile.TypeDecl("Client", "struct", List.of(), "", List.of(), List.of())),
                 List.of(new ParsedGoFile.FunctionDecl("doXY", "", List.of(),
                         List.of("*otherpkg.Server"), List.of())),
                 List.of(), List.of());
@@ -216,7 +216,7 @@ class GoSourceAnalyzerTest {
         ParsedGoFile file = new ParsedGoFile(
                 "server/embed/config.go", "embed", "go.etcd.io/etcd/v3/server/embed",
                 List.of(),
-                List.of(new ParsedGoFile.TypeDecl("Config", "struct", List.of(), List.of(), List.of())),
+                List.of(new ParsedGoFile.TypeDecl("Config", "struct", List.of(), "", List.of(), List.of())),
                 List.of(new ParsedGoFile.FunctionDecl("init", "", List.of(), List.of(), List.of())),
                 List.of(), List.of());
 
@@ -310,7 +310,7 @@ class GoSourceAnalyzerTest {
         ParsedGoFile embedFile = new ParsedGoFile(
                 "server/embed/etcd.go", "embed", "go.etcd.io/etcd/v3/server/embed",
                 List.of(new ParsedGoFile.ImportDecl("etcdserver", "go.etcd.io/etcd/v3/server/etcdserver")),
-                List.of(new ParsedGoFile.TypeDecl("Etcd", "struct", List.of(),
+                List.of(new ParsedGoFile.TypeDecl("Etcd", "struct", List.of(), "",
                         List.of("*etcdserver.EtcdServer"), List.of())),
                 List.of(), List.of(), List.of());
 
@@ -335,7 +335,7 @@ class GoSourceAnalyzerTest {
         ParsedGoFile embedFile = new ParsedGoFile(
                 "server/embed/etcd.go", "embed", "go.etcd.io/etcd/v3/server/embed",
                 List.of(new ParsedGoFile.ImportDecl("clientv3", "go.etcd.io/etcd/v3/client/v3")),
-                List.of(new ParsedGoFile.TypeDecl("Etcd", "struct", List.of(), List.of(),
+                List.of(new ParsedGoFile.TypeDecl("Etcd", "struct", List.of(), "", List.of(),
                         List.of(new ParsedGoFile.FieldDecl(
                                 "Clients", "[]*clientv3.Client", "go.etcd.io/etcd/v3/client/v3")))),
                 List.of(), List.of(), List.of());
@@ -358,7 +358,7 @@ class GoSourceAnalyzerTest {
                 "server/etcdserver/server.go", "etcdserver",
                 "go.etcd.io/etcd/v3/server/etcdserver",
                 List.of(),
-                List.of(new ParsedGoFile.TypeDecl("EtcdServer", "struct", List.of(), List.of(), List.of())),
+                List.of(new ParsedGoFile.TypeDecl("EtcdServer", "struct", List.of(), "", List.of(), List.of())),
                 List.of(new ParsedGoFile.FunctionDecl("NewServer", "", List.of(),
                         List.of("*Config"), List.of("*EtcdServer"))),
                 List.of(), List.of());
@@ -366,7 +366,7 @@ class GoSourceAnalyzerTest {
         ParsedGoFile embedFile = new ParsedGoFile(
                 "server/embed/etcd.go", "embed", "go.etcd.io/etcd/v3/server/embed",
                 List.of(new ParsedGoFile.ImportDecl("etcdserver", "go.etcd.io/etcd/v3/server/etcdserver")),
-                List.of(new ParsedGoFile.TypeDecl("Etcd", "struct", List.of(), List.of(), List.of())),
+                List.of(new ParsedGoFile.TypeDecl("Etcd", "struct", List.of(), "", List.of(), List.of())),
                 List.of(new ParsedGoFile.FunctionDecl("StartEtcd", "", List.of(),
                         List.of("*Config"), List.of("*Etcd"))),
                 List.of(),
@@ -393,7 +393,7 @@ class GoSourceAnalyzerTest {
         ParsedGoFile clientFile = new ParsedGoFile(
                 "client/v3/client.go", "v3", "go.etcd.io/etcd/v3/client/v3",
                 List.of(),
-                List.of(new ParsedGoFile.TypeDecl("Client", "struct", List.of(), List.of(), List.of())),
+                List.of(new ParsedGoFile.TypeDecl("Client", "struct", List.of(), "", List.of(), List.of())),
                 List.of(new ParsedGoFile.FunctionDecl("New", "", List.of(),
                         List.of("*Config"), List.of("*Client"))),
                 List.of(), List.of());
@@ -401,7 +401,7 @@ class GoSourceAnalyzerTest {
         ParsedGoFile callerFile = new ParsedGoFile(
                 "server/embed/etcd.go", "embed", "go.etcd.io/etcd/v3/server/embed",
                 List.of(new ParsedGoFile.ImportDecl("clientv3", "go.etcd.io/etcd/v3/client/v3")),
-                List.of(new ParsedGoFile.TypeDecl("Etcd", "struct", List.of(), List.of(), List.of())),
+                List.of(new ParsedGoFile.TypeDecl("Etcd", "struct", List.of(), "", List.of(), List.of())),
                 List.of(new ParsedGoFile.FunctionDecl("StartEtcd", "", List.of(),
                         List.of(), List.of("*Etcd"))),
                 List.of(),
@@ -476,9 +476,9 @@ class GoSourceAnalyzerTest {
                 "client/v3/client.go", "v3", "go.etcd.io/etcd/v3/client/v3",
                 List.of(),
                 List.of(
-                        new ParsedGoFile.TypeDecl("Client",     "struct", List.of(), List.of(), List.of()),
-                        new ParsedGoFile.TypeDecl("Config",     "struct", List.of(), List.of(), List.of()),
-                        new ParsedGoFile.TypeDecl("AuthConfig", "struct", List.of(), List.of(), List.of())),
+                        new ParsedGoFile.TypeDecl("Client",     "struct", List.of(), "", List.of(), List.of()),
+                        new ParsedGoFile.TypeDecl("Config",     "struct", List.of(), "", List.of(), List.of()),
+                        new ParsedGoFile.TypeDecl("AuthConfig", "struct", List.of(), "", List.of(), List.of())),
                 List.of(), List.of(), List.of());
 
         DependencyModel model = resolve("go.etcd.io/etcd/v3", List.of(file));
@@ -499,7 +499,7 @@ class GoSourceAnalyzerTest {
                 "rules/rule.go", "rules",
                 "github.com/prometheus/prometheus/rules",
                 List.of(new ParsedGoFile.ImportDecl("model", "github.com/prometheus/prometheus/pkg/model")),
-                List.of(new ParsedGoFile.TypeDecl("Rule", "struct", List.of(), List.of(),
+                List.of(new ParsedGoFile.TypeDecl("Rule", "struct", List.of(), "", List.of(),
                         List.of(new ParsedGoFile.FieldDecl("label", "model.Label",
                                 "github.com/prometheus/prometheus/pkg/model")))),
                 List.of(), List.of(), List.of());
@@ -552,6 +552,70 @@ class GoSourceAnalyzerTest {
         assertEquals("go.etcd.io/etcd/v3", info.moduleName());
         assertEquals("1.21",               info.goVersion());
         assertEquals(tempDir,              info.moduleRoot());
+    }
+
+    // ══════════════════════════════════════════════════════════════════════════
+    // Concept point 22: type definition underlying type → USES (e.g. type Book []Page)
+    // ══════════════════════════════════════════════════════════════════════════
+    @Test
+    void typeDefinitionUnderlyingTypeCreatesUsesEdge() {
+        // type Book []Page  — same package, kind="type", baseType="[]Page"
+        ParsedGoFile file = new ParsedGoFile(
+                "basics/index/index.go", "index",
+                "github.com/jweigend/concepts-of-programming-languages/basics/index",
+                List.of(),
+                List.of(
+                        new ParsedGoFile.TypeDecl("Page",  "type", List.of(), "[]string",   List.of(), List.of()),
+                        new ParsedGoFile.TypeDecl("Book",  "type", List.of(), "[]Page",     List.of(), List.of()),
+                        new ParsedGoFile.TypeDecl("Index", "type", List.of(), "map[string][]int", List.of(), List.of())),
+                List.of(), List.of(), List.of());
+
+        DependencyModel model = resolve(
+                "github.com/jweigend/concepts-of-programming-languages", List.of(file));
+
+        DependencyModel.ClassInfo book = model.getClass("basics.index.Book");
+        assertNotNull(book);
+        assertTrue(book.dependencies.contains("basics.index.Page"),
+                "Book must USES Page via underlying type []Page");
+        assertTrue(book.getKinds("basics.index.Page").contains(EdgeKind.USES));
+        // Index uses int — stdlib, must be ignored
+        assertFalse(model.getClass("basics.index.Index").dependencies.contains("int"));
+    }
+
+    // ══════════════════════════════════════════════════════════════════════════
+    // Concept point 23: function signature parameter types → USES on owner
+    // ══════════════════════════════════════════════════════════════════════════
+    @Test
+    void functionSignatureParamTypeCreatesUsesEdgeOnOwner() {
+        // MakeIndex(book Book) Index  — Index owns MakeIndex, must USES Book
+        ParsedGoFile file = new ParsedGoFile(
+                "basics/index/index.go", "index",
+                "github.com/jweigend/concepts-of-programming-languages/basics/index",
+                List.of(),
+                List.of(
+                        new ParsedGoFile.TypeDecl("Page",  "type", List.of(), "[]string", List.of(), List.of()),
+                        new ParsedGoFile.TypeDecl("Book",  "type", List.of(), "[]Page",   List.of(), List.of()),
+                        new ParsedGoFile.TypeDecl("Index", "type", List.of(), "map[string][]int", List.of(), List.of())),
+                List.of(
+                        new ParsedGoFile.FunctionDecl("MakeIndex", "", List.of(),
+                                List.of("Book"), List.of("Index")),        // Index owns this
+                        new ParsedGoFile.FunctionDecl("MakeBook",  "", List.of(),
+                                List.of("[]Page"), List.of("Book")),       // Book owns this
+                        new ParsedGoFile.FunctionDecl("MakePage",  "", List.of(),
+                                List.of("[]string"), List.of("Page"))),    // Page owns this
+                List.of(), List.of());
+
+        DependencyModel model = resolve(
+                "github.com/jweigend/concepts-of-programming-languages", List.of(file));
+
+        DependencyModel.ClassInfo index = model.getClass("basics.index.Index");
+        assertNotNull(index);
+        assertTrue(index.dependencies.contains("basics.index.Book"),
+                "Index must USES Book (MakeIndex parameter)");
+
+        DependencyModel.ClassInfo book = model.getClass("basics.index.Book");
+        assertTrue(book.dependencies.contains("basics.index.Page"),
+                "Book must USES Page (MakeBook parameter []Page and underlying type)");
     }
 
     // ══════════════════════════════════════════════════════════════════════════

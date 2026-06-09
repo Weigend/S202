@@ -33,8 +33,9 @@ public record ParsedGoFile(
     /** An exported or unexported type definition (struct or interface). */
     public record TypeDecl(
             String name,
-            String kind,              // "struct" or "interface"
+            String kind,              // "struct", "interface", or "type" (alias/definition)
             List<String> typeParams,  // generic type param names, e.g. ["T"]
+            String baseType,          // underlying type expr for kind="type", e.g. "[]Page"
             List<String> embeds,      // embedded type expressions, e.g. ["*etcdserver.EtcdServer"]
             List<FieldDecl> fields) { // struct fields (empty for interfaces)
 
@@ -42,6 +43,7 @@ public record ParsedGoFile(
             typeParams = typeParams == null ? List.of() : List.copyOf(typeParams);
             embeds     = embeds     == null ? List.of() : List.copyOf(embeds);
             fields     = fields     == null ? List.of() : List.copyOf(fields);
+            if (baseType == null) baseType = "";
         }
     }
 

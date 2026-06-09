@@ -47,6 +47,7 @@ type TypeDecl struct {
 	Name       string      `json:"name"`
 	Kind       string      `json:"kind"`
 	TypeParams []string    `json:"typeParams"`
+	BaseType   string      `json:"baseType"` // underlying type for kind="type", e.g. "[]Page"
 	Embeds     []string    `json:"embeds"`
 	Fields     []FieldDecl `json:"fields"`
 }
@@ -216,6 +217,7 @@ func extractTypes(f *ast.File, aliases map[string]string) []TypeDecl {
 				td.Embeds = extractInterfaceEmbeds(t)
 			default:
 				td.Kind = "type"
+				td.BaseType = exprToString(ts.Type)
 			}
 			result = append(result, td)
 		}
