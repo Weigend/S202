@@ -44,8 +44,9 @@ import javafx.scene.layout.VBox;
 import javafx.scene.paint.Color;
 import javafx.scene.text.Text;
 import javafx.scene.text.TextFlow;
-import org.kordamp.ikonli.javafx.FontIcon;
-import org.kordamp.ikonli.materialdesign2.MaterialDesignS;
+import javafx.scene.Group;
+import javafx.scene.shape.Circle;
+import javafx.scene.shape.Polygon;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -318,9 +319,23 @@ public class S202MenuBar {
         pane.setHeader(null);
         pane.setHeaderText(null);
 
-        FontIcon logo = new FontIcon(MaterialDesignS.SITEMAP);
-        logo.setIconSize(56);
-        logo.setIconColor(Color.web("#ffd54f"));
+        // Yellow hexagon (pointy-top) with inner circle
+        Color yellow = Color.web("#ffd54f");
+        double r = 26.0;   // outer radius
+        double cx = r, cy = r;
+        Polygon hex = new Polygon();
+        for (int i = 0; i < 6; i++) {
+            double a = Math.toRadians(60 * i - 90);
+            hex.getPoints().addAll(cx + r * Math.cos(a), cy + r * Math.sin(a));
+        }
+        hex.setFill(Color.TRANSPARENT);
+        hex.setStroke(yellow);
+        hex.setStrokeWidth(3.5);
+        Circle innerCircle = new Circle(cx, cy, r * 0.38);
+        innerCircle.setFill(Color.TRANSPARENT);
+        innerCircle.setStroke(yellow);
+        innerCircle.setStrokeWidth(3.0);
+        Group logo = new Group(hex, innerCircle);
 
         Label title = new Label("S202 Code Analyzer");
         title.getStyleClass().add("about-title");
