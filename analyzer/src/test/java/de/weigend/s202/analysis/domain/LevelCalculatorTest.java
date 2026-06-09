@@ -383,11 +383,10 @@ class LevelCalculatorTest {
         DomainModel.CalculatedElementInfo pkgCom = calculatedModel.getPackage("com");
         assertNotNull(pkgCom, "Package com should exist");
         // Parent->child edges contribute to the weighted package graph
-        // now, so com aggregates the outgoing deps of its descendants:
-        // com.example2.E depends on com.example.B, which propagates as
-        // com -> com.example. com therefore ends up at L1.
-        assertEquals(1, pkgCom.architectureLevel,
-            "Package com aggregates its descendants' outgoing deps → L1");
+        // now, so com aggregates the outgoing deps of its descendants.
+        // With example3 sub-packages added, com now ends up at L2.
+        assertEquals(2, pkgCom.architectureLevel,
+            "Package com aggregates its descendants' outgoing deps → L2");
     }
 
     @Test
@@ -431,10 +430,10 @@ class LevelCalculatorTest {
     @Test
     void testDomainLevelDistribution() {
         // Check class-level distribution for the non-adversarial com.* classes only.
-        // Level 0: com.example.A, com.example1.X, com.example2.D
-        // Level 1: com.example.B, com.example2.C, com.example2.B
-        // Level 2: com.example.C, com.example2.A
-        // Level 3: com.example2.E
+        // Level 0: com.example.A, com.example1.X, com.example2.D, com.example3.sub1.B
+        // Level 1: com.example.B, com.example2.C, com.example2.B, com.example3.sub2.C
+        // Level 2: com.example.C, com.example2.A, com.example3.sub1.A
+        // Level 3: com.example2.E, com.example3.sub2.D
         Map<Integer, java.util.List<DomainModel.CalculatedElementInfo>> byLevel =
             calculatedModel.getElementsByLevel();
 
@@ -451,10 +450,10 @@ class LevelCalculatorTest {
             .filter(e -> "CLASS".equals(e.type) && e.fullName.startsWith("com."))
             .toList();
 
-        assertEquals(3, comLevel0.size(), "Level 0 should have 3 com.* classes (A, X, D)");
-        assertEquals(3, comLevel1.size(), "Level 1 should have 3 com.* classes (B, C, B)");
-        assertEquals(2, comLevel2.size(), "Level 2 should have 2 com.* classes (C, A)");
-        assertEquals(1, comLevel3.size(), "Level 3 should have 1 com.* class (E)");
+        assertEquals(4, comLevel0.size(), "Level 0 should have 4 com.* classes (A, X, D, B_ex3)");
+        assertEquals(4, comLevel1.size(), "Level 1 should have 4 com.* classes (B, C_ex2, B_ex2, C_ex3)");
+        assertEquals(3, comLevel2.size(), "Level 2 should have 3 com.* classes (C, A_ex2, A_ex3)");
+        assertEquals(2, comLevel3.size(), "Level 3 should have 2 com.* classes (E, D_ex3)");
     }
 
 
