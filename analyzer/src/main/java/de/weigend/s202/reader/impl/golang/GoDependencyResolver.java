@@ -183,7 +183,9 @@ public class GoDependencyResolver {
                 DependencyModel.ClassInfo callerClass = model.getClass(callerFQN);
                 if (callerClass == null) continue;
 
-                resolveCalleeFQN(call, pkgFQN, model, functionOwnerIndex).ifPresent(targetFQN -> {
+                resolveCalleeFQN(call, pkgFQN, model, functionOwnerIndex)
+                        .filter(t -> !t.equals(callerFQN))   // no self-reference
+                        .ifPresent(targetFQN -> {
                     EdgeKind kind = call.isNewPattern() ? EdgeKind.INSTANTIATES : EdgeKind.CALLS;
                     callerClass.addDependency(targetFQN, kind);
                     // MethodInfo call tracking
