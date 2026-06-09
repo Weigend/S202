@@ -12,7 +12,7 @@ A JavaFX-based tool for analyzing code across multiple languages and visualizing
 
 ## Features
 
-- **Readers**: Java bytecode (ASM 9.6), Maven and Gradle multi-module projects, Python source (CPython AST), C source (PoC); Go, TypeScript, Rust planned
+- **Readers**: Java bytecode (ASM 9.6), Maven and Gradle multi-module projects, Python source (CPython AST), C source (PoC), Go source (Alpha); TypeScript, Rust planned
 - **Dependency detection**: Class/module and package dependencies — imports, calls, inheritance, type annotations
 - **Class cycle detection**: SCCs at class level (red overlay)
 - **Package tangle detection**: Mutual package dependencies (orange overlay); both overlays are independently togglable
@@ -33,7 +33,7 @@ A JavaFX-based tool for analyzing code across multiple languages and visualizing
 <tr><td><small><b>Reader: Gradle</b></small></td><td><small>Multi-module via <code>settings.gradle(.kts)</code></small></td><td><small><b>Beta</b></small></td></tr>
 <tr><td><small><b>Reader: Python</b></small></td><td><small>Source analysis via CPython <code>ast</code></small></td><td><small><b>Alpha</b></small></td></tr>
 <tr><td><small><b>Reader: C</b></small></td><td><small>Source analysis via AST</small></td><td><small><b>PoC</b></small></td></tr>
-<tr><td><small><b>Reader: Go</b></small></td><td><small>Source analysis</small></td><td><small><b>Planned</b></small></td></tr>
+<tr><td><small><b>Reader: Go</b></small></td><td><small>Source analysis</small></td><td><small><b>Alpha</b></small></td></tr>
 <tr><td><small><b>Reader: TypeScript</b></small></td><td><small>Source analysis</small></td><td><small><b>Planned</b></small></td></tr>
 <tr><td><small><b>Reader: Rust</b></small></td><td><small>Source analysis (on request)</small></td><td><small><b>Planned</b></small></td></tr>
 <tr><td><small><b>View: Layered Architecture</b></small></td><td><small>Topological package layout; violation and cycle overlays</small></td><td><small><b>Stable</b></small></td></tr>
