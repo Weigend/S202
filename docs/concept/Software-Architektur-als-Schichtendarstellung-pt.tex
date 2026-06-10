@@ -286,7 +286,8 @@ vis\'iveis como overlays ativados separadamente:
         classes individuais. Eles s\~ao detectados pelo algoritmo de Tarjan sobre
         o grafo de depend\^encias de classes.
   \item[Ciclos de pacotes (laranja)] Tangles no n\'ivel de pacotes, detectados
-        sobre o grafo agregado de pacotes. Um ciclo de pacotes significa que dois
+        sobre o grafo agregado direto de pacotes (sem a propaga\c{c}\~ao de
+        ancestrais descrita adiante). Um ciclo de pacotes significa que dois
         ou mais pacotes dependem uns dos outros como grupo, independentemente de
         quais classes concretas s\~ao respons\'aveis. Ciclos de pacotes revelam
         acoplamento no n\'ivel arquitetural: a pr\'opria estrutura de pacotes tem
@@ -367,8 +368,10 @@ depend\^encia de classe, S202 conta as chamadas de m\'etodo da classe de
 origem para a classe de destino e atribui essa contagem \`a aresta de pacote
 correspondente: se uma classe na sub\'arvore do pacote $P$ chama uma classe na
 sub\'arvore do pacote $Q$ via $n$ chamadas de m\'etodo, a aresta $P \to Q$
-recebe peso $n$. Para depend\^encias estruturais sem contagem de chamadas,
-usa-se peso~1.
+recebe peso $n$. Se uma classe tem apenas depend\^encias sem contagem de
+chamadas para um pacote de destino, ela contribui com um peso de fallback
+de~1 para essa aresta de pacote (por classe e pacote de destino, n\~ao por
+depend\^encia).
 
 Para capturar a contribui\c{c}\~ao de pacotes aninhados, cada peso \'e
 propagado pela cadeia de ancestrais do pacote de origem: uma chamada de
@@ -377,6 +380,12 @@ propagado pela cadeia de ancestrais do pacote de origem: uma chamada de
 \texttt{com}$\to$\texttt{com.b}. A ordem transitiva entre pacotes surge apenas
 no c\'alculo de n\'iveis subsequente~-- nenhuma aresta transitiva adicional
 \'e inserida no grafo.
+
+A propaga\c{c}\~ao de ancestrais pode, por\'em, criar ciclos que n\~ao existem
+no grafo direto de pacotes. Ciclos de pacotes (tangles) s\~ao, portanto,
+detectados sobre o grafo direto, n\~ao propagado; a quebra de ciclos e a
+atribui\c{c}\~ao de n\'iveis, em contrapartida, operam sobre o grafo
+propagado.
 
 Um exemplo num\'erico concreto: as depend\^encias de classe
 \texttt{com.a.A}$\to$\texttt{net.b.B} e \texttt{com.a.B}$\to$\texttt{net.b.B}
@@ -420,6 +429,11 @@ removidas e os n\'iveis dos n\'os afetados surgem exclusivamente de
 depend\^encias fora da antiga SCC. Se tampouco h\'a essas depend\^encias, os
 n\'os permanecem no mesmo n\'ivel~-- como pares genuinos sem ordem
 justific\'avel.
+
+Os dois tipos de corte s\~ao aplicados iterativamente: ap\'os cada passagem,
+as SCCs s\~ao recalculadas e, para SCCs residuais, os ranks s\~ao recalculados
+sobre seus membros. O procedimento termina quando n\~ao resta nenhuma SCC com
+pelo menos dois membros.
 
 A detec\c{c}\~ao de simetria baseia-se na medida de rank, n\~ao na
 compara\c{c}\~ao de pesos. Uma SCC em que todas as arestas t\^em o mesmo peso
@@ -476,7 +490,9 @@ por meio de dois casos.
 diferentes n\'iveis de pacotes. Uma aresta $A \to B$ dentro de tal SCC \'e
 cortada quando $\mathit{pkgLevel}(A) < \mathit{pkgLevel}(B)$ vale~-- ela corre
 de um pacote posicionado mais baixo para um mais alto, contra a dire\c{c}\~ao
-arquitetural.
+arquitetural. O corte \'e aplicado iterativamente at\'e que nenhuma aresta
+dentro de uma SCC corra contra a hip\'otese de pacotes; SCCs que restam depois
+disso s\~ao tratadas pelo Caso~B.
 
 \textbf{Caso B} abrange SCCs confinadas inteiramente a um \'unico n\'ivel de
 pacote~-- nenhum contexto de pacote fornece uma dire\c{c}\~ao. Todas as arestas
@@ -627,7 +643,12 @@ estejam dispon\'iveis as informa\c{c}\~oes que justificam essa posi\c{c}\~ao.
 \begin{enumerate}
   \item \textbf{Construir o grafo de classes:} A partir do bytecode \'e criado
         um grafo dirigido de classes. Esse grafo permanece o modelo bruto de
-        dom\'inio da an\'alise.
+        dom\'inio da an\'alise. Apenas arestas que carregam pelo menos uma
+        rela\c{c}\~ao do tipo \texttt{extends}, \texttt{implements},
+        \texttt{imports}, \texttt{instantiates} ou \texttt{calls} entram no
+        c\'alculo da ordem; refer\^encias puras de tipo (tipos de campos,
+        tipos de par\^ametros e retorno, casts) permanecem no modelo bruto,
+        mas n\~ao s\~ao consideradas.
   \item \textbf{Reconhecer SCCs:} No grafo de classes, componentes
         fortemente conexas s\~ao determinadas por Tarjan. O resultado ainda
         n\~ao \'e um layout, mas a informa\c{c}\~ao de quais classes podem ser
@@ -641,9 +662,11 @@ estejam dispon\'iveis as informa\c{c}\~oes que justificam essa posi\c{c}\~ao.
   \item \textbf{Calcular a ordem de pacotes:} A partir das entradas e sa\'idas
         ponderadas calcula-se a medida de rank $rank(P)$. Todas as arestas para
         as quais $rank(P) < rank(Q)$ vale s\~ao classificadas como back edges e
-        cortadas em uma \'unica passagem. Se todos os ranks dentro de uma SCC
-        s\~ao iguais, todas as arestas internas s\~ao removidas; os n\'iveis
-        surgem ent\~ao de depend\^encias fora da antiga SCC.
+        cortadas; SCCs residuais s\~ao tratadas novamente com ranks
+        recalculados, at\'e que o grafo de pacotes seja ac\'iclico. Se todos os
+        ranks dentro de uma SCC s\~ao iguais, todas as arestas internas s\~ao
+        removidas; os n\'iveis surgem ent\~ao de depend\^encias fora da antiga
+        SCC.
   \item \textbf{Determinar back edges de classes:} SCCs de classes s\~ao
         quebradas usando a hip\'otese de pacotes. \emph{Caso A}~-- uma aresta
         $A \to B$ dentro de uma SCC \'e cortada quando

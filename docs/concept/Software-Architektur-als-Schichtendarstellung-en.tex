@@ -269,7 +269,8 @@ visible as separately toggled overlays:
         that prevents a strict linear order of individual classes. They are
         detected by Tarjan's algorithm on the class dependency graph.
   \item[Package cycles (orange)] Tangles at the package level, detected on the
-        aggregated package graph. A package cycle means that two or more
+        direct aggregated package graph (without the ancestor propagation
+        described later). A package cycle means that two or more
         packages depend on each other as a group, regardless of which concrete
         classes inside them are responsible. Package cycles reveal
         architectural-level coupling: the package structure itself has circular
@@ -343,8 +344,9 @@ information for aggregation. For each class dependency, S202 counts the method
 calls from the source class to the target class and attributes this count to
 the corresponding package edge: if a class in the subtree of package $P$ calls
 a class in the subtree of package $Q$ via $n$ method calls, the edge $P \to Q$
-receives weight $n$. For structural dependencies without method-call data, a
-fallback weight of~1 is used.
+receives weight $n$. If a class has only dependencies without method-call data
+into a target package, it contributes a fallback weight of~1 to that package
+edge (per class and target package, not per dependency).
 
 To capture the contribution of nested packages, each weight is propagated up
 the ancestor chain of the source package: a call from \texttt{com.a.X} to
@@ -352,6 +354,11 @@ the ancestor chain of the source package: a call from \texttt{com.a.X} to
 also to \texttt{com}$\to$\texttt{com.b}. The transitive order among packages
 emerges from the subsequent longest-path computation — no additional transitive
 edges are added to the graph.
+
+Ancestor propagation can, however, create cycles that do not exist in the
+direct package graph. Package cycles (tangles) are therefore detected on the
+direct, non-propagated package graph; cycle-breaking and level assignment, by
+contrast, operate on the propagated graph.
 
 A concrete numerical example: the class dependencies
 \texttt{com.a.A}$\to$\texttt{net.b.B} and \texttt{com.a.B}$\to$\texttt{net.b.B}
@@ -393,6 +400,11 @@ information. In this case, all internal edges are removed and the levels of the
 affected nodes are determined solely by dependencies outside the former SCC. If
 no such dependencies exist either, the nodes remain at the same level~-- as
 genuine peers with no justifiable ordering.
+
+Both kinds of cuts are applied iteratively: after each pass, the SCCs are
+recomputed, and for any remaining residual SCCs the ranks are recalculated over
+their members. The procedure ends when no SCC with at least two members
+remains.
 
 Symmetry detection is based on the rank measure, not on weight comparison. An
 SCC in which all edges carry the same weight is not necessarily symmetric:
@@ -447,7 +459,9 @@ edge $A \to B$ inside such an SCC is cut when
 $\mathit{pkgLevel}(A) < \mathit{pkgLevel}(B)$ — it runs from a
 lower-positioned package toward a higher-positioned one, against the
 architectural direction. The edge is then not an arbitrary cut edge but a
-concrete dependency that violates the package order.
+concrete dependency that violates the package order. The cut is applied
+iteratively until no edge inside an SCC runs against the package hypothesis;
+SCCs that remain afterwards are handled by Case~B.
 
 \textbf{Case B} covers SCCs confined entirely to a single package level — no
 package context provides a direction. All internal edges of such an SCC are
@@ -589,6 +603,11 @@ information that justifies this position is available.
 \begin{enumerate}
   \item \textbf{Build the class graph:} A directed class graph is created from
         the bytecode. This graph remains the domain raw model of the analysis.
+        Only edges that carry at least one relationship of kind
+        \texttt{extends}, \texttt{implements}, \texttt{imports},
+        \texttt{instantiates}, or \texttt{calls} enter the ordering
+        computation; pure type references (field types, parameter and return
+        types, casts) remain in the raw model but are not considered.
   \item \textbf{Detect SCCs:} Strongly connected components are determined on
         the class graph using Tarjan. The result is not yet a layout; it is the
         information which classes can be ordered acyclically and which belong
@@ -600,9 +619,11 @@ information that justifies this position is available.
         a single flat graph spanning all packages.
   \item \textbf{Compute package ordering:} The rank measure $rank(P)$ is
         computed from the weighted incoming and outgoing edges. All edges for
-        which $rank(P) < rank(Q)$ holds are classified as back edges and cut in
-        one pass. If all ranks within an SCC are equal, all internal edges are
-        removed; levels then arise from dependencies outside the former SCC.
+        which $rank(P) < rank(Q)$ holds are classified as back edges and cut;
+        residual SCCs are processed again with recomputed ranks until the
+        package graph is acyclic. If all ranks within an SCC are equal, all
+        internal edges are removed; levels then arise from dependencies outside
+        the former SCC.
   \item \textbf{Determine class back edges:} Class SCCs are broken using the
         package hypothesis. \emph{Case A} — an edge $A \to B$ inside an SCC
         is cut when $\mathit{pkgLevel}(A) < \mathit{pkgLevel}(B)$: it runs
