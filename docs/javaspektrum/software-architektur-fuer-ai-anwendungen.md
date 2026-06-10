@@ -39,11 +39,11 @@ Ein Java-Projekt sieht auf der Platte zunächst geordnet aus: Packages, Maven-Mo
 
 Architektur zeigt sich im Code vor allem durch gerichtete Abhängigkeiten. In einer geschichteten Darstellung steht die nutzende Klasse oben, die genutzte darunter. Eine Kante nach oben ist auffällig, weil sie auf eine gebrochene Schichtung, einen Zyklus oder eine unklare Verantwortung hinweisen kann.
 
-Das ist die bekannte Idee hinter Tools wie Structure101: Containment macht die verschachtelte Struktur sichtbar, Levelization ordnet diese Container nach ihren Abhängigkeiten. Structure101 konnte davon schon sehr viel. Für mich war es über Jahre das Arbeitsmodell, das ich als Architekt haben wollte: nicht nur Dateien, sondern eine Karte der tatsächlichen Kopplung.
+Das ist die bekannte Idee hinter Tools wie Structure101 [2]: Containment macht die verschachtelte Struktur sichtbar, Levelization ordnet diese Container nach ihren Abhängigkeiten [3]. Structure101 konnte davon schon sehr viel. Für mich war es über Jahre das Arbeitsmodell, das ich als Architekt haben wollte: nicht nur Dateien, sondern eine Karte der tatsächlichen Kopplung.
 
 Warum also noch ein neues Werkzeug? Vor der KI-Zeit wäre S202 kaum finanzierbar gewesen. Der Markt für ein spezialisiertes Architekturwerkzeug ist klein, und ein etabliertes Produkt deckte viele Anforderungen bereits ab. KI verändert hier nicht die Architekturtheorie, sondern die Ökonomie: Ein Nischenwerkzeug lässt sich heute in fokussierten Claude- oder Codex-Sessions bauen, umbauen und auf konkrete Situationen zuschneiden.
 
-Daraus entstand S202: zuerst als Structure101-inspiriertes Arbeitsmodell für Java-Bytecode, dann immer stärker als Architekturwerkbank. S202 ist Open Source unter der Apache-2.0-Lizenz: [github.com/Weigend/S202](https://github.com/Weigend/S202). Heute liest S202 auch Python- und C-Quellbäume in dasselbe Abhängigkeitsmodell ein. Neben klassischer Schichtung unterstützt es Komponentenarchitekturen mit expliziten API-Flächen, Implementierungsbereichen und Verletzungen wie "Komponente umgeht API" oder "API leakt Implementierung".
+Daraus entstand S202: zuerst als Structure101-inspiriertes Arbeitsmodell für Java-Bytecode, dann immer stärker als Architekturwerkbank. S202 ist Open Source unter der Apache-2.0-Lizenz [1]. Heute liest S202 auch Python-, C- und Go-Quellbäume in dasselbe Abhängigkeitsmodell ein. Neben klassischer Schichtung unterstützt es Komponentenarchitekturen mit expliziten API-Flächen, Implementierungsbereichen und Verletzungen wie "Komponente umgeht API" oder "API leakt Implementierung".
 
 Interessanter als das Werkzeug selbst ist aber, was passierte, als S202 auf sich selbst angewendet wurde.
 
@@ -132,7 +132,15 @@ Die kleine Annotation-Bibliothek `s202-annotations` ist ein Beispiel dafür. Mit
 
 S202 ist nicht einfach eine freie Kopie eines alten Werkzeugs. Das Vorbild Containment und Levelization bleibt wichtig, aber die Anforderungen haben sich verschoben. Komponentenarchitekturen sind nicht nur Schichten mit anderen Namen: Ein erlaubter Zugriff auf `domain.architecture.Architecture` ist etwas anderes als ein direkter Zugriff auf `domain.impl.LevelCalculator`. Diese Unterscheidung ist in KI-Reviews wichtig, weil generierter Code oft den gerade sichtbaren konkreten Typ verwendet, wenn ihm keine harte Grenze entgegensteht.
 
-Auch Sprache ist heute weniger stabil als früher. Ein Produkt kann Java-Services, Python-Automatisierung, C-Bibliotheken und Konfigurationsartefakte enthalten. S202s Reader-Schnittstelle ist deshalb offen; Java-Bytecode ist der robuste Startpunkt, Python und C zeigen die Erweiterbarkeit, Go und TypeScript sind geplant. Ein erster Reader für eine beliebige Sprache, der Imports und Aufrufe in das gemeinsame DependencyModel übersetzt, lässt sich in einer Vibe-Coding-Session oft in unter einer Stunde bauen.
+Auch Sprache ist heute weniger stabil als früher. Ein Produkt kann Java-Services, Python-Automatisierung, C-Bibliotheken und Konfigurationsartefakte enthalten. S202s Reader-Schnittstelle ist deshalb offen; Java-Bytecode ist der robuste Startpunkt, Python, C und Go zeigen die Erweiterbarkeit, TypeScript ist geplant. Ein erster Reader für eine beliebige Sprache, der Imports und Aufrufe in das gemeinsame DependencyModel übersetzt, lässt sich in einer Vibe-Coding-Session oft in unter einer Stunde bauen.
+
+Der Go-Reader lieferte gleich einen Praxistest auf fremdem Code: eine Analyse von etcd, dem verteilten Key-Value-Store hinter Kubernetes [4]. Der Qualitätsreport aggregiert Strukturbefunde — Größe, Paket-Ungleichgewichte, Zyklen und Verletzungen — zu einem Score von 0 bis 100 und entsteht in wenigen Sekunden. etcd erreichte 59 Punkte: 56 Verletzungen der berechneten Schichtung, ein Paketzyklus und zehn Klassenzyklen, verteilt über 57 Pakete; dazu weist der Report 96 Zugriffe an den erkannten API-Grenzen vorbei separat aus.
+
+![Qualitätsreport der etcd-Analyse mit Score und Befundübersicht.](figures/etcd-quality-report.png)
+
+*Abbildung 5: Der in Sekunden generierte Qualitätsreport der etcd-Analyse: Score, Befundtreiber und Executive Summary.*
+
+Das sagt nichts gegen etcd: Das Projekt ist funktional ausgereift und betrieblich bewährt. Es zeigt aber, dass selbst in einem Aushängeschild der Cloud-Native-Community strukturelle Schulden und Unstimmigkeiten stecken, die vermutlich noch nie jemand systematisch angesehen hat — weil das Sichtbarmachen bisher schlicht zu aufwendig war.
 
 Dasselbe gilt für Architekturprojektionen. Neben der klassischen Schichtung gibt es Komponenten- und Hexagonal-Sichten, alle auf demselben DependencyModel. In What-If-Analysen kann zudem eine Zielordnung ausprobiert werden, ohne den Code zu ändern. Für KI-Refactorings ist das entscheidend: Der Mensch formuliert das Zielbild, die KI hilft bei der Umsetzung, und das Modell prüft anschließend, ob die Struktur wirklich besser geworden ist.
 
@@ -151,6 +159,16 @@ Die Developer Experience Revolution besteht nicht nur darin, dass KI schneller C
 Die S202-Selbstanalyse zeigt dafür einen praktischen Arbeitsmodus. Zuerst wird die Codebasis in ein Abhängigkeitsmodell überführt. Dann werden Schichten, Komponenten, API-Flächen und Verletzungen sichtbar. Daraus entsteht kein abstraktes Architekturpapier, sondern eine konkrete Refactoring-Liste. Die Umsetzung kann mit KI-Unterstützung schnell erfolgen, aber das Ziel bleibt menschlich begründet und anschließend messbar.
 
 S202 ist in diesem Sinn weniger Produktversprechen als Erfahrungsbericht: Ein Architekturwerkzeug, das ich vor der KI-Zeit gerne gehabt hätte, das sich wirtschaftlich aber kaum bauen ließ. Mit KI-Unterstützung wurde es möglich, und mit S202 selbst wurde die eigene Architektur besser. Darin liegt die eigentliche Erkenntnis für KI-Codebasen: Nicht der schnellste Code gewinnt, sondern der, dessen Struktur ein Team noch sehen, erklären und gezielt verändern kann.
+
+## Literatur und Links
+
+[1] S202 — Architekturwerkzeug, Open Source (Apache 2.0): [github.com/Weigend/S202](https://github.com/Weigend/S202)
+
+[2] Structure101 — Software-Architektur-Werkzeug: [structure101.com](https://structure101.com)
+
+[3] J. Lakos: Large-Scale C++ Software Design. Addison-Wesley, 1996
+
+[4] etcd — Distributed reliable key-value store: [etcd.io](https://etcd.io)
 
 ## Autor
 
