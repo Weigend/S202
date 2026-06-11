@@ -110,6 +110,12 @@ public class ArchitectureView extends BorderPane {
     private StackPane contentPane;
     private ArchitectureNode currentRootNode;
     private final Map<String, javafx.scene.Node> elementRegistry = new HashMap<>();
+    /**
+     * Expand/collapse state of the hexagonal package overlay, keyed by package
+     * FQN. Held here (not in the UI nodes) because the hexagonal view is fully
+     * rebuilt on every annotation change.
+     */
+    private final Map<String, Boolean> hexagonalPackageExpansionState = new HashMap<>();
 
     // Renderers and builders
     private DependencyRendererStrategy dependencyRenderer;
@@ -408,7 +414,8 @@ public class ArchitectureView extends BorderPane {
                             getArchitectureAnnotations(),
                             architecture.get() instanceof HexagonalArchitecture hex ? hex : null,
                             this::handleHexagonalAnnotationsChanged,
-                            arrowsCoalescer::markDirty);
+                            arrowsCoalescer::markDirty,
+                            hexagonalPackageExpansionState);
             return hexagonalBuilder.buildTree(rootNode, maxDepth);
         }
 
@@ -440,7 +447,8 @@ public class ArchitectureView extends BorderPane {
                             getArchitectureAnnotations(),
                             architecture.get() instanceof HexagonalArchitecture hex ? hex : null,
                             this::handleHexagonalAnnotationsChanged,
-                            arrowsCoalescer::markDirty);
+                            arrowsCoalescer::markDirty,
+                            hexagonalPackageExpansionState);
             hexagonalBuilder.buildTreeAsync(rootNode, maxDepth, progressSink, onComplete);
             return;
         }

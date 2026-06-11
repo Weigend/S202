@@ -95,6 +95,98 @@ class HexagonalArchitectureBuilderTest {
     }
 
     @Test
+    void packagesAreProjectedAsElementsWithRingFromPackageLevel() {
+        DomainModel domain = new DomainModel();
+        pkg(domain, "com", 0);
+        pkg(domain, "com.acme", 0);
+        pkg(domain, "com.acme.domain", 0);
+        pkg(domain, "com.acme.app", 3);
+        pkg(domain, "com.acme.rest", 6);
+
+        // Class levels deliberately contradict their package level: the high-level
+        // Entity must stay CORE and the level-0 AppService must stay APPLICATION,
+        // because classes inherit the ring of their package.
+        cls(domain, "com.acme.domain.Entity", false, 5, Set.of());
+        cls(domain, "com.acme.app.AppService", false, 0, Set.of("com.acme.domain.Entity"));
+        cls(domain, "com.acme.rest.RestController", false, 6, Set.of("com.acme.app.AppService"));
+
+        HexagonalArchitecture architecture = new HexagonalArchitectureBuilder()
+                .build(domain, ArchitectureAnnotations.empty());
+
+        assertPackageRing(architecture, "com.acme.domain", HexagonalArchitecture.RingRole.CORE);
+        assertPackageRing(architecture, "com.acme.app", HexagonalArchitecture.RingRole.APPLICATION);
+        assertPackageRing(architecture, "com.acme.rest", HexagonalArchitecture.RingRole.ADAPTER);
+
+        assertElementRing(architecture, "com.acme.domain.Entity", HexagonalArchitecture.RingRole.CORE);
+        assertElementRing(architecture, "com.acme.app.AppService", HexagonalArchitecture.RingRole.APPLICATION);
+        assertElementRing(architecture, "com.acme.rest.RestController", HexagonalArchitecture.RingRole.ADAPTER);
+    }
+
+    @Test
+    void explicitAnnotationsOverrideInheritedPackageRing() {
+        DomainModel domain = new DomainModel();
+        pkg(domain, "com", 0);
+        pkg(domain, "com.acme", 0);
+        pkg(domain, "com.acme.domain", 0);
+        pkg(domain, "com.acme.rest", 2);
+
+        cls(domain, "com.acme.domain.Entity", false, 0, Set.of());
+        cls(domain, "com.acme.domain.LoadPort", true, 0, Set.of());
+        cls(domain, "com.acme.rest.RestController", false, 2, Set.of());
+        cls(domain, "com.acme.rest.SharedRule", false, 2, Set.of());
+
+        ArchitectureAnnotations annotations = ArchitectureAnnotations.empty()
+                .withElementRole("com.acme.rest.SharedRule", ArchitectureAnnotations.ElementRole.CORE)
+                .withPort("com.acme.domain.LoadPort",
+                        ArchitectureAnnotations.PortDirection.OUTBOUND,
+                        "com.acme.domain");
+
+        HexagonalArchitecture architecture = new HexagonalArchitectureBuilder()
+                .build(domain, annotations);
+
+        assertPackageRing(architecture, "com.acme.rest", HexagonalArchitecture.RingRole.ADAPTER);
+        // Explicit class role beats the inherited ADAPTER ring.
+        assertElementRing(architecture, "com.acme.rest.SharedRule", HexagonalArchitecture.RingRole.CORE);
+        assertElementRing(architecture, "com.acme.rest.RestController", HexagonalArchitecture.RingRole.ADAPTER);
+        // Explicit ports sit on the application boundary regardless of package ring.
+        assertElementRing(architecture, "com.acme.domain.LoadPort", HexagonalArchitecture.RingRole.APPLICATION);
+    }
+
+    @Test
+    void segmentModelProjectsPackagesOfEverySegment() {
+        DomainModel domain = domainModel();
+        ArchitectureAnnotations annotations = ArchitectureAnnotations.empty()
+                .withElementRole("com.acme.web", ArchitectureAnnotations.ElementRole.ADAPTER)
+                .withElementRole("com.acme.order.domain", ArchitectureAnnotations.ElementRole.CORE);
+
+        HexagonalArchitecture architecture = new HexagonalArchitectureBuilder()
+                .build(domain, annotations);
+
+        Map<String, HexagonalArchitecture.HexElement> packages = architecture.elements().stream()
+                .filter(element -> !element.classElement())
+                .collect(Collectors.toMap(HexagonalArchitecture.HexElement::fqn, element -> element));
+        assertEquals(Set.of(
+                        "com.acme.order.application",
+                        "com.acme.order.domain",
+                        "com.acme.persistence",
+                        "com.acme.web"),
+                packages.keySet());
+        assertEquals("com.acme.order", packages.get("com.acme.order.application").segmentId());
+        assertEquals("com.acme.web", packages.get("com.acme.web").segmentId());
+        assertEquals(HexagonalArchitecture.RingRole.CORE,
+                packages.get("com.acme.order.domain").ringRole());
+        assertEquals(HexagonalArchitecture.RingRole.ADAPTER,
+                packages.get("com.acme.web").ringRole());
+
+        // Every class element keeps pointing at a projected package.
+        architecture.elements().stream()
+                .filter(HexagonalArchitecture.HexElement::classElement)
+                .forEach(element -> assertTrue(
+                        packages.containsKey(element.fqn().substring(0, element.fqn().lastIndexOf('.'))),
+                        () -> "No projected package for " + element.fqn()));
+    }
+
+    @Test
     void hexagonalProjectionDoesNotMutateCalculatedLevels() {
         DomainModel domain = domainModel();
         Map<String, Integer> before = classLevels(domain);
@@ -136,9 +228,21 @@ class HexagonalArchitectureBuilderTest {
                                           String fqn,
                                           HexagonalArchitecture.RingRole expected) {
         HexagonalArchitecture.HexElement element = architecture.elements().stream()
+                .filter(HexagonalArchitecture.HexElement::classElement)
                 .filter(e -> e.fqn().equals(fqn))
                 .findFirst()
                 .orElseThrow();
+        assertEquals(expected, element.ringRole());
+    }
+
+    private static void assertPackageRing(HexagonalArchitecture architecture,
+                                          String fqn,
+                                          HexagonalArchitecture.RingRole expected) {
+        HexagonalArchitecture.HexElement element = architecture.elements().stream()
+                .filter(e -> !e.classElement())
+                .filter(e -> e.fqn().equals(fqn))
+                .findFirst()
+                .orElseThrow(() -> new AssertionError("No package element for " + fqn));
         assertEquals(expected, element.ringRole());
     }
 

@@ -41,8 +41,12 @@ import java.util.Set;
 
 /**
  * Builds the hexagonal architecture projection from the already-calculated
- * domain model. The builder maps classes to radial rings and segments and then
- * classifies policy findings. It never changes architecture levels.
+ * domain model. Ring assignment happens at PACKAGE granularity: each package
+ * that directly contains classes is projected as a package element whose ring
+ * derives from the package architectureLevel (explicit annotations win), and
+ * classes inherit the ring of their package. Only explicit port/role
+ * annotations override the inherited ring for individual classes. The builder
+ * never changes architecture levels.
  */
 @Singleton
 public final class HexagonalArchitectureBuilder implements ArchitectureStyle {
@@ -83,7 +87,23 @@ public final class HexagonalArchitectureBuilder implements ArchitectureStyle {
         List<HexagonalArchitecture.HexElement> elements = new ArrayList<>();
         List<HexagonalArchitecture.HexPort> ports = new ArrayList<>();
 
-        int maxLevel = Math.max(0, domain.getMaxLevel());
+        Map<String, PackageProjection> packagesByFqn =
+                projectPackages(index, segmentByClass, effectiveAnnotations);
+        for (PackageProjection pkg : packagesByFqn.values()) {
+            elements.add(new HexagonalArchitecture.HexElement(
+                    pkg.fqn(),
+                    pkg.simpleName(),
+                    false,
+                    pkg.segmentId(),
+                    pkg.ringRole(),
+                    pkg.elementRole(),
+                    pkg.architectureLevel(),
+                    pkg.localLevel(),
+                    false,
+                    false,
+                    false));
+        }
+
         for (CalculatedElementInfo cls : sortedClasses(domain)) {
             SegmentRoot segment = segmentByClass.get(cls.fullName);
             if (segment == null) {
@@ -92,8 +112,9 @@ public final class HexagonalArchitectureBuilder implements ArchitectureStyle {
             boolean componentApi = isComponentApiCandidate(cls, index, apiClassifier);
             ArchitectureAnnotations.PortSpec explicitPort = effectiveAnnotations.explicitPort(cls.fullName);
             ArchitectureAnnotations.ElementRole elementRole = effectiveAnnotations.explicitElementRole(cls.fullName);
+            PackageProjection parentPackage = packagesByFqn.get(parentOf(cls.fullName));
             HexagonalArchitecture.RingRole ringRole =
-                    classifyRing(cls, maxLevel, elementRole, explicitPort, componentApi);
+                    ringForClass(elementRole, explicitPort, parentPackage);
             boolean portCandidate = componentApi || explicitPort != null;
             boolean explicitPortElement = explicitPort != null;
 
@@ -192,11 +213,89 @@ public final class HexagonalArchitectureBuilder implements ArchitectureStyle {
         return membership;
     }
 
-    private static HexagonalArchitecture.RingRole classifyRing(CalculatedElementInfo cls,
-                                                               int maxLevel,
-                                                               ArchitectureAnnotations.ElementRole role,
+    /**
+     * Projects every package that directly contains at least one segment-owned
+     * class. The package ring derives from the package architectureLevel
+     * relative to the maximum projected package level; an explicit ElementRole
+     * annotation on the package FQN wins over the level bucket.
+     */
+    private static Map<String, PackageProjection> projectPackages(ModelIndex index,
+                                                                  Map<String, SegmentRoot> segmentByClass,
+                                                                  ArchitectureAnnotations annotations) {
+        Map<String, SegmentRoot> segmentByPackage = new LinkedHashMap<>();
+        for (Map.Entry<String, SegmentRoot> entry : segmentByClass.entrySet()) {
+            segmentByPackage.putIfAbsent(parentOf(entry.getKey()), entry.getValue());
+        }
+
+        int maxPackageLevel = 0;
+        for (String packageFqn : segmentByPackage.keySet()) {
+            CalculatedElementInfo pkg = index.packages().get(packageFqn);
+            if (pkg != null) {
+                maxPackageLevel = Math.max(maxPackageLevel, pkg.architectureLevel);
+            }
+        }
+
+        Map<String, PackageProjection> result = new LinkedHashMap<>();
+        for (Map.Entry<String, SegmentRoot> entry : segmentByPackage.entrySet().stream()
+                .sorted(Map.Entry.comparingByKey())
+                .toList()) {
+            String packageFqn = entry.getKey();
+            if (packageFqn.isEmpty()) {
+                continue;
+            }
+            CalculatedElementInfo pkg = index.packages().get(packageFqn);
+            int architectureLevel = pkg == null ? 0 : pkg.architectureLevel;
+            int localLevel = pkg == null ? 0 : pkg.localLevel;
+            String simpleName = pkg == null
+                    ? packageFqn.substring(packageFqn.lastIndexOf('.') + 1)
+                    : pkg.simpleName;
+            ArchitectureAnnotations.ElementRole role = annotations.explicitElementRole(packageFqn);
+            result.put(packageFqn, new PackageProjection(
+                    packageFqn,
+                    simpleName,
+                    entry.getValue().id(),
+                    classifyPackageRing(role, architectureLevel, maxPackageLevel),
+                    role,
+                    architectureLevel,
+                    localLevel));
+        }
+        return result;
+    }
+
+    private static HexagonalArchitecture.RingRole classifyPackageRing(ArchitectureAnnotations.ElementRole role,
+                                                                      int packageLevel,
+                                                                      int maxPackageLevel) {
+        if (role == ArchitectureAnnotations.ElementRole.CORE) {
+            return HexagonalArchitecture.RingRole.CORE;
+        }
+        if (role == ArchitectureAnnotations.ElementRole.ADAPTER) {
+            return HexagonalArchitecture.RingRole.ADAPTER;
+        }
+        if (role == ArchitectureAnnotations.ElementRole.INBOUND_PORT
+                || role == ArchitectureAnnotations.ElementRole.OUTBOUND_PORT) {
+            return HexagonalArchitecture.RingRole.APPLICATION;
+        }
+        if (maxPackageLevel <= 0) {
+            return HexagonalArchitecture.RingRole.CORE;
+        }
+        double ratio = packageLevel / (double) maxPackageLevel;
+        if (ratio <= 0.34) {
+            return HexagonalArchitecture.RingRole.CORE;
+        }
+        if (ratio <= 0.67) {
+            return HexagonalArchitecture.RingRole.APPLICATION;
+        }
+        return HexagonalArchitecture.RingRole.ADAPTER;
+    }
+
+    /**
+     * Classes inherit the ring of their package. Only explicit class-level
+     * annotations (role or port) override the inherited ring; ports sit on the
+     * application boundary by definition.
+     */
+    private static HexagonalArchitecture.RingRole ringForClass(ArchitectureAnnotations.ElementRole role,
                                                                ArchitectureAnnotations.PortSpec explicitPort,
-                                                               boolean componentApi) {
+                                                               PackageProjection parentPackage) {
         if (role == ArchitectureAnnotations.ElementRole.CORE) {
             return HexagonalArchitecture.RingRole.CORE;
         }
@@ -205,21 +304,12 @@ public final class HexagonalArchitectureBuilder implements ArchitectureStyle {
         }
         if (role == ArchitectureAnnotations.ElementRole.INBOUND_PORT
                 || role == ArchitectureAnnotations.ElementRole.OUTBOUND_PORT
-                || explicitPort != null
-                || componentApi) {
+                || explicitPort != null) {
             return HexagonalArchitecture.RingRole.APPLICATION;
         }
-        if (maxLevel <= 0) {
-            return HexagonalArchitecture.RingRole.CORE;
-        }
-        double ratio = cls.architectureLevel / (double) maxLevel;
-        if (ratio <= 0.34) {
-            return HexagonalArchitecture.RingRole.CORE;
-        }
-        if (ratio <= 0.67) {
-            return HexagonalArchitecture.RingRole.APPLICATION;
-        }
-        return HexagonalArchitecture.RingRole.ADAPTER;
+        return parentPackage == null
+                ? HexagonalArchitecture.RingRole.APPLICATION
+                : parentPackage.ringRole();
     }
 
     private static boolean isComponentApiCandidate(CalculatedElementInfo cls,
@@ -366,6 +456,14 @@ public final class HexagonalArchitectureBuilder implements ArchitectureStyle {
     }
 
     private record SegmentRoot(String id, String label, String rootFqn, boolean explicit) {}
+
+    private record PackageProjection(String fqn,
+                                     String simpleName,
+                                     String segmentId,
+                                     HexagonalArchitecture.RingRole ringRole,
+                                     ArchitectureAnnotations.ElementRole elementRole,
+                                     int architectureLevel,
+                                     int localLevel) {}
 
     private record ElementProjection(String segmentId,
                                      HexagonalArchitecture.RingRole ringRole,
