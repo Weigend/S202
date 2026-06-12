@@ -19,6 +19,7 @@ import de.weigend.s202.domain.architecture.ArchitectureAnnotations;
 import de.weigend.s202.domain.architecture.HexagonalArchitecture;
 import de.weigend.s202.ui.GraphSelection;
 import de.weigend.s202.ui.LevelClassBox;
+import de.weigend.s202.ui.LevelPackageBox;
 import de.weigend.s202.ui.model.ArchitectureNode;
 import javafx.application.Platform;
 import javafx.geometry.Insets;
@@ -34,6 +35,7 @@ import javafx.scene.layout.HBox;
 import javafx.scene.layout.Pane;
 import javafx.scene.layout.Priority;
 import javafx.scene.layout.Region;
+import javafx.scene.layout.StackPane;
 import javafx.scene.layout.VBox;
 import javafx.scene.paint.Color;
 import javafx.scene.shape.Circle;
@@ -269,6 +271,9 @@ public final class HexagonalArchitectureTreeBuilder {
                 + " -fx-border-color: #9aa7b5; -fx-border-width: 1;"
                 + " -fx-padding: 3 7; -fx-background-radius: 3; -fx-border-radius: 3;");
         summary.setVisible(false);
+        // Purely informational — it may overlap the header at some angles and
+        // must never swallow the click that re-expands the segment.
+        summary.setMouseTransparent(true);
 
         List<Node> details = new ArrayList<>();
         List<Runnable> cardVisibilityUpdaters = new ArrayList<>();
@@ -422,7 +427,7 @@ public final class HexagonalArchitectureTreeBuilder {
         }
 
         Runnable[] closeAction = new Runnable[1];
-        VBox card = buildLayeredCard(segment, spec,
+        Node card = buildOverlayCard(segment, spec,
                 () -> {
                     if (closeAction[0] != null) {
                         closeAction[0].run();
@@ -476,31 +481,39 @@ public final class HexagonalArchitectureTreeBuilder {
     }
 
     /**
-     * The expand overlay: the classes of the group in the familiar layered
-     * representation — one row per ARCHITECTURE level (the global semantic
-     * depth, not the layout index inside the parent container), highest level
-     * on top, exactly like the Architecture View orders its layers.
+     * The expand overlay: a real {@link LevelPackageBox} — the exact package
+     * representation of the Architecture View — filled with the group's
+     * classes, one row per ARCHITECTURE level (the global semantic depth,
+     * not the layout index inside the parent container), highest level on
+     * top. A close button floats over the top-right corner so a card can
+     * always be dismissed even when its group box is covered.
      */
-    private VBox buildLayeredCard(HexagonalArchitecture.HexSegment segment, GroupSpec spec, Runnable closeAction) {
-        VBox card = new VBox(4);
-        card.setAlignment(Pos.CENTER);
-        card.setMaxWidth(360);
-        card.setStyle("-fx-background-color: rgba(255,255,255,0.97);"
-                + " -fx-border-color: #475569; -fx-border-width: 1.4;"
-                + " -fx-padding: 7; -fx-background-radius: 5; -fx-border-radius: 5;"
-                + " -fx-effect: dropshadow(gaussian, rgba(15,23,42,0.35), 9, 0.2, 0, 2);");
-        // Hidden card contents roll arrows up to the group box.
-        card.getProperties().put("s202.rollupEndpointFqn", spec.key());
-
-        Label title = new Label(spec.socket()
+    private Node buildOverlayCard(HexagonalArchitecture.HexSegment segment, GroupSpec spec, Runnable closeAction) {
+        String title = spec.socket()
                 ? spec.label() + " — " + segment.label()
-                : spec.packageFqn());
-        title.setStyle("-fx-font-size: 10px; -fx-font-weight: bold; -fx-text-fill: #1e293b;");
-        Region spacer = new Region();
-        HBox.setHgrow(spacer, Priority.ALWAYS);
+                : spec.label();
+        LevelPackageBox packageBox = new LevelPackageBox(title, -1, false, spec.packageFqn(), -1);
+        packageBox.setSelectionChangeSink(selectionChangeSink);
+
+        spec.classes().stream()
+                .sorted(Comparator.comparing(HexagonalArchitecture.HexElement::fqn))
+                .forEach(element -> {
+                    LevelClassBox box = classBox(element);
+                    if (element.explicitPort()) {
+                        box.setStyle("-fx-background-color: #ffd28a; -fx-border-color: #b45309;"
+                                + " -fx-border-width: 2;");
+                    } else if (element.portCandidate()) {
+                        box.setStyle("-fx-background-color: #fff7d6; -fx-border-color: #ca8a04;"
+                                + " -fx-border-width: 1.5;");
+                    }
+                    installClassContextMenu(box, element, segment.id());
+                    elementRegistry.put(element.fqn(), box);
+                    packageBox.addToLevel(element.architectureLevel(), box);
+                });
+
         Label close = new Label("✕");
-        close.setStyle("-fx-font-size: 11px; -fx-font-weight: bold; -fx-text-fill: #64748b;"
-                + " -fx-padding: 0 2;");
+        close.setStyle("-fx-font-size: 11px; -fx-font-weight: bold; -fx-text-fill: #475569;"
+                + " -fx-background-color: rgba(255,255,255,0.85); -fx-padding: 0 3;");
         close.setCursor(Cursor.HAND);
         close.setOnMouseClicked(event -> {
             if (event.getButton() == MouseButton.PRIMARY) {
@@ -508,34 +521,14 @@ public final class HexagonalArchitectureTreeBuilder {
                 event.consume();
             }
         });
-        HBox headerRow = new HBox(6, title, spacer, close);
-        headerRow.setAlignment(Pos.CENTER_LEFT);
-        card.getChildren().add(headerRow);
 
-        Map<Integer, List<HexagonalArchitecture.HexElement>> byLevel = new TreeMap<>(Comparator.reverseOrder());
-        for (HexagonalArchitecture.HexElement element : spec.classes()) {
-            byLevel.computeIfAbsent(element.architectureLevel(), k -> new ArrayList<>()).add(element);
-        }
-        for (List<HexagonalArchitecture.HexElement> row : byLevel.values()) {
-            HBox levelRow = new HBox(4);
-            levelRow.setAlignment(Pos.CENTER);
-            row.stream()
-                    .sorted(Comparator.comparing(HexagonalArchitecture.HexElement::fqn))
-                    .forEach(element -> {
-                        LevelClassBox box = classBox(element);
-                        if (element.explicitPort()) {
-                            box.setStyle("-fx-background-color: #ffd28a; -fx-border-color: #b45309;"
-                                    + " -fx-border-width: 2;");
-                        } else if (element.portCandidate()) {
-                            box.setStyle("-fx-background-color: #fff7d6; -fx-border-color: #ca8a04;"
-                                    + " -fx-border-width: 1.5;");
-                        }
-                        installClassContextMenu(box, element, segment.id());
-                        elementRegistry.put(element.fqn(), box);
-                        levelRow.getChildren().add(box);
-                    });
-            card.getChildren().add(levelRow);
-        }
+        StackPane card = new StackPane(packageBox, close);
+        StackPane.setAlignment(close, Pos.TOP_RIGHT);
+        StackPane.setMargin(close, new Insets(2, 3, 0, 0));
+        card.setMaxWidth(380);
+        card.setEffect(new javafx.scene.effect.DropShadow(9, 0, 2, Color.web("#0f172a59")));
+        // Hidden card contents roll arrows up to the group box.
+        card.getProperties().put("s202.rollupEndpointFqn", spec.key());
         return card;
     }
 
