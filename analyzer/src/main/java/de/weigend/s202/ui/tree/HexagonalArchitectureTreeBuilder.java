@@ -616,9 +616,12 @@ public final class HexagonalArchitectureTreeBuilder {
 
     /**
      * Radius inside the ring band for a group whose normalized level position
-     * is {@code levelT} (0 = lowest level in the ring). Low-level packages are
-     * the ring's API and sit towards the band's OUTER edge — the shell presents
-     * its contact surface to the next ring (see HEXAGONAL_PACKAGE_LEVEL_CONCEPT).
+     * is {@code levelT} (0 = lowest level in the ring). In the inner rings the
+     * shell presents its contact surface outward: low-level packages are the
+     * ring's API and sit towards the band's OUTER edge. The ADAPTER ring
+     * inverts this — its outward-facing surface is the entry point to the
+     * world, so the HIGHEST level (bootstrap, main) sits outermost (see
+     * HEXAGONAL_PACKAGE_LEVEL_CONCEPT).
      */
     private double bandRadius(HexagonalArchitecture.RingRole ring, double levelT) {
         double inner;
@@ -635,6 +638,7 @@ public final class HexagonalArchitectureTreeBuilder {
             default -> {
                 inner = APPLICATION_RADIUS + 30;
                 outer = ADAPTER_RADIUS - 30;
+                return inner + levelT * (outer - inner);
             }
         }
         return outer - levelT * (outer - inner);

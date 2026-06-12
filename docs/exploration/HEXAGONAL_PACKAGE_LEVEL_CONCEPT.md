@@ -328,7 +328,10 @@ APPLICATION - eine aufklappbare Box fuer die Service-Klassen des Themas.
               spi/api; KEINE Ring-Vorbedingung, da Vertragspakete auf
               Level 0 liegen).
 ADAPTER     - eine aufklappbare Box pro (Adapter-Paket x Thema), radial
-              nach Paket-Level gestaffelt wie bisher.
+              nach Paket-Level gestaffelt -- hier mit UMGEKEHRTER
+              Richtung: die Aussenflaeche des Adapter-Rings ist die
+              Schnittstelle zur Welt, also sitzt das HOECHSTE Level
+              (bootstrap/main) ganz aussen, nicht innen.
 
 Jede Overlay-Karte traegt ein Schliessen-Symbol (x) im Kopf -- sonst
 bleiben aufgeklappte Karten haengen, wenn die zugehoerige Box verdeckt
