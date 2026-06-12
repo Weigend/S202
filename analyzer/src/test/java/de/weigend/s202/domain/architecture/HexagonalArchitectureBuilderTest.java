@@ -50,7 +50,10 @@ class HexagonalArchitectureBuilderTest {
         HexagonalArchitecture architecture = new HexagonalArchitectureBuilder()
                 .build(domain, annotations);
 
-        assertEquals(List.of("com.acme.order", "com.acme.persistence", "com.acme.web"),
+        // Segments are the business themes: the leaf packages of the core ring
+        // (order.domain is annotated CORE, order.application lands in CORE by
+        // package level). Adapters spread over the theme sectors by voting.
+        assertEquals(List.of("com.acme.order.application", "com.acme.order.domain"),
                 architecture.segments().stream()
                         .map(HexagonalArchitecture.HexSegment::rootFqn)
                         .toList());
@@ -171,8 +174,10 @@ class HexagonalArchitectureBuilderTest {
                         "com.acme.persistence",
                         "com.acme.web"),
                 packages.keySet());
-        assertEquals("com.acme.order", packages.get("com.acme.order.application").segmentId());
-        assertEquals("com.acme.web", packages.get("com.acme.web").segmentId());
+        // Themes here: order.application and order.domain. The web adapter
+        // package votes itself into the application theme via its dependencies.
+        assertEquals("com.acme.order.application", packages.get("com.acme.order.application").segmentId());
+        assertEquals("com.acme.order.application", packages.get("com.acme.web").segmentId());
         assertEquals(HexagonalArchitecture.RingRole.CORE,
                 packages.get("com.acme.order.domain").ringRole());
         assertEquals(HexagonalArchitecture.RingRole.ADAPTER,
@@ -184,6 +189,55 @@ class HexagonalArchitectureBuilderTest {
                 .forEach(element -> assertTrue(
                         packages.containsKey(element.fqn().substring(0, element.fqn().lastIndexOf('.'))),
                         () -> "No projected package for " + element.fqn()));
+    }
+
+    @Test
+    void themeSegmentationAssignsClassesByDependencyVoting() {
+        DomainModel domain = new DomainModel();
+        pkg(domain, "com", 0);
+        pkg(domain, "com.shop", 0);
+        pkg(domain, "com.shop.domain", 0);
+        pkg(domain, "com.shop.domain.book", 1);
+        pkg(domain, "com.shop.domain.publisher", 0);
+        pkg(domain, "com.shop.api", 2);
+        pkg(domain, "com.shop.rest", 3);
+
+        cls(domain, "com.shop.domain.publisher.Publisher", false, 0, Set.of());
+        cls(domain, "com.shop.domain.book.Book", false, 1, Set.of("com.shop.domain.publisher.Publisher"));
+        cls(domain, "com.shop.api.BookApi", true, 2, Set.of("com.shop.domain.book.Book"));
+        cls(domain, "com.shop.api.PublisherApi", true, 2, Set.of("com.shop.domain.publisher.Publisher"));
+        // No direct domain dependency: BookController reaches the book theme
+        // only through BookApi, i.e. via the second voting round.
+        cls(domain, "com.shop.rest.BookController", false, 3, Set.of("com.shop.api.BookApi"));
+
+        HexagonalArchitecture architecture = new HexagonalArchitectureBuilder()
+                .build(domain, ArchitectureAnnotations.empty());
+
+        assertEquals(List.of("com.shop.domain.book", "com.shop.domain.publisher"),
+                architecture.segments().stream()
+                        .map(HexagonalArchitecture.HexSegment::rootFqn)
+                        .toList());
+
+        assertEquals("com.shop.domain.book", classElement(architecture, "com.shop.api.BookApi").segmentId());
+        assertEquals("com.shop.domain.publisher", classElement(architecture, "com.shop.api.PublisherApi").segmentId());
+        assertEquals("com.shop.domain.book", classElement(architecture, "com.shop.rest.BookController").segmentId());
+
+        // The api package element lands in the majority theme of its classes
+        // (tie between book and publisher resolves alphabetically to book).
+        HexagonalArchitecture.HexElement apiPackage = architecture.elements().stream()
+                .filter(e -> !e.classElement())
+                .filter(e -> e.fqn().equals("com.shop.api"))
+                .findFirst()
+                .orElseThrow();
+        assertEquals("com.shop.domain.book", apiPackage.segmentId());
+    }
+
+    private static HexagonalArchitecture.HexElement classElement(HexagonalArchitecture architecture, String fqn) {
+        return architecture.elements().stream()
+                .filter(HexagonalArchitecture.HexElement::classElement)
+                .filter(e -> e.fqn().equals(fqn))
+                .findFirst()
+                .orElseThrow();
     }
 
     @Test

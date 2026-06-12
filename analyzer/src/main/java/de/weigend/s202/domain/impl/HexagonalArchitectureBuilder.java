@@ -81,32 +81,57 @@ public final class HexagonalArchitectureBuilder implements ArchitectureStyle {
                 annotations == null ? ArchitectureAnnotations.empty() : annotations;
         ModelIndex index = ModelIndex.of(domain);
         ComponentApiClassifier apiClassifier = new ComponentApiClassifier(effectiveAnnotations, rawModel);
-        List<SegmentRoot> roots = segmentRoots(domain, index, effectiveAnnotations, rawModel);
-        Map<String, SegmentRoot> segmentByClass = segmentMembership(index, roots);
+
+        Map<String, PackageProjection> packagesByFqn = projectPackages(index, effectiveAnnotations);
+
+        // Segments are the BUSINESS THEMES: the largest sibling group of core
+        // packages under one common parent (e.g. the four children of the
+        // domain package: book, publisher, inventory, logistics). Grouping by
+        // parent keeps contract packages like api/spi — whose interfaces sit
+        // at level 0 by design — from being mistaken for themes. Every class
+        // is assigned to one theme; the theme sector spans all rings. When the
+        // model has no recognizable themes, fall back to top-level segments.
+        Map<String, List<String>> coreLeavesByParent = new java.util.TreeMap<>();
+        for (PackageProjection pkg : packagesByFqn.values()) {
+            if (pkg.ringRole() == HexagonalArchitecture.RingRole.CORE) {
+                coreLeavesByParent.computeIfAbsent(parentOf(pkg.fqn()), k -> new ArrayList<>()).add(pkg.fqn());
+            }
+        }
+        List<String> themes = coreLeavesByParent.values().stream()
+                .max(Comparator.comparingInt(List::size))
+                .map(group -> group.stream().sorted().toList())
+                .orElse(List.of());
+        boolean themeMode = themes.size() >= 2;
+
+        List<HexagonalArchitecture.HexSegment> segments;
+        Map<String, String> segmentIdByClass;
+        if (themeMode) {
+            segments = themes.stream()
+                    .map(theme -> new HexagonalArchitecture.HexSegment(
+                            theme,
+                            packagesByFqn.get(theme).simpleName(),
+                            theme,
+                            false))
+                    .toList();
+            segmentIdByClass = assignClassesToThemes(domain, themes);
+        } else {
+            List<SegmentRoot> roots = segmentRoots(domain, index, effectiveAnnotations, rawModel);
+            Map<String, SegmentRoot> segmentByClass = segmentMembership(index, roots);
+            segments = roots.stream()
+                    .map(root -> new HexagonalArchitecture.HexSegment(
+                            root.id(), root.label(), root.rootFqn(), root.explicit()))
+                    .toList();
+            segmentIdByClass = new LinkedHashMap<>();
+            segmentByClass.forEach((fqn, root) -> segmentIdByClass.put(fqn, root.id()));
+        }
+
         Map<String, ElementProjection> projectionByClass = new LinkedHashMap<>();
         List<HexagonalArchitecture.HexElement> elements = new ArrayList<>();
         List<HexagonalArchitecture.HexPort> ports = new ArrayList<>();
 
-        Map<String, PackageProjection> packagesByFqn =
-                projectPackages(index, segmentByClass, effectiveAnnotations);
-        for (PackageProjection pkg : packagesByFqn.values()) {
-            elements.add(new HexagonalArchitecture.HexElement(
-                    pkg.fqn(),
-                    pkg.simpleName(),
-                    false,
-                    pkg.segmentId(),
-                    pkg.ringRole(),
-                    pkg.elementRole(),
-                    pkg.architectureLevel(),
-                    pkg.localLevel(),
-                    false,
-                    false,
-                    false));
-        }
-
         for (CalculatedElementInfo cls : sortedClasses(domain)) {
-            SegmentRoot segment = segmentByClass.get(cls.fullName);
-            if (segment == null) {
+            String segmentId = segmentIdByClass.get(cls.fullName);
+            if (segmentId == null) {
                 continue;
             }
             boolean componentApi = isComponentApiCandidate(cls, index, apiClassifier);
@@ -119,12 +144,12 @@ public final class HexagonalArchitectureBuilder implements ArchitectureStyle {
             boolean explicitPortElement = explicitPort != null;
 
             projectionByClass.put(cls.fullName, new ElementProjection(
-                    segment.id(), ringRole, elementRole, componentApi, portCandidate, explicitPortElement));
+                    segmentId, ringRole, elementRole, componentApi, portCandidate, explicitPortElement));
             elements.add(new HexagonalArchitecture.HexElement(
                     cls.fullName,
                     cls.simpleName,
                     true,
-                    segment.id(),
+                    segmentId,
                     ringRole,
                     elementRole,
                     cls.architectureLevel,
@@ -136,18 +161,37 @@ public final class HexagonalArchitectureBuilder implements ArchitectureStyle {
                 ports.add(new HexagonalArchitecture.HexPort(
                         explicitPort.id(),
                         explicitPort.classFqn(),
-                        segment.id(),
+                        segmentId,
                         explicitPort.direction(),
                         true));
             }
         }
 
+        // Package elements carry the ring of each package; their segment is the
+        // majority theme of their classes (a package like application.api may
+        // contribute classes to several sectors).
+        for (PackageProjection pkg : packagesByFqn.values()) {
+            String segmentId = packageSegment(pkg.fqn(), index, segmentIdByClass);
+            if (segmentId == null) {
+                continue;
+            }
+            elements.add(new HexagonalArchitecture.HexElement(
+                    pkg.fqn(),
+                    pkg.simpleName(),
+                    false,
+                    segmentId,
+                    pkg.ringRole(),
+                    pkg.elementRole(),
+                    pkg.architectureLevel(),
+                    pkg.localLevel(),
+                    false,
+                    false,
+                    false));
+        }
+
         return new HexagonalArchitectureModel(
                 DEFAULT_RINGS,
-                roots.stream()
-                        .map(root -> new HexagonalArchitecture.HexSegment(
-                                root.id(), root.label(), root.rootFqn(), root.explicit()))
-                        .toList(),
+                segments,
                 ports.stream()
                         .sorted(Comparator.comparing(HexagonalArchitecture.HexPort::segmentId)
                                 .thenComparing(HexagonalArchitecture.HexPort::classFqn))
@@ -214,21 +258,23 @@ public final class HexagonalArchitectureBuilder implements ArchitectureStyle {
     }
 
     /**
-     * Projects every package that directly contains at least one segment-owned
-     * class. The package ring derives from the package architectureLevel
-     * relative to the maximum projected package level; an explicit ElementRole
-     * annotation on the package FQN wins over the level bucket.
+     * Projects every package that directly contains at least one class. The
+     * package ring derives from the package architectureLevel relative to the
+     * maximum projected package level; an explicit ElementRole annotation on
+     * the package FQN wins over the level bucket.
      */
     private static Map<String, PackageProjection> projectPackages(ModelIndex index,
-                                                                  Map<String, SegmentRoot> segmentByClass,
                                                                   ArchitectureAnnotations annotations) {
-        Map<String, SegmentRoot> segmentByPackage = new LinkedHashMap<>();
-        for (Map.Entry<String, SegmentRoot> entry : segmentByClass.entrySet()) {
-            segmentByPackage.putIfAbsent(parentOf(entry.getKey()), entry.getValue());
+        java.util.SortedSet<String> packageFqns = new java.util.TreeSet<>();
+        for (CalculatedElementInfo cls : index.classes().values()) {
+            String parent = parentOf(cls.fullName);
+            if (!parent.isEmpty()) {
+                packageFqns.add(parent);
+            }
         }
 
         int maxPackageLevel = 0;
-        for (String packageFqn : segmentByPackage.keySet()) {
+        for (String packageFqn : packageFqns) {
             CalculatedElementInfo pkg = index.packages().get(packageFqn);
             if (pkg != null) {
                 maxPackageLevel = Math.max(maxPackageLevel, pkg.architectureLevel);
@@ -236,13 +282,7 @@ public final class HexagonalArchitectureBuilder implements ArchitectureStyle {
         }
 
         Map<String, PackageProjection> result = new LinkedHashMap<>();
-        for (Map.Entry<String, SegmentRoot> entry : segmentByPackage.entrySet().stream()
-                .sorted(Map.Entry.comparingByKey())
-                .toList()) {
-            String packageFqn = entry.getKey();
-            if (packageFqn.isEmpty()) {
-                continue;
-            }
+        for (String packageFqn : packageFqns) {
             CalculatedElementInfo pkg = index.packages().get(packageFqn);
             int architectureLevel = pkg == null ? 0 : pkg.architectureLevel;
             int localLevel = pkg == null ? 0 : pkg.localLevel;
@@ -253,13 +293,152 @@ public final class HexagonalArchitectureBuilder implements ArchitectureStyle {
             result.put(packageFqn, new PackageProjection(
                     packageFqn,
                     simpleName,
-                    entry.getValue().id(),
                     classifyPackageRing(role, architectureLevel, maxPackageLevel),
                     role,
                     architectureLevel,
                     localLevel));
         }
         return result;
+    }
+
+    /**
+     * Assigns every class to one business theme. Classes inside a theme
+     * package belong to it directly. Everything else is assigned in phases:
+     *
+     * <p>Phase A — dependency voting (synchronous rounds): assigned
+     * dependencies vote for their theme, each vote weighted by
+     * 1/popularity of the target so that ubiquitous value objects (an Isbn
+     * used everywhere) cannot drag whole adapters into their theme.
+     *
+     * <p>Phase B — dependent voting for classes with no dependency path to a
+     * theme (contract interfaces carry no bytecode dependencies by design):
+     * assigned users and implementors vote, each weighted by 1/fan-out of the
+     * voter. A focused implementation (two dependencies) speaks loudly for its
+     * theme; a composition root touching everything barely whispers — a cheap
+     * but effective proxy for the implements relation.
+     *
+     * <p>Phase C — leftovers go to the largest theme so the projection stays
+     * total. All iteration orders are sorted, so the result is deterministic;
+     * ties resolve alphabetically.
+     */
+    private static Map<String, String> assignClassesToThemes(DomainModel domain, List<String> themes) {
+        List<CalculatedElementInfo> classes = sortedClasses(domain);
+        List<String> themesByLength = themes.stream()
+                .sorted(Comparator.comparingInt(String::length).reversed())
+                .toList();
+
+        Map<String, String> assignment = new LinkedHashMap<>();
+        for (CalculatedElementInfo cls : classes) {
+            for (String theme : themesByLength) {
+                if (isInPackage(cls.fullName, theme)) {
+                    assignment.put(cls.fullName, theme);
+                    break;
+                }
+            }
+        }
+
+        Map<String, java.util.SortedSet<String>> dependentsByClass = new HashMap<>();
+        for (CalculatedElementInfo cls : classes) {
+            for (String target : cls.dependencies) {
+                dependentsByClass.computeIfAbsent(target, k -> new java.util.TreeSet<>()).add(cls.fullName);
+            }
+        }
+        Map<String, CalculatedElementInfo> classesByFqn = new HashMap<>();
+        classes.forEach(cls -> classesByFqn.put(cls.fullName, cls));
+
+        // Phase A: dependency votes, weighted by 1/popularity of the target.
+        runVotingRounds(classes, assignment, cls -> {
+            Map<String, Double> votes = new java.util.TreeMap<>();
+            for (String dep : cls.dependencies.stream().sorted().toList()) {
+                String theme = assignment.get(dep);
+                if (theme != null) {
+                    int popularity = dependentsByClass.getOrDefault(dep, java.util.Collections.emptySortedSet()).size();
+                    votes.merge(theme, 1.0 / Math.max(1, popularity), Double::sum);
+                }
+            }
+            return votes;
+        });
+
+        // Phase B: dependent votes, weighted by 1/fan-out of the voter.
+        runVotingRounds(classes, assignment, cls -> {
+            Map<String, Double> votes = new java.util.TreeMap<>();
+            for (String dependent : dependentsByClass.getOrDefault(cls.fullName, java.util.Collections.emptySortedSet())) {
+                String theme = assignment.get(dependent);
+                if (theme != null) {
+                    CalculatedElementInfo voter = classesByFqn.get(dependent);
+                    int fanOut = voter == null ? 1 : voter.dependencies.size();
+                    votes.merge(theme, 1.0 / Math.max(1, fanOut), Double::sum);
+                }
+            }
+            return votes;
+        });
+
+        // Phase C: leftovers.
+        Map<String, Double> themeSizes = new java.util.TreeMap<>();
+        assignment.values().forEach(theme -> themeSizes.merge(theme, 1.0, Double::sum));
+        String largestTheme = themeSizes.isEmpty() ? themes.get(0) : majorityVote(themeSizes);
+        for (CalculatedElementInfo cls : classes) {
+            assignment.putIfAbsent(cls.fullName, largestTheme);
+        }
+        return assignment;
+    }
+
+    /**
+     * Synchronous voting rounds: every round evaluates all unassigned classes
+     * against the assignment snapshot of the previous round, so iteration
+     * order cannot leak into the result.
+     */
+    private static void runVotingRounds(List<CalculatedElementInfo> classes,
+                                        Map<String, String> assignment,
+                                        java.util.function.Function<CalculatedElementInfo, Map<String, Double>> voteFn) {
+        boolean changed = true;
+        int rounds = 0;
+        while (changed && rounds++ < classes.size()) {
+            changed = false;
+            Map<String, String> newlyAssigned = new LinkedHashMap<>();
+            for (CalculatedElementInfo cls : classes) {
+                if (assignment.containsKey(cls.fullName)) {
+                    continue;
+                }
+                Map<String, Double> votes = voteFn.apply(cls);
+                if (!votes.isEmpty()) {
+                    newlyAssigned.put(cls.fullName, majorityVote(votes));
+                }
+            }
+            if (!newlyAssigned.isEmpty()) {
+                assignment.putAll(newlyAssigned);
+                changed = true;
+            }
+        }
+    }
+
+    /** Highest vote weight wins; ties resolve to the alphabetically first key. */
+    private static String majorityVote(Map<String, Double> votes) {
+        String winner = null;
+        double best = Double.NEGATIVE_INFINITY;
+        for (Map.Entry<String, Double> entry : votes.entrySet()) {
+            if (entry.getValue() > best) {
+                best = entry.getValue();
+                winner = entry.getKey();
+            }
+        }
+        return winner;
+    }
+
+    /** Majority theme of the classes directly inside the package. */
+    private static String packageSegment(String packageFqn,
+                                         ModelIndex index,
+                                         Map<String, String> segmentIdByClass) {
+        Map<String, Double> votes = new java.util.TreeMap<>();
+        for (CalculatedElementInfo element : index.contentsByParent().getOrDefault(packageFqn, List.of())) {
+            if (!"PACKAGE".equals(element.type)) {
+                String segmentId = segmentIdByClass.get(element.fullName);
+                if (segmentId != null) {
+                    votes.merge(segmentId, 1.0, Double::sum);
+                }
+            }
+        }
+        return votes.isEmpty() ? null : majorityVote(votes);
     }
 
     private static HexagonalArchitecture.RingRole classifyPackageRing(ArchitectureAnnotations.ElementRole role,
@@ -374,12 +553,14 @@ public final class HexagonalArchitectureBuilder implements ArchitectureStyle {
                     continue;
                 }
 
-                boolean crossSegment = !sourceProjection.segmentId().equals(targetProjection.segmentId());
+                // Segments are business themes, so crossing a segment boundary is
+                // normal inside the core (book -> publisher). A bypass is an
+                // adapter reaching past the ports into application/core code.
                 boolean adapterToInnerImplementation =
                         sourceProjection.ringRole() == HexagonalArchitecture.RingRole.ADAPTER
                                 && ringRank(targetProjection.ringRole())
                                 <= ringRank(HexagonalArchitecture.RingRole.APPLICATION);
-                if ((crossSegment || adapterToInnerImplementation) && !targetIsExplicitPort) {
+                if (adapterToInnerImplementation && !targetIsExplicitPort) {
                     violations.add(new Violation(
                             source.fullName,
                             targetFqn,
@@ -459,7 +640,6 @@ public final class HexagonalArchitectureBuilder implements ArchitectureStyle {
 
     private record PackageProjection(String fqn,
                                      String simpleName,
-                                     String segmentId,
                                      HexagonalArchitecture.RingRole ringRole,
                                      ArchitectureAnnotations.ElementRole elementRole,
                                      int architectureLevel,

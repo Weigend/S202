@@ -273,3 +273,69 @@ der Architecture View umzustellen (echtes In-Place-Expandieren). Das
 wuerde die gesamte Polargeometrie dynamisch machen -- hoher Aufwand,
 instabile Optik. Das Overlay-Modell liefert das gewuenschte Verhalten
 ohne diesen Preis.
+
+## Iteration 2 (2026-06-11): Fachliche Themen als Segmente
+
+Befund aus dem Paper-Whale-Test: Top-Level-Pakete als Segmente ergeben
+Schicht-Wedges (domain, application, persistence, ...) -- das ist falsch.
+Die Segmente muessen die FACHLICHEN THEMEN sein. Im Beispiel: das domain-
+Paket enthaelt vier Themen (book, publisher, inventory, logistics); jedes
+Thema nimmt einen Sektor ueber ALLE Ringe ein.
+
+```text
+Segmente  = die GROESSTE GESCHWISTER-GRUPPE von Core-Blatt-Paketen unter
+            einem gemeinsamen Eltern-Paket ("im domain package gibt es
+            vier Themen"). Die Gruppierung nach Parent verhindert, dass
+            Vertragspakete wie api/spi faelschlich Themen werden -- deren
+            Interfaces liegen per Design auf Level 0 (Interfaces tragen
+            im Bytecode-Modell keine Abhaengigkeiten; alles ruht auf
+            ihnen). Fallback auf Top-Level-Segmentierung, wenn keine
+            zwei Themen erkennbar sind.
+Zuordnung = Klassen in einem Themen-Paket gehoeren dem Thema. Der Rest
+            in Phasen, alle Runden synchron und deterministisch:
+            Phase A: Abhaengigkeits-Voting, Stimme gewichtet mit
+                     1/Popularitaet des Ziels -- ein ueberall genutztes
+                     Value Object (Isbn) zieht so keine Adapter in sein
+                     Thema.
+            Phase B: fuer Klassen ohne Dependency-Pfad (Interfaces!):
+                     Nutzer/Implementierer stimmen, gewichtet mit
+                     1/Fan-Out des Waehlers. Eine fokussierte
+                     Implementierung (2 Deps) stimmt laut, der
+                     Bootstrap (20 Deps) fluestert -- ein Proxy fuer
+                     die Implements-Beziehung.
+            Phase C: Rest ins groesste Thema.
+            Die Einheit der Themen-Zuordnung ist die KLASSE -- das
+            api-Paket etwa verteilt seine Use-Cases auf mehrere
+            Sektoren.
+```
+
+Die Ring-Zuordnung bleibt paketbasiert (Iteration 1); neu ist nur die
+Winkel-Zuordnung (Segment) auf Klassenebene.
+
+Darstellung pro Sektor:
+
+```text
+CORE        - eine aufklappbare Box pro Core-Paket des Themas. Expand
+              blendet die Schichtendarstellung der Klassen als Overlay
+              ein: eine Zeile pro ARCHITECTURE LEVEL (globale
+              semantische Tiefe, NICHT der lokale Layout-Level im
+              Parent-Container), hoechste oben.
+APPLICATION - eine aufklappbare Box fuer die Service-Klassen des Themas.
+              Die API- und SPI-Interfaces des Themas sitzen als ZWEI
+              GETRENNT aufklappbare Sockel auf der Aussengrenze des
+              Application-Rings (API = inbound, SPI = outbound;
+              Erkennung: PortDirection-Annotation, sonst Paketname
+              spi/api; KEINE Ring-Vorbedingung, da Vertragspakete auf
+              Level 0 liegen).
+ADAPTER     - eine aufklappbare Box pro (Adapter-Paket x Thema), radial
+              nach Paket-Level gestaffelt wie bisher.
+
+Jede Overlay-Karte traegt ein Schliessen-Symbol (x) im Kopf -- sonst
+bleiben aufgeklappte Karten haengen, wenn die zugehoerige Box verdeckt
+ist.
+```
+
+Violations: Die crossSegment-Klausel der PORT_BYPASS-Regel entfaellt --
+bei Themen-Segmenten sind Querbezuege zwischen Themen im Kern normal
+(book -> publisher). Bypass bleibt: Adapter-Klasse greift an den Ports
+vorbei auf Application/Core-Implementierung zu.
