@@ -658,13 +658,16 @@ public final class HexagonalArchitectureBuilder implements ArchitectureStyle {
                 }
 
                 // Segments are business themes, so crossing a segment boundary is
-                // normal inside the core (book -> publisher). A bypass is an
-                // adapter reaching past the ports into application/core code.
-                boolean adapterToInnerImplementation =
+                // normal inside the core (book -> publisher). Adapters may also
+                // use the CORE ring freely: a repository must know the domain
+                // types that appear in its port signatures (persistence ->
+                // domain.book is fine). The bypass is an adapter reaching past
+                // the ports into the APPLICATION ring — the use-case
+                // implementation the ports exist to protect.
+                boolean adapterToApplicationImplementation =
                         sourceProjection.ringRole() == HexagonalArchitecture.RingRole.ADAPTER
-                                && ringRank(targetProjection.ringRole())
-                                <= ringRank(HexagonalArchitecture.RingRole.APPLICATION);
-                if (adapterToInnerImplementation && !targetIsExplicitPort) {
+                                && targetProjection.ringRole() == HexagonalArchitecture.RingRole.APPLICATION;
+                if (adapterToApplicationImplementation && !targetIsExplicitPort) {
                     violations.add(new Violation(
                             source.fullName,
                             targetFqn,

@@ -337,8 +337,21 @@ ist.
 
 Violations: Die crossSegment-Klausel der PORT_BYPASS-Regel entfaellt --
 bei Themen-Segmenten sind Querbezuege zwischen Themen im Kern normal
-(book -> publisher). Bypass bleibt: Adapter-Klasse greift an den Ports
-vorbei auf Application/Core-Implementierung zu.
+(book -> publisher). Adapter duerfen ausserdem den CORE-Ring frei
+nutzen: Ein Repository muss die Domaenen-Typen kennen, die in seinen
+Port-Signaturen vorkommen (persistence -> domain.book ist KEIN Bypass).
+Bypass ist ausschliesslich: Adapter-Klasse greift an den Ports vorbei
+auf den APPLICATION-Ring zu -- die Use-Case-Implementierung, die die
+Ports schuetzen sollen.
+
+Wichtig fuers Verstaendnis der Darstellung: Die aufklappbaren Boxen an
+den Raendern sind KEINE Pakete, sondern Paket-FILTER zu Themen -- ein
+Paket wie persistence ist ueber mehrere Sektoren verteilt (eine Gruppe
+pro Thema). Der paketbasierte Pfeil-Mechanismus des DependencyRenderers
+(ArchitectureNode-Aggregation pro Paket) kennt diese Filtergruppen
+nicht; pro Paket ist nur eine Stellvertreter-Gruppe unter dem Plain-FQN
+registriert. Themengerechtes Pfeil-Routing (Aggregation pro
+Thema-Gruppe statt pro Paket) ist der naechste offene Schritt.
 
 ### Vertragssignal: Service vs. Adapter
 

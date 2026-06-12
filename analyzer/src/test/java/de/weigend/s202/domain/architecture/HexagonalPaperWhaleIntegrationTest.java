@@ -29,6 +29,7 @@ import java.util.Map;
 import java.util.stream.Collectors;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assumptions.assumeTrue;
 
 /**
@@ -91,6 +92,15 @@ class HexagonalPaperWhaleIntegrationTest {
         // even though both sit one level above the ports: implementing an SPI
         // (persistence, shipping, the ui notifier) or merely using the API
         // (rest, ui, platform glue) puts a package into the outer ring.
+        // Adapters may use the domain model freely: a repository must know the
+        // types that appear in its port signatures. persistence -> domain.book
+        // is NOT a port bypass.
+        assertTrue(architecture.violations().stream()
+                        .filter(violation -> violation.kind() == ViolationKind.HEXAGON_PORT_BYPASS)
+                        .noneMatch(violation -> violation.sourceFqn().startsWith("com.paperwhale.persistence.")
+                                && violation.targetFqn().startsWith("com.paperwhale.domain.")),
+                "adapter use of domain model types must not be flagged as port bypass");
+
         assertEquals(HexagonalArchitecture.RingRole.ADAPTER,
                 classes.get("com.paperwhale.persistence.JdbcBookRepository").ringRole());
         assertEquals(HexagonalArchitecture.RingRole.ADAPTER,

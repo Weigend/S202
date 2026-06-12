@@ -50,10 +50,9 @@ class HexagonalArchitectureBuilderTest {
         HexagonalArchitecture architecture = new HexagonalArchitectureBuilder()
                 .build(domain, annotations);
 
-        // Segments are the business themes: the leaf packages of the core ring
-        // (order.domain is annotated CORE, order.application lands in CORE by
-        // package level). Adapters spread over the theme sectors by voting.
-        assertEquals(List.of("com.acme.order.application", "com.acme.order.domain"),
+        // Only order.domain classifies as core, so theme detection finds no
+        // sibling group of two — the builder falls back to top-level segments.
+        assertEquals(List.of("com.acme.order", "com.acme.persistence", "com.acme.web"),
                 architecture.segments().stream()
                         .map(HexagonalArchitecture.HexSegment::rootFqn)
                         .toList());
@@ -174,10 +173,10 @@ class HexagonalArchitectureBuilderTest {
                         "com.acme.persistence",
                         "com.acme.web"),
                 packages.keySet());
-        // Themes here: order.application and order.domain. The web adapter
-        // package votes itself into the application theme via its dependencies.
-        assertEquals("com.acme.order.application", packages.get("com.acme.order.application").segmentId());
-        assertEquals("com.acme.order.application", packages.get("com.acme.web").segmentId());
+        // Fallback segmentation (only one core package): packages map to their
+        // top-level segment roots.
+        assertEquals("com.acme.order", packages.get("com.acme.order.application").segmentId());
+        assertEquals("com.acme.web", packages.get("com.acme.web").segmentId());
         assertEquals(HexagonalArchitecture.RingRole.CORE,
                 packages.get("com.acme.order.domain").ringRole());
         assertEquals(HexagonalArchitecture.RingRole.ADAPTER,
@@ -332,7 +331,11 @@ class HexagonalArchitectureBuilderTest {
         pkg(model, "com", 0);
         pkg(model, "com.acme", 0);
         pkg(model, "com.acme.order", 1);
-        pkg(model, "com.acme.order.application", 1);
+        // Level 2 of max 3 puts the application package into the APPLICATION
+        // ring, so adapter classes reaching past the ports into it are
+        // bypasses. With only one core package (order.domain) the builder
+        // falls back to top-level segmentation.
+        pkg(model, "com.acme.order.application", 2);
         pkg(model, "com.acme.order.domain", 0);
         pkg(model, "com.acme.persistence", 3);
         pkg(model, "com.acme.web", 3);
