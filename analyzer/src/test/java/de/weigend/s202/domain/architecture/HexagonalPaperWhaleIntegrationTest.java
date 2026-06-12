@@ -86,5 +86,20 @@ class HexagonalPaperWhaleIntegrationTest {
                 classes.get("com.paperwhale.application.service.SalesService").ringRole());
         assertEquals(HexagonalArchitecture.RingRole.ADAPTER,
                 classes.get("com.paperwhale.bootstrap.PaperWhaleApp").ringRole());
+
+        // The contract signal separates the adapters from the service layer
+        // even though both sit one level above the ports: implementing an SPI
+        // (persistence, shipping, the ui notifier) or merely using the API
+        // (rest, ui, platform glue) puts a package into the outer ring.
+        assertEquals(HexagonalArchitecture.RingRole.ADAPTER,
+                classes.get("com.paperwhale.persistence.JdbcBookRepository").ringRole());
+        assertEquals(HexagonalArchitecture.RingRole.ADAPTER,
+                classes.get("com.paperwhale.rest.CatalogResource").ringRole());
+        assertEquals(HexagonalArchitecture.RingRole.ADAPTER,
+                classes.get("com.paperwhale.ui.StoreFrontConsole").ringRole());
+        assertEquals(HexagonalArchitecture.RingRole.ADAPTER,
+                classes.get("com.paperwhale.shipping.SeagullExpressCarrier").ringRole());
+        assertEquals(HexagonalArchitecture.RingRole.ADAPTER,
+                classes.get("com.paperwhale.platform.JsonCodec").ringRole());
     }
 }

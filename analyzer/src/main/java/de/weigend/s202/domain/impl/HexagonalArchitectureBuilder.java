@@ -27,6 +27,7 @@ import de.weigend.s202.domain.architecture.Tangle;
 import de.weigend.s202.domain.architecture.Violation;
 import de.weigend.s202.domain.architecture.ViolationKind;
 import de.weigend.s202.reader.DependencyModel;
+import de.weigend.s202.reader.EdgeKind;
 import jakarta.inject.Singleton;
 
 import java.util.ArrayList;
@@ -82,7 +83,7 @@ public final class HexagonalArchitectureBuilder implements ArchitectureStyle {
         ModelIndex index = ModelIndex.of(domain);
         ComponentApiClassifier apiClassifier = new ComponentApiClassifier(effectiveAnnotations, rawModel);
 
-        Map<String, PackageProjection> packagesByFqn = projectPackages(index, effectiveAnnotations);
+        Map<String, PackageProjection> packagesByFqn = projectPackages(index, effectiveAnnotations, rawModel);
 
         // Segments are the BUSINESS THEMES: the largest sibling group of core
         // packages under one common parent (e.g. the four children of the
@@ -260,11 +261,13 @@ public final class HexagonalArchitectureBuilder implements ArchitectureStyle {
     /**
      * Projects every package that directly contains at least one class. The
      * package ring derives from the package architectureLevel relative to the
-     * maximum projected package level; an explicit ElementRole annotation on
-     * the package FQN wins over the level bucket.
+     * maximum projected package level. Precedence: an explicit ElementRole
+     * annotation on the package FQN wins, then the contract signal (see
+     * {@link #contractSignal}), then the level bucket.
      */
     private static Map<String, PackageProjection> projectPackages(ModelIndex index,
-                                                                  ArchitectureAnnotations annotations) {
+                                                                  ArchitectureAnnotations annotations,
+                                                                  DependencyModel rawModel) {
         java.util.SortedSet<String> packageFqns = new java.util.TreeSet<>();
         for (CalculatedElementInfo cls : index.classes().values()) {
             String parent = parentOf(cls.fullName);
@@ -281,6 +284,8 @@ public final class HexagonalArchitectureBuilder implements ArchitectureStyle {
             }
         }
 
+        Map<String, ContractSide> contractSides = contractSides(index, annotations);
+
         Map<String, PackageProjection> result = new LinkedHashMap<>();
         for (String packageFqn : packageFqns) {
             CalculatedElementInfo pkg = index.packages().get(packageFqn);
@@ -290,15 +295,110 @@ public final class HexagonalArchitectureBuilder implements ArchitectureStyle {
                     ? packageFqn.substring(packageFqn.lastIndexOf('.') + 1)
                     : pkg.simpleName;
             ArchitectureAnnotations.ElementRole role = annotations.explicitElementRole(packageFqn);
+            HexagonalArchitecture.RingRole signal =
+                    contractSignal(packageFqn, index, rawModel, contractSides);
             result.put(packageFqn, new PackageProjection(
                     packageFqn,
                     simpleName,
-                    classifyPackageRing(role, architectureLevel, maxPackageLevel),
+                    classifyPackageRing(role, signal, architectureLevel, maxPackageLevel),
                     role,
                     architectureLevel,
                     localLevel));
         }
         return result;
+    }
+
+    /**
+     * Maps every contract class (explicit port or member of a conventionally
+     * named api/spi package) to its side of the hexagon.
+     */
+    private static Map<String, ContractSide> contractSides(ModelIndex index,
+                                                           ArchitectureAnnotations annotations) {
+        Map<String, ContractSide> sides = new HashMap<>();
+        for (CalculatedElementInfo cls : index.classes().values()) {
+            ArchitectureAnnotations.PortSpec port = annotations.explicitPort(cls.fullName);
+            if (port != null) {
+                sides.put(cls.fullName,
+                        port.direction() == ArchitectureAnnotations.PortDirection.OUTBOUND
+                                ? ContractSide.SPI
+                                : ContractSide.API);
+                continue;
+            }
+            String parent = parentOf(cls.fullName);
+            String packageName = parent.substring(parent.lastIndexOf('.') + 1);
+            if ("spi".equalsIgnoreCase(packageName)) {
+                sides.put(cls.fullName, ContractSide.SPI);
+            } else if ("api".equalsIgnoreCase(packageName)) {
+                sides.put(cls.fullName, ContractSide.API);
+            }
+        }
+        return sides;
+    }
+
+    /**
+     * Ring signal from how a package relates to the hexagon's contracts.
+     * Levels alone cannot separate the service layer from the adapters — both
+     * sit one step above the ports — but the edge kinds can:
+     *
+     * <pre>
+     * implements an SPI contract -> driven adapter (persistence, carrier)
+     * implements an API contract -> the application implementation
+     * only USES API contracts    -> driving adapter (rest, ui) or glue
+     * </pre>
+     *
+     * Returns null when the package touches no contracts (or no raw model with
+     * edge kinds is available) — the level bucket decides then. Contract
+     * packages themselves are exempt.
+     */
+    private static HexagonalArchitecture.RingRole contractSignal(String packageFqn,
+                                                                 ModelIndex index,
+                                                                 DependencyModel rawModel,
+                                                                 Map<String, ContractSide> contractSides) {
+        if (rawModel == null) {
+            return null;
+        }
+        String packageName = packageFqn.substring(packageFqn.lastIndexOf('.') + 1);
+        if ("api".equalsIgnoreCase(packageName) || "spi".equalsIgnoreCase(packageName)) {
+            return null;
+        }
+
+        boolean implementsSpi = false;
+        boolean implementsApi = false;
+        boolean usesApi = false;
+        for (CalculatedElementInfo element : index.contentsByParent().getOrDefault(packageFqn, List.of())) {
+            if ("PACKAGE".equals(element.type)) {
+                continue;
+            }
+            DependencyModel.ClassInfo raw = rawModel.getAllClasses().get(element.fullName);
+            if (raw == null) {
+                continue;
+            }
+            for (Map.Entry<String, java.util.EnumSet<EdgeKind>> dep : raw.dependencyKinds.entrySet()) {
+                ContractSide side = contractSides.get(dep.getKey());
+                if (side == null) {
+                    continue;
+                }
+                boolean realizes = dep.getValue().contains(EdgeKind.IMPLEMENTS)
+                        || dep.getValue().contains(EdgeKind.EXTENDS);
+                if (realizes && side == ContractSide.SPI) {
+                    implementsSpi = true;
+                } else if (realizes) {
+                    implementsApi = true;
+                } else if (side == ContractSide.API) {
+                    usesApi = true;
+                }
+            }
+        }
+        if (implementsSpi) {
+            return HexagonalArchitecture.RingRole.ADAPTER;
+        }
+        if (implementsApi) {
+            return HexagonalArchitecture.RingRole.APPLICATION;
+        }
+        if (usesApi) {
+            return HexagonalArchitecture.RingRole.ADAPTER;
+        }
+        return null;
     }
 
     /**
@@ -442,6 +542,7 @@ public final class HexagonalArchitectureBuilder implements ArchitectureStyle {
     }
 
     private static HexagonalArchitecture.RingRole classifyPackageRing(ArchitectureAnnotations.ElementRole role,
+                                                                      HexagonalArchitecture.RingRole contractSignal,
                                                                       int packageLevel,
                                                                       int maxPackageLevel) {
         if (role == ArchitectureAnnotations.ElementRole.CORE) {
@@ -453,6 +554,9 @@ public final class HexagonalArchitectureBuilder implements ArchitectureStyle {
         if (role == ArchitectureAnnotations.ElementRole.INBOUND_PORT
                 || role == ArchitectureAnnotations.ElementRole.OUTBOUND_PORT) {
             return HexagonalArchitecture.RingRole.APPLICATION;
+        }
+        if (contractSignal != null) {
+            return contractSignal;
         }
         if (maxPackageLevel <= 0) {
             return HexagonalArchitecture.RingRole.CORE;
@@ -634,6 +738,11 @@ public final class HexagonalArchitectureBuilder implements ArchitectureStyle {
             return "";
         }
         return fqn.substring(0, fqn.lastIndexOf('.'));
+    }
+
+    private enum ContractSide {
+        API,
+        SPI
     }
 
     private record SegmentRoot(String id, String label, String rootFqn, boolean explicit) {}

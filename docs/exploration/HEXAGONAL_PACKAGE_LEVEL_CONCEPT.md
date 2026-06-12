@@ -339,3 +339,24 @@ Violations: Die crossSegment-Klausel der PORT_BYPASS-Regel entfaellt --
 bei Themen-Segmenten sind Querbezuege zwischen Themen im Kern normal
 (book -> publisher). Bypass bleibt: Adapter-Klasse greift an den Ports
 vorbei auf Application/Core-Implementierung zu.
+
+### Vertragssignal: Service vs. Adapter
+
+Die Level allein koennen die Service-Schicht nicht von den Adaptern
+trennen -- beide liegen genau eine Stufe ueber den Ports. Die Edge-Kinds
+des Bytecode-Readers (IMPLEMENTS/EXTENDS vs. Nutzung) koennen es:
+
+```text
+Paket implementiert einen SPI-Vertrag -> ADAPTER (driven: persistence,
+                                         carrier, notifier)
+Paket implementiert einen API-Vertrag -> APPLICATION (die Use-Case-
+                                         Implementierung)
+Paket NUTZT API-Vertraege nur        -> ADAPTER (driving: rest, ui,
+                                         oder Adapter-Glue)
+```
+
+Vertraege = explizite Ports plus Klassen in api/spi-benannten Paketen.
+Praezedenz der Ring-Zuordnung: explizite Paket-Annotation > Vertrags-
+signal > Level-Drittel. Ohne rawModel (Edge-Kinds) faellt die Heuristik
+stumm auf das Level-Drittel zurueck. Damit landen persistence, rest und
+ui ohne jede Annotation im Adapter-Ring aussen.

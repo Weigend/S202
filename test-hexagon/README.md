@@ -45,27 +45,31 @@ interfaces are **called by the outer ring** (rest, ui) and implemented by
 
 ## What the Hexagonal View should show
 
-With package-level ring assignment (tertile rule over package levels,
-max level 6) the projection lands as follows:
+The segments are the four BUSINESS THEMES — the children of the domain
+package (book, publisher, inventory, logistics) — each occupying one sector
+across all rings. Every class is assigned to a theme by weighted dependency
+voting (e.g. JdbcPublisherDirectory lands in the publisher sector,
+SeagullExpressCarrier in logistics).
+
+Ring assignment per package:
 
 | Ring        | Packages (out of the box)                                   |
 |-------------|-------------------------------------------------------------|
 | Core        | domain.publisher, domain.book, domain.inventory, domain.logistics |
-| Application | application.api, application.spi, application.service       |
-| Adapters    | rest, ui, shipping, bootstrap                                |
+| Application | application.service (implements the API contracts)          |
+| Adapters    | persistence, shipping (implement SPI contracts), rest, ui, platform (use API contracts), bootstrap |
 
-Both `api` and `spi` carry `@S202Api`, so their interfaces appear as port
-candidates at the ring boundary. Marking them as explicit Inbound/Outbound
-ports via the context menu makes the cross-segment PORT_BYPASS findings
-disappear — that workflow is part of the demo.
+The contracts themselves — `application.api` and `application.spi` — appear
+as two separately expandable API/SPI sockets on the application-ring
+boundary of each theme sector. Contract interfaces carry no bytecode
+dependencies, so they sit at architecture level 0 by design: everything
+rests on them.
 
-**Two packages land one ring too far in (known heuristic limitation):**
-`persistence` and `platform` sit at level 4 — exactly the level of
-`application.service` — because a driven adapter and the service layer both
-live one step above the ports. The level metric cannot tell them apart.
-Right-click each and "Mark Package as Adapter" to correct the picture.
-(A future heuristic signal — "implements an SPI interface ⇒ adapter" — would
-classify `persistence` automatically; this app is the test case for it.)
+The service/adapter separation comes from the CONTRACT SIGNAL, not from
+levels (both sit one step above the ports): a package implementing an SPI
+interface is a driven adapter, a package merely using API interfaces is a
+driving adapter, and the package implementing the API interfaces is the
+application core implementation.
 
 ## Things to try
 
