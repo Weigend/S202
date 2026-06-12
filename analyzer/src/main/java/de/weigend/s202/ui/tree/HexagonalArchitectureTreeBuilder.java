@@ -40,6 +40,8 @@ import javafx.scene.layout.VBox;
 import javafx.scene.paint.Color;
 import javafx.scene.shape.Circle;
 import javafx.scene.shape.Line;
+import org.kordamp.ikonli.javafx.FontIcon;
+import org.kordamp.ikonli.materialdesign2.MaterialDesignP;
 
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -248,7 +250,7 @@ public final class HexagonalArchitectureTreeBuilder {
                     SEGMENT_REGISTRY_PREFIX + segment.id());
             pane.getChildren().add(boxGroup);
 
-            SegmentVisual visual = createSegmentHeader(pane, segment, segmentClasses, mid);
+            SegmentVisual visual = createSegmentHeader(pane, segment, mid);
             drawSectorGroups(boxGroup, segmentCardGroup, segment, segmentClasses,
                     packagesByFqn, start, end, mid, visual);
         }
@@ -256,24 +258,12 @@ public final class HexagonalArchitectureTreeBuilder {
 
     private SegmentVisual createSegmentHeader(Pane pane,
                                               HexagonalArchitecture.HexSegment segment,
-                                              List<HexagonalArchitecture.HexElement> classes,
                                               double midAngle) {
         HexagonalSegmentHeader header = new HexagonalSegmentHeader(segment.label(), segment.rootFqn(), selectionChangeSink);
         installPackageRoleContextMenu(header, segment.rootFqn(), "segment");
         // The header is reachable for arrow rollup under a synthetic key so the
         // plain package FQN stays free for the theme's core group box.
         elementRegistry.put(SEGMENT_REGISTRY_PREFIX + segment.id(), header);
-
-        long ports = classes.stream().filter(HexagonalArchitecture.HexElement::explicitPort).count();
-        Label summary = new Label(classes.size() + " classes, " + ports + " ports");
-        summary.setStyle("-fx-font-size: 10px; -fx-text-fill: #334155;"
-                + " -fx-background-color: rgba(255,255,255,0.82);"
-                + " -fx-border-color: #9aa7b5; -fx-border-width: 1;"
-                + " -fx-padding: 3 7; -fx-background-radius: 3; -fx-border-radius: 3;");
-        summary.setVisible(false);
-        // Purely informational — it may overlap the header at some angles and
-        // must never swallow the click that re-expands the segment.
-        summary.setMouseTransparent(true);
 
         List<Node> details = new ArrayList<>();
         List<Runnable> cardVisibilityUpdaters = new ArrayList<>();
@@ -283,7 +273,6 @@ public final class HexagonalArchitectureTreeBuilder {
                 detail.setVisible(expanded);
                 detail.setManaged(expanded);
             }
-            summary.setVisible(!expanded);
             for (Runnable updater : cardVisibilityUpdaters) {
                 updater.run();
             }
@@ -292,8 +281,7 @@ public final class HexagonalArchitectureTreeBuilder {
         header.setToggleAction(toggle);
 
         placeNode(header, ADAPTER_RADIUS + 58, midAngle, 90, 14);
-        placeNode(summary, ADAPTER_RADIUS + 88, midAngle, 78, -8);
-        pane.getChildren().addAll(header, summary);
+        pane.getChildren().add(header);
         return new SegmentVisual(header, details, cardVisibilityUpdaters);
     }
 
@@ -740,7 +728,15 @@ public final class HexagonalArchitectureTreeBuilder {
             Label count = new Label("(" + classCount + ")");
             count.setStyle("-fx-font-size: 9px; -fx-text-fill: #475569;");
 
-            getChildren().addAll(toggle, nameLabel, count);
+            if (socket) {
+                // API/SPI contracts ARE the ports of the hexagon — say so.
+                FontIcon portIcon = new FontIcon(MaterialDesignP.POWER_PLUG);
+                portIcon.setIconColor(Color.web("#7c2d12"));
+                portIcon.setIconSize(11);
+                getChildren().addAll(toggle, portIcon, nameLabel, count);
+            } else {
+                getChildren().addAll(toggle, nameLabel, count);
+            }
             setExpandedVisual(expanded);
             applyUnselectedStyle();
             setOnMouseClicked(event -> {
