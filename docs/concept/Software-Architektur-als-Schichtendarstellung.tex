@@ -439,6 +439,22 @@ benutzt. Dadurch entsteht die transitive Schichtung: Aus $B \to A$ und
 $C \to B$ folgt $A$ auf Level~0, $B$ auf Level~1 und $C$ auf Level~2, auch
 wenn keine direkte Kante $C \to A$ existiert.
 
+Diese Regel~-- bekannt als \emph{Longest-Path-} oder \emph{ASAP-Levelisierung}~--
+verankert jedes Paket so tief wie m\"oglich, unmittelbar \"uber seiner tiefsten
+Abh\"angigkeit. Sie deckt sich mit der Invariante, die Structure101 f\"ur seine
+Levelized Structure Maps dokumentiert: Jedes Element h\"angt von mindestens einem
+Element auf der unmittelbar darunterliegenden Ebene ab. Die Alternative, jedes
+Paket stattdessen b\"undig \emph{unter seinen Abnehmer} zu ziehen (ALAP), w\"urde
+diese Invariante verletzen, da zwischen einem Paket und seiner n\"achsten
+Abh\"angigkeit eine L\"ucke entstehen k\"onnte.
+
+Eine Folge ist bewusst in Kauf zu nehmen: Pakete mit gleicher Rolle, aber
+unterschiedlich tiefen Abh\"angigkeitsketten landen auf verschiedenen Levels.
+Stehen etwa mehrere Adapter \"uber derselben Anwendungsschicht, einer von ihnen
+aber zus\"atzlich \"uber einem gemeinsamen Hilfspaket, so liegt dieser eine Ebene
+h\"oher als die \"ubrigen~-- die Levelisierung misst Abh\"angigkeitstiefe, nicht
+architektonische Rolle.
+
 Die hier erzeugten Levels sind das \emph{architectureLevel} jedes Pakets~--
 die Architekturhypothese, die im n\"achsten Schritt die Klassen-SCC-Behandlung
 steuert. In einem separaten Schritt, der nach den Klassenlevels ausgef\"uhrt

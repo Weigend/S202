@@ -448,6 +448,22 @@ diretamente. Assim surge a estratifica\c{c}\~ao transitiva: de $B \to A$ e
 $C \to B$ segue que $A$ fica no Level~0, $B$ no Level~1 e $C$ no Level~2,
 mesmo sem existir uma aresta direta $C \to A$.
 
+Essa regra~-- conhecida como nivelamento de \emph{caminho mais longo} ou
+\emph{ASAP}~-- ancora cada pacote o mais baixo poss\'ivel, imediatamente acima
+de sua depend\^encia mais profunda. Ela coincide com a invariante que o
+Structure101 documenta para seus Levelized Structure Maps: cada elemento depende
+de pelo menos um elemento no n\'ivel imediatamente abaixo. A alternativa de
+puxar cada pacote rente \emph{abaixo de seu consumidor} (ALAP) violaria essa
+invariante, pois poderia surgir uma lacuna entre um pacote e sua depend\^encia
+mais pr\'oxima.
+
+Uma consequ\^encia \'e aceita deliberadamente: pacotes com o mesmo papel, mas
+com cadeias de depend\^encia de profundidade diferente, acabam em n\'iveis
+diferentes. Se, por exemplo, v\'arios adaptadores ficam acima da mesma camada de
+aplica\c{c}\~ao, mas um deles fica adicionalmente acima de um pacote auxiliar
+compartilhado, esse \'e colocado um n\'ivel acima dos demais~-- o nivelamento
+mede profundidade de depend\^encia, n\~ao papel arquitetural.
+
 Os n\'iveis produzidos aqui s\~ao o \emph{architectureLevel} de cada pacote~--
 a hip\'otese arquitetural que guia o tratamento de SCCs de classes na etapa
 seguinte. Em uma etapa separada, executada ap\'os os n\'iveis de classes serem
