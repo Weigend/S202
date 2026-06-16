@@ -156,6 +156,24 @@ Component-specific findings are shown in the dependencies side view under **Comp
 
 The Component View is also useful for codebases that are **not yet component-oriented**. By manually marking API classes you can explore a what-if scenario: which packages could form a component, which API boundary would be needed to decouple them, and which existing callers would violate that boundary. JPMS (`module-info`) is therefore not a prerequisite or source of truth — it can be a *target*: once the Component View shows a clean boundary with no violations, introducing a JPMS module or an explicit API layer becomes a low-risk, well-scoped step.
 
+## Hexagonal View (experimental)
+
+> **Proof of concept — experimental.** The **Hexagonal View** is an early prototype that explores an alternative projection of the same dependency model. It is not yet a stable feature: layout, interactions, and violation checks are still evolving and may change or be removed. The layered, tangle, and component views remain the supported way to analyze a codebase.
+
+Instead of stacking packages in horizontal layers, the Hexagonal View arranges them as concentric rings of a hexagonal (ports-and-adapters) architecture: the **domain core** in the center, the **application** layer around it, and the **adapters** in the outer ring. The ring of each package is derived from its package `architectureLevel`, so the same level calculation that drives the layered view also places the rings here. Packages exposing a port are marked with **API / SPI sockets** (the orange boxes with a port icon), and dependency arrows that bypass a ring are drawn as overlays.
+
+![Hexagonal View of the test-hexagon example](docs/hexagonal-view-test-example.png)
+
+The screenshot shows the bundled **test-hexagon** example (the *paperwhale* book-shop domain): the `book`, `publisher`, `logistics`, and `inventory` domain packages sit in the core, the `service` / `API` / `SPI` ports form the application ring, and `persistence`, `rest`, `shipping`, and `bootstrap` are the surrounding adapters. Clicking a `+` group expands a package into an overlay card listing its classes.
+
+To try it, build and load the example project under [`test-hexagon`](test-hexagon):
+
+```bash
+mvn -pl test-hexagon -am install    # produces test-hexagon/target/test-hexagon-1.0.0.jar
+```
+
+Then **File → Open Maven Project…** on `test-hexagon/pom.xml` (or **Open JAR…** on the produced JAR) and switch to **View → Hexagonal View**.
+
 ## Quality Report
 
 The **Quality Report** gives a one-page structural health summary of a loaded codebase. Open it via **File → Analyze Quality**.

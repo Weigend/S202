@@ -25,11 +25,7 @@ import java.util.Map;
 
 /**
  * Result of a layout-invariant check, with a copy-paste-friendly reproducer
- * rendering for handing to a developer or LLM. Mirrors the C# LayoutInvariantReport
- * from Software City — same section order, same indentation, same
- * "Heuristic back edges" line — so a finding posted into a chat or pasted
- * into an LLM looks identical regardless of which renderer (3D Unity, 2D
- * Structure202) produced it.
+ * rendering for handing to a developer or LLM.
  */
 public final class LayoutInvariantReport {
 
@@ -41,23 +37,23 @@ public final class LayoutInvariantReport {
 
     private final List<String> sourcePaths;
     private final int maxLevel;
-    private final int districtCount;
-    private final int buildingCount;
+    private final int packageCount;
+    private final int classCount;
     private final int dependencyCount;
     private final int identifiedBackEdgeCount;
     private final List<InvariantFinding> findings;
 
     public LayoutInvariantReport(List<String> sourcePaths,
                                  int maxLevel,
-                                 int districtCount,
-                                 int buildingCount,
+                                 int packageCount,
+                                 int classCount,
                                  int dependencyCount,
                                  int identifiedBackEdgeCount,
                                  List<InvariantFinding> findings) {
         this.sourcePaths = List.copyOf(sourcePaths);
         this.maxLevel = maxLevel;
-        this.districtCount = districtCount;
-        this.buildingCount = buildingCount;
+        this.packageCount = packageCount;
+        this.classCount = classCount;
         this.dependencyCount = dependencyCount;
         this.identifiedBackEdgeCount = identifiedBackEdgeCount;
         this.findings = List.copyOf(findings);
@@ -65,8 +61,8 @@ public final class LayoutInvariantReport {
 
     public List<String> sourcePaths()      { return sourcePaths; }
     public int maxLevel()                  { return maxLevel; }
-    public int districtCount()             { return districtCount; }
-    public int buildingCount()             { return buildingCount; }
+    public int packageCount()              { return packageCount; }
+    public int classCount()               { return classCount; }
     public int dependencyCount()           { return dependencyCount; }
     public int identifiedBackEdgeCount()   { return identifiedBackEdgeCount; }
     public List<InvariantFinding> findings(){ return findings; }
@@ -92,9 +88,9 @@ public final class LayoutInvariantReport {
         }
 
         sb.append('\n');
-        sb.append("-- City --\n");
-        sb.append("  Districts:               ").append(districtCount).append('\n');
-        sb.append("  Buildings:               ").append(buildingCount).append('\n');
+        sb.append("-- Model --\n");
+        sb.append("  Packages:                ").append(packageCount).append('\n');
+        sb.append("  Classes:                 ").append(classCount).append('\n');
         sb.append("  Dependencies:            ").append(dependencyCount).append('\n');
         sb.append("  MaxLevel:                ").append(maxLevel).append('\n');
         sb.append("  Heuristic back edges:    ").append(identifiedBackEdgeCount).append('\n');

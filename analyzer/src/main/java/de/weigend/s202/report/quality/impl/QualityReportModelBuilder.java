@@ -795,8 +795,8 @@ final class QualityReportModelBuilder {
                     "Layout Invariants",
                     List.of("Metric", "Value"),
                     List.of(
-                            List.of("Districts", Integer.toString(invariants.districtCount())),
-                            List.of("Buildings", Integer.toString(invariants.buildingCount())),
+                            List.of("Packages", Integer.toString(invariants.packageCount())),
+                            List.of("Classes", Integer.toString(invariants.classCount())),
                             List.of("Dependencies", Integer.toString(invariants.dependencyCount())),
                             List.of("Max level", Integer.toString(invariants.maxLevel())),
                             List.of("Invariant findings", Integer.toString(invariants.findings().size())))));

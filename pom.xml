@@ -16,6 +16,7 @@
     <modules>
         <module>s202-annotations</module>
         <module>test-example</module>
+        <module>test-hexagon</module>
         <module>analyzer</module>
     </modules>
 

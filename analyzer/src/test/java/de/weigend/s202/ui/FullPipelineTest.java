@@ -46,8 +46,8 @@ public class FullPipelineTest {
             System.out.println("    " + pkg.fullName + " -> L" + pkg.architectureLevel);
         }
         
-        // 4 com.* packages + 7 sccs.* packages (adversarial SCC example)
-        assertEquals(11, calculatedModel.getAllPackages().size(), "Should have 11 packages");
+        // 7 com.* packages + 7 sccs.* packages (adversarial SCC example)
+        assertEquals(14, calculatedModel.getAllPackages().size(), "Should have 14 packages");
         
         // com.example2 depends on com.example(0) and com.example1(0) → package level 1
         DomainModel.CalculatedElementInfo example2 = calculatedModel.getPackage("com.example2");

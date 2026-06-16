@@ -42,21 +42,21 @@ public class ArchitectureViewLevelTest {
         // Step 1: Analyze
         InputAnalyzer inputAnalyzer = new InputAnalyzer();
         DependencyModel rawModel = inputAnalyzer.analyze(testJarPath);
-        // 4 com.* packages + 7 sccs.* packages (adversarial SCC example)
-        assertEquals(11, rawModel.getAllPackageNames().size(), "Should have 11 packages");
-        // 9 com.* classes + 10 sccs.* classes
-        assertEquals(19, rawModel.getAllClasses().size(), "Should have 19 classes");
+        // 7 com.* packages + 7 sccs.* packages (adversarial SCC example)
+        assertEquals(14, rawModel.getAllPackageNames().size(), "Should have 14 packages");
+        // 13 com.* classes + 10 sccs.* classes
+        assertEquals(23, rawModel.getAllClasses().size(), "Should have 23 classes");
 
         // Step 2: Calculate levels
         LevelCalculator levelCalculator = new LevelCalculator();
         DomainModel calculatedModel = levelCalculator.calculate(rawModel);
-        assertEquals(11, calculatedModel.getAllPackages().size(), "Should have 11 packages after calculation");
+        assertEquals(14, calculatedModel.getAllPackages().size(), "Should have 14 packages after calculation");
 
         // architectureLevel reflects honest dep-chain depth — parent->child
         // edges contribute, so com aggregates its descendants' outgoing
-        // deps and lands at L1.
-        assertEquals(1, calculatedModel.getAllPackages().get("com").architectureLevel,
-                "com aggregates descendants' deps → L1");
+        // deps. With example3 sub-packages added, com lands at L2.
+        assertEquals(2, calculatedModel.getAllPackages().get("com").architectureLevel,
+                "com aggregates descendants' deps → L2");
         assertEquals(0, calculatedModel.getAllPackages().get("com.example").architectureLevel, "com.example has no cross-pkg deps → L0");
         assertEquals(0, calculatedModel.getAllPackages().get("com.example1").architectureLevel, "com.example1 has no cross-pkg deps → L0");
         assertEquals(1, calculatedModel.getAllPackages().get("com.example2").architectureLevel, "com.example2 depends on com.example → package L1");
@@ -64,8 +64,8 @@ public class ArchitectureViewLevelTest {
         // Step 3: Build ArchitectureNode tree
         ArchitectureNodeBuilder builder = new ArchitectureNodeBuilder();
         ArchitectureNode rootNode = builder.build(calculatedModel);
-        // 19 classes + 11 packages + 1 root
-        assertEquals(31, rootNode.getTotalNodeCount(), "Should have 31 nodes (19 classes + 11 packages + 1 root)");
+        // 23 classes + 14 packages + 1 root
+        assertEquals(38, rootNode.getTotalNodeCount(), "Should have 38 nodes (23 classes + 14 packages + 1 root)");
 
         // Verify ArchitectureNode has packages with correct levels
         ArchitectureNode com2Node = findNodeByName(rootNode, "com.example2");

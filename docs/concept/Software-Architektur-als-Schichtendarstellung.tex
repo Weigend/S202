@@ -281,8 +281,9 @@ beide als getrennt schaltbare Overlays sichtbar:
         Kopplung, die eine strikt lineare Ordnung einzelner Klassen verhindert.
         Sie werden mit dem Tarjan-Algorithmus auf dem Klassenabh\"angigkeitsgraphen
         erkannt.
-  \item[Paketzyklen (orange)] Tangles auf Paketebene, erkannt am aggregierten
-        Paketgraphen. Ein Paketzyklus bedeutet, dass zwei oder mehr Pakete als
+  \item[Paketzyklen (orange)] Tangles auf Paketebene, erkannt am direkten
+        aggregierten Paketgraphen (ohne die sp\"ater beschriebene
+        Ahnen-Propagation). Ein Paketzyklus bedeutet, dass zwei oder mehr Pakete als
         Gruppe voneinander abh\"angen~-- unabh\"angig davon, welche konkreten
         Klassen daf\"ur verantwortlich sind. Paketzyklen zeigen Kopplung auf
         architektonischer Ebene: Die Paketstruktur selbst hat zirkul\"are
@@ -362,8 +363,9 @@ jede Klassenabh\"angigkeit z\"ahlt S202 die Methodenaufrufe von der
 Quellklasse zur Zielklasse und ordnet diese Anzahl der entsprechenden
 Paketkante zu: Wenn eine Klasse im Teilbaum von Paket $P$ eine Klasse im
 Teilbaum von Paket $Q$ \"uber $n$ Methodenaufrufe aufruft, erh\"alt die Kante
-$P \to Q$ das Gewicht $n$. F\"ur strukturelle Abh\"angigkeiten ohne
-Aufrufz\"ahlung wird ein Gewicht von~1 verwendet.
+$P \to Q$ das Gewicht $n$. Hat eine Klasse in ein Zielpaket nur
+Abh\"angigkeiten ohne Aufrufz\"ahlung, tr\"agt sie ein Fallback-Gewicht von~1
+zu dieser Paketkante bei (pro Klasse und Zielpaket, nicht pro Abh\"angigkeit).
 
 Um den Beitrag verschachtelter Pakete zu erfassen, wird jedes Gewicht die
 Ahnenkette des Quellpakets hochpropagiert: Ein Aufruf von \texttt{com.a.X}
@@ -371,6 +373,11 @@ nach \texttt{com.b.Y} tr\"agt das Gewicht zu \texttt{com.a}$\to$\texttt{com.b}
 und au\ss{}erdem zu \texttt{com}$\to$\texttt{com.b} bei. Die transitive Ordnung
 der Pakete entsteht erst bei der nachfolgenden Levelberechnung~-- dem Graphen
 werden keine zus\"atzlichen transitiven Kanten hinzugef\"ugt.
+
+Die Ahnen-Propagation kann allerdings Zyklen erzeugen, die im direkten
+Paketgraphen nicht existieren. Paketzyklen (Tangles) werden deshalb auf dem
+direkten, nicht propagierten Paketgraphen erkannt; das Aufbrechen der Zyklen
+und die Levelvergabe arbeiten dagegen auf dem propagierten Graphen.
 
 Ein konkretes Zahlenbeispiel: Die Klassenabh\"angigkeiten
 \texttt{com.a.A}$\to$\texttt{net.b.B} und \texttt{com.a.B}$\to$\texttt{net.b.B}
@@ -415,6 +422,11 @@ au\ss{}erhalb der ehemaligen SCC. Gibt es auch dort keine Abh\"angigkeiten,
 bleiben die Knoten auf demselben Level~-- als echte Peers ohne begr\"undbare
 Ordnung.
 
+Beide Schnittarten werden iterativ angewendet: Nach jedem Durchlauf werden die
+SCCs neu bestimmt, und f\"ur verbleibende Rest-SCCs werden die Ranks \"uber
+deren Mitglieder neu berechnet. Das Verfahren endet, wenn keine SCC mit
+mindestens zwei Mitgliedern mehr existiert.
+
 Die Symmetrieerkennung beruht auf dem Rankma\ss{}, nicht auf einem Gewichtsvergleich.
 Eine SCC, in der alle Kanten dasselbe Gewicht tragen, ist nicht zwingend
 symmetrisch: Unterschiedliche Ein- und Ausgangsgrade erzeugen trotz gleicher
@@ -426,6 +438,22 @@ andere Paket liegt eine Ebene \"uber dem h\"ochsten Paket, das es direkt
 benutzt. Dadurch entsteht die transitive Schichtung: Aus $B \to A$ und
 $C \to B$ folgt $A$ auf Level~0, $B$ auf Level~1 und $C$ auf Level~2, auch
 wenn keine direkte Kante $C \to A$ existiert.
+
+Diese Regel~-- bekannt als \emph{Longest-Path-} oder \emph{ASAP-Levelisierung}~--
+verankert jedes Paket so tief wie m\"oglich, unmittelbar \"uber seiner tiefsten
+Abh\"angigkeit. Sie deckt sich mit der Invariante, die Structure101 f\"ur seine
+Levelized Structure Maps dokumentiert: Jedes Element h\"angt von mindestens einem
+Element auf der unmittelbar darunterliegenden Ebene ab. Die Alternative, jedes
+Paket stattdessen b\"undig \emph{unter seinen Abnehmer} zu ziehen (ALAP), w\"urde
+diese Invariante verletzen, da zwischen einem Paket und seiner n\"achsten
+Abh\"angigkeit eine L\"ucke entstehen k\"onnte.
+
+Eine Folge ist bewusst in Kauf zu nehmen: Pakete mit gleicher Rolle, aber
+unterschiedlich tiefen Abh\"angigkeitsketten landen auf verschiedenen Levels.
+Stehen etwa mehrere Adapter \"uber derselben Anwendungsschicht, einer von ihnen
+aber zus\"atzlich \"uber einem gemeinsamen Hilfspaket, so liegt dieser eine Ebene
+h\"oher als die \"ubrigen~-- die Levelisierung misst Abh\"angigkeitstiefe, nicht
+architektonische Rolle.
 
 Die hier erzeugten Levels sind das \emph{architectureLevel} jedes Pakets~--
 die Architekturhypothese, die im n\"achsten Schritt die Klassen-SCC-Behandlung
@@ -468,7 +496,9 @@ Kriterium. Die Paketordnung liefert dieses Kriterium durch zwei F\"alle.
 verteilt sind. Eine Kante $A \to B$ innerhalb einer solchen SCC wird
 geschnitten, wenn $\mathit{pkgLevel}(A) < \mathit{pkgLevel}(B)$ gilt~-- sie
 l\"auft von einem tiefer liegenden Paket in ein h\"oher liegendes, gegen die
-architektonische Richtung.
+architektonische Richtung. Dieser Schnitt wird iterativ angewendet, bis keine
+Kante innerhalb einer SCC mehr gegen die Pakethypothese l\"auft; SCCs, die
+danach \"ubrig bleiben, behandelt Fall~B.
 
 \textbf{Fall B} betrifft SCCs, die vollst\"andig auf einem einzigen Paketlevel
 liegen~-- kein Paketkontext liefert eine Richtung. Alle internen Kanten einer
@@ -614,7 +644,11 @@ vorliegen, die diese Position begr\"unden.
 \begin{enumerate}
   \item \textbf{Klassengraph aufbauen:} Aus dem Bytecode wird ein gerichteter
         Klassengraph erzeugt. Dieser Graph bleibt das fachliche Rohmodell der
-        Analyse.
+        Analyse. In die Ordnungsberechnung gehen nur Kanten ein, die mindestens
+        eine Beziehung der Art \texttt{extends}, \texttt{implements},
+        \texttt{imports}, \texttt{instantiates} oder \texttt{calls} tragen;
+        reine Typreferenzen (Feldtypen, Parameter- und R\"uckgabetypen, Casts)
+        bleiben im Rohmodell erhalten, werden aber nicht gewertet.
   \item \textbf{SCCs erkennen:} Auf dem Klassengraphen werden stark
         zusammenh\"angende Komponenten mittels Tarjan ermittelt. Das Ergebnis
         ist noch kein Layout, sondern die Information, welche Klassen azyklisch
@@ -627,8 +661,10 @@ vorliegen, die diese Position begr\"unden.
         einziger flacher Graph \"uber alle Pakete.
   \item \textbf{Paketordnung berechnen:} Aus den gewichteten Ein- und Ausg\"angen
         wird das Rangma\ss{} $rank(P)$ berechnet. Alle Kanten, f\"ur die
-        $rank(P) < rank(Q)$ gilt, werden als Back-Edges klassifiziert und in
-        einem Durchlauf geschnitten. Sind alle Ranks innerhalb einer SCC gleich,
+        $rank(P) < rank(Q)$ gilt, werden als Back-Edges klassifiziert und
+        geschnitten; verbleibende Rest-SCCs werden mit neu berechneten Ranks
+        erneut behandelt, bis der Paketgraph azyklisch ist. Sind alle Ranks
+        innerhalb einer SCC gleich,
         werden alle internen Kanten entfernt; Levels entstehen dann aus
         Abh\"angigkeiten au\ss{}erhalb der ehemaligen SCC.
   \item \textbf{Klassen-Back-Edges bestimmen:} Klassen-SCCs werden mithilfe der

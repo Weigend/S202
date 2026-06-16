@@ -124,8 +124,8 @@ public record S202Project(
     public record LayoutInvariantReportDto(
             List<String> sourcePaths,
             int maxLevel,
-            int districtCount,
-            int buildingCount,
+            int packageCount,
+            int classCount,
             int dependencyCount,
             int identifiedBackEdgeCount,
             List<InvariantFindingDto> findings) {}

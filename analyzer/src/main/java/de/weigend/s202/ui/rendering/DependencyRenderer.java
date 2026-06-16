@@ -76,6 +76,7 @@ public class DependencyRenderer implements DependencyRendererStrategy {
     private final Consumer<String> statusCallback;
 
     private final List<Shape> dependencyLines = new ArrayList<>();
+    private final Map<String, Integer> levelByFqn = new HashMap<>();
     private Shape selectedLine = null;
     private boolean dependencyLinesDrawn = false;
     private String selectedFullName;
@@ -139,11 +140,40 @@ public class DependencyRenderer implements DependencyRendererStrategy {
         dependencyLines.clear();
         selectedLine = null;
 
+        // Index the architecture levels once per redraw: wrong-direction
+        // detection must come from the semantic levels, never from pixel
+        // positions — in the radial hexagonal layout the screen Y axis carries
+        // no level meaning at all.
+        levelByFqn.clear();
+        indexArchitectureLevels(rootNode);
+
         // Iterate through all registered elements and draw arrows for their dependencies
         drawDependencyArrowsRecursive(rootNode, selectedFullName);
 
         // Mark as drawn
         dependencyLinesDrawn = true;
+    }
+
+    private void indexArchitectureLevels(ArchitectureNode node) {
+        if (node.getFullName() != null) {
+            levelByFqn.put(node.getFullName(), node.getArchitectureLevel());
+        }
+        for (ArchitectureNode child : node.getChildren()) {
+            indexArchitectureLevels(child);
+        }
+    }
+
+    /**
+     * A dependency runs in the wrong direction when its source sits on a LOWER
+     * architecture level than its target — the callee would depend on its
+     * caller. Unknown levels never count as wrong.
+     */
+    private boolean isWrongDirection(String sourceFqn, String targetFqn) {
+        Integer sourceLevel = levelByFqn.get(sourceFqn);
+        Integer targetLevel = levelByFqn.get(targetFqn);
+        return sourceLevel != null && targetLevel != null
+                && sourceLevel >= 0 && targetLevel >= 0
+                && sourceLevel < targetLevel;
     }
 
     /**
@@ -292,13 +322,14 @@ public class DependencyRenderer implements DependencyRendererStrategy {
         String srcFqn    = packageNode.getFullName();
         String srcPrefix = srcFqn != null ? srcFqn + "." : "";
 
-        // target node → total number of class-level deps pointing there
-        Map<Node, Integer> targetCounts = new HashMap<>();
+        // target node → {total deps, wrong-direction deps} pointing there
+        Map<Node, int[]> targetCounts = new HashMap<>();
         collectSubtreeClassDeps(packageNode, srcFqn, srcPrefix, targetCounts);
 
-        for (Map.Entry<Node, Integer> entry : targetCounts.entrySet()) {
+        for (Map.Entry<Node, int[]> entry : targetCounts.entrySet()) {
             Node   targetElement = entry.getKey();
-            int    count         = entry.getValue();
+            int    count         = entry.getValue()[0];
+            int    wrongCount    = entry.getValue()[1];
             String targetFqn     = fqnOf(targetElement);
 
             boolean isSourceSelected = selectedFqn != null &&
@@ -316,24 +347,33 @@ public class DependencyRenderer implements DependencyRendererStrategy {
                     || targetElement instanceof ComponentBox
                     || Boolean.TRUE.equals(targetElement.getProperties().get("s202.aggregateEndpoint"))
                     || count > 1) ? count : 0;
-            createCurvedDependencyLine(sourceElement, targetElement, srcFqn, targetFqn, isIncoming, badge);
+            createCurvedDependencyLine(sourceElement, targetElement, srcFqn, targetFqn, isIncoming,
+                    badge, wrongCount > 0);
         }
     }
 
     /**
      * Walks the subtree of {@code node} collecting every class-level dep that
      * points outside {@code srcFqn}/{@code srcPrefix}. Each dep is resolved to
-     * its visible target node (rolling up collapsed packages) and aggregated.
+     * its visible target node (rolling up collapsed packages) and aggregated as
+     * {@code {total, wrongDirection}} counts. Wrong direction is decided on the
+     * underlying CLASS levels, not on the rolled-up boxes.
      */
     private void collectSubtreeClassDeps(ArchitectureNode node,
                                           String srcFqn, String srcPrefix,
-                                          Map<Node, Integer> targetCounts) {
+                                          Map<Node, int[]> targetCounts) {
         for (ArchitectureNode child : node.getChildren()) {
             if (child.getType() == ArchitectureNode.NodeType.CLASS) {
                 for (String dep : child.getDependencies()) {
                     if (dep.equals(srcFqn) || dep.startsWith(srcPrefix)) continue; // internal
                     Node target = findVisibleTarget(dep);
-                    if (target != null) targetCounts.merge(target, 1, Integer::sum);
+                    if (target != null) {
+                        int[] counts = targetCounts.computeIfAbsent(target, k -> new int[2]);
+                        counts[0]++;
+                        if (isWrongDirection(child.getFullName(), dep)) {
+                            counts[1]++;
+                        }
+                    }
                 }
             } else {
                 collectSubtreeClassDeps(child, srcFqn, srcPrefix, targetCounts);
@@ -458,10 +498,12 @@ public class DependencyRenderer implements DependencyRendererStrategy {
     /**
      * Draws one aggregated straight arrow from a collapsed package to a target package,
      * identical in style to class-level dependency arrows. A small badge next to the
-     * line midpoint shows the number of underlying class-level dependencies.
+     * line midpoint shows the number of underlying class-level dependencies; it turns
+     * to the violation colour only when the aggregate contains a semantic
+     * wrong-direction edge — never based on pixel direction.
      */
     private void createCurvedDependencyLine(Node source, Node target, String sourceName, String targetName,
-                                             boolean isIncoming, int count) {
+                                             boolean isIncoming, int count, boolean containsWrongDirection) {
         try {
             double[] srcB = getBoundsInPane(source);
             double[] tgtB = getBoundsInPane(target);
@@ -526,7 +568,7 @@ public class DependencyRenderer implements DependencyRendererStrategy {
                 double offset = BADGE_MIN_RADIUS + 2.0;
                 double badgeX = midX + (-dy / len) * offset;
                 double badgeY = midY + ( dx / len) * offset;
-                Color badgeBg = normalDir ? BADGE_BG : BADGE_BG_VIOLATION;
+                Color badgeBg = containsWrongDirection ? BADGE_BG_VIOLATION : BADGE_BG;
                 dependencyPane.getChildren().add(buildBadge(Integer.toString(count), badgeX, badgeY, badgeBg));
             }
 

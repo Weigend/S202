@@ -67,8 +67,12 @@ import javafx.geometry.Pos;
 import javafx.beans.property.ReadOnlyDoubleProperty;
 import javafx.beans.value.ChangeListener;
 import javafx.scene.Node;
+import javafx.scene.SnapshotParameters;
+import javafx.scene.canvas.Canvas;
+import javafx.scene.canvas.GraphicsContext;
 import javafx.scene.control.Alert;
 import javafx.scene.control.Button;
+import javafx.scene.image.WritableImage;
 import javafx.scene.control.CheckBox;
 import javafx.scene.control.Label;
 import javafx.scene.control.Separator;
@@ -281,6 +285,7 @@ public class S202Module implements Module {
     @SuppressWarnings("unchecked")
     public void start() {
         installSceneStylesheet();
+        installWindowIcon();
 
         EventBus<EventObject> bus = Lookup.lookup(EventBus.class);
 
@@ -367,6 +372,34 @@ public class S202Module implements Module {
             view.selectByFullName(ev.getFullName());
             return true;
         });
+    }
+
+    private void installWindowIcon() {
+        var stage = applicationWindow.getStage();
+        if (stage == null) return;
+        int size = 64;
+        Canvas canvas = new Canvas(size, size);
+        GraphicsContext gc = canvas.getGraphicsContext2D();
+        double cx = size / 2.0, cy = size / 2.0;
+        double r = size / 2.0 - 4;
+        // hexagon
+        double[] xs = new double[6], ys = new double[6];
+        for (int i = 0; i < 6; i++) {
+            double a = Math.toRadians(60 * i - 90);
+            xs[i] = cx + r * Math.cos(a);
+            ys[i] = cy + r * Math.sin(a);
+        }
+        gc.setStroke(Color.web("#ffd54f"));
+        gc.setLineWidth(3.5);
+        gc.strokePolygon(xs, ys, 6);
+        // inner circle
+        double cr = r * 0.38;
+        gc.setLineWidth(3.0);
+        gc.strokeOval(cx - cr, cy - cr, cr * 2, cr * 2);
+        SnapshotParameters params = new SnapshotParameters();
+        params.setFill(Color.TRANSPARENT);
+        WritableImage img = canvas.snapshot(params, null);
+        stage.getIcons().setAll(img);
     }
 
     private void installSceneStylesheet() {
