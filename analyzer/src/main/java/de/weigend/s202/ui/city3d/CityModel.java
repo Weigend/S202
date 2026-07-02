@@ -43,6 +43,7 @@ public record CityModel(int maxLevel,
                            int architectureLevel,
                            int nestingDepth,
                            int horizontalOrder,
+                           boolean inCycle,
                            Footprint footprint) {}
 
     /** A class or interface. */
@@ -55,7 +56,9 @@ public record CityModel(int maxLevel,
                            Footprint footprint,
                            int fanIn,
                            int fanOut,
-                           boolean isInterface) {}
+                           int methodCount,
+                           boolean isInterface,
+                           boolean inCycle) {}
 
     /** A directed class-to-class dependency (both endpoints are fully qualified names). */
     public record Dependency(String from, String to) {}

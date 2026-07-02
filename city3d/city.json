@@ -7,6 +7,7 @@
     "architectureLevel" : 2,
     "nestingDepth" : 0,
     "horizontalOrder" : 0,
+    "inCycle" : false,
     "footprint" : null
   }, {
     "fullName" : "com.example",
@@ -15,6 +16,7 @@
     "architectureLevel" : 0,
     "nestingDepth" : 1,
     "horizontalOrder" : 0,
+    "inCycle" : false,
     "footprint" : null
   }, {
     "fullName" : "com.example1",
@@ -23,6 +25,7 @@
     "architectureLevel" : 0,
     "nestingDepth" : 1,
     "horizontalOrder" : 1,
+    "inCycle" : false,
     "footprint" : null
   }, {
     "fullName" : "com.example2",
@@ -31,6 +34,7 @@
     "architectureLevel" : 1,
     "nestingDepth" : 1,
     "horizontalOrder" : 0,
+    "inCycle" : false,
     "footprint" : null
   }, {
     "fullName" : "com.example3",
@@ -39,6 +43,7 @@
     "architectureLevel" : 2,
     "nestingDepth" : 1,
     "horizontalOrder" : 2,
+    "inCycle" : false,
     "footprint" : null
   }, {
     "fullName" : "com.example3.sub1",
@@ -47,6 +52,7 @@
     "architectureLevel" : 0,
     "nestingDepth" : 2,
     "horizontalOrder" : 0,
+    "inCycle" : true,
     "footprint" : null
   }, {
     "fullName" : "com.example3.sub2",
@@ -55,6 +61,7 @@
     "architectureLevel" : 1,
     "nestingDepth" : 2,
     "horizontalOrder" : 0,
+    "inCycle" : true,
     "footprint" : null
   }, {
     "fullName" : "sccs",
@@ -63,6 +70,7 @@
     "architectureLevel" : 4,
     "nestingDepth" : 0,
     "horizontalOrder" : 1,
+    "inCycle" : false,
     "footprint" : null
   }, {
     "fullName" : "sccs.api",
@@ -71,6 +79,7 @@
     "architectureLevel" : 2,
     "nestingDepth" : 1,
     "horizontalOrder" : 0,
+    "inCycle" : true,
     "footprint" : null
   }, {
     "fullName" : "sccs.app",
@@ -79,6 +88,7 @@
     "architectureLevel" : 4,
     "nestingDepth" : 1,
     "horizontalOrder" : 0,
+    "inCycle" : false,
     "footprint" : null
   }, {
     "fullName" : "sccs.core",
@@ -87,6 +97,7 @@
     "architectureLevel" : 0,
     "nestingDepth" : 1,
     "horizontalOrder" : 0,
+    "inCycle" : true,
     "footprint" : null
   }, {
     "fullName" : "sccs.infra",
@@ -95,6 +106,7 @@
     "architectureLevel" : 3,
     "nestingDepth" : 1,
     "horizontalOrder" : 0,
+    "inCycle" : true,
     "footprint" : null
   }, {
     "fullName" : "sccs.platform",
@@ -103,6 +115,7 @@
     "architectureLevel" : 0,
     "nestingDepth" : 1,
     "horizontalOrder" : 1,
+    "inCycle" : false,
     "footprint" : null
   }, {
     "fullName" : "sccs.service",
@@ -111,6 +124,7 @@
     "architectureLevel" : 1,
     "nestingDepth" : 1,
     "horizontalOrder" : 0,
+    "inCycle" : true,
     "footprint" : null
   } ],
   "buildings" : [ {
@@ -123,7 +137,9 @@
     "footprint" : null,
     "fanIn" : 0,
     "fanOut" : 1,
-    "isInterface" : false
+    "methodCount" : 3,
+    "isInterface" : false,
+    "inCycle" : false
   }, {
     "fullName" : "com.example.B",
     "simpleName" : "B",
@@ -134,7 +150,9 @@
     "footprint" : null,
     "fanIn" : 2,
     "fanOut" : 1,
-    "isInterface" : false
+    "methodCount" : 3,
+    "isInterface" : false,
+    "inCycle" : false
   }, {
     "fullName" : "com.example.A",
     "simpleName" : "A",
@@ -145,7 +163,9 @@
     "footprint" : null,
     "fanIn" : 1,
     "fanOut" : 0,
-    "isInterface" : false
+    "methodCount" : 2,
+    "isInterface" : false,
+    "inCycle" : false
   }, {
     "fullName" : "com.example1.X",
     "simpleName" : "X",
@@ -156,7 +176,9 @@
     "footprint" : null,
     "fanIn" : 1,
     "fanOut" : 0,
-    "isInterface" : false
+    "methodCount" : 2,
+    "isInterface" : false,
+    "inCycle" : false
   }, {
     "fullName" : "com.example2.E",
     "simpleName" : "E",
@@ -167,7 +189,9 @@
     "footprint" : null,
     "fanIn" : 0,
     "fanOut" : 3,
-    "isInterface" : false
+    "methodCount" : 2,
+    "isInterface" : false,
+    "inCycle" : false
   }, {
     "fullName" : "com.example2.C",
     "simpleName" : "C",
@@ -178,7 +202,9 @@
     "footprint" : null,
     "fanIn" : 1,
     "fanOut" : 1,
-    "isInterface" : false
+    "methodCount" : 2,
+    "isInterface" : false,
+    "inCycle" : false
   }, {
     "fullName" : "com.example2.D",
     "simpleName" : "D",
@@ -189,7 +215,9 @@
     "footprint" : null,
     "fanIn" : 2,
     "fanOut" : 0,
-    "isInterface" : false
+    "methodCount" : 2,
+    "isInterface" : false,
+    "inCycle" : false
   }, {
     "fullName" : "com.example2.A",
     "simpleName" : "A",
@@ -200,7 +228,9 @@
     "footprint" : null,
     "fanIn" : 1,
     "fanOut" : 2,
-    "isInterface" : false
+    "methodCount" : 2,
+    "isInterface" : false,
+    "inCycle" : false
   }, {
     "fullName" : "com.example2.B",
     "simpleName" : "B",
@@ -211,7 +241,9 @@
     "footprint" : null,
     "fanIn" : 1,
     "fanOut" : 1,
-    "isInterface" : false
+    "methodCount" : 2,
+    "isInterface" : false,
+    "inCycle" : false
   }, {
     "fullName" : "com.example3.sub1.A",
     "simpleName" : "A",
@@ -222,7 +254,9 @@
     "footprint" : null,
     "fanIn" : 1,
     "fanOut" : 2,
-    "isInterface" : false
+    "methodCount" : 2,
+    "isInterface" : false,
+    "inCycle" : false
   }, {
     "fullName" : "com.example3.sub1.B",
     "simpleName" : "B",
@@ -233,7 +267,9 @@
     "footprint" : null,
     "fanIn" : 2,
     "fanOut" : 0,
-    "isInterface" : false
+    "methodCount" : 2,
+    "isInterface" : false,
+    "inCycle" : false
   }, {
     "fullName" : "com.example3.sub2.C",
     "simpleName" : "C",
@@ -244,7 +280,9 @@
     "footprint" : null,
     "fanIn" : 1,
     "fanOut" : 1,
-    "isInterface" : false
+    "methodCount" : 2,
+    "isInterface" : false,
+    "inCycle" : false
   }, {
     "fullName" : "com.example3.sub2.D",
     "simpleName" : "D",
@@ -255,7 +293,9 @@
     "footprint" : null,
     "fanIn" : 0,
     "fanOut" : 1,
-    "isInterface" : false
+    "methodCount" : 2,
+    "isInterface" : false,
+    "inCycle" : false
   }, {
     "fullName" : "sccs.api.PaymentController",
     "simpleName" : "PaymentController",
@@ -266,7 +306,9 @@
     "footprint" : null,
     "fanIn" : 1,
     "fanOut" : 2,
-    "isInterface" : false
+    "methodCount" : 2,
+    "isInterface" : false,
+    "inCycle" : false
   }, {
     "fullName" : "sccs.api.NotificationController",
     "simpleName" : "NotificationController",
@@ -277,7 +319,9 @@
     "footprint" : null,
     "fanIn" : 1,
     "fanOut" : 2,
-    "isInterface" : false
+    "methodCount" : 2,
+    "isInterface" : false,
+    "inCycle" : false
   }, {
     "fullName" : "sccs.app.AppMain",
     "simpleName" : "AppMain",
@@ -288,7 +332,9 @@
     "footprint" : null,
     "fanIn" : 0,
     "fanOut" : 2,
-    "isInterface" : false
+    "methodCount" : 2,
+    "isInterface" : false,
+    "inCycle" : false
   }, {
     "fullName" : "sccs.core.Event",
     "simpleName" : "Event",
@@ -299,7 +345,9 @@
     "footprint" : null,
     "fanIn" : 2,
     "fanOut" : 1,
-    "isInterface" : false
+    "methodCount" : 2,
+    "isInterface" : false,
+    "inCycle" : true
   }, {
     "fullName" : "sccs.core.Order",
     "simpleName" : "Order",
@@ -310,7 +358,9 @@
     "footprint" : null,
     "fanIn" : 2,
     "fanOut" : 1,
-    "isInterface" : false
+    "methodCount" : 2,
+    "isInterface" : false,
+    "inCycle" : true
   }, {
     "fullName" : "sccs.infra.MessageQueue",
     "simpleName" : "MessageQueue",
@@ -321,7 +371,9 @@
     "footprint" : null,
     "fanIn" : 3,
     "fanOut" : 3,
-    "isInterface" : false
+    "methodCount" : 3,
+    "isInterface" : false,
+    "inCycle" : true
   }, {
     "fullName" : "sccs.infra.PaymentRepository",
     "simpleName" : "PaymentRepository",
@@ -332,7 +384,9 @@
     "footprint" : null,
     "fanIn" : 3,
     "fanOut" : 3,
-    "isInterface" : false
+    "methodCount" : 4,
+    "isInterface" : false,
+    "inCycle" : true
   }, {
     "fullName" : "sccs.platform.Infrastructure",
     "simpleName" : "Infrastructure",
@@ -343,7 +397,9 @@
     "footprint" : null,
     "fanIn" : 2,
     "fanOut" : 0,
-    "isInterface" : false
+    "methodCount" : 2,
+    "isInterface" : false,
+    "inCycle" : false
   }, {
     "fullName" : "sccs.service.NotificationService",
     "simpleName" : "NotificationService",
@@ -354,7 +410,9 @@
     "footprint" : null,
     "fanIn" : 2,
     "fanOut" : 2,
-    "isInterface" : false
+    "methodCount" : 2,
+    "isInterface" : false,
+    "inCycle" : true
   }, {
     "fullName" : "sccs.service.PaymentService",
     "simpleName" : "PaymentService",
@@ -365,7 +423,9 @@
     "footprint" : null,
     "fanIn" : 2,
     "fanOut" : 2,
-    "isInterface" : false
+    "methodCount" : 2,
+    "isInterface" : false,
+    "inCycle" : true
   } ],
   "dependencies" : [ {
     "from" : "com.example.C",

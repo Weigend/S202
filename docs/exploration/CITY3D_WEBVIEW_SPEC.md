@@ -267,7 +267,14 @@ Render-Infrastruktur (InstancedMesh, Fassaden-Shader, Bloom, Navigation) ist wie
   Browser. End-to-end in echtem Chromium verifiziert (test-example: 23 Klassen, 14 Pakete,
   31 Deps, Level 0–4; keine JS-Fehler). Metriken heute: Level, fanIn/fanOut, Interface-Flag;
   Footprints headless `null` (Client-Layout). Offen für Phase 1: LoC/Coverage/SCC, Footprint-Reuse.
-- **Phase 1 — Render datengetrieben:** Metrik-Mapping (§6), Picking + Tooltip, Distrikt-Gruppierung.
+- **Phase 1 — Render datengetrieben:** ✅ **erledigt (2026-07-02).** Distrikt-Blöcke (Pakete als
+  Plattformen mit Labels), Fassaden-Fenster-Shader (`city3d/facade.js`, vereinfachter
+  City3JS-Port), Metrik-Mapping + Picking/Tooltip. **Metrik-Realität** (Pipeline geprüft): Höhe =
+  **Method-Count** (LoC existiert nicht), Farbe = Level, **rote Fassade = Klasse im Zyklus**
+  (`getClassBackEdges`), Distrikt rot = Paket-Tangle (`getPackageTangles`), Breite = fanIn.
+  **Nicht verfügbar** und daher ungemappt: LoC, Test-Coverage, Komplexität (beleuchtete Fenster
+  aktuell seed-basiert statt coverage-getrieben). In echtem Chromium verifiziert (Shader
+  kompiliert, keine JS-Fehler).
 - **Phase 2 — Embedding:** JCEF (V2) einbetten, `Architecture3DModule`-Analogon baut eine
   JCEF-basierte `View` statt `ArchitectureView3D`; Bridge nach §5. (Oder V3, falls so entschieden.)
 - **Phase 3 — Overlays:** Dependency-Linien, SCC-/Violation-Highlighting (Ersatz für `CurvedArrow3D`).
