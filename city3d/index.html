@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Structure202 · City3D (Phase 0)</title>
+  <style>
+    html, body { margin: 0; height: 100%; background: #0b0f1a; overflow: hidden;
+                 font-family: system-ui, sans-serif; color: #cbd5e1; }
+    #hud { position: fixed; top: 12px; left: 12px; font-size: 13px; line-height: 1.5;
+           background: rgba(15,23,42,.7); padding: 10px 12px; border-radius: 8px;
+           border: 1px solid #1e293b; pointer-events: none; }
+    #hud b { color: #f1f5f9; }
+    #tip { position: fixed; bottom: 12px; left: 12px; font-size: 12px; color: #64748b; }
+    .legend { margin-top: 6px; }
+    .swatch { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 4px; vertical-align: middle; }
+  </style>
+</head>
+<body>
+  <div id="hud">Loading city.json…</div>
+  <div id="tip">Drag = orbit · scroll = zoom · right-drag = pan · hover a building for details</div>
+  <script type="importmap">
+  { "imports": { "three": "./vendor/three.module.min.js" } }
+  </script>
+  <script type="module" src="./main.js"></script>
+</body>
+</html>
