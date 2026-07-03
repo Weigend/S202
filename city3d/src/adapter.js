@@ -152,7 +152,8 @@ export function layoutFromModel(model) {
   const rooftops = [];
   const slabs = [];
   const streets = []; // gap corridors between a package's children (its streets)
-  const ramps = [];   // sloped connectors running down over a package edge to the parent street
+  const ramps = [];   // connector segments (traced from the requests below, terrain-following)
+  const rampReqs = []; // {ax, ay, az, dir, w}: a street reaching an edge, to descend outward
 
   // The gaps between a package's children are its streets, drawn on the package's
   // slab surface. Because a package sits inside the free space (streets) of its
@@ -188,17 +189,16 @@ export function layoutFromModel(model) {
     // horizontal streets (run along X) between successive level rows, inset from
     // the L/R edges, plus a ramp at each end running DOWN over the package edge to
     // the parent street one terrace below — connecting the higher street to it.
-    const parentY = node.depth >= 1 ? (node.depth - 1) * STEP + SLAB_T : 0;
-    const OUT = NODE_GAP / 2; // how far the ramp reaches into the parent gap
     for (let ri = 0; ri < rowKeys.length - 1; ri++) {
       const g0 = rowKeys[ri] + rowD[ri], g1 = rowKeys[ri + 1];
       const sz = oz + (g0 + g1) / 2, sw = (g1 - g0) * STREET_FILL;
       // Cross street runs to the package edge so it meets the ramp seamlessly.
       streets.push({ x: cellX + cellW / 2, z: sz, w: cellW, d: sw, y, axis: 'x' });
-      // Ramps start AT the slab edge and drop outward into the gap, so they stay
-      // outside the package footprint (otherwise they'd be buried in the slab).
-      ramps.push({ ax: cellX, ay: y, az: sz, bx: cellX - OUT, by: parentY, bz: sz, w: sw });                 // left
-      ramps.push({ ax: cellX + cellW, ay: y, az: sz, bx: cellX + cellW + OUT, by: parentY, bz: sz, w: sw }); // right
+      // Request a connector from each edge; it is traced down the terrain later,
+      // so a drop over more than one terrace becomes a staircase, not a straight
+      // ramp cutting through the intermediate ledge.
+      rampReqs.push({ ax: cellX, ay: y, az: sz, dir: -1, w: sw });        // left
+      rampReqs.push({ ax: cellX + cellW, ay: y, az: sz, dir: 1, w: sw }); // right
     }
   }
 
@@ -252,6 +252,38 @@ export function layoutFromModel(model) {
   }
   // Centre the city on the origin; the root fills a cell equal to its own size.
   place(root, -root.w / 2, -root.d / 2, root.w, root.d);
+
+  // ---- trace each ramp request down the terrain into a staircase of segments --
+  // Surface height at a point = the top of the highest slab covering it (else 0).
+  function surfaceAt(x, z) {
+    let y = 0;
+    for (const s of slabs) {
+      if (x >= s.x - s.w / 2 && x <= s.x + s.w / 2 && z >= s.z - s.d / 2 && z <= s.z + s.d / 2) y = Math.max(y, s.topY);
+    }
+    return y;
+  }
+  const RUN = NODE_GAP / 2; // horizontal length of one step's descent
+  for (const req of rampReqs) {
+    const { az, dir, w } = req;
+    let x = req.ax, curY = req.ay, guard = 0;
+    while (guard++ < 40 && curY > 0.01) {
+      const ahead = surfaceAt(x + dir * 0.6, az); // surface just outside current x
+      if (ahead < curY - 0.01) {
+        ramps.push({ ax: x, ay: curY, az, bx: x + dir * RUN, by: ahead, bz: az, w }); // descend one step
+        x += dir * RUN; curY = ahead;
+      } else if (ahead > curY + 0.01) {
+        break; // a higher neighbour blocks the way -> stop (don't run under it)
+      } else {
+        // same level: run flat until the surface changes (a drop or an obstacle)
+        let d = 1;
+        while (d < 200 && Math.abs(surfaceAt(x + dir * d, az) - curY) < 0.6) d++;
+        if (d >= 200) break; // flat with no further change -> reached the low street
+        const flatEnd = x + dir * (d - 1);
+        if (Math.abs(flatEnd - x) > 0.5) ramps.push({ ax: x, ay: curY, az, bx: flatEnd, by: curY, bz: az, w }); // flat over the terrace
+        x = flatEnd;
+      }
+    }
+  }
 
   return {
     boxes, rooftops, slabs, streets, ramps,
