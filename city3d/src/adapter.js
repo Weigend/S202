@@ -152,11 +152,10 @@ export function layoutFromModel(model) {
   // The gaps between a package's children are its streets, drawn on the package's
   // slab surface. Because a package sits inside the free space (streets) of its
   // parent, these nested street grids connect up the hierarchy automatically.
-  function emitStreets(node, ox, oz) {
+  function emitStreets(node, cellX, cellW, ox, oz) {
     const items = [...node.children, ...node.classes].filter((it) => it._cellX != null);
     if (!items.length) return;
     const y = node.depth >= 0 ? node.depth * STEP + SLAB_T : 0; // this package's ground
-    const innerL = PAD, innerR = node.w - PAD;
 
     // group items into their level rows by the row band (_rowZ0)
     const rows = new Map();
@@ -176,10 +175,12 @@ export function layoutFromModel(model) {
         streets.push({ x: ox + (g0 + g1) / 2, z: oz + zk + rowD[ri] / 2, w: g1 - g0, d: rowD[ri], y, axis: 'z' });
       }
     });
-    // horizontal streets (run along X) between successive level rows
+    // horizontal streets (run along X) between successive level rows — extended
+    // to the full slab width so they reach the package edge (a step down to the
+    // parent forms there; handled later).
     for (let ri = 0; ri < rowKeys.length - 1; ri++) {
       const g0 = rowKeys[ri] + rowD[ri], g1 = rowKeys[ri + 1];
-      streets.push({ x: ox + (innerL + innerR) / 2, z: oz + (g0 + g1) / 2, w: innerR - innerL, d: g1 - g0, y, axis: 'x' });
+      streets.push({ x: cellX + cellW / 2, z: oz + (g0 + g1) / 2, w: cellW, d: g1 - g0, y, axis: 'x' });
     }
   }
 
@@ -221,7 +222,7 @@ export function layoutFromModel(model) {
     // Centre the node's (tight) content within the cell it was given to fill.
     const ox = cellX + (cellW - node.w) / 2;
     const oz = cellZ + (cellD - node.d) / 2;
-    if (node.kind === 'pkg') emitStreets(node, ox, oz);
+    if (node.kind === 'pkg') emitStreets(node, cellX, cellW, ox, oz);
     for (const child of node.children) place(child, ox + child._cellX, oz + child._cellZ, child._cellW, child._cellD);
     for (const cls of node.classes) emitBuilding(cls, ox + cls._cellX, oz + cls._cellZ, node.depth);
   }
