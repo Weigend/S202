@@ -19,6 +19,7 @@
 const NODE_GAP = 12;   // gap between siblings in a level row (vertical streets)
 const GROUP_GAP = 12;  // gap between level rows (horizontal streets) — equal to NODE_GAP
 const PAD = 7;         // inner margin of a package             (its surrounding street)
+const EDGE = 8;        // keep streets this far from the slab edge (uniform border)
 const STEP = 9;        // elevation added per nesting level     (terracing)
 const SLAB_T = 3;      // package platform thickness
 
@@ -173,8 +174,8 @@ export function layoutFromModel(model) {
     // before the neighbouring row's buildings; to the slab edge if none.
     rowKeys.forEach((zk, ri) => {
       const row = rows.get(zk).sort((a, b) => a._cellX - b._cellX);
-      const zFront = ri > 0 ? oz + rowKeys[ri - 1] + rowD[ri - 1] : cellZ;         // prev row's back edge, else slab edge
-      const zBack = ri < rowKeys.length - 1 ? oz + rowKeys[ri + 1] : cellZ + cellD; // next row's front edge, else slab edge
+      const zFront = ri > 0 ? oz + rowKeys[ri - 1] + rowD[ri - 1] : cellZ + EDGE;         // prev row's back edge, else near slab edge
+      const zBack = ri < rowKeys.length - 1 ? oz + rowKeys[ri + 1] : cellZ + cellD - EDGE; // next row's front edge, else near slab edge
       const zc = (zFront + zBack) / 2, dd = zBack - zFront;
       for (let i = 0; i < row.length - 1; i++) {
         const a = row[i], b = row[i + 1];
@@ -187,7 +188,7 @@ export function layoutFromModel(model) {
     // parent forms there; handled later).
     for (let ri = 0; ri < rowKeys.length - 1; ri++) {
       const g0 = rowKeys[ri] + rowD[ri], g1 = rowKeys[ri + 1];
-      streets.push({ x: cellX + cellW / 2, z: oz + (g0 + g1) / 2, w: cellW, d: g1 - g0, y, axis: 'x' });
+      streets.push({ x: cellX + cellW / 2, z: oz + (g0 + g1) / 2, w: cellW - 2 * EDGE, d: g1 - g0, y, axis: 'x' });
     }
   }
 
