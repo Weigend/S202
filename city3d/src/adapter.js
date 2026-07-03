@@ -20,7 +20,7 @@ const NODE_GAP = 12;   // gap between siblings in a level row (vertical streets)
 const GROUP_GAP = 12;  // gap between level rows (horizontal streets) — equal to NODE_GAP
 const PAD = 7;         // inner margin of a package             (its surrounding street)
 const EDGE = 8;        // keep streets this far from the slab edge (uniform border)
-const STEP = 9;        // elevation added per nesting level     (terracing)
+const STEP = 3;        // elevation added per nesting level (= pedestal thickness)
 const SLAB_T = 3;      // package platform thickness
 
 function mulberry32(seed) {
