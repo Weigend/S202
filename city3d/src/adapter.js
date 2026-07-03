@@ -152,7 +152,7 @@ export function layoutFromModel(model) {
   // The gaps between a package's children are its streets, drawn on the package's
   // slab surface. Because a package sits inside the free space (streets) of its
   // parent, these nested street grids connect up the hierarchy automatically.
-  function emitStreets(node, cellX, cellW, ox, oz) {
+  function emitStreets(node, cellX, cellZ, cellW, cellD, ox, oz) {
     const items = [...node.children, ...node.classes].filter((it) => it._cellX != null);
     if (!items.length) return;
     const y = node.depth >= 0 ? node.depth * STEP + SLAB_T : 0; // this package's ground
@@ -166,13 +166,18 @@ export function layoutFromModel(model) {
     const rowKeys = [...rows.keys()].sort((a, b) => a - b);
     const rowD = rowKeys.map((k) => rows.get(k)[0]._rowD);
 
-    // vertical streets (run along Z) between the cells within each row
+    // vertical streets (run along Z) between the cells within each row, extended
+    // toward the package edge — but only to the cross street (inter-row gap)
+    // before the neighbouring row's buildings; to the slab edge if none.
     rowKeys.forEach((zk, ri) => {
       const row = rows.get(zk).sort((a, b) => a._cellX - b._cellX);
+      const zFront = ri > 0 ? oz + rowKeys[ri - 1] + rowD[ri - 1] : cellZ;         // prev row's back edge, else slab edge
+      const zBack = ri < rowKeys.length - 1 ? oz + rowKeys[ri + 1] : cellZ + cellD; // next row's front edge, else slab edge
+      const zc = (zFront + zBack) / 2, dd = zBack - zFront;
       for (let i = 0; i < row.length - 1; i++) {
         const a = row[i], b = row[i + 1];
         const g0 = a._cellX + a._cellW, g1 = b._cellX;
-        streets.push({ x: ox + (g0 + g1) / 2, z: oz + zk + rowD[ri] / 2, w: g1 - g0, d: rowD[ri], y, axis: 'z' });
+        streets.push({ x: ox + (g0 + g1) / 2, z: zc, w: g1 - g0, d: dd, y, axis: 'z' });
       }
     });
     // horizontal streets (run along X) between successive level rows — extended
@@ -222,7 +227,7 @@ export function layoutFromModel(model) {
     // Centre the node's (tight) content within the cell it was given to fill.
     const ox = cellX + (cellW - node.w) / 2;
     const oz = cellZ + (cellD - node.d) / 2;
-    if (node.kind === 'pkg') emitStreets(node, cellX, cellW, ox, oz);
+    if (node.kind === 'pkg') emitStreets(node, cellX, cellZ, cellW, cellD, ox, oz);
     for (const child of node.children) place(child, ox + child._cellX, oz + child._cellZ, child._cellW, child._cellD);
     for (const cls of node.classes) emitBuilding(cls, ox + cls._cellX, oz + cls._cellZ, node.depth);
   }
