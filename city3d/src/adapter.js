@@ -14,8 +14,10 @@
 //     height = method count, footprint = fan-in/out, building type = level.
 
 // Layout metrics (Layout3D-style). Gaps become the streets between platforms.
-const NODE_GAP = 9;    // gap between siblings in a level row  (streets)
-const GROUP_GAP = 15;  // gap between level rows                (avenues)
+// Street width = the gap the asphalt fills. Keep both equal so horizontal and
+// vertical streets are the same width.
+const NODE_GAP = 12;   // gap between siblings in a level row (vertical streets)
+const GROUP_GAP = 12;  // gap between level rows (horizontal streets) — equal to NODE_GAP
 const PAD = 7;         // inner margin of a package             (its surrounding street)
 const STEP = 9;        // elevation added per nesting level     (terracing)
 const SLAB_T = 3;      // package platform thickness
