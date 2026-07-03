@@ -5,16 +5,22 @@ is taken over as-is** — streets, weather, times of day, building types, bloom,
 sky, traffic, reflections — and **only the generator is adapted** so that the
 arrangement and size of buildings carry meaning from the analysed architecture.
 
-What the city encodes (see [`src/adapter.js`](src/adapter.js)):
+What the city encodes (see [`src/adapter.js`](src/adapter.js)) — the layout mirrors
+the 2D architecture view's **nested** packages and the 3D view's elevation:
 
 | City element | Meaning |
 |---|---|
-| One **block** per package (district) | arranged by architecture level (level = spatial gradient) |
-| One **building** per class | inside its package block |
+| **Nested platforms** | the package tree: `com > com.example > class A` as nested rectangles |
+| Platform **elevation** | nesting depth — deeper packages terrace upward (stacked) |
+| Rows within a package | architecture level (siblings ordered by horizontalOrder) |
+| The **gaps** between platforms | the (hierarchical) street network |
+| One **building** per class | sitting on top of its package platform |
 | Building **height** | method count (size = amount of code) |
 | Building **footprint** | fan-in (width) / fan-out (depth) |
 | Building **type** (glass/stone/brick/concrete) | architecture level — interfaces are glass |
-| Setbacks, rooftops, shopfronts, streets | kept from City3JS for the city look |
+| Setbacks, rooftops, wet reflections, sky, weather | kept from City3JS for the city look |
+
+Traffic is currently off (the nested layout has no straight full-span avenues for cars).
 
 Everything else (`city.js` rendering, `sky.js`, `weather.js`, `traffic.js`,
 `postfx.js`, `controls.js`) is the original City3JS view.

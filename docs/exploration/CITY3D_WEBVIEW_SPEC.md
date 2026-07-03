@@ -282,6 +282,14 @@ Render-Infrastruktur (InstancedMesh, Fassaden-Shader, Bloom, Navigation) ist wie
   und `src/main.js` (lädt `public/city.json`) minimal geändert; alles andere unverändert. Vite-Projekt
   (`npm run dev`). In echtem Chromium verifiziert (rendert, keine JS-Fehler). Der frühere
   `facade.js`/Minimal-Viewer ist damit abgelöst.
+- **Phase 1c — Hierarchische Schachtelung** ✅ **erledigt (2026-07-03).** Der Generator bildet die
+  **Paket-Hierarchie als geschachtelte Plattformen** ab (Port der 2D-Schachtelung + 3D-Elevation aus
+  `SceneBuilder3D`/`Layout3D`): `com > com.example > Klasse A` als geschachtelte Rechtecke; jede
+  Schachtelungstiefe wird angehoben (`depth*9`, terrassiert/„gestapelt"); innerhalb eines Pakets
+  Reihen nach Architektur-Level (Geschwister nach `horizontalOrder`); die Lücken zwischen Plattformen
+  sind das hierarchische Straßennetz. Gebäude sitzen auf ihrer Paket-Platte, Höhe = Method-Count.
+  Numerisch verifiziert (0 Containment-Verletzungen; Elevation d0/d1/d2 = 0/9/18) + fehlerfrei in
+  Chromium gerendert. Traffic vorerst aus (keine geraden Vollspann-Avenues); Kamera rahmt automatisch.
 - **Phase 2 — Embedding:** JCEF (V2) einbetten, `Architecture3DModule`-Analogon baut eine
   JCEF-basierte `View` statt `ArchitectureView3D`; Bridge nach §5. (Oder V3, falls so entschieden.)
 - **Phase 3 — Overlays:** Dependency-Linien, SCC-/Violation-Highlighting (Ersatz für `CurvedArrow3D`).

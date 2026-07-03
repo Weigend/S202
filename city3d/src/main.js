@@ -35,11 +35,25 @@ async function loadCityModel() {
 }
 let cityModel = await loadCityModel();
 let city = buildCity(scene, atmosphere, cityModel);
-let traffic = buildTraffic(scene, city.streetsX, city.streetsZ, city.bounds);
+// Traffic needs straight full-span avenues; the nested layout's streets are the
+// gaps between terraced platforms, so it is disabled (no such avenues) for now.
+function makeTraffic() {
+  return (city.streetsX.length || city.streetsZ.length)
+    ? buildTraffic(scene, city.streetsX, city.streetsZ, city.bounds)
+    : { update() {}, dispose() {} };
+}
+let traffic = makeTraffic();
 document.title = `City3D · ${cityModel.buildings.length} classes · ${cityModel.districts.length} packages`;
 
 const nav = new Navigation(camera, renderer.domElement);
-nav.orbit.target.set(0, 70, 0);
+// Frame the camera on the actual (compact, nested) city instead of a fixed far pose.
+function frameCity() {
+  const span = Math.max(city.bounds.spanX, city.bounds.spanZ, 120);
+  camera.position.set(span * 0.55, span * 0.55 + 40, span * 0.9 + 60);
+  nav.orbit.target.set(0, 12, 0);
+  nav.orbit.update();
+}
+frameCity();
 nav.setCinematic(true);
 
 const { composer, bloom, gtao, grade } = createComposer(renderer, scene, camera);
@@ -117,7 +131,8 @@ $('b-regen').addEventListener('click', async () => {
   city.dispose();
   cityModel = await loadCityModel(); // re-read city.json (pick up a fresh export)
   city = buildCity(scene, atmosphere, cityModel);
-  traffic = buildTraffic(scene, city.streetsX, city.streetsZ, city.bounds);
+  traffic = makeTraffic();
+  frameCity();
   syncCityLight();
   city.setWetness(wetness); // Nässe auf das neue Stadt-Material übertragen
 });

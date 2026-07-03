@@ -88,18 +88,14 @@ export function buildCity(scene, atmosphere, model, seed = 1) {
   const group = new THREE.Group();
   group.name = 'city';
 
-  // Data-driven layout: real classes/packages instead of a procedural skyline.
-  // Fills the very same arrays the original generator produced, so everything
-  // downstream (instancing, roofs, shopfronts, streets, weather) is unchanged.
-  // Meaning: one block per package, one building per class, height = methods,
+  // Hierarchical data-driven layout: NESTED package platforms + one building per
+  // class. Fills the same building/roof arrays the original generator produced,
+  // so the building rendering (facade shader, setbacks, roofs) is unchanged; adds
+  // stacked package slabs, and the gaps between them are the (hierarchical) streets.
+  // Meaning: package nesting = terraces raised by depth, height = methods,
   // footprint = fan-in/out, building type = architecture level. See adapter.js.
-  const { boxes, rooftops, groundFacades, streetsX, streetsZ, spanX, spanZ, x0, z0, grid }
+  const { boxes, rooftops, groundFacades, slabs, spanX, spanZ, x0, z0, maxDepth }
     = layoutFromModel(model);
-
-  // Roads and sidewalks are placed on the block grid; align it with the
-  // data-driven grid so they match the actual number of package blocks.
-  CFG.cols = grid[0];
-  CFG.rows = grid[1];
 
   // ---- InstancedMesh aufbauen ------------------------------------------------
   const count = boxes.length;
@@ -148,8 +144,13 @@ export function buildCity(scene, atmosphere, model, seed = 1) {
   const groundDetails = makeGroundFloorDetails(groundFacades, atmosphere);
   group.add(groundDetails);
 
-  // ---- Boden / Straßen -------------------------------------------------------
-  const ground = makeGround(spanX, spanZ, x0, z0, streetsX, streetsZ, atmosphere);
+  // Nested package platforms (the districts). Buildings sit on top of these.
+  const slabMesh = makePackageSlabs(slabs, maxDepth);
+  group.add(slabMesh);
+
+  // ---- Boden -----------------------------------------------------------------
+  // Flat wet-reflective asphalt; the streets are the gaps between the platforms.
+  const ground = makeGroundBase(spanX, spanZ, atmosphere);
   group.add(ground);
 
   scene.add(group);
@@ -157,18 +158,16 @@ export function buildCity(scene, atmosphere, model, seed = 1) {
   return {
     group,
     material: mat,
-    streetLightMaterial: ground.userData.streetLightMaterial,
-    nightMaterials: [
-      ground.userData.streetLightMaterial,
-      ...groundDetails.userData.nightMaterials,
-    ],
-    streetsX, streetsZ,
+    streetLightMaterial: null,
+    nightMaterials: [...(groundDetails.userData.nightMaterials ?? [])].filter(Boolean),
+    streetsX: [], streetsZ: [],
     bounds: { spanX, spanZ },
-    stats: { buildings: rooftops.length, boxes: count, grid: [CFG.cols, CFG.rows] },
+    stats: { buildings: rooftops.length, boxes: count, grid: [slabs.length, count] },
     setWetness: (w) => ground.userData.setWetness?.(w),
     dispose() {
       geo.dispose();
       mat.dispose();
+      slabMesh.traverse((o) => { o.geometry?.dispose(); o.material?.dispose(); });
       roofDetails.traverse((o) => { o.geometry?.dispose(); o.material?.dispose(); });
       groundDetails.traverse((o) => { o.geometry?.dispose(); o.material?.dispose(); });
       ground.traverse((o) => {
@@ -179,6 +178,96 @@ export function buildCity(scene, atmosphere, model, seed = 1) {
       scene.remove(group);
     },
   };
+}
+
+// ---- Nested package platforms (districts) ----------------------------------
+// One thin slab per package, raised by nesting depth so packages terrace upward;
+// colour pale->dark by depth, reddened when the package is in a cycle.
+const SLAB_T = 3;
+function makePackageSlabs(slabs, maxDepth) {
+  const group = new THREE.Group();
+  group.name = 'package-slabs';
+  if (!slabs.length) return group;
+
+  const geo = new THREE.BoxGeometry(1, 1, 1);
+  const mesh = new THREE.InstancedMesh(
+    geo, new THREE.MeshStandardMaterial({ roughness: 0.85, metalness: 0.05 }), slabs.length);
+  mesh.receiveShadow = true;
+
+  const base = new THREE.Color(0xfffacd), deep = new THREE.Color(0xd6b85a), cyc = new THREE.Color(0x8a3b34);
+  const m4 = new THREE.Matrix4(), q = new THREE.Quaternion();
+  const pos = new THREE.Vector3(), scl = new THREE.Vector3(), col = new THREE.Color();
+  for (let i = 0; i < slabs.length; i++) {
+    const s = slabs[i];
+    pos.set(s.x, s.y + SLAB_T / 2, s.z);
+    scl.set(s.w, SLAB_T, s.d);
+    m4.compose(pos, q, scl);
+    mesh.setMatrixAt(i, m4);
+    col.copy(base).lerp(deep, maxDepth > 0 ? s.depth / maxDepth : 0);
+    if (s.inCycle) col.lerp(cyc, 0.5);
+    mesh.setColorAt(i, col);
+  }
+  mesh.instanceMatrix.needsUpdate = true;
+  if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true;
+  group.add(mesh);
+  return group;
+}
+
+// ---- Flat wet-reflective ground (asphalt in the street gaps) ---------------
+function makeGroundBase(spanX, spanZ, atmosphere) {
+  const g = new THREE.Group();
+  g.name = 'ground';
+  const pad = 600;
+
+  const geo = new THREE.PlaneGeometry(spanX + pad, spanZ + pad);
+  geo.rotateX(-Math.PI / 2);
+  const DRY_ROAD = new THREE.Color(0x11151a);
+  const WET_ROAD = new THREE.Color(0x070a0e);
+  const mat = new THREE.MeshStandardMaterial({
+    color: DRY_ROAD.clone(), roughness: 0.72, metalness: 0, envMapIntensity: 0.35,
+  });
+  mat.userData.wet = { value: 0 };
+  mat.onBeforeCompile = (sh) => {
+    sh.uniforms.uWet = mat.userData.wet;
+    sh.vertexShader = sh.vertexShader
+      .replace('#include <common>', '#include <common>\n         varying vec2 vWorldXZ;')
+      .replace('#include <begin_vertex>', '#include <begin_vertex>\n         vWorldXZ = (modelMatrix * vec4(transformed, 1.0)).xz;');
+    sh.fragmentShader = sh.fragmentShader
+      .replace('#include <common>', '#include <common>\n         varying vec2 vWorldXZ;\n         uniform float uWet;')
+      .replace('#include <roughnessmap_fragment>',
+        `#include <roughnessmap_fragment>
+         {
+           vec2 p = vWorldXZ * 0.03;
+           float n = sin(p.x) * sin(p.y) + 0.6 * sin(p.x * 2.3 + 1.7) * sin(p.y * 1.9 - 0.6);
+           float puddle = smoothstep(-0.1, 0.7, n);
+           float wetRough = mix(0.42, 0.05, puddle);
+           roughnessFactor = mix(roughnessFactor, wetRough, uWet);
+         }`);
+  };
+  const plane = new THREE.Mesh(geo, mat);
+  plane.position.y = -0.05;
+  plane.receiveShadow = true;
+  g.add(plane);
+
+  const reflector = new Reflector(new THREE.PlaneGeometry(spanX + pad, spanZ + pad), {
+    textureWidth: 1024, textureHeight: 1024, color: 0x99a3ad, shader: WetReflectorShader,
+  });
+  reflector.rotateX(-Math.PI / 2);
+  reflector.position.y = -0.03;
+  reflector.material.transparent = true;
+  reflector.material.depthWrite = false;
+  reflector.visible = false;
+  g.add(reflector);
+
+  g.userData.setWetness = (w) => {
+    mat.userData.wet.value = w;
+    mat.color.copy(DRY_ROAD).lerp(WET_ROAD, w);
+    mat.roughness = THREE.MathUtils.lerp(0.72, 0.18, w);
+    mat.envMapIntensity = THREE.MathUtils.lerp(0.35, 1.3, w);
+    reflector.material.uniforms.uWet.value = w;
+    reflector.visible = w > 0.001;
+  };
+  return g;
 }
 
 // ---- Dachlandschaft: Brüstungen, Technik und klassische NYC-Wassertanks -----
