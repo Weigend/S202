@@ -21,8 +21,8 @@ const GROUP_GAP = 12;  // gap between level rows (horizontal streets) — equal 
 const PAD = 7;         // inner margin of a package             (its surrounding street)
 const EDGE = 8;        // keep streets this far from the slab edge (uniform border)
 const STREET_FILL = 2 / 3; // asphalt fills 2/3 of the gap (centred, leaving a border)
-const STEP = 3;        // elevation added per nesting level (= pedestal thickness)
-const SLAB_T = 3;      // package platform thickness
+const STEP = 1.5;      // elevation added per nesting level (minimal / flat terracing)
+const SLAB_T = 1.5;    // package platform thickness (kept equal to STEP -> uniform pedestals)
 
 function mulberry32(seed) {
   let a = seed >>> 0;
@@ -237,9 +237,6 @@ export function layoutFromModel(model) {
       const botY = node.depth >= 1 ? (node.depth - 1) * STEP + SLAB_T : 0;
       slabs.push({
         x: cellX + cellW / 2, z: cellZ + cellD / 2, w: cellW, d: cellD,
-        // Flat plateau (inner region, where buildings and child hills sit); the
-        // margin out to the cell edge becomes the sloped hillside (skirt).
-        pw: Math.max(0, node.w - 2 * PAD), pd: Math.max(0, node.d - 2 * PAD),
         botY, topY, depth: node.depth, level: node.level,
         inCycle: node.inCycle, simple: node.simple,
       });

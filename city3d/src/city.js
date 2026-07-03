@@ -144,19 +144,16 @@ export function buildCity(scene, atmosphere, model, seed = 1) {
   const groundDetails = makeGroundFloorDetails(groundFacades, atmosphere);
   group.add(groundDetails);
 
-  // Organic terrain: each package is a flat plateau with soft cosine hillsides
-  // down to its parent's level. Buildings and streets sit on the plateaus; ramps
-  // drape on the slopes. One unified mesh, so terraces blend without z-fighting.
-  const surface = makeSurfaceFn(slabs);
-  const terrainMesh = makeTerrain(slabs, surface, spanX, spanZ, maxDepth);
-  group.add(terrainMesh);
+  // Rectangular package platforms (districts), stacked by nesting depth.
+  const slabMesh = makePackageSlabs(slabs, maxDepth);
+  group.add(slabMesh);
 
-  // Hierarchical streets on the plateaus (the gap corridors between children).
+  // Hierarchical streets on the platforms (the gap corridors between children).
   const streetMesh = makeStreets(streets);
   group.add(streetMesh);
 
-  // Ramp connectors, draped on the hillsides.
-  const rampMesh = makeRamps(ramps, surface);
+  // Ramp connectors down the terrace edges to the parent's streets.
+  const rampMesh = makeRamps(ramps);
   group.add(rampMesh);
 
   // ---- Boden -----------------------------------------------------------------
@@ -180,7 +177,7 @@ export function buildCity(scene, atmosphere, model, seed = 1) {
     dispose() {
       geo.dispose();
       mat.dispose();
-      terrainMesh.traverse((o) => { o.geometry?.dispose(); o.material?.dispose(); });
+      slabMesh.traverse((o) => { o.geometry?.dispose(); o.material?.dispose(); });
       streetMesh.traverse((o) => { o.geometry?.dispose(); o.material?.dispose(); });
       rampMesh.traverse((o) => { o.geometry?.dispose(); o.material?.dispose(); });
       roofDetails.traverse((o) => { o.geometry?.dispose(); o.material?.dispose(); });
@@ -195,72 +192,34 @@ export function buildCity(scene, atmosphere, model, seed = 1) {
   };
 }
 
-// ---- Organic package terrain (hills) ---------------------------------------
-// Height at (x,z): the highest package covering it. Inside a package's plateau
-// (its inner region) the height is the package top; across the surrounding margin
-// it eases down (cosine) to the parent's level, forming a soft hillside. A little
-// noise + rounded corners make the outline organic. Returns {h, depth}.
-function makeSurfaceFn(slabs) {
-  return function surface(x, z) {
-    let h = 0, depth = -1;
-    for (const s of slabs) {
-      const hx = Math.abs(x - s.x), hz = Math.abs(z - s.z);
-      if (hx > s.w / 2 || hz > s.d / 2) continue;                 // outside this package
-      const mgx = (s.w - s.pw) / 2, mgz = (s.d - s.pd) / 2;       // skirt band widths
-      const tx = mgx > 0.01 ? Math.min(1, Math.max(0, (hx - s.pw / 2) / mgx)) : (hx > s.pw / 2 ? 1 : 0);
-      const tz = mgz > 0.01 ? Math.min(1, Math.max(0, (hz - s.pd / 2) / mgz)) : (hz > s.pd / 2 ? 1 : 0);
-      let t = Math.min(1, Math.hypot(tx, tz));                    // 0 = plateau, 1 = cell edge (rounded)
-      if (t > 0 && t < 1) t = Math.min(1, Math.max(0, t + 0.13 * Math.sin(x * 0.17 + s.depth) * Math.sin(z * 0.15)));
-      const ease = (1 - Math.cos(Math.PI * t)) / 2;
-      const hh = s.topY - (s.topY - s.botY) * ease;
-      if (hh > h) { h = hh; depth = s.depth; }
-    }
-    return { h, depth };
-  };
-}
-
-function makeTerrain(slabs, surface, spanX, spanZ, maxDepth) {
+// ---- Rectangular package platforms (districts) -----------------------------
+// One box per package, a solid pedestal from the parent's top up to its own top
+// (so terraces stack without an air gap); colour pale->dark by depth, red in a cycle.
+function makePackageSlabs(slabs, maxDepth) {
   const group = new THREE.Group();
-  group.name = 'terrain';
+  group.name = 'package-slabs';
   if (!slabs.length) return group;
 
-  const pad = 16, step = 2;
-  const minX = -spanX / 2 - pad, maxX = spanX / 2 + pad;
-  const minZ = -spanZ / 2 - pad, maxZ = spanZ / 2 + pad;
-  const nx = Math.ceil((maxX - minX) / step), nz = Math.ceil((maxZ - minZ) / step);
-
-  const base = new THREE.Color(0xfffacd), deep = new THREE.Color(0xd6b85a), ground = new THREE.Color(0x0e1626);
-  const pos = new Float32Array((nx + 1) * (nz + 1) * 3);
-  const col = new Float32Array((nx + 1) * (nz + 1) * 3);
-  const c = new THREE.Color();
-  let p = 0;
-  for (let j = 0; j <= nz; j++) {
-    for (let i = 0; i <= nx; i++) {
-      const x = minX + i * step, z = minZ + j * step;
-      const { h, depth } = surface(x, z);
-      pos[p] = x; pos[p + 1] = h; pos[p + 2] = z;
-      if (depth < 0) c.copy(ground);
-      else c.copy(base).lerp(deep, maxDepth > 0 ? depth / maxDepth : 0);
-      col[p] = c.r; col[p + 1] = c.g; col[p + 2] = c.b;
-      p += 3;
-    }
-  }
-  const idx = [];
-  for (let j = 0; j < nz; j++) {
-    for (let i = 0; i < nx; i++) {
-      const a = j * (nx + 1) + i;
-      idx.push(a, a + nx + 1, a + 1, a + 1, a + nx + 1, a + nx + 2);
-    }
-  }
-  const geo = new THREE.BufferGeometry();
-  geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
-  geo.setAttribute('color', new THREE.BufferAttribute(col, 3));
-  geo.setIndex(idx);
-  geo.computeVertexNormals();
-  const mesh = new THREE.Mesh(geo, new THREE.MeshStandardMaterial({
-    vertexColors: true, roughness: 0.9, metalness: 0.03,
-  }));
+  const geo = new THREE.BoxGeometry(1, 1, 1);
+  const mesh = new THREE.InstancedMesh(
+    geo, new THREE.MeshStandardMaterial({ roughness: 0.85, metalness: 0.05 }), slabs.length);
   mesh.receiveShadow = true;
+
+  const base = new THREE.Color(0xfffacd), deep = new THREE.Color(0xd6b85a), cyc = new THREE.Color(0x8a3b34);
+  const m4 = new THREE.Matrix4(), q = new THREE.Quaternion();
+  const pos = new THREE.Vector3(), scl = new THREE.Vector3(), col = new THREE.Color();
+  for (let i = 0; i < slabs.length; i++) {
+    const s = slabs[i];
+    pos.set(s.x, (s.botY + s.topY) / 2, s.z);
+    scl.set(s.w, s.topY - s.botY, s.d);
+    m4.compose(pos, q, scl);
+    mesh.setMatrixAt(i, m4);
+    col.copy(base).lerp(deep, maxDepth > 0 ? s.depth / maxDepth : 0);
+    if (s.inCycle) col.lerp(cyc, 0.5);
+    mesh.setColorAt(i, col);
+  }
+  mesh.instanceMatrix.needsUpdate = true;
+  if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true;
   group.add(mesh);
   return group;
 }
@@ -321,14 +280,14 @@ function makeStreets(streets) {
 // ---- Soft ramp connectors (street A -> lower street B over a package edge) ----
 // A curved ribbon following a cosine profile: tangent-flat where it meets the
 // upper street and the lower one, steepest in the middle — no sharp edges.
-function makeRamps(ramps, surface) {
+function makeRamps(ramps) {
   const group = new THREE.Group();
   group.name = 'ramps';
   if (!ramps.length) return group;
   const mat = new THREE.MeshStandardMaterial({
     color: 0x0d1016, roughness: 0.9, metalness: 0, side: THREE.DoubleSide,
   });
-  const N = 20; // profile segments (finer so the road follows the hillside)
+  const N = 16; // profile segments
   for (const r of ramps) {
     // horizontal run direction (in the XZ plane) + perpendicular width direction
     let hx = r.bx - r.ax, hz = r.bz - r.az;
@@ -337,9 +296,10 @@ function makeRamps(ramps, surface) {
     const pos = [], idx = [];
     for (let i = 0; i <= N; i++) {
       const t = i / N;
+      const ease = (1 - Math.cos(Math.PI * t)) / 2; // cosine S-curve for the height
       const px = r.ax + (r.bx - r.ax) * t;
+      const py = r.ay + (r.by - r.ay) * ease + 0.06; // lift clear of the slab tops (no z-fighting)
       const pz = r.az + (r.bz - r.az) * t;
-      const py = surface(px, pz).h + 0.08; // drape on the hillside terrain
       pos.push(px + wx, py, pz + wz, px - wx, py, pz - wz);
     }
     for (let i = 0; i < N; i++) {
