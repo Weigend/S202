@@ -193,8 +193,10 @@ export function layoutFromModel(model) {
       const g0 = rowKeys[ri] + rowD[ri], g1 = rowKeys[ri + 1];
       const sz = oz + (g0 + g1) / 2, sw = g1 - g0;
       streets.push({ x: cellX + cellW / 2, z: sz, w: cellW - 2 * EDGE, d: sw, y, axis: 'x' });
-      ramps.push({ ax: cellX + EDGE, ay: y, az: sz, bx: cellX - OUT, by: parentY, bz: sz, w: sw });                 // left
-      ramps.push({ ax: cellX + cellW - EDGE, ay: y, az: sz, bx: cellX + cellW + OUT, by: parentY, bz: sz, w: sw }); // right
+      // Ramps start AT the slab edge and drop outward into the gap, so they stay
+      // outside the package footprint (otherwise they'd be buried in the slab).
+      ramps.push({ ax: cellX, ay: y, az: sz, bx: cellX - OUT, by: parentY, bz: sz, w: sw });                 // left
+      ramps.push({ ax: cellX + cellW, ay: y, az: sz, bx: cellX + cellW + OUT, by: parentY, bz: sz, w: sw }); // right
     }
   }
 
