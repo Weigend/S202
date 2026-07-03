@@ -298,7 +298,7 @@ function makeRamps(ramps) {
       const t = i / N;
       const ease = (1 - Math.cos(Math.PI * t)) / 2; // cosine S-curve for the height
       const px = r.ax + (r.bx - r.ax) * t;
-      const py = r.ay + (r.by - r.ay) * ease;
+      const py = r.ay + (r.by - r.ay) * ease + 0.06; // lift clear of the slab tops (no z-fighting)
       const pz = r.az + (r.bz - r.az) * t;
       pos.push(px + wx, py, pz + wz, px - wx, py, pz - wz);
     }
