@@ -102,20 +102,27 @@ export function layoutFromModel(model) {
     }
     // Highest local level first (top row), like the 2D view.
     const levels = [...byLevel.keys()].sort((a, b) => b - a);
-    let z = PAD, maxRight = PAD;
-    for (const lv of levels) {
+
+    // Measure each level row (width + depth) first ...
+    const rows = levels.map((lv) => {
       const row = byLevel.get(lv).sort((a, b) =>
         (a.horiz - b.horiz) || (a.simple || '').localeCompare(b.simple || ''));
-      let x = PAD, rowD = 0;
-      for (const it of row) {
-        it._lx = x; it._lz = z;
-        x += it.w + NODE_GAP;
-        rowD = Math.max(rowD, it.d);
-      }
-      maxRight = Math.max(maxRight, x - NODE_GAP); // drop trailing gap
-      z += rowD + GROUP_GAP;
+      const width = row.reduce((s, it) => s + it.w, 0) + Math.max(0, row.length - 1) * NODE_GAP;
+      const depth = Math.max(...row.map((it) => it.d));
+      return { row, width, depth };
+    });
+    const innerW = Math.max(0, ...rows.map((r) => r.width));
+
+    // ... then place them stacked in Z, each CENTERED horizontally (the 2D view's
+    // Pos.CENTER): empty space grows symmetrically, so streets fall into clean,
+    // centred gaps and stacked sub-packages line up on a common centre axis.
+    let z = PAD;
+    for (const r of rows) {
+      let x = PAD + (innerW - r.width) / 2;
+      for (const it of r.row) { it._lx = x; it._lz = z; x += it.w + NODE_GAP; }
+      z += r.depth + GROUP_GAP;
     }
-    node.w = Math.max(maxRight + PAD, 2 * PAD);
+    node.w = Math.max(innerW + 2 * PAD, 2 * PAD);
     node.d = Math.max(z - GROUP_GAP + PAD, 2 * PAD); // drop trailing gap, add bottom pad
   }
   measure(root);
