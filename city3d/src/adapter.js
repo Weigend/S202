@@ -237,6 +237,9 @@ export function layoutFromModel(model) {
       const botY = node.depth >= 1 ? (node.depth - 1) * STEP + SLAB_T : 0;
       slabs.push({
         x: cellX + cellW / 2, z: cellZ + cellD / 2, w: cellW, d: cellD,
+        // Flat plateau (inner region, where buildings and child hills sit); the
+        // margin out to the cell edge becomes the sloped hillside (skirt).
+        pw: Math.max(0, node.w - 2 * PAD), pd: Math.max(0, node.d - 2 * PAD),
         botY, topY, depth: node.depth, level: node.level,
         inCycle: node.inCycle, simple: node.simple,
       });
