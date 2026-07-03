@@ -113,17 +113,17 @@ export function layoutFromModel(model) {
     });
     const innerW = Math.max(0, ...rows.map((r) => r.width));
 
-    // ... then stack the rows in Z (rows left-aligned, like a VBox). WITHIN a row,
-    // items are centred on the row's cross-axis (its centre line) like a JavaFX
-    // HBox with Pos.CENTER: side-by-side sub-packages of different depths share
-    // one centre line instead of being top-aligned, and the streets fall into
-    // clean, symmetric gaps.
+    // ... then stack the rows in Z. Each row is centred BOTH ways, like the 2D
+    // view: horizontally (X) the row is centred within the package width so
+    // stacked rows share a common vertical centre axis; and within the row each
+    // item is centred on the row's cross-axis (Z) so side-by-side sub-packages of
+    // different depths share one centre line instead of being top-aligned.
     let z = PAD;
     for (const r of rows) {
-      let x = PAD;
+      let x = PAD + (innerW - r.width) / 2; // centre the row horizontally (X)
       for (const it of r.row) {
         it._lx = x;
-        it._lz = z + (r.depth - it.d) / 2; // centre each item on the row's centre line
+        it._lz = z + (r.depth - it.d) / 2; // centre item on the row's centre line (Z)
         it._rowZ0 = z; it._rowD = r.depth; // remember the row band (for street corridors)
         x += it.w + NODE_GAP;
       }
