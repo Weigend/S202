@@ -12,7 +12,7 @@ the 2D architecture view's **nested** packages and the 3D view's elevation:
 |---|---|
 | **Nested platforms** | the package tree: `com > com.example > class A` as nested rectangles |
 | Platform **elevation** | nesting depth — deeper packages terrace upward (stacked) |
-| Rows within a package | architecture level (siblings ordered by horizontalOrder) |
+| Rows within a package | local level (the "L:x" of the 2D view; siblings ordered by horizontalOrder) |
 | The **gaps** between platforms | the (hierarchical) street network |
 | One **building** per class | sitting on top of its package platform |
 | Building **height** | method count (size = amount of code) |

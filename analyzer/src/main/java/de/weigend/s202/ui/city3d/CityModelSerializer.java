@@ -111,7 +111,8 @@ public final class CityModelSerializer {
         if (node.getType() == NodeType.PACKAGE) {
             districts.add(new CityModel.District(
                     fqn, node.getSimpleName(), parentPackageFqn,
-                    level, depth, node.getHorizontalLayoutOrder(), m.packageInCycle(fqn), fp));
+                    level, node.getLevel(), depth, node.getHorizontalLayoutOrder(),
+                    m.packageInCycle(fqn), fp));
             for (ArchitectureNode child : node.getChildren()) {
                 maxLevel = Math.max(maxLevel,
                         collect(child, fqn, depth + 1, footprints, m, districts, buildings, dependencies));
@@ -119,7 +120,7 @@ public final class CityModelSerializer {
         } else {
             buildings.add(new CityModel.Building(
                     fqn, node.getSimpleName(), parentPackageFqn,
-                    level, depth, node.getHorizontalLayoutOrder(), fp,
+                    level, node.getLevel(), depth, node.getHorizontalLayoutOrder(), fp,
                     node.getDependents().size(), node.getDependencies().size(),
                     m.methodCount(fqn), node.isInterfaceType(), m.classInCycle(fqn)));
             for (String to : node.getDependencies()) {

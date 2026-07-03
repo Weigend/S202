@@ -57,7 +57,9 @@ export function layoutFromModel(model) {
   for (const d of model.districts ?? []) {
     pkg.set(d.fullName, {
       kind: 'pkg', fqn: d.fullName, simple: d.simpleName,
-      level: d.architectureLevel, depth: d.nestingDepth,
+      // level = LOCAL level (row within parent, the "L:x" of the 2D view);
+      // arch = global architecture level (used for building type/colour).
+      level: d.localLevel, arch: d.architectureLevel, depth: d.nestingDepth,
       horiz: d.horizontalOrder, inCycle: !!d.inCycle,
       children: [], classes: [], w: 0, d: 0,
     });
@@ -73,7 +75,7 @@ export function layoutFromModel(model) {
     if (!parent) continue;
     parent.classes.push({
       kind: 'cls', fqn: b.fullName, simple: b.simpleName,
-      level: b.architectureLevel, horiz: b.horizontalOrder,
+      level: b.localLevel, arch: b.architectureLevel, horiz: b.horizontalOrder,
       methodCount: b.methodCount, fanIn: b.fanIn ?? 0, fanOut: b.fanOut ?? 0,
       isInterface: !!b.isInterface, inCycle: !!b.inCycle, w: 0, d: 0,
     });
@@ -98,7 +100,8 @@ export function layoutFromModel(model) {
       if (!byLevel.has(lv)) byLevel.set(lv, []);
       byLevel.get(lv).push(it);
     }
-    const levels = [...byLevel.keys()].sort((a, b) => a - b);
+    // Highest local level first (top row), like the 2D view.
+    const levels = [...byLevel.keys()].sort((a, b) => b - a);
     let z = PAD, maxRight = PAD;
     for (const lv of levels) {
       const row = byLevel.get(lv).sort((a, b) =>
@@ -127,7 +130,7 @@ export function layoutFromModel(model) {
     const slabTop = Math.max(0, parentDepth) * STEP + SLAB_T; // sits on its package platform
     const floors = c.methodCount > 0 ? c.methodCount : (c.level + 1);
     let h = Math.max(12, 10 + floors * 9);
-    const style = styleFor(c.level, maxLevel, c.isInterface);
+    const style = styleFor(c.arch, maxLevel, c.isInterface);
     const seed = hashName(c.fqn) * 1000;
     const layout = layoutFor(style, rng);
 
