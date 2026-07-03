@@ -192,7 +192,8 @@ export function layoutFromModel(model) {
     for (let ri = 0; ri < rowKeys.length - 1; ri++) {
       const g0 = rowKeys[ri] + rowD[ri], g1 = rowKeys[ri + 1];
       const sz = oz + (g0 + g1) / 2, sw = g1 - g0;
-      streets.push({ x: cellX + cellW / 2, z: sz, w: cellW - 2 * EDGE, d: sw, y, axis: 'x' });
+      // Cross street runs to the package edge so it meets the ramp seamlessly.
+      streets.push({ x: cellX + cellW / 2, z: sz, w: cellW, d: sw, y, axis: 'x' });
       // Ramps start AT the slab edge and drop outward into the gap, so they stay
       // outside the package footprint (otherwise they'd be buried in the slab).
       ramps.push({ ax: cellX, ay: y, az: sz, bx: cellX - OUT, by: parentY, bz: sz, w: sw });                 // left
