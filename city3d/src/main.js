@@ -64,7 +64,37 @@ const raycaster = new THREE.Raycaster();
 const pointer = new THREE.Vector2();
 let pressXY = null;
 
-function hideInfo() { infoEl.style.display = 'none'; }
+// Selection highlight: a bright outline around every box of the selected class.
+const highlightGroup = new THREE.Group();
+highlightGroup.name = 'selection';
+scene.add(highlightGroup);
+const selEdges = new THREE.EdgesGeometry(new THREE.BoxGeometry(1, 1, 1).translate(0, 0.5, 0));
+const selMat = new THREE.LineBasicMaterial({ color: 0x5fc8ff, transparent: true, opacity: 0.95, depthTest: false });
+const selMat4 = new THREE.Matrix4();
+const selScale = new THREE.Matrix4().makeScale(1.06, 1.03, 1.06);
+
+function clearHighlight() {
+  for (let i = highlightGroup.children.length - 1; i >= 0; i--) highlightGroup.remove(highlightGroup.children[i]);
+}
+
+function highlightBuilding(fqn) {
+  clearHighlight();
+  const bm = city.buildingMesh;
+  if (!fqn || !bm) return;
+  bm.updateMatrixWorld();
+  for (let i = 0; i < city.boxFqns.length; i++) {
+    if (city.boxFqns[i] !== fqn) continue;
+    bm.getMatrixAt(i, selMat4);
+    selMat4.premultiply(bm.matrixWorld).multiply(selScale);
+    const line = new THREE.LineSegments(selEdges, selMat);
+    line.matrixAutoUpdate = false;
+    line.matrix.copy(selMat4);
+    line.renderOrder = 999;
+    highlightGroup.add(line);
+  }
+}
+
+function hideInfo() { infoEl.style.display = 'none'; clearHighlight(); }
 
 function showInfo(b) {
   const tags =
@@ -80,6 +110,7 @@ function showInfo(b) {
     `<div class="row"><span class="k">fan-in / fan-out</span><span class="v">${b.fanIn} / ${b.fanOut}</span></div>`;
   infoEl.style.display = 'block';
   infoEl.querySelector('.close').onclick = hideInfo;
+  highlightBuilding(b.fullName);
 }
 
 function pickAt(clientX, clientY) {
