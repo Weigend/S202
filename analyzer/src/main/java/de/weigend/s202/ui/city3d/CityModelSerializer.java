@@ -17,6 +17,9 @@ package de.weigend.s202.ui.city3d;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.SerializationFeature;
+import de.weigend.s202.domain.DependencyEdge;
+import de.weigend.s202.domain.DomainModel;
+import de.weigend.s202.reader.DependencyModel;
 import de.weigend.s202.ui.model.ArchitectureNode;
 import de.weigend.s202.ui.model.ArchitectureNode.NodeType;
 import javafx.geometry.Bounds;
@@ -25,8 +28,10 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 /**
  * Serialises an {@link ArchitectureNode} tree into the {@link CityModel} JSON
@@ -59,6 +64,31 @@ public final class CityModelSerializer {
             public int methodCount(String fqn) { return -1; }
             public boolean classInCycle(String fqn) { return false; }
             public boolean packageInCycle(String fqn) { return false; }
+        };
+    }
+
+    /**
+     * Builds a {@link Metrics} adapter from the computed models: method count per
+     * class (from the raw {@link DependencyModel}) and cycle membership (from the
+     * {@link DomainModel} class back-edges and package tangles).
+     */
+    public static Metrics metricsFrom(DependencyModel raw, DomainModel calculated) {
+        Set<String> classCycle = new HashSet<>();
+        for (DependencyEdge e : calculated.getClassBackEdges()) {
+            classCycle.add(e.from());
+            classCycle.add(e.to());
+        }
+        Set<String> packageCycle = new HashSet<>();
+        for (Set<String> tangle : calculated.getPackageTangles()) {
+            packageCycle.addAll(tangle);
+        }
+        return new Metrics() {
+            @Override public int methodCount(String fqn) {
+                DependencyModel.ClassInfo ci = raw.getClass(fqn);
+                return ci == null ? -1 : ci.methods.size();
+            }
+            @Override public boolean classInCycle(String fqn) { return classCycle.contains(fqn); }
+            @Override public boolean packageInCycle(String fqn) { return packageCycle.contains(fqn); }
         };
     }
 

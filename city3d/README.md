@@ -25,7 +25,20 @@ Traffic is currently off (the nested layout has no straight full-span avenues fo
 Everything else (`city.js` rendering, `sky.js`, `weather.js`, `traffic.js`,
 `postfx.js`, `controls.js`) is the original City3JS view.
 
-## How to run
+## In the app (Structure202)
+
+Build the web bundle once, then use the menu:
+
+```bash
+cd city3d && npm install && npm run build   # produces city3d/dist
+```
+
+In Structure202, load/analyse a project and pick **File → Show City3D View**. The
+app serialises the current analysis to a `CityModel`, serves the bundle on a
+loopback port (`de.weigend.s202.ui.city3d.CityView3DServer`) and opens the city
+in your browser. Re-run the menu after analysing another jar to update it.
+
+## How to run (standalone dev)
 
 **1. Export a city model** from a `.jar` (headless, plain Java — no UI). Writes
 `city3d/public/city.json`, which the view fetches:

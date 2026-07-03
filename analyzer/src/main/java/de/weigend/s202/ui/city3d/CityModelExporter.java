@@ -15,7 +15,6 @@
  */
 package de.weigend.s202.ui.city3d;
 
-import de.weigend.s202.domain.DependencyEdge;
 import de.weigend.s202.domain.DomainModel;
 import de.weigend.s202.domain.impl.LevelCalculator;
 import de.weigend.s202.reader.DependencyModel;
@@ -25,8 +24,6 @@ import de.weigend.s202.ui.model.ArchitectureNode;
 import de.weigend.s202.ui.model.ArchitectureNodeBuilder;
 
 import java.nio.file.Path;
-import java.util.HashSet;
-import java.util.Set;
 
 /**
  * Headless Phase-0 exporter for the City3D prototype: runs the plain-Java
@@ -59,7 +56,7 @@ public final class CityModelExporter {
         ArchitectureNode root = new ArchitectureNodeBuilder().build(calculated);
         new HorizontalRowLayoutOptimizer().assignHorizontalLayoutOrders(root);
 
-        CityModelSerializer.Metrics metrics = buildMetrics(raw, calculated);
+        CityModelSerializer.Metrics metrics = CityModelSerializer.metricsFrom(raw, calculated);
 
         CityModelSerializer serializer = new CityModelSerializer();
         CityModel model = serializer.build(root, null, metrics); // headless: no footprints
@@ -69,27 +66,6 @@ public final class CityModelExporter {
         System.out.printf("City3D export: wrote %s%n  maxLevel=%d, districts=%d, buildings=%d, dependencies=%d, classesInCycle=%d%n",
                 output.toAbsolutePath(), model.maxLevel(),
                 model.districts().size(), model.buildings().size(), model.dependencies().size(), cycleClasses);
-    }
-
-    /** Per-element metrics that are not on the tree: method count (size proxy) and cycle membership. */
-    private static CityModelSerializer.Metrics buildMetrics(DependencyModel raw, DomainModel calculated) {
-        Set<String> classCycle = new HashSet<>();
-        for (DependencyEdge e : calculated.getClassBackEdges()) {
-            classCycle.add(e.from());
-            classCycle.add(e.to());
-        }
-        Set<String> packageCycle = new HashSet<>();
-        for (Set<String> tangle : calculated.getPackageTangles()) {
-            packageCycle.addAll(tangle);
-        }
-        return new CityModelSerializer.Metrics() {
-            @Override public int methodCount(String fqn) {
-                DependencyModel.ClassInfo ci = raw.getClass(fqn);
-                return ci == null ? -1 : ci.methods.size();
-            }
-            @Override public boolean classInCycle(String fqn) { return classCycle.contains(fqn); }
-            @Override public boolean packageInCycle(String fqn) { return packageCycle.contains(fqn); }
-        };
     }
 
     private CityModelExporter() {

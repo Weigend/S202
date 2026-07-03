@@ -6,12 +6,12 @@ export default defineConfig({
     host: true,
     port: 5173,
   },
+  base: './', // relative asset paths so the bundle can be served from any path
   build: {
     target: 'esnext',
     rollupOptions: {
       input: {
         main: resolve(__dirname, 'index.html'),
-        lab: resolve(__dirname, 'lab.html'),
       },
     },
   },
