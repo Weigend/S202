@@ -277,22 +277,40 @@ function makeStreets(streets) {
   return group;
 }
 
-// ---- Sloped ramp connectors (street A -> lower street B over a package edge) --
+// ---- Soft ramp connectors (street A -> lower street B over a package edge) ----
+// A curved ribbon following a cosine profile: tangent-flat where it meets the
+// upper street and the lower one, steepest in the middle — no sharp edges.
 function makeRamps(ramps) {
   const group = new THREE.Group();
   group.name = 'ramps';
   if (!ramps.length) return group;
-  const mat = new THREE.MeshStandardMaterial({ color: 0x0d1016, roughness: 0.9, metalness: 0 });
-  const xAxis = new THREE.Vector3(1, 0, 0);
+  const mat = new THREE.MeshStandardMaterial({
+    color: 0x0d1016, roughness: 0.9, metalness: 0, side: THREE.DoubleSide,
+  });
+  const N = 16; // profile segments
   for (const r of ramps) {
-    const a = new THREE.Vector3(r.ax, r.ay, r.az);
-    const b = new THREE.Vector3(r.bx, r.by, r.bz);
-    const dir = new THREE.Vector3().subVectors(b, a);
-    const len = dir.length();
-    if (len < 0.01) continue;
-    const mesh = new THREE.Mesh(new THREE.BoxGeometry(len, 0.12, r.w), mat);
-    mesh.position.copy(a).add(b).multiplyScalar(0.5);
-    mesh.quaternion.setFromUnitVectors(xAxis, dir.multiplyScalar(1 / len));
+    // horizontal run direction (in the XZ plane) + perpendicular width direction
+    let hx = r.bx - r.ax, hz = r.bz - r.az;
+    const hl = Math.hypot(hx, hz) || 1; hx /= hl; hz /= hl;
+    const wx = -hz * r.w / 2, wz = hx * r.w / 2;
+    const pos = [], idx = [];
+    for (let i = 0; i <= N; i++) {
+      const t = i / N;
+      const ease = (1 - Math.cos(Math.PI * t)) / 2; // cosine S-curve for the height
+      const px = r.ax + (r.bx - r.ax) * t;
+      const py = r.ay + (r.by - r.ay) * ease;
+      const pz = r.az + (r.bz - r.az) * t;
+      pos.push(px + wx, py, pz + wz, px - wx, py, pz - wz);
+    }
+    for (let i = 0; i < N; i++) {
+      const a = i * 2;
+      idx.push(a, a + 1, a + 2, a + 1, a + 3, a + 2);
+    }
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+    geo.setIndex(idx);
+    geo.computeVertexNormals();
+    const mesh = new THREE.Mesh(geo, mat);
     mesh.receiveShadow = true;
     group.add(mesh);
   }
