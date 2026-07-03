@@ -94,7 +94,7 @@ export function buildCity(scene, atmosphere, model, seed = 1) {
   // stacked package slabs, and the gaps between them are the (hierarchical) streets.
   // Meaning: package nesting = terraces raised by depth, height = methods,
   // footprint = fan-in/out, building type = architecture level. See adapter.js.
-  const { boxes, rooftops, groundFacades, slabs, spanX, spanZ, x0, z0, maxDepth }
+  const { boxes, rooftops, groundFacades, slabs, streets, spanX, spanZ, x0, z0, maxDepth }
     = layoutFromModel(model);
 
   // ---- InstancedMesh aufbauen ------------------------------------------------
@@ -148,6 +148,11 @@ export function buildCity(scene, atmosphere, model, seed = 1) {
   const slabMesh = makePackageSlabs(slabs, maxDepth);
   group.add(slabMesh);
 
+  // Hierarchical streets: the gap corridors between each package's children,
+  // drawn on that package's platform (child streets connect up to the parent's).
+  const streetMesh = makeStreets(streets);
+  group.add(streetMesh);
+
   // ---- Boden -----------------------------------------------------------------
   // Flat wet-reflective asphalt; the streets are the gaps between the platforms.
   const ground = makeGroundBase(spanX, spanZ, atmosphere);
@@ -168,6 +173,7 @@ export function buildCity(scene, atmosphere, model, seed = 1) {
       geo.dispose();
       mat.dispose();
       slabMesh.traverse((o) => { o.geometry?.dispose(); o.material?.dispose(); });
+      streetMesh.traverse((o) => { o.geometry?.dispose(); o.material?.dispose(); });
       roofDetails.traverse((o) => { o.geometry?.dispose(); o.material?.dispose(); });
       groundDetails.traverse((o) => { o.geometry?.dispose(); o.material?.dispose(); });
       ground.traverse((o) => {
@@ -210,6 +216,59 @@ function makePackageSlabs(slabs, maxDepth) {
   mesh.instanceMatrix.needsUpdate = true;
   if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true;
   group.add(mesh);
+  return group;
+}
+
+// ---- Hierarchical streets --------------------------------------------------
+// Dark asphalt strips with dashed centre lines, laid in the gap corridors of
+// each package (on its platform). Same look as the original grid streets, but
+// nested: a package's avenues sit in the free space of its parent's avenues.
+function makeStreets(streets) {
+  const group = new THREE.Group();
+  group.name = 'streets';
+  if (!streets.length) return group;
+
+  const m4 = new THREE.Matrix4(), q = new THREE.Quaternion();
+  const p = new THREE.Vector3(), s = new THREE.Vector3();
+
+  const asphalt = new THREE.InstancedMesh(
+    new THREE.BoxGeometry(1, 1, 1),
+    new THREE.MeshStandardMaterial({ color: 0x0d1016, roughness: 0.9, metalness: 0 }),
+    streets.length);
+  asphalt.receiveShadow = true;
+
+  const DASH = 5, GAP = 6;
+  const dashes = [];
+  for (let i = 0; i < streets.length; i++) {
+    const st = streets[i];
+    p.set(st.x, st.y + 0.04, st.z);
+    s.set(Math.max(0.2, st.w), 0.08, Math.max(0.2, st.d));
+    m4.compose(p, q, s);
+    asphalt.setMatrixAt(i, m4);
+    if (st.axis === 'x') {
+      for (let x = -st.w / 2 + DASH / 2; x < st.w / 2; x += DASH + GAP)
+        dashes.push({ x: st.x + x, y: st.y + 0.09, z: st.z, w: DASH, d: 0.25 });
+    } else {
+      for (let z = -st.d / 2 + DASH / 2; z < st.d / 2; z += DASH + GAP)
+        dashes.push({ x: st.x, y: st.y + 0.09, z: st.z + z, w: 0.25, d: DASH });
+    }
+  }
+  asphalt.instanceMatrix.needsUpdate = true;
+  group.add(asphalt);
+
+  if (dashes.length) {
+    const dm = new THREE.InstancedMesh(
+      new THREE.BoxGeometry(1, 1, 1),
+      new THREE.MeshStandardMaterial({ color: 0xd2b866, roughness: 0.8, metalness: 0 }),
+      dashes.length);
+    for (let i = 0; i < dashes.length; i++) {
+      const d = dashes[i];
+      p.set(d.x, d.y, d.z); s.set(d.w, 0.06, d.d); m4.compose(p, q, s);
+      dm.setMatrixAt(i, m4);
+    }
+    dm.instanceMatrix.needsUpdate = true;
+    group.add(dm);
+  }
   return group;
 }
 

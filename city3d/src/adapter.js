@@ -124,6 +124,41 @@ export function layoutFromModel(model) {
   const boxes = [];
   const rooftops = [];
   const slabs = [];
+  const streets = []; // gap corridors between a package's children (its streets)
+
+  // The gaps between a package's children are its streets, drawn on the package's
+  // slab surface. Because a package sits inside the free space (streets) of its
+  // parent, these nested street grids connect up the hierarchy automatically.
+  function emitStreets(node, ox, oz) {
+    const items = [...node.children, ...node.classes].filter((it) => it._lx != null);
+    if (!items.length) return;
+    const y = node.depth >= 0 ? node.depth * STEP + SLAB_T : 0; // this package's ground
+    const innerL = PAD, innerR = node.w - PAD;
+
+    // group items into rows by their row start (_lz); a row's depth = tallest item
+    const rows = new Map();
+    for (const it of items) {
+      if (!rows.has(it._lz)) rows.set(it._lz, []);
+      rows.get(it._lz).push(it);
+    }
+    const rowKeys = [...rows.keys()].sort((a, b) => a - b);
+    const rowD = rowKeys.map((k) => Math.max(...rows.get(k).map((it) => it.d)));
+
+    // vertical streets (run along Z) between siblings within each row
+    rowKeys.forEach((zk, ri) => {
+      const row = rows.get(zk).sort((a, b) => a._lx - b._lx);
+      for (let i = 0; i < row.length - 1; i++) {
+        const a = row[i], b = row[i + 1];
+        const g0 = a._lx + a.w, g1 = b._lx;
+        streets.push({ x: ox + (g0 + g1) / 2, z: oz + zk + rowD[ri] / 2, w: g1 - g0, d: rowD[ri], y, axis: 'z' });
+      }
+    });
+    // horizontal streets (run along X) between successive level rows
+    for (let ri = 0; ri < rowKeys.length - 1; ri++) {
+      const g0 = rowKeys[ri] + rowD[ri], g1 = rowKeys[ri + 1];
+      streets.push({ x: ox + (innerL + innerR) / 2, z: oz + (g0 + g1) / 2, w: innerR - innerL, d: g1 - g0, y, axis: 'x' });
+    }
+  }
 
   function emitBuilding(c, ox, oz, parentDepth) {
     const cx = ox + c.w / 2, cz = oz + c.d / 2;
@@ -160,6 +195,7 @@ export function layoutFromModel(model) {
         inCycle: node.inCycle, simple: node.simple,
       });
     }
+    if (node.kind === 'pkg') emitStreets(node, ox, oz);
     for (const child of node.children) place(child, ox + child._lx, oz + child._lz);
     for (const cls of node.classes) emitBuilding(cls, ox + cls._lx, oz + cls._lz, node.depth);
   }
@@ -167,9 +203,9 @@ export function layoutFromModel(model) {
   place(root, -root.w / 2, -root.d / 2);
 
   return {
-    boxes, rooftops, slabs,
+    boxes, rooftops, slabs, streets,
     groundFacades: [],           // shopfronts assume ground-level buildings; N/A on platforms
-    streetsX: [], streetsZ: [],  // streets are the gaps between nested platforms
+    streetsX: [], streetsZ: [],  // no straight full-span avenues (traffic stays off)
     spanX: root.w, spanZ: root.d, x0: -root.w / 2, z0: -root.d / 2,
     maxDepth: Math.max(0, ...slabs.map((s) => s.depth), 0),
     grid: [slabs.length, boxes.length],
