@@ -20,6 +20,7 @@ const NODE_GAP = 12;   // gap between siblings in a level row (vertical streets)
 const GROUP_GAP = 12;  // gap between level rows (horizontal streets) — equal to NODE_GAP
 const PAD = 7;         // inner margin of a package             (its surrounding street)
 const EDGE = 8;        // keep streets this far from the slab edge (uniform border)
+const STREET_FILL = 2 / 3; // asphalt fills 2/3 of the gap (centred, leaving a border)
 const STEP = 3;        // elevation added per nesting level (= pedestal thickness)
 const SLAB_T = 3;      // package platform thickness
 
@@ -181,7 +182,7 @@ export function layoutFromModel(model) {
       for (let i = 0; i < row.length - 1; i++) {
         const a = row[i], b = row[i + 1];
         const g0 = a._cellX + a._cellW, g1 = b._cellX;
-        streets.push({ x: ox + (g0 + g1) / 2, z: zc, w: g1 - g0, d: dd, y, axis: 'z' });
+        streets.push({ x: ox + (g0 + g1) / 2, z: zc, w: (g1 - g0) * STREET_FILL, d: dd, y, axis: 'z' });
       }
     });
     // horizontal streets (run along X) between successive level rows, inset from
@@ -191,7 +192,7 @@ export function layoutFromModel(model) {
     const OUT = NODE_GAP / 2; // how far the ramp reaches into the parent gap
     for (let ri = 0; ri < rowKeys.length - 1; ri++) {
       const g0 = rowKeys[ri] + rowD[ri], g1 = rowKeys[ri + 1];
-      const sz = oz + (g0 + g1) / 2, sw = g1 - g0;
+      const sz = oz + (g0 + g1) / 2, sw = (g1 - g0) * STREET_FILL;
       // Cross street runs to the package edge so it meets the ramp seamlessly.
       streets.push({ x: cellX + cellW / 2, z: sz, w: cellW, d: sw, y, axis: 'x' });
       // Ramps start AT the slab edge and drop outward into the gap, so they stay
