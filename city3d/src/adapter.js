@@ -113,13 +113,20 @@ export function layoutFromModel(model) {
     });
     const innerW = Math.max(0, ...rows.map((r) => r.width));
 
-    // ... then place them stacked in Z, each CENTERED horizontally (the 2D view's
-    // Pos.CENTER): empty space grows symmetrically, so streets fall into clean,
-    // centred gaps and stacked sub-packages line up on a common centre axis.
+    // ... then stack the rows in Z (rows left-aligned, like a VBox). WITHIN a row,
+    // items are centred on the row's cross-axis (its centre line) like a JavaFX
+    // HBox with Pos.CENTER: side-by-side sub-packages of different depths share
+    // one centre line instead of being top-aligned, and the streets fall into
+    // clean, symmetric gaps.
     let z = PAD;
     for (const r of rows) {
-      let x = PAD + (innerW - r.width) / 2;
-      for (const it of r.row) { it._lx = x; it._lz = z; x += it.w + NODE_GAP; }
+      let x = PAD;
+      for (const it of r.row) {
+        it._lx = x;
+        it._lz = z + (r.depth - it.d) / 2; // centre each item on the row's centre line
+        it._rowZ0 = z; it._rowD = r.depth; // remember the row band (for street corridors)
+        x += it.w + NODE_GAP;
+      }
       z += r.depth + GROUP_GAP;
     }
     node.w = Math.max(innerW + 2 * PAD, 2 * PAD);
@@ -142,14 +149,15 @@ export function layoutFromModel(model) {
     const y = node.depth >= 0 ? node.depth * STEP + SLAB_T : 0; // this package's ground
     const innerL = PAD, innerR = node.w - PAD;
 
-    // group items into rows by their row start (_lz); a row's depth = tallest item
+    // group items into rows by their row band (items in a row share _rowZ0, but
+    // have different _lz because they are centred on the row's cross-axis)
     const rows = new Map();
     for (const it of items) {
-      if (!rows.has(it._lz)) rows.set(it._lz, []);
-      rows.get(it._lz).push(it);
+      if (!rows.has(it._rowZ0)) rows.set(it._rowZ0, []);
+      rows.get(it._rowZ0).push(it);
     }
     const rowKeys = [...rows.keys()].sort((a, b) => a - b);
-    const rowD = rowKeys.map((k) => Math.max(...rows.get(k).map((it) => it.d)));
+    const rowD = rowKeys.map((k) => rows.get(k)[0]._rowD);
 
     // vertical streets (run along Z) between siblings within each row
     rowKeys.forEach((zk, ri) => {
