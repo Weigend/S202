@@ -227,7 +227,9 @@ export function layoutFromModel(model) {
     // Centre the node's (tight) content within the cell it was given to fill.
     const ox = cellX + (cellW - node.w) / 2;
     const oz = cellZ + (cellD - node.d) / 2;
-    if (node.kind === 'pkg') emitStreets(node, cellX, cellZ, cellW, cellD, ox, oz);
+    // Packages that consist only of classes (no sub-packages) get NO internal
+    // streets for now — the class-level street layout is still to be designed.
+    if (node.kind === 'pkg' && node.children.length > 0) emitStreets(node, cellX, cellZ, cellW, cellD, ox, oz);
     for (const child of node.children) place(child, ox + child._cellX, oz + child._cellZ, child._cellW, child._cellD);
     for (const cls of node.classes) emitBuilding(cls, ox + cls._cellX, oz + cls._cellZ, node.depth);
   }
