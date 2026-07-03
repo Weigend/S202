@@ -230,9 +230,13 @@ export function layoutFromModel(model) {
 
   function place(node, cellX, cellZ, cellW, cellD) {
     if (node.kind === 'pkg' && node.depth >= 0) {
+      // Solid pedestal: from the parent's top surface up to this package's top,
+      // so terraces stack without an air gap under the nested platforms.
+      const topY = node.depth * STEP + SLAB_T;
+      const botY = node.depth >= 1 ? (node.depth - 1) * STEP + SLAB_T : 0;
       slabs.push({
         x: cellX + cellW / 2, z: cellZ + cellD / 2, w: cellW, d: cellD,
-        y: node.depth * STEP, depth: node.depth, level: node.level,
+        botY, topY, depth: node.depth, level: node.level,
         inCycle: node.inCycle, simple: node.simple,
       });
     }

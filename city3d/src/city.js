@@ -210,8 +210,8 @@ function makePackageSlabs(slabs, maxDepth) {
   const pos = new THREE.Vector3(), scl = new THREE.Vector3(), col = new THREE.Color();
   for (let i = 0; i < slabs.length; i++) {
     const s = slabs[i];
-    pos.set(s.x, s.y + SLAB_T / 2, s.z);
-    scl.set(s.w, SLAB_T, s.d);
+    pos.set(s.x, (s.botY + s.topY) / 2, s.z);
+    scl.set(s.w, s.topY - s.botY, s.d);
     m4.compose(pos, q, scl);
     mesh.setMatrixAt(i, m4);
     col.copy(base).lerp(deep, maxDepth > 0 ? s.depth / maxDepth : 0);
