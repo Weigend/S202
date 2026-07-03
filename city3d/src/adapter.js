@@ -113,19 +113,28 @@ export function layoutFromModel(model) {
     });
     const innerW = Math.max(0, ...rows.map((r) => r.width));
 
-    // ... then stack the rows in Z. Each row is centred BOTH ways, like the 2D
-    // view: horizontally (X) the row is centred within the package width so
-    // stacked rows share a common vertical centre axis; and within the row each
-    // item is centred on the row's cross-axis (Z) so side-by-side sub-packages of
-    // different depths share one centre line instead of being top-aligned.
+    // ... then stack the rows in Z and give every child a CELL it fills, like the
+    // 2D box layout (JavaFX Hgrow / maxSize=MAX_VALUE). A sub-package grows to use
+    // ALL the free space in its cell: it fills the row depth (Z — "extends equally
+    // to the back") and shares any spare row width (X). A class keeps its size and
+    // is centred in its cell (its arrangement is already correct). A row with no
+    // sub-package is centred horizontally; a row with sub-packages fills the width.
     let z = PAD;
     for (const r of rows) {
-      let x = PAD + (innerW - r.width) / 2; // centre the row horizontally (X)
+      const stretchers = r.row.filter((it) => it.kind === 'pkg');
+      const extra = Math.max(0, innerW - r.width);
+      const per = stretchers.length ? extra / stretchers.length : 0;
+      let x = stretchers.length ? PAD : PAD + (innerW - r.width) / 2;
       for (const it of r.row) {
-        it._lx = x;
-        it._lz = z + (r.depth - it.d) / 2; // centre item on the row's centre line (Z)
-        it._rowZ0 = z; it._rowD = r.depth; // remember the row band (for street corridors)
-        x += it.w + NODE_GAP;
+        it._rowZ0 = z; it._rowD = r.depth; // row band (for street corridors)
+        if (it.kind === 'pkg') {
+          it._cellX = x; it._cellZ = z;                 // fill the cell ...
+          it._cellW = it.w + per; it._cellD = r.depth;  // ... spare width (X) + full row depth (Z)
+        } else {
+          it._cellX = x; it._cellZ = z + (r.depth - it.d) / 2; // class: fixed, centred in the band
+          it._cellW = it.w; it._cellD = it.d;
+        }
+        x += it._cellW + NODE_GAP;
       }
       z += r.depth + GROUP_GAP;
     }
@@ -144,13 +153,12 @@ export function layoutFromModel(model) {
   // slab surface. Because a package sits inside the free space (streets) of its
   // parent, these nested street grids connect up the hierarchy automatically.
   function emitStreets(node, ox, oz) {
-    const items = [...node.children, ...node.classes].filter((it) => it._lx != null);
+    const items = [...node.children, ...node.classes].filter((it) => it._cellX != null);
     if (!items.length) return;
     const y = node.depth >= 0 ? node.depth * STEP + SLAB_T : 0; // this package's ground
     const innerL = PAD, innerR = node.w - PAD;
 
-    // group items into rows by their row band (items in a row share _rowZ0, but
-    // have different _lz because they are centred on the row's cross-axis)
+    // group items into their level rows by the row band (_rowZ0)
     const rows = new Map();
     for (const it of items) {
       if (!rows.has(it._rowZ0)) rows.set(it._rowZ0, []);
@@ -159,12 +167,12 @@ export function layoutFromModel(model) {
     const rowKeys = [...rows.keys()].sort((a, b) => a - b);
     const rowD = rowKeys.map((k) => rows.get(k)[0]._rowD);
 
-    // vertical streets (run along Z) between siblings within each row
+    // vertical streets (run along Z) between the cells within each row
     rowKeys.forEach((zk, ri) => {
-      const row = rows.get(zk).sort((a, b) => a._lx - b._lx);
+      const row = rows.get(zk).sort((a, b) => a._cellX - b._cellX);
       for (let i = 0; i < row.length - 1; i++) {
         const a = row[i], b = row[i + 1];
-        const g0 = a._lx + a.w, g1 = b._lx;
+        const g0 = a._cellX + a._cellW, g1 = b._cellX;
         streets.push({ x: ox + (g0 + g1) / 2, z: oz + zk + rowD[ri] / 2, w: g1 - g0, d: rowD[ri], y, axis: 'z' });
       }
     });
@@ -202,20 +210,23 @@ export function layoutFromModel(model) {
     });
   }
 
-  function place(node, ox, oz) {
+  function place(node, cellX, cellZ, cellW, cellD) {
     if (node.kind === 'pkg' && node.depth >= 0) {
       slabs.push({
-        x: ox + node.w / 2, z: oz + node.d / 2, w: node.w, d: node.d,
+        x: cellX + cellW / 2, z: cellZ + cellD / 2, w: cellW, d: cellD,
         y: node.depth * STEP, depth: node.depth, level: node.level,
         inCycle: node.inCycle, simple: node.simple,
       });
     }
+    // Centre the node's (tight) content within the cell it was given to fill.
+    const ox = cellX + (cellW - node.w) / 2;
+    const oz = cellZ + (cellD - node.d) / 2;
     if (node.kind === 'pkg') emitStreets(node, ox, oz);
-    for (const child of node.children) place(child, ox + child._lx, oz + child._lz);
-    for (const cls of node.classes) emitBuilding(cls, ox + cls._lx, oz + cls._lz, node.depth);
+    for (const child of node.children) place(child, ox + child._cellX, oz + child._cellZ, child._cellW, child._cellD);
+    for (const cls of node.classes) emitBuilding(cls, ox + cls._cellX, oz + cls._cellZ, node.depth);
   }
-  // Centre the city on the origin.
-  place(root, -root.w / 2, -root.d / 2);
+  // Centre the city on the origin; the root fills a cell equal to its own size.
+  place(root, -root.w / 2, -root.d / 2, root.w, root.d);
 
   return {
     boxes, rooftops, slabs, streets,
