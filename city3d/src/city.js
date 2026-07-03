@@ -168,6 +168,8 @@ export function buildCity(scene, atmosphere, model, seed = 1) {
     material: mat,
     buildingMesh: mesh,                       // the class buildings (InstancedMesh) for picking
     boxFqns: boxes.map((b) => b.fqn),          // instanceId -> class fqn (undefined for antennas)
+    slabPickMesh: slabMesh.userData.mesh,      // the package platforms (InstancedMesh) for picking
+    slabFqns: slabs.map((s) => s.fqn),         // instanceId -> package fqn
     streetLightMaterial: null,
     nightMaterials: [...(groundDetails.userData.nightMaterials ?? [])].filter(Boolean),
     streetsX: [], streetsZ: [],
@@ -221,6 +223,7 @@ function makePackageSlabs(slabs, maxDepth) {
   mesh.instanceMatrix.needsUpdate = true;
   if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true;
   group.add(mesh);
+  group.userData.mesh = mesh; // exposed for picking (instanceId -> slab)
   return group;
 }
 

@@ -238,7 +238,7 @@ export function layoutFromModel(model) {
       slabs.push({
         x: cellX + cellW / 2, z: cellZ + cellD / 2, w: cellW, d: cellD,
         botY, topY, depth: node.depth, level: node.level,
-        inCycle: node.inCycle, simple: node.simple,
+        inCycle: node.inCycle, simple: node.simple, fqn: node.fqn,
       });
     }
     // Centre the node's (tight) content within the cell it was given to fill.

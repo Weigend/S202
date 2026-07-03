@@ -64,11 +64,13 @@ const raycaster = new THREE.Raycaster();
 const pointer = new THREE.Vector2();
 let pressXY = null;
 
-// Selection highlight: a bright outline around every box of the selected class.
+// Selection highlight: a bright outline around the selected class' boxes or the
+// selected package's platform.
 const highlightGroup = new THREE.Group();
 highlightGroup.name = 'selection';
 scene.add(highlightGroup);
-const selEdges = new THREE.EdgesGeometry(new THREE.BoxGeometry(1, 1, 1).translate(0, 0.5, 0));
+const selEdgesBuilding = new THREE.EdgesGeometry(new THREE.BoxGeometry(1, 1, 1).translate(0, 0.5, 0)); // base at y=0
+const selEdgesSlab = new THREE.EdgesGeometry(new THREE.BoxGeometry(1, 1, 1));                          // centred
 const selMat = new THREE.LineBasicMaterial({ color: 0x5fc8ff, transparent: true, opacity: 0.95, depthTest: false });
 const selMat4 = new THREE.Matrix4();
 const selScale = new THREE.Matrix4().makeScale(1.06, 1.03, 1.06);
@@ -77,16 +79,13 @@ function clearHighlight() {
   for (let i = highlightGroup.children.length - 1; i >= 0; i--) highlightGroup.remove(highlightGroup.children[i]);
 }
 
-function highlightBuilding(fqn) {
-  clearHighlight();
-  const bm = city.buildingMesh;
-  if (!fqn || !bm) return;
-  bm.updateMatrixWorld();
-  for (let i = 0; i < city.boxFqns.length; i++) {
-    if (city.boxFqns[i] !== fqn) continue;
-    bm.getMatrixAt(i, selMat4);
-    selMat4.premultiply(bm.matrixWorld).multiply(selScale);
-    const line = new THREE.LineSegments(selEdges, selMat);
+function outlineInstances(mesh, edges, ids) {
+  if (!mesh || !ids.length) return;
+  mesh.updateMatrixWorld();
+  for (const i of ids) {
+    mesh.getMatrixAt(i, selMat4);
+    selMat4.premultiply(mesh.matrixWorld).multiply(selScale);
+    const line = new THREE.LineSegments(edges, selMat);
     line.matrixAutoUpdate = false;
     line.matrix.copy(selMat4);
     line.renderOrder = 999;
@@ -94,34 +93,86 @@ function highlightBuilding(fqn) {
   }
 }
 
+function highlight(sel) {
+  clearHighlight();
+  if (!sel) return;
+  if (sel.kind === 'class') {
+    const ids = [];
+    for (let i = 0; i < city.boxFqns.length; i++) if (city.boxFqns[i] === sel.fqn) ids.push(i);
+    outlineInstances(city.buildingMesh, selEdgesBuilding, ids);
+  } else {
+    const i = city.slabFqns.indexOf(sel.fqn);
+    if (i >= 0) outlineInstances(city.slabPickMesh, selEdgesSlab, [i]);
+  }
+}
+
 function hideInfo() { infoEl.style.display = 'none'; clearHighlight(); }
 
-function showInfo(b) {
+function rows(pairs) {
+  return pairs.map(([k, v]) => `<div class="row"><span class="k">${k}</span><span class="v">${v}</span></div>`).join('');
+}
+
+function showClass(b) {
   const tags =
+    ' <span class="tag" style="background:rgba(127,179,255,.14);color:#7fb3ff">class</span>' +
     (b.isInterface ? ' <span class="tag iface">interface</span>' : '') +
     (b.inCycle ? ' <span class="tag cycle">⟲ cycle</span>' : '');
   infoEl.innerHTML =
     '<span class="close" title="schließen">×</span>' +
     `<div class="cls">${b.simpleName}${tags}</div>` +
     `<div class="fqn">${b.fullName}</div>` +
-    `<div class="row"><span class="k">package</span><span class="k">${b.districtFullName || '–'}</span></div>` +
-    `<div class="row"><span class="k">architecture level</span><span class="v">${b.architectureLevel}</span></div>` +
-    `<div class="row"><span class="k">methods</span><span class="v">${b.methodCount >= 0 ? b.methodCount : '–'}</span></div>` +
-    `<div class="row"><span class="k">fan-in / fan-out</span><span class="v">${b.fanIn} / ${b.fanOut}</span></div>`;
-  infoEl.style.display = 'block';
-  infoEl.querySelector('.close').onclick = hideInfo;
-  highlightBuilding(b.fullName);
+    rows([
+      ['package', `<span style="color:#7f97c2">${b.districtFullName || '–'}</span>`],
+      ['architecture level', b.architectureLevel],
+      ['methods', b.methodCount >= 0 ? b.methodCount : '–'],
+      ['fan-in / fan-out', `${b.fanIn} / ${b.fanOut}`],
+    ]);
 }
 
-function pickAt(clientX, clientY) {
-  if (!city.buildingMesh) return null;
+function showPackage(d) {
+  const classes = cityModel.buildings.filter((b) => b.districtFullName === d.fullName).length;
+  const subs = cityModel.districts.filter((x) => x.parentFullName === d.fullName).length;
+  const tags =
+    ' <span class="tag" style="background:rgba(214,184,90,.2);color:#d6b85a">package</span>' +
+    (d.inCycle ? ' <span class="tag cycle">⟲ tangle</span>' : '');
+  infoEl.innerHTML =
+    '<span class="close" title="schließen">×</span>' +
+    `<div class="cls">${d.simpleName}${tags}</div>` +
+    `<div class="fqn">${d.fullName}</div>` +
+    rows([
+      ['architecture level', d.architectureLevel],
+      ['nesting depth', d.nestingDepth],
+      ['direct classes', classes],
+      ['sub-packages', subs],
+    ]);
+}
+
+function select(sel) {
+  if (!sel) { hideInfo(); return; }
+  if (sel.kind === 'class') showClass(sel.data); else showPackage(sel.data);
+  infoEl.style.display = 'block';
+  infoEl.querySelector('.close').onclick = hideInfo;
+  highlight(sel);
+}
+
+function pick(clientX, clientY) {
+  const targets = [];
+  if (city.buildingMesh) targets.push(city.buildingMesh);
+  if (city.slabPickMesh) targets.push(city.slabPickMesh);
+  if (!targets.length) return null;
   pointer.x = (clientX / window.innerWidth) * 2 - 1;
   pointer.y = -(clientY / window.innerHeight) * 2 + 1;
   raycaster.setFromCamera(pointer, camera);
-  const hit = raycaster.intersectObject(city.buildingMesh, false)[0];
+  const hit = raycaster.intersectObjects(targets, false)[0];
   if (!hit || hit.instanceId == null) return null;
-  const fqn = city.boxFqns[hit.instanceId];
-  return fqn ? cityModel.buildings.find((x) => x.fullName === fqn) : null;
+  if (hit.object === city.buildingMesh) {
+    const fqn = city.boxFqns[hit.instanceId];
+    const b = fqn && cityModel.buildings.find((x) => x.fullName === fqn);
+    return b ? { kind: 'class', data: b, fqn } : null;
+  }
+  const fqn = city.slabFqns[hit.instanceId];
+  const d = fqn && cityModel.districts.find((x) => x.fullName === fqn);
+  return d ? { kind: 'package', data: d, fqn } : null;
 }
 
 renderer.domElement.addEventListener('pointerdown', (e) => { pressXY = [e.clientX, e.clientY]; });
@@ -130,12 +181,11 @@ renderer.domElement.addEventListener('pointerup', (e) => {
   const moved = Math.hypot(e.clientX - pressXY[0], e.clientY - pressXY[1]);
   pressXY = null;
   if (moved > 5) return; // an orbit drag, not a click
-  const b = pickAt(e.clientX, e.clientY);
-  if (b) showInfo(b); else hideInfo();
+  select(pick(e.clientX, e.clientY));
 });
 renderer.domElement.addEventListener('pointermove', (e) => {
   if (pressXY) return;
-  renderer.domElement.style.cursor = pickAt(e.clientX, e.clientY) ? 'pointer' : '';
+  renderer.domElement.style.cursor = pick(e.clientX, e.clientY) ? 'pointer' : '';
 });
 
 const rain = createRain(scene);
