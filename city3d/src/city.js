@@ -169,6 +169,8 @@ export function buildCity(scene, atmosphere, model, seed = 1) {
   return {
     group,
     material: mat,
+    buildingMesh: mesh,                       // the class buildings (InstancedMesh) for picking
+    boxFqns: boxes.map((b) => b.fqn),          // instanceId -> class fqn (undefined for antennas)
     streetLightMaterial: null,
     nightMaterials: [...(groundDetails.userData.nightMaterials ?? [])].filter(Boolean),
     streetsX: [], streetsZ: [],

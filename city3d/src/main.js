@@ -58,6 +58,55 @@ nav.setCinematic(true);
 
 const { composer, bloom, gtao, grade } = createComposer(renderer, scene, camera);
 
+// ---- Picking: click a class building -> info overlay ------------------------
+const infoEl = document.getElementById('info');
+const raycaster = new THREE.Raycaster();
+const pointer = new THREE.Vector2();
+let pressXY = null;
+
+function hideInfo() { infoEl.style.display = 'none'; }
+
+function showInfo(b) {
+  const tags =
+    (b.isInterface ? ' <span class="tag iface">interface</span>' : '') +
+    (b.inCycle ? ' <span class="tag cycle">⟲ cycle</span>' : '');
+  infoEl.innerHTML =
+    '<span class="close" title="schließen">×</span>' +
+    `<div class="cls">${b.simpleName}${tags}</div>` +
+    `<div class="fqn">${b.fullName}</div>` +
+    `<div class="row"><span class="k">package</span><span class="k">${b.districtFullName || '–'}</span></div>` +
+    `<div class="row"><span class="k">architecture level</span><span class="v">${b.architectureLevel}</span></div>` +
+    `<div class="row"><span class="k">methods</span><span class="v">${b.methodCount >= 0 ? b.methodCount : '–'}</span></div>` +
+    `<div class="row"><span class="k">fan-in / fan-out</span><span class="v">${b.fanIn} / ${b.fanOut}</span></div>`;
+  infoEl.style.display = 'block';
+  infoEl.querySelector('.close').onclick = hideInfo;
+}
+
+function pickAt(clientX, clientY) {
+  if (!city.buildingMesh) return null;
+  pointer.x = (clientX / window.innerWidth) * 2 - 1;
+  pointer.y = -(clientY / window.innerHeight) * 2 + 1;
+  raycaster.setFromCamera(pointer, camera);
+  const hit = raycaster.intersectObject(city.buildingMesh, false)[0];
+  if (!hit || hit.instanceId == null) return null;
+  const fqn = city.boxFqns[hit.instanceId];
+  return fqn ? cityModel.buildings.find((x) => x.fullName === fqn) : null;
+}
+
+renderer.domElement.addEventListener('pointerdown', (e) => { pressXY = [e.clientX, e.clientY]; });
+renderer.domElement.addEventListener('pointerup', (e) => {
+  if (!pressXY) return;
+  const moved = Math.hypot(e.clientX - pressXY[0], e.clientY - pressXY[1]);
+  pressXY = null;
+  if (moved > 5) return; // an orbit drag, not a click
+  const b = pickAt(e.clientX, e.clientY);
+  if (b) showInfo(b); else hideInfo();
+});
+renderer.domElement.addEventListener('pointermove', (e) => {
+  if (pressXY) return;
+  renderer.domElement.style.cursor = pickAt(e.clientX, e.clientY) ? 'pointer' : '';
+});
+
 const rain = createRain(scene);
 
 // Aktuelle Nässe — muss nach "Neu bauen" auf das frische Stadt-Material zurück.
@@ -127,6 +176,7 @@ cineBtn.addEventListener('click', () => {
 });
 
 $('b-regen').addEventListener('click', async () => {
+  hideInfo();
   traffic.dispose();
   city.dispose();
   cityModel = await loadCityModel(); // re-read city.json (pick up a fresh export)

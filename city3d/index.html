@@ -115,10 +115,30 @@
 
       .credit { position: fixed; bottom: 22px; right: 24px; z-index: 20;
         color: #44557a; font-size: 10px; letter-spacing: 0.18em; }
+
+      /* ---- Class info overlay (on click) ---- */
+      #info {
+        position: fixed; z-index: 25; left: 24px; top: 50%; transform: translateY(-50%);
+        background: var(--panel); border: 1px solid var(--panel-brd);
+        border-radius: 12px; padding: 14px 16px; backdrop-filter: blur(10px);
+        width: 300px; font-size: 12px; line-height: 1.55; pointer-events: auto;
+      }
+      #info .cls { font-size: 15px; font-weight: 600; color: var(--fg); padding-right: 18px; }
+      #info .fqn { color: #7f97c2; word-break: break-all; margin: 3px 0 10px; font-size: 11px; }
+      #info .row { display: flex; justify-content: space-between; gap: 16px; }
+      #info .k { color: #9fb4da; }
+      #info .v { color: var(--accent); font-variant-numeric: tabular-nums; }
+      #info .tag { display: inline-block; padding: 1px 7px; border-radius: 6px; font-size: 10px; letter-spacing: 0.06em; vertical-align: middle; }
+      #info .cycle { background: rgba(248,113,113,0.18); color: #fca5a5; }
+      #info .iface { background: rgba(95,200,255,0.16); color: var(--accent); }
+      #info .close { position: absolute; top: 10px; right: 12px; cursor: pointer; color: #7f97c2; font-size: 16px; line-height: 1; }
+      #info .close:hover { color: var(--fg); }
     </style>
   </head>
   <body>
     <div id="app"></div>
+
+    <div id="info" style="display:none"></div>
 
     <div id="loader">
       <div class="title">City3D</div>
