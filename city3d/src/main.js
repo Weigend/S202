@@ -69,27 +69,47 @@ let pressXY = null;
 const highlightGroup = new THREE.Group();
 highlightGroup.name = 'selection';
 scene.add(highlightGroup);
-const selEdgesBuilding = new THREE.EdgesGeometry(new THREE.BoxGeometry(1, 1, 1).translate(0, 0.5, 0)); // base at y=0
-const selEdgesSlab = new THREE.EdgesGeometry(new THREE.BoxGeometry(1, 1, 1));                          // centred
-const selMat = new THREE.LineBasicMaterial({ color: 0x5fc8ff, transparent: true, opacity: 0.95, depthTest: false });
+const glowBoxBuilding = new THREE.BoxGeometry(1, 1, 1).translate(0, 0.5, 0); // base at y=0
+const glowBoxSlab = new THREE.BoxGeometry(1, 1, 1);                          // centred
+// Fresnel rim-glow shell: bright at the silhouette, transparent to the front;
+// additive + the scene bloom turns it into an edge glow. No z-writing.
+const glowMat = new THREE.ShaderMaterial({
+  uniforms: { uColor: { value: new THREE.Color(0x7fe0ff) }, uPower: { value: 2.2 }, uIntensity: { value: 3.4 } },
+  transparent: true, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide,
+  vertexShader: `
+    varying vec3 vN; varying vec3 vV;
+    void main() {
+      vec4 wp = modelMatrix * vec4(position, 1.0);
+      vN = normalize(mat3(modelMatrix) * normal);
+      vV = normalize(cameraPosition - wp.xyz);
+      gl_Position = projectionMatrix * viewMatrix * wp;
+    }`,
+  fragmentShader: `
+    uniform vec3 uColor; uniform float uPower; uniform float uIntensity;
+    varying vec3 vN; varying vec3 vV;
+    void main() {
+      float f = pow(1.0 - abs(dot(normalize(vN), normalize(vV))), uPower);
+      gl_FragColor = vec4(uColor * uIntensity * f, f);
+    }`,
+});
 const selMat4 = new THREE.Matrix4();
-const selScale = new THREE.Matrix4().makeScale(1.06, 1.03, 1.06);
+const selScale = new THREE.Matrix4().makeScale(1.1, 1.06, 1.1);
 
 function clearHighlight() {
   for (let i = highlightGroup.children.length - 1; i >= 0; i--) highlightGroup.remove(highlightGroup.children[i]);
 }
 
-function outlineInstances(mesh, edges, ids) {
+function glowInstances(mesh, geo, ids) {
   if (!mesh || !ids.length) return;
   mesh.updateMatrixWorld();
   for (const i of ids) {
     mesh.getMatrixAt(i, selMat4);
     selMat4.premultiply(mesh.matrixWorld).multiply(selScale);
-    const line = new THREE.LineSegments(edges, selMat);
-    line.matrixAutoUpdate = false;
-    line.matrix.copy(selMat4);
-    line.renderOrder = 999;
-    highlightGroup.add(line);
+    const shell = new THREE.Mesh(geo, glowMat);
+    shell.matrixAutoUpdate = false;
+    shell.matrix.copy(selMat4);
+    shell.renderOrder = 999;
+    highlightGroup.add(shell);
   }
 }
 
@@ -99,10 +119,10 @@ function highlight(sel) {
   if (sel.kind === 'class') {
     const ids = [];
     for (let i = 0; i < city.boxFqns.length; i++) if (city.boxFqns[i] === sel.fqn) ids.push(i);
-    outlineInstances(city.buildingMesh, selEdgesBuilding, ids);
+    glowInstances(city.buildingMesh, glowBoxBuilding, ids);
   } else {
     const i = city.slabFqns.indexOf(sel.fqn);
-    if (i >= 0) outlineInstances(city.slabPickMesh, selEdgesSlab, [i]);
+    if (i >= 0) glowInstances(city.slabPickMesh, glowBoxSlab, [i]);
   }
 }
 
