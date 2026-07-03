@@ -51,7 +51,7 @@ public final class CityModelExporter {
             System.exit(2);
         }
         String jarPath = args[0];
-        Path output = Path.of(args.length >= 2 ? args[1] : "city3d/city.json");
+        Path output = Path.of(args.length >= 2 ? args[1] : "city3d/public/city.json");
 
         System.out.println("City3D export: analysing " + jarPath);
         DependencyModel raw = new InputAnalyzer().analyze(jarPath);

@@ -1,53 +1,50 @@
-# City3D — data-driven 3D city renderer (Phase 0)
+# City3D — data-driven software city (City3JS view)
 
-Structure202's own copy of the [City3JS](../../City3JS) idea: render the analysed
-architecture as a Manhattan-style 3D city, **buildings = classes, districts =
-packages**, driven by real analysis data (no RNG).
+Structure202's own copy of the [City3JS](../../City3JS) Manhattan view. The **view
+is taken over as-is** — streets, weather, times of day, building types, bloom,
+sky, traffic, reflections — and **only the generator is adapted** so that the
+arrangement and size of buildings carry meaning from the analysed architecture.
 
-This is the **Phase 0 Durchstich** from
-[`docs/exploration/CITY3D_WEBVIEW_SPEC.md`](../docs/exploration/CITY3D_WEBVIEW_SPEC.md):
-a thin end-to-end slice that gets real buildings on screen with zero embedding
-risk. It runs in a normal browser; the JavaFX/JCEF embedding (V2) and the richer
-City3JS shaders come in later phases.
+What the city encodes (see [`src/adapter.js`](src/adapter.js)):
+
+| City element | Meaning |
+|---|---|
+| One **block** per package (district) | arranged by architecture level (level = spatial gradient) |
+| One **building** per class | inside its package block |
+| Building **height** | method count (size = amount of code) |
+| Building **footprint** | fan-in (width) / fan-out (depth) |
+| Building **type** (glass/stone/brick/concrete) | architecture level — interfaces are glass |
+| Setbacks, rooftops, shopfronts, streets | kept from City3JS for the city look |
+
+Everything else (`city.js` rendering, `sky.js`, `weather.js`, `traffic.js`,
+`postfx.js`, `controls.js`) is the original City3JS view.
 
 ## How to run
 
-**1. Export a city model** from a `.jar` (headless, plain Java — no UI):
+**1. Export a city model** from a `.jar` (headless, plain Java — no UI). Writes
+`city3d/public/city.json`, which the view fetches:
 
 ```bash
 cd analyzer
 mvn -q org.codehaus.mojo:exec-maven-plugin:3.1.0:java \
   -Dexec.mainClass=de.weigend.s202.ui.city3d.CityModelExporter \
-  -Dexec.args="../test-example/target/test-example-1.0.0.jar ../city3d/city.json"
+  -Dexec.args="../test-example/target/test-example-1.0.0.jar ../city3d/public/city.json"
 ```
 
-This writes `city3d/city.json` (a checked-in sample is already there).
-
-**2. Serve this folder and open it** (ES modules + `fetch` need http, not `file://`):
+**2. Run the view** (Vite dev server):
 
 ```bash
 cd city3d
-python3 -m http.server 8099
-# open http://localhost:8099/
+npm install      # once: three + vite
+npm run dev      # http://localhost:5173/
 ```
 
-Drag to orbit, scroll to zoom, hover a building for its class / level / fan-in.
-
-## What maps to what (Phase 0)
-
-| Visual | Encodes |
-|---|---|
-| Building height | architecture level (deeper level = taller) |
-| Building width | fan-in (log-scaled) |
-| Building colour | architecture level (blue → amber → red) |
-| Emissive tint | interface types |
-| Row (depth) | architecture level |
-
-Richer mapping (LoC → floors, coverage → lit windows, SCC → red facade) is Phase 1.
+Use the panel to change time of day, bloom, fog and weather; **Neu bauen**
+re-reads `city.json` (so re-export + click to update). "Fly" mode with `F`.
 
 ## Pieces
 
-- `de.weigend.s202.ui.city3d.CityModel` — the JSON data contract (districts, buildings, dependencies).
-- `de.weigend.s202.ui.city3d.CityModelSerializer` — tree → `CityModel` (reuses 2D footprints when available; `null` headless).
-- `de.weigend.s202.ui.city3d.CityModelExporter` — headless CLI: jar → `city.json`.
-- `main.js` — the Three.js renderer; `vendor/` holds a self-contained Three.js copy (no CDN).
+- `src/adapter.js` — the only real change: `CityModel` JSON → City3JS building/roof/facade/street arrays.
+- `src/city.js` — City3JS generator; its procedural block loop is replaced by a call to the adapter, everything downstream unchanged.
+- `src/main.js` — City3JS orchestration; fetches `city.json` and passes the model to `buildCity`.
+- `de.weigend.s202.ui.city3d.*` (Java) — `CityModel`, `CityModelSerializer`, `CityModelExporter`.
