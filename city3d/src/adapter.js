@@ -151,6 +151,7 @@ export function layoutFromModel(model) {
   const rooftops = [];
   const slabs = [];
   const streets = []; // gap corridors between a package's children (its streets)
+  const ramps = [];   // sloped connectors running down over a package edge to the parent street
 
   // The gaps between a package's children are its streets, drawn on the package's
   // slab surface. Because a package sits inside the free space (streets) of its
@@ -183,12 +184,17 @@ export function layoutFromModel(model) {
         streets.push({ x: ox + (g0 + g1) / 2, z: zc, w: g1 - g0, d: dd, y, axis: 'z' });
       }
     });
-    // horizontal streets (run along X) between successive level rows — extended
-    // to the full slab width so they reach the package edge (a step down to the
-    // parent forms there; handled later).
+    // horizontal streets (run along X) between successive level rows, inset from
+    // the L/R edges, plus a ramp at each end running DOWN over the package edge to
+    // the parent street one terrace below — connecting the higher street to it.
+    const parentY = node.depth >= 1 ? (node.depth - 1) * STEP + SLAB_T : 0;
+    const OUT = NODE_GAP / 2; // how far the ramp reaches into the parent gap
     for (let ri = 0; ri < rowKeys.length - 1; ri++) {
       const g0 = rowKeys[ri] + rowD[ri], g1 = rowKeys[ri + 1];
-      streets.push({ x: cellX + cellW / 2, z: oz + (g0 + g1) / 2, w: cellW - 2 * EDGE, d: g1 - g0, y, axis: 'x' });
+      const sz = oz + (g0 + g1) / 2, sw = g1 - g0;
+      streets.push({ x: cellX + cellW / 2, z: sz, w: cellW - 2 * EDGE, d: sw, y, axis: 'x' });
+      ramps.push({ ax: cellX + EDGE, ay: y, az: sz, bx: cellX - OUT, by: parentY, bz: sz, w: sw });                 // left
+      ramps.push({ ax: cellX + cellW - EDGE, ay: y, az: sz, bx: cellX + cellW + OUT, by: parentY, bz: sz, w: sw }); // right
     }
   }
 
@@ -240,7 +246,7 @@ export function layoutFromModel(model) {
   place(root, -root.w / 2, -root.d / 2, root.w, root.d);
 
   return {
-    boxes, rooftops, slabs, streets,
+    boxes, rooftops, slabs, streets, ramps,
     groundFacades: [],           // shopfronts assume ground-level buildings; N/A on platforms
     streetsX: [], streetsZ: [],  // no straight full-span avenues (traffic stays off)
     spanX: root.w, spanZ: root.d, x0: -root.w / 2, z0: -root.d / 2,

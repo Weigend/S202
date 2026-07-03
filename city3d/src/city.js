@@ -94,7 +94,7 @@ export function buildCity(scene, atmosphere, model, seed = 1) {
   // stacked package slabs, and the gaps between them are the (hierarchical) streets.
   // Meaning: package nesting = terraces raised by depth, height = methods,
   // footprint = fan-in/out, building type = architecture level. See adapter.js.
-  const { boxes, rooftops, groundFacades, slabs, streets, spanX, spanZ, x0, z0, maxDepth }
+  const { boxes, rooftops, groundFacades, slabs, streets, ramps, spanX, spanZ, x0, z0, maxDepth }
     = layoutFromModel(model);
 
   // ---- InstancedMesh aufbauen ------------------------------------------------
@@ -153,6 +153,10 @@ export function buildCity(scene, atmosphere, model, seed = 1) {
   const streetMesh = makeStreets(streets);
   group.add(streetMesh);
 
+  // Ramp connectors running down over the package edges to the parent's streets.
+  const rampMesh = makeRamps(ramps);
+  group.add(rampMesh);
+
   // ---- Boden -----------------------------------------------------------------
   // Flat wet-reflective asphalt; the streets are the gaps between the platforms.
   const ground = makeGroundBase(spanX, spanZ, atmosphere);
@@ -174,6 +178,7 @@ export function buildCity(scene, atmosphere, model, seed = 1) {
       mat.dispose();
       slabMesh.traverse((o) => { o.geometry?.dispose(); o.material?.dispose(); });
       streetMesh.traverse((o) => { o.geometry?.dispose(); o.material?.dispose(); });
+      rampMesh.traverse((o) => { o.geometry?.dispose(); o.material?.dispose(); });
       roofDetails.traverse((o) => { o.geometry?.dispose(); o.material?.dispose(); });
       groundDetails.traverse((o) => { o.geometry?.dispose(); o.material?.dispose(); });
       ground.traverse((o) => {
@@ -268,6 +273,28 @@ function makeStreets(streets) {
     }
     dm.instanceMatrix.needsUpdate = true;
     group.add(dm);
+  }
+  return group;
+}
+
+// ---- Sloped ramp connectors (street A -> lower street B over a package edge) --
+function makeRamps(ramps) {
+  const group = new THREE.Group();
+  group.name = 'ramps';
+  if (!ramps.length) return group;
+  const mat = new THREE.MeshStandardMaterial({ color: 0x0d1016, roughness: 0.9, metalness: 0 });
+  const xAxis = new THREE.Vector3(1, 0, 0);
+  for (const r of ramps) {
+    const a = new THREE.Vector3(r.ax, r.ay, r.az);
+    const b = new THREE.Vector3(r.bx, r.by, r.bz);
+    const dir = new THREE.Vector3().subVectors(b, a);
+    const len = dir.length();
+    if (len < 0.01) continue;
+    const mesh = new THREE.Mesh(new THREE.BoxGeometry(len, 0.12, r.w), mat);
+    mesh.position.copy(a).add(b).multiplyScalar(0.5);
+    mesh.quaternion.setFromUnitVectors(xAxis, dir.multiplyScalar(1 / len));
+    mesh.receiveShadow = true;
+    group.add(mesh);
   }
   return group;
 }
