@@ -30,4 +30,6 @@ cd "$PROJECT_ROOT/analyzer"
 # R1-algo violation on com.example.A when test-example is loaded, so the
 # implausibility alert dialog pops up. Comment out the export to disable.
 export JAVA_TOOL_OPTIONS="-Ds202.demo.injectAlert=true"
-mvn org.openjfx:javafx-maven-plugin:0.0.8:run
+# Classpath-Start (nicht javafx:run / Module-Path): der eingebettete City3D-Tab
+# braucht JCEF im selben Prozess; exec:java startet vom Classpath.
+mvn exec:java

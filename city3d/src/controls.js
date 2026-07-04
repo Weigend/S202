@@ -12,6 +12,7 @@ export class Navigation {
     this.camera = camera;
     this.dom = dom;
     this.mode = 'orbit';
+    this._softFly = false;
 
     this.orbit = new OrbitControls(camera, dom);
     this.orbit.enableDamping = true;
@@ -27,12 +28,14 @@ export class Navigation {
 
     this.fly = new PointerLockControls(camera, dom);
     this.velocity = new THREE.Vector3();
-    this.keys = { f: 0, b: 0, l: 0, r: 0, u: 0, d: 0, boost: 0 };
+    this.keys = { f: 0, b: 0, l: 0, r: 0, u: 0, d: 0, boost: 0, toggleFly: 0 };
 
     this._onKeyDown = (e) => this._key(e, 1);
     this._onKeyUp = (e) => this._key(e, 0);
     window.addEventListener('keydown', this._onKeyDown);
     window.addEventListener('keyup', this._onKeyUp);
+    dom.tabIndex = 0;
+    dom.addEventListener('pointerdown', () => dom.focus({ preventScroll: true }));
 
     // Nutzerinteraktion stoppt die Kinofahrt
     this.orbit.addEventListener('start', () => { this.orbit.autoRotate = false; this._userMoved = true; });
@@ -55,12 +58,14 @@ export class Navigation {
     if (mode === this.mode) return;
     if (mode === 'fly') {
       this.mode = 'fly';
+      this._softFly = true;
       this.orbit.enabled = false;
       this.orbit.autoRotate = false;
-      this.fly.lock();
+      try { this.fly.lock(); } catch (_) {}
     } else {
       this.mode = 'orbit';
-      this.fly.unlock();
+      this._softFly = false;
+      if (this.fly.isLocked) this.fly.unlock();
       this.orbit.enabled = true;
       // Orbit-Target vor die Kamera setzen, damit es nicht springt
       const fwd = new THREE.Vector3();
@@ -72,6 +77,8 @@ export class Navigation {
   }
 
   _key(e, v) {
+    if (e.target && /^(INPUT|TEXTAREA|SELECT)$/.test(e.target.tagName)) return;
+    let handled = true;
     switch (e.code) {
       case 'KeyW': case 'ArrowUp': this.keys.f = v; break;
       case 'KeyS': case 'ArrowDown': this.keys.b = v; break;
@@ -80,12 +87,21 @@ export class Navigation {
       case 'KeyE': case 'Space': this.keys.u = v; break;
       case 'KeyQ': this.keys.d = v; break;
       case 'ShiftLeft': case 'ShiftRight': this.keys.boost = v; break;
-      case 'KeyF': if (v) this.toggleFly(); break;
+      case 'KeyF':
+        if (v && !this.keys.toggleFly) this.toggleFly();
+        this.keys.toggleFly = v;
+        break;
+      case 'Escape':
+        if (v && this.mode === 'fly') this.setMode('orbit');
+        break;
+      default:
+        handled = false;
     }
+    if (handled && v && e.preventDefault) e.preventDefault();
   }
 
   update(dt) {
-    if (this.mode === 'fly' && this.fly.isLocked) {
+    if (this.mode === 'fly' && (this.fly.isLocked || this._softFly)) {
       const accel = (this.keys.boost ? 900 : 320);
       const damp = Math.exp(-6 * dt);
       const k = this.keys;

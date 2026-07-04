@@ -175,6 +175,16 @@ function select(sel) {
   highlight(sel);
 }
 
+// Select by fqn — resolves class vs package from the model (used by the host-app sync).
+function selectByFqn(fqn) {
+  if (!fqn) { hideInfo(); return; }
+  const b = cityModel.buildings.find((x) => x.fullName === fqn);
+  if (b) { select({ kind: 'class', data: b, fqn }); return; }
+  const d = cityModel.districts.find((x) => x.fullName === fqn);
+  if (d) select({ kind: 'package', data: d, fqn });
+  else hideInfo();
+}
+
 function pick(clientX, clientY) {
   const targets = [];
   if (city.buildingMesh) targets.push(city.buildingMesh);
@@ -201,12 +211,31 @@ renderer.domElement.addEventListener('pointerup', (e) => {
   const moved = Math.hypot(e.clientX - pressXY[0], e.clientY - pressXY[1]);
   pressXY = null;
   if (moved > 5) return; // an orbit drag, not a click
-  select(pick(e.clientX, e.clientY));
+  const sel = pick(e.clientX, e.clientY);
+  select(sel);
+  pushSelectionToHost(sel ? sel.fqn : '');   // browser -> app
 });
 renderer.domElement.addEventListener('pointermove', (e) => {
   if (pressXY) return;
   renderer.domElement.style.cursor = pick(e.clientX, e.clientY) ? 'pointer' : '';
 });
+
+// ---- Bidirectional selection sync with the host app (over the loopback server) ----
+// app -> browser: highlight what was selected in the 2D architecture view.
+let applyingHostSelection = false;
+try {
+  const hostEvents = new EventSource('/events');
+  hostEvents.onmessage = (ev) => {
+    applyingHostSelection = true;
+    try { selectByFqn(ev.data); } finally { applyingHostSelection = false; }
+  };
+} catch (err) { /* no host channel (e.g. opened standalone) */ }
+
+// browser -> app: tell the host which node was picked here.
+function pushSelectionToHost(fqn) {
+  if (applyingHostSelection) return;   // don't echo a selection the host just pushed
+  try { fetch('/select', { method: 'POST', body: fqn || '' }).catch(() => {}); } catch (err) { /* ignore */ }
+}
 
 const rain = createRain(scene);
 

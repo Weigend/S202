@@ -44,6 +44,7 @@ export class Atmosphere {
     // --- Himmel ---
     this.sky = new Sky();
     this.sky.scale.setScalar(60000);
+    this.sky.frustumCulled = false;
     const u = this.sky.material.uniforms;
     u.turbidity.value = 6;
     u.rayleigh.value = 2.2;

@@ -175,7 +175,11 @@ export function buildCity(scene, atmosphere, model, seed = 1) {
     streetsX: [], streetsZ: [],
     bounds: { spanX, spanZ },
     stats: { buildings: rooftops.length, boxes: count, grid: [slabs.length, count] },
-    setWetness: (w) => ground.userData.setWetness?.(w),
+    setWetness: (w) => {
+      ground.userData.setWetness?.(w);
+      streetMesh.userData.setWetness?.(w);
+      rampMesh.userData.setWetness?.(w);
+    },
     dispose() {
       geo.dispose();
       mat.dispose();
@@ -238,10 +242,11 @@ function makeStreets(streets) {
 
   const m4 = new THREE.Matrix4(), q = new THREE.Quaternion();
   const p = new THREE.Vector3(), s = new THREE.Vector3();
+  const asphaltMat = makeWetRoadMaterial({ roughness: 0.82, envMapIntensity: 0.45 });
 
   const asphalt = new THREE.InstancedMesh(
     new THREE.BoxGeometry(1, 1, 1),
-    new THREE.MeshStandardMaterial({ color: 0x0d1016, roughness: 0.9, metalness: 0 }),
+    asphaltMat,
     streets.length);
   asphalt.receiveShadow = true;
 
@@ -263,6 +268,7 @@ function makeStreets(streets) {
   }
   asphalt.instanceMatrix.needsUpdate = true;
   group.add(asphalt);
+  group.userData.setWetness = (w) => asphaltMat.userData.setWetness?.(w);
 
   if (dashes.length) {
     const dm = new THREE.InstancedMesh(
@@ -287,9 +293,8 @@ function makeRamps(ramps) {
   const group = new THREE.Group();
   group.name = 'ramps';
   if (!ramps.length) return group;
-  const mat = new THREE.MeshStandardMaterial({
-    color: 0x0d1016, roughness: 0.9, metalness: 0, side: THREE.DoubleSide,
-  });
+  const mat = makeWetRoadMaterial({ roughness: 0.82, envMapIntensity: 0.45 });
+  mat.side = THREE.DoubleSide;
   const N = 16; // profile segments
   for (const r of ramps) {
     // horizontal run direction (in the XZ plane) + perpendicular width direction
@@ -317,21 +322,16 @@ function makeRamps(ramps) {
     mesh.receiveShadow = true;
     group.add(mesh);
   }
+  group.userData.setWetness = (w) => mat.userData.setWetness?.(w);
   return group;
 }
 
-// ---- Flat wet-reflective ground (asphalt in the street gaps) ---------------
-function makeGroundBase(spanX, spanZ, atmosphere) {
-  const g = new THREE.Group();
-  g.name = 'ground';
-  const pad = 600;
+const DRY_ROAD = new THREE.Color(0x11151a);
+const WET_ROAD = new THREE.Color(0x070a0e);
 
-  const geo = new THREE.PlaneGeometry(spanX + pad, spanZ + pad);
-  geo.rotateX(-Math.PI / 2);
-  const DRY_ROAD = new THREE.Color(0x11151a);
-  const WET_ROAD = new THREE.Color(0x070a0e);
+function makeWetRoadMaterial({ roughness = 0.72, envMapIntensity = 0.35 } = {}) {
   const mat = new THREE.MeshStandardMaterial({
-    color: DRY_ROAD.clone(), roughness: 0.72, metalness: 0, envMapIntensity: 0.35,
+    color: DRY_ROAD.clone(), roughness, metalness: 0, envMapIntensity,
   });
   mat.userData.wet = { value: 0 };
   mat.onBeforeCompile = (sh) => {
@@ -351,6 +351,24 @@ function makeGroundBase(spanX, spanZ, atmosphere) {
            roughnessFactor = mix(roughnessFactor, wetRough, uWet);
          }`);
   };
+  mat.userData.setWetness = (w) => {
+    mat.userData.wet.value = w;
+    mat.color.copy(DRY_ROAD).lerp(WET_ROAD, w);
+    mat.roughness = THREE.MathUtils.lerp(roughness, 0.14, w);
+    mat.envMapIntensity = THREE.MathUtils.lerp(envMapIntensity, 1.4, w);
+  };
+  return mat;
+}
+
+// ---- Flat wet-reflective ground (asphalt in the street gaps) ---------------
+function makeGroundBase(spanX, spanZ, atmosphere) {
+  const g = new THREE.Group();
+  g.name = 'ground';
+  const pad = 600;
+
+  const geo = new THREE.PlaneGeometry(spanX + pad, spanZ + pad);
+  geo.rotateX(-Math.PI / 2);
+  const mat = makeWetRoadMaterial();
   const plane = new THREE.Mesh(geo, mat);
   plane.position.y = -0.05;
   plane.receiveShadow = true;
@@ -367,10 +385,7 @@ function makeGroundBase(spanX, spanZ, atmosphere) {
   g.add(reflector);
 
   g.userData.setWetness = (w) => {
-    mat.userData.wet.value = w;
-    mat.color.copy(DRY_ROAD).lerp(WET_ROAD, w);
-    mat.roughness = THREE.MathUtils.lerp(0.72, 0.18, w);
-    mat.envMapIntensity = THREE.MathUtils.lerp(0.35, 1.3, w);
+    mat.userData.setWetness(w);
     reflector.material.uniforms.uWet.value = w;
     reflector.visible = w > 0.001;
   };
