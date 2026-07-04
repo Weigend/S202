@@ -222,6 +222,7 @@ export function buildCity(scene, atmosphere, model, seed = 1) {
     stats: { buildings: rooftops.length, boxes: count, grid: [slabs.length, count] },
     anchors,                                   // fqn -> Position (Bögen, Kamera-Anflug)
     beaconMat: beacons.userData.beaconMat,     // für den Blink-Puls im Render-Loop
+    waterUniforms: ground.userData.waterUniforms, // uTime für die Wellen-Animation
     setMetric,
     labels,                                    // Paket-Schilder: labels.update(camera, dt)
     setWetness: (w) => {
@@ -409,6 +410,40 @@ function makeRoadsMesh(roadNet, graph) {
     group.add(wm);
   }
 
+  // Runde Kreuzungsteller: an jeder Kreuzung ein Asphalt-Teller (rundet die
+  // Asphalt-Ecken) über einem größeren Gehweg-Teller (füllt die Eck-Lücken
+  // zwischen den Gehsteig-Segmenten als abgesenkter Bordstein).
+  const junctions = new Map();
+  for (const r of roads) {
+    const sts = graph.stationsByRoad.get(r.id) ?? [];
+    for (const st of sts) {
+      if (!st.cw) continue;
+      const jx = r.axis === 'x' ? st.pos : r.c;
+      const jz = r.axis === 'x' ? r.c : st.pos;
+      const key = `${Math.round(jx * 2)}|${Math.round(r.y * 2)}|${Math.round(jz * 2)}`;
+      const rad = Math.max(r.w, st.cw) / 2;
+      const known = junctions.get(key);
+      if (!known || known.r < rad) junctions.set(key, { x: jx, y: r.y, z: jz, r: rad });
+    }
+  }
+  if (junctions.size) {
+    const discGeo = new THREE.CylinderGeometry(1, 1, 1, 20);
+    const kerbMesh = new THREE.InstancedMesh(discGeo,
+      new THREE.MeshStandardMaterial({ color: 0x54585c, roughness: 0.92, metalness: 0 }), junctions.size);
+    const roadDisc = new THREE.InstancedMesh(discGeo, asphaltMat, junctions.size);
+    kerbMesh.receiveShadow = roadDisc.receiveShadow = true;
+    let ji = 0;
+    for (const j of junctions.values()) {
+      p.set(j.x, j.y + 0.038, j.z); s.set(j.r + 1.55, 0.08, j.r + 1.55);
+      m4.compose(p, q, s); kerbMesh.setMatrixAt(ji, m4);
+      p.set(j.x, j.y + 0.041, j.z); s.set(j.r + 0.35, 0.088, j.r + 0.35);
+      m4.compose(p, q, s); roadDisc.setMatrixAt(ji, m4);
+      ji++;
+    }
+    kerbMesh.instanceMatrix.needsUpdate = roadDisc.instanceMatrix.needsUpdate = true;
+    group.add(kerbMesh, roadDisc);
+  }
+
   // Straßenlaternen entlang der längeren Ring-/Querstraßen, alternierend.
   const LAMP_EVERY = 30;
   const poles = [], heads = [];
@@ -522,35 +557,95 @@ function makeWetRoadMaterial({ roughness = 0.72, envMapIntensity = 0.35 } = {}) 
   return mat;
 }
 
-// ---- Flat wet-reflective ground (asphalt in the street gaps) ---------------
+// ---- Wasser-Shader: echte Szenen-Reflexion, blau getönt, mit Wellen-Wobble ---
+const WaterShader = {
+  uniforms: {
+    color: { value: null },
+    tDiffuse: { value: null },
+    textureMatrix: { value: null },
+    uTime: { value: 0 },
+    uDeep: { value: new THREE.Color(0x0c2236) },
+    uHazeCol: { value: new THREE.Color(0x9fc0e4) }, // wird pro Frame an den Nebel angeglichen
+  },
+  vertexShader: /* glsl */`
+    uniform mat4 textureMatrix;
+    varying vec4 vUv;
+    varying vec3 vWorld;
+    #include <common>
+    #include <logdepthbuf_pars_vertex>
+    void main() {
+      vUv = textureMatrix * vec4(position, 1.0);
+      vWorld = (modelMatrix * vec4(position, 1.0)).xyz;
+      gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+      #include <logdepthbuf_vertex>
+    }`,
+  fragmentShader: /* glsl */`
+    uniform vec3 color;
+    uniform sampler2D tDiffuse;
+    uniform float uTime;
+    uniform vec3 uDeep;
+    uniform vec3 uHazeCol;
+    varying vec4 vUv;
+    varying vec3 vWorld;
+    #include <logdepthbuf_pars_fragment>
+    void main() {
+      #include <logdepthbuf_fragment>
+      // Wellen: die Reflexion leicht verwackeln (zwei überlagerte Sinusfelder)
+      vec4 uv = vUv;
+      vec2 wave = vec2(
+        sin(vWorld.x * 0.11 + uTime * 0.8) + 0.5 * sin(vWorld.z * 0.23 - uTime * 1.1),
+        cos(vWorld.z * 0.09 + uTime * 0.7) + 0.5 * cos(vWorld.x * 0.21 + uTime * 0.9));
+      uv.xy += wave * vUv.w * 0.0035;
+      vec3 refl = texture2DProj(tDiffuse, uv).rgb * color;
+      // Fresnel: flacher Blick = Spiegel, steiler Blick = tiefes Wasser
+      vec3 viewDir = normalize(cameraPosition - vWorld);
+      float fres = pow(1.0 - clamp(viewDir.y, 0.0, 1.0), 3.0);
+      vec3 water = mix(uDeep, refl, mix(0.22, 0.9, fres));
+      // Fernes Wasser in den Horizontdunst blenden (keine harte Kante zum Himmel)
+      float haze = smoothstep(2200.0, 9500.0, distance(vWorld.xz, cameraPosition.xz));
+      water = mix(water, uHazeCol, haze);
+      gl_FragColor = vec4(water, 1.0);
+      #include <tonemapping_fragment>
+      #include <colorspace_fragment>
+    }`,
+};
+
+// ---- Boden: die Stadt als Insel im Wasser ------------------------------------
+// Betonsockel unter dem Stadtgebiet, außen eine reflektierende Wasserfläche
+// (spiegelt Himmel + Skyline, mit animiertem Wellen-Wobble).
 function makeGroundBase(spanX, spanZ, atmosphere) {
   const g = new THREE.Group();
   g.name = 'ground';
-  const pad = 600;
+  const isW = spanX + 56, isD = spanZ + 56;
 
-  const geo = new THREE.PlaneGeometry(spanX + pad, spanZ + pad);
-  geo.rotateX(-Math.PI / 2);
+  // Sockel: ragt 0.8 über die Wasserlinie, Rest liegt darunter (Ufermauer).
+  const island = new THREE.Mesh(
+    new THREE.BoxGeometry(isW, 3, isD),
+    new THREE.MeshStandardMaterial({ color: 0x2c3136, roughness: 0.95, metalness: 0 }));
+  island.position.y = -1.53; // Oberkante -0.03
+  island.receiveShadow = true;
+  g.add(island);
+
+  // Deckplatte mit dem Nass-Asphalt-Material (Wetness-Regler wirkt hier).
+  const topGeo = new THREE.PlaneGeometry(isW, isD);
+  topGeo.rotateX(-Math.PI / 2);
   const mat = makeWetRoadMaterial();
-  const plane = new THREE.Mesh(geo, mat);
-  plane.position.y = -0.05;
-  plane.receiveShadow = true;
-  g.add(plane);
+  const plate = new THREE.Mesh(topGeo, mat);
+  plate.position.y = -0.01;
+  plate.receiveShadow = true;
+  g.add(plate);
 
-  const reflector = new Reflector(new THREE.PlaneGeometry(spanX + pad, spanZ + pad), {
-    textureWidth: 1024, textureHeight: 1024, color: 0x99a3ad, shader: WetReflectorShader,
+  // Wasser: Reflector-Ebene bis weit hinter den Horizontdunst.
+  const waterSpan = Math.max(isW, isD) + 22000;
+  const water = new Reflector(new THREE.PlaneGeometry(waterSpan, waterSpan), {
+    textureWidth: 1024, textureHeight: 1024, color: 0x8fa8bb, shader: WaterShader,
   });
-  reflector.rotateX(-Math.PI / 2);
-  reflector.position.y = -0.03;
-  reflector.material.transparent = true;
-  reflector.material.depthWrite = false;
-  reflector.visible = false;
-  g.add(reflector);
+  water.rotateX(-Math.PI / 2);
+  water.position.y = -0.82;
+  g.add(water);
 
-  g.userData.setWetness = (w) => {
-    mat.userData.setWetness(w);
-    reflector.material.uniforms.uWet.value = w;
-    reflector.visible = w > 0.001;
-  };
+  g.userData.setWetness = (w) => mat.userData.setWetness(w);
+  g.userData.waterUniforms = water.material.uniforms;
   return g;
 }
 

@@ -41,17 +41,55 @@ let city = buildCity(scene, atmosphere, cityModel);
 // Straßenroute von der nutzenden zur genutzten Klasse (Dijkstra über den
 // Straßengraphen; cyan = regelkonform, rot = Verstoß).
 let trafficDensity = 0.5;
+
+// Kreuzungslast-Hotspots: pulsierende Ringe auf den meistbefahrenen Knoten —
+// dort, wo sich die Abhängigkeits-Routen bündeln (Architektur-Arterien).
+function makeHotspots(graph, nodeLoad) {
+  const entries = [...nodeLoad.entries()]
+    .filter(([, n]) => n >= 3)
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 28);
+  if (!entries.length) return { update() {}, dispose() {} };
+  const geo = new THREE.TorusGeometry(1, 0.09, 6, 28);
+  geo.rotateX(Math.PI / 2);
+  const mat = new THREE.MeshBasicMaterial({
+    color: 0xffa028, transparent: true, opacity: 0.7, toneMapped: false,
+    depthWrite: false, blending: THREE.AdditiveBlending,
+  });
+  const mesh = new THREE.InstancedMesh(geo, mat, entries.length);
+  const m4 = new THREE.Matrix4(), q = new THREE.Quaternion();
+  entries.forEach(([id, n], i) => {
+    const p = graph.nodes[id];
+    const r = 1.6 + Math.sqrt(n) * 0.7;
+    m4.compose(new THREE.Vector3(p.x, p.y + 0.2, p.z), q, new THREE.Vector3(r, 1, r));
+    mesh.setMatrixAt(i, m4);
+  });
+  mesh.instanceMatrix.needsUpdate = true;
+  scene.add(mesh);
+  return {
+    update(t) { mat.opacity = 0.4 + 0.35 * (0.5 + 0.5 * Math.sin(t * 2.6)); },
+    dispose() { geo.dispose(); mat.dispose(); scene.remove(mesh); },
+  };
+}
+
+let hotspots = { update() {}, dispose() {} };
 function makeTraffic() {
-  const trips = buildTrips(city.roadGraph, cityModel);
+  const { trips, nodeLoad } = buildTrips(city.roadGraph, cityModel);
   // Diagnose: wie viele Abhängigkeiten haben eine fahrbare Route gefunden?
   const nCars = trips.filter((t) => !t.local).length;
   console.info(`City3D traffic: ${trips.length} routes (${nCars} cars, ${trips.length - nCars} pedestrians) `
     + `of ${cityModel.dependencies?.length ?? 0} dependencies, ${city.roadGraph.nodes.length} graph nodes`);
-  const t = new Traffic(scene, trips);
-  t.setDensity(trafficDensity);
-  return t;
+  hotspots.dispose();
+  hotspots = makeHotspots(city.roadGraph, nodeLoad);
+  return new Traffic(scene, trips);
 }
 let traffic = makeTraffic();
+
+// Verkehrsdichte = Regler × Tag/Nacht-Rhythmus (nachts leeren sich die Straßen).
+function applyDensity() {
+  traffic.setDensity(trafficDensity, atmosphere.dayFactor ?? 1);
+}
+applyDensity();
 document.title = `City3D · ${cityModel.buildings.length} classes · ${cityModel.districts.length} packages`;
 
 // ---- Abhängigkeits-Visualisierung (Bögen + Datenpakete über der Stadt) ------
@@ -248,10 +286,12 @@ function showPod(t) {
     `<span class="dep out" data-fqn="${t.from}" title="${t.from}">${t.from.split('.').pop()}</span>` +
     `<span class="dep-more">→</span>` +
     `<span class="dep in" data-fqn="${t.to}" title="${t.to}">${t.to.split('.').pop()}</span>` +
-    `</div></div>`;
+    `</div></div>` +
+    '<div class="btn-row" style="margin-top:12px"><button class="ui" data-follow>📍 Verfolgen</button></div>';
 }
 
 function select(sel) {
+  stopFollow(); // neue Auswahl beendet eine laufende Verfolgung
   if (!sel) { hideInfo(); return; }
   currentSel = sel;
   if (sel.kind === 'class') showClass(sel.data);
@@ -274,6 +314,7 @@ infoEl.addEventListener('click', (e) => {
     return;
   }
   if (e.target.closest('[data-fly]') && currentSel) flyTo(currentSel.fqn);
+  if (e.target.closest('[data-follow]') && currentSel?.kind === 'pod') startFollow(currentSel.ref);
 });
 
 // Select by fqn — resolves class vs package from the model (used by the host-app sync).
@@ -287,18 +328,19 @@ function selectByFqn(fqn) {
 }
 
 function pick(clientX, clientY) {
+  // Pods zuerst, per Screen-Space-Abstand: der Raycast gegen die winzigen,
+  // beweglichen Instanzen verlor sonst immer gegen das Paket darunter.
+  const pod = traffic.podAtScreen(camera, clientX, clientY, window.innerWidth, window.innerHeight);
+  if (pod) return { kind: 'pod', data: pod.trip, ref: pod.ref, fqn: null };
   const targets = [];
   if (city.buildingMesh) targets.push(city.buildingMesh);
   if (city.slabPickMesh) targets.push(city.slabPickMesh);
-  targets.push(...traffic.pickTargets); // Pods (Autos + Fußgänger) sind anklickbar
   if (!targets.length) return null;
   pointer.x = (clientX / window.innerWidth) * 2 - 1;
   pointer.y = -(clientY / window.innerHeight) * 2 + 1;
   raycaster.setFromCamera(pointer, camera);
   const hit = raycaster.intersectObjects(targets, false)[0];
   if (!hit || hit.instanceId == null) return null;
-  const trip = traffic.tripAt(hit.object, hit.instanceId);
-  if (trip) return { kind: 'pod', data: trip, fqn: null };
   if (hit.object === city.buildingMesh) {
     const fqn = city.boxFqns[hit.instanceId];
     const b = fqn && cityModel.buildings.find((x) => x.fullName === fqn);
@@ -308,6 +350,20 @@ function pick(clientX, clientY) {
   const d = fqn && cityModel.districts.find((x) => x.fullName === fqn);
   return d ? { kind: 'package', data: d, fqn } : null;
 }
+
+// ---- Verfolger-Kamera: klebt hinter einem ausgewählten Pod -------------------
+// Fährt der Pod an sein Ziel, übernimmt derselbe Wagen die nächste Abhängigkeit
+// — die Verfolgung wird so zur endlosen Stadtrundfahrt entlang echter Kanten.
+let followRef = null;
+const followDesired = new THREE.Vector3();
+const followLook = new THREE.Vector3();
+function startFollow(ref) {
+  flight = null;
+  followRef = ref;
+  nav.setMode('orbit');
+  nav.orbit.autoRotate = false;
+}
+function stopFollow() { followRef = null; }
 
 // ---- Kamera-Anflug: sanfter Tween auf eine Klasse oder ein Paket -------------
 let flight = null;
@@ -344,7 +400,7 @@ renderer.domElement.addEventListener('dblclick', (e) => {
   if (sel && sel.fqn) flyTo(sel.fqn);
 });
 
-renderer.domElement.addEventListener('pointerdown', (e) => { pressXY = [e.clientX, e.clientY]; flight = null; });
+renderer.domElement.addEventListener('pointerdown', (e) => { pressXY = [e.clientX, e.clientY]; flight = null; stopFollow(); });
 renderer.domElement.addEventListener('pointerup', (e) => {
   if (!pressXY) return;
   const moved = Math.hypot(e.clientX - pressXY[0], e.clientY - pressXY[1]);
@@ -412,7 +468,17 @@ $('s-time').addEventListener('input', (e) => {
   const t = parseFloat(e.target.value);
   atmosphere.setTime(t);
   syncCityLight();
+  applyDensity();
   $('v-time').textContent = timeLabel(t);
+});
+
+// Zeitraffer: Sonne (und Mond) rotieren kontinuierlich durch den Tagesbogen.
+let cycleOn = false;
+let cycleT = 0.11;
+$('b-cycle').addEventListener('click', () => {
+  cycleOn = !cycleOn;
+  $('b-cycle').classList.toggle('active', cycleOn);
+  cycleT = parseFloat($('s-time').value);
 });
 
 $('s-bloom').addEventListener('input', (e) => {
@@ -428,7 +494,7 @@ $('s-fog').addEventListener('input', (e) => {
 
 $('s-traffic').addEventListener('input', (e) => {
   trafficDensity = parseFloat(e.target.value);
-  traffic.setDensity(trafficDensity);
+  applyDensity();
   $('v-traffic').textContent = Math.round(trafficDensity * 100) + '%';
 });
 
@@ -544,6 +610,7 @@ window.addEventListener('keydown', (e) => {
     e.preventDefault();
     searchEl.focus();
   }
+  if (e.key === 'Escape') stopFollow();
 });
 
 const cineBtn = $('b-cinematic');
@@ -564,6 +631,7 @@ $('b-regen').addEventListener('click', async () => {
   deps = new DependencyViz(scene, cityModel, city.anchors);
   deps.setMode(depMode);
   city.setMetric(metricMode);
+  applyDensity();
   searchIndex = buildSearchIndex();
   updateDepStats();
   frameCity();
@@ -588,6 +656,7 @@ window.addEventListener('resize', () => {
 // ============================ Loop ===========================================
 const clock = new THREE.Clock();
 let envAccum = 0;
+let uiAccum = 0;
 let firstFrame = true;
 
 // FPS-Anzeige (geglättet) + Gebäudezahl — fürs Skalierungstesten via ?cols=&rows=
@@ -609,6 +678,20 @@ function animate() {
 
   nav.update(dt);
 
+  // Zeitraffer: Sonnen-/Mondstand rotiert kontinuierlich.
+  if (cycleOn) {
+    cycleT = (cycleT + dt / 150) % 1; // voller Tag in 2,5 Minuten
+    atmosphere.setTime(cycleT);
+    syncCityLight();
+    uiAccum += dt;
+    if (uiAccum > 0.4) {
+      uiAccum = 0;
+      $('s-time').value = cycleT;
+      $('v-time').textContent = timeLabel(cycleT);
+      applyDensity();
+    }
+  }
+
   // Kamera-Anflug (überschreibt Orbit-Damping, solange der Flug läuft).
   if (flight) {
     flight.s = Math.min(1, flight.s + dt / 1.3);
@@ -618,9 +701,30 @@ function animate() {
     if (flight.s >= 1) flight = null;
   }
 
-  traffic.update(dt, clock.elapsedTime);
+  traffic.update(dt);
+  traffic.updateLabels(camera, dt); // Schilder über nahen Pods
+
+  // Verfolger-Kamera: hinter dem Pod bleiben, Blick voraus.
+  if (followRef) {
+    const st = traffic.carState(followRef);
+    if (st) {
+      const back = followRef.pool === traffic.pedPool ? 8 : 15;
+      followDesired.set(st.x - st.dx * back, st.y + back * 0.55, st.z - st.dz * back);
+      followLook.set(st.x + st.dx * 7, st.y + 1.4, st.z + st.dz * 7);
+      const k = 1 - Math.exp(-3.4 * dt);
+      camera.position.lerp(followDesired, k);
+      nav.orbit.target.lerp(followLook, k);
+      camera.lookAt(nav.orbit.target);
+    } // st == null: Pod pausiert gerade (Respawn) — Kamera hält kurz an
+  }
+
   deps.update(clock.elapsedTime);
   atmosphere.update(dt); // Wolken driften
+  hotspots.update(clock.elapsedTime); // Kreuzungslast pulsiert
+  if (city.waterUniforms) {
+    city.waterUniforms.uTime.value = clock.elapsedTime;              // Wellen
+    city.waterUniforms.uHazeCol.value.copy(scene.fog.color);         // Horizontdunst
+  }
   city.labels?.update(camera, dt);
   // Zyklus-Beacons: harter Doppelherzschlag-Blink, nachts kräftiger.
   if (city.beaconMat) {

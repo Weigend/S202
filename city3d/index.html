@@ -230,8 +230,8 @@
         <input id="s-time" type="range" min="0" max="1" step="0.001" value="0.11" />
       </div>
       <div class="ctl">
-        <label>Bloom <span id="v-bloom">0.4</span></label>
-        <input id="s-bloom" type="range" min="0" max="2.5" step="0.01" value="0.4" />
+        <label>Bloom <span id="v-bloom">0.22</span></label>
+        <input id="s-bloom" type="range" min="0" max="1.5" step="0.01" value="0.22" />
       </div>
       <div class="ctl">
         <label>Nebel <span id="v-fog">1.0</span></label>
@@ -271,8 +271,9 @@
       </div>
       <div class="ctl">
         <div class="btn-row">
-          <button class="ui active" id="b-cinematic">Kino-Kamera</button>
-          <button class="ui" id="b-regen">Neu bauen</button>
+          <button class="ui sm active" id="b-cinematic">Kino-Kamera</button>
+          <button class="ui sm" id="b-cycle">Zeitraffer</button>
+          <button class="ui sm" id="b-regen">Neu bauen</button>
         </div>
       </div>
     </div>
@@ -298,6 +299,8 @@
         <div class="lg">🚗 Auto = paketübergreifend</div>
         <div class="lg">🚶 Fußgänger = paketlokal (Gehsteig)</div>
         <div class="lg"><span class="dot" style="background:#59d0ff"></span> regelkonform · <span class="dot" style="background:#ff5040"></span> Verstoß</div>
+        <div class="lg"><span class="dot" style="background:#ffa028"></span> Ring = stark befahrene Kreuzung</div>
+        <div class="lg">Klick auf Pod: Fahrt-Info + 📍 Verfolgen</div>
         <h3>Warnsignale</h3>
         <div class="lg"><span class="dot" style="background:#ff3020; box-shadow:0 0 6px #ff3020; animation: blink 1.6s infinite"></span> Dach-Beacon = Klasse im Zyklus</div>
         <div class="lg"><span class="sw" style="background:#8a3b34"></span> rote Plattform = Paket-Tangle</div>

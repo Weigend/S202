@@ -24,8 +24,10 @@ the 2D architecture view's **nested** packages and the 3D view's elevation:
 | **Cycle beacons** | blinking red rooftop warning lights on classes inside a dependency cycle |
 | **Road network** (`src/adapter.js` → `src/roads.js`) | a real routable graph: perimeter **ring road** per package, **cross streets** between level rows, **side streets** between siblings, a **driveway** per building and **ramps** down every terrace step; sidewalks with kerb cuts at junctions, centre-line dashes, street lamps |
 | **Traffic = dependencies** (`src/vehicles.js`) | every (sampled) dependency moves: cross-package = **car** on the roadway, package-local = **pedestrian** on the sidewalk; cyan = rule-conform, **red = violation**; routing uses edge weights (cars bundle onto wide boulevards, ramps are penalised); pods are clickable → source/target + glowing route; density slider |
-| **Greenery** (`src/greenery.js`) | parks with lawns, trees and bushes in the free plaza areas + a green belt around the city (sampled against buildings/roads/ramps/platforms) |
-| **Sky & daylight** (`src/sky.js`) | reworked day model: crisp blue sky (low turbidity), hard warm sun with full-contrast shadows, thin horizon haze, drifting procedural cloud layer |
+| **Greenery** (`src/greenery.js`) | parks (lawn rectangles + tree clusters), concrete plazas and bushes in the free areas + a green belt (sampled against buildings/roads/ramps/platforms) |
+| **Island & water** | the city sits on a concrete island in an animated reflective ocean (scene reflection, wave wobble, horizon haze) |
+| **Sky & daylight** (`src/sky.js`) | custom gradient sky dome (real blue zenith), sun disc + glow, **moon** with cool moonlight shadows at night, drifting procedural clouds, day/night timelapse button |
+| **Hotspots & follow cam** | pulsing rings mark the busiest intersections (route load); pods show proximity labels (source → target) and can be clicked & **followed** (chase cam, endless tour) |
 | **Package labels** (`src/labels.js`) | district name signs at platform edges, fading in with camera distance |
 
 UI: search box (press `/`) with fly-to, clickable uses/used-by chips in the info

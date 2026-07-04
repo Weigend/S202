@@ -77,9 +77,9 @@ export function makeGreenery({ slabs, roadNet, anchors, spanX, spanZ }) {
   const lawns = [], trunks = [], crownsRound = [], crownsCone = [], bushes = [];
   let treeCount = 0;
 
-  function plantCluster(cx, cz, y, pkg, rect) {
+  function plantCluster(cx, cz, y, pkg, rect, onLawn = false) {
     const r = 2.6 + rng() * 2.8;
-    if (lawns.length < LAWN_CAP) lawns.push({ x: cx, z: cz, y, r });
+    if (!onLawn && lawns.length < LAWN_CAP) lawns.push({ x: cx, z: cz, y, r });
     const n = 2 + Math.floor(rng() * 4);
     for (let i = 0; i < n && treeCount < TREE_CAP; i++) {
       const a = rng() * Math.PI * 2, d = rng() * r * 0.8;
@@ -102,7 +102,34 @@ export function makeGreenery({ slabs, roadNet, anchors, spanX, spanZ }) {
     }
   }
 
+  // Größere Freiflächen: rechteckige Rasenfelder (mit Bäumen) und Beton-Plätze.
+  const lawnRects = [], padRects = [];
+  const RECT_PROBE = [[0, 0], [-0.5, -0.5], [0.5, -0.5], [-0.5, 0.5], [0.5, 0.5], [0.5, 0], [-0.5, 0], [0, 0.5], [0, -0.5]];
+  function seedRects(rect, y, pkg, area) {
+    const n = Math.min(3, Math.round(area / 1500));
+    for (let k = 0; k < n; k++) {
+      for (let attempt = 0; attempt < 12; attempt++) {
+        const w = 7 + rng() * 13, d = 6 + rng() * 11;
+        const x = rect.x0 + rng() * (rect.x1 - rect.x0);
+        const z = rect.z0 + rng() * (rect.z1 - rect.z0);
+        let ok = true;
+        for (const [fx, fz] of RECT_PROBE) {
+          if (!isFree(x + fx * w, z + fz * d, y, pkg, rect, 1.4)) { ok = false; break; }
+        }
+        if (!ok) continue;
+        if (rng() < 0.55 && lawnRects.length < LAWN_CAP) {
+          lawnRects.push({ x, z, y, w, d });
+          plantCluster(x, z, y, pkg, rect, true); // Park: Bäume auf dem Rasen
+        } else {
+          padRects.push({ x, z, y, w, d });       // Beton-Freifläche
+        }
+        break;
+      }
+    }
+  }
+
   function seedArea(rect, y, pkg, area) {
+    seedRects(rect, y, pkg, area);
     const clusters = Math.min(8, Math.max(1, Math.round(area / 850)));
     for (let c = 0; c < clusters && treeCount < TREE_CAP; c++) {
       for (let attempt = 0; attempt < 14; attempt++) {
@@ -119,8 +146,8 @@ export function makeGreenery({ slabs, roadNet, anchors, spanX, spanZ }) {
     const rect = { x0: s.x - s.w / 2, x1: s.x + s.w / 2, z0: s.z - s.d / 2, z1: s.z + s.d / 2 };
     seedArea(rect, s.topY, s.fqn, s.w * s.d);
   }
-  // Boden: Stadtgebiet + Grüngürtel außen herum
-  const belt = 34;
+  // Boden: Stadtgebiet + Grüngürtel — bleibt auf der Insel (Wasser beginnt bei +28).
+  const belt = 18;
   const groundRect = { x0: -spanX / 2 - belt, x1: spanX / 2 + belt, z0: -spanZ / 2 - belt, z1: spanZ / 2 + belt };
   seedArea(groundRect, 0, '<root>', (spanX + 2 * belt) * (spanZ + 2 * belt) * 0.55);
 
@@ -137,6 +164,32 @@ export function makeGreenery({ slabs, roadNet, anchors, spanX, spanZ }) {
     mesh.receiveShadow = true;
     lawns.forEach((l, i) => {
       p.set(l.x, l.y + 0.045, l.z); sc.set(l.r, 0.09, l.r);
+      m4.compose(p, q, sc); mesh.setMatrixAt(i, m4);
+    });
+    mesh.instanceMatrix.needsUpdate = true;
+    group.add(mesh);
+  }
+  if (lawnRects.length) {
+    const mesh = new THREE.InstancedMesh(
+      new THREE.BoxGeometry(1, 1, 1),
+      new THREE.MeshStandardMaterial({ color: 0x37582e, roughness: 0.95, metalness: 0 }),
+      lawnRects.length);
+    mesh.receiveShadow = true;
+    lawnRects.forEach((r, i) => {
+      p.set(r.x, r.y + 0.035, r.z); sc.set(r.w, 0.07, r.d);
+      m4.compose(p, q, sc); mesh.setMatrixAt(i, m4);
+    });
+    mesh.instanceMatrix.needsUpdate = true;
+    group.add(mesh);
+  }
+  if (padRects.length) {
+    const mesh = new THREE.InstancedMesh(
+      new THREE.BoxGeometry(1, 1, 1),
+      new THREE.MeshStandardMaterial({ color: 0x6d7176, roughness: 0.88, metalness: 0, envMapIntensity: 0.15 }),
+      padRects.length);
+    mesh.receiveShadow = true;
+    padRects.forEach((r, i) => {
+      p.set(r.x, r.y + 0.028, r.z); sc.set(r.w, 0.055, r.d);
       m4.compose(p, q, sc); mesh.setMatrixAt(i, m4);
     });
     mesh.instanceMatrix.needsUpdate = true;

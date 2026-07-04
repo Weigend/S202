@@ -79,8 +79,8 @@ export function createComposer(renderer, scene, camera) {
   });
   composer.addPass(gtao);
 
-  // --- Bloom: beleuchtete Fenster und Lichter glühen ---
-  const bloom = new UnrealBloomPass(new THREE.Vector2(w, h), 0.4, 0.45, 0.6);
+  // --- Bloom: dezent — nur echte Lichter (Fenster nachts, Signale) glühen ---
+  const bloom = new UnrealBloomPass(new THREE.Vector2(w, h), 0.22, 0.3, 0.6);
   composer.addPass(bloom);
 
   // --- Tone-Mapping + sRGB ---

@@ -1,5 +1,4 @@
 import * as THREE from 'three';
-import { Sky } from 'three/addons/objects/Sky.js';
 
 /**
  * Atmosphäre: prozeduraler Himmel, Sonne/Mond, Beleuchtung, Nebel, Sterne,
@@ -21,10 +20,10 @@ const tmpColor = new THREE.Color();
 // Farbpaletten je nach Sonnenhöhe — werden interpoliert.
 // fog = Dunst-/Horizontfarbe. Nachts bewusst NICHT schwarz (Lichtverschmutzung).
 const PALETTE = {
-  night:  { sun: 0x223047, amb: 0x0a1326, hemiSky: 0x14233f, hemiGround: 0x05070d, fog: 0x1a2335, cloud: 0x1b2436 },
-  blue:   { sun: 0x4a6fa5, amb: 0x1b2c4a, hemiSky: 0x2a4670, hemiGround: 0x0a1020, fog: 0x26344f, cloud: 0x3a4c6e },
-  golden: { sun: 0xffab5e, amb: 0x4a3c4e, hemiSky: 0xb08cc0, hemiGround: 0x241a1c, fog: 0x8a6a72, cloud: 0xffc9a0 },
-  day:    { sun: 0xfff2da, amb: 0x51617c, hemiSky: 0x8fb6ea, hemiGround: 0x3a4148, fog: 0xa9c4e2, cloud: 0xffffff },
+  night:  { sun: 0x223047, amb: 0x0a1326, hemiSky: 0x14233f, hemiGround: 0x05070d, fog: 0x141d30, cloud: 0x1b2436, zenith: 0x030710, horizon: 0x101b30 },
+  blue:   { sun: 0x4a6fa5, amb: 0x1b2c4a, hemiSky: 0x2a4670, hemiGround: 0x0a1020, fog: 0x243350, cloud: 0x3a4c6e, zenith: 0x0d2148, horizon: 0x3d5a8a },
+  golden: { sun: 0xffab5e, amb: 0x4a3c4e, hemiSky: 0xb08cc0, hemiGround: 0x241a1c, fog: 0x9a7a80, cloud: 0xffc9a0, zenith: 0x2c53a0, horizon: 0xffb072 },
+  day:    { sun: 0xfff2da, amb: 0x51617c, hemiSky: 0x8fb6ea, hemiGround: 0x3a4148, fog: 0x9fc0e4, cloud: 0xffffff, zenith: 0x2b6bd2, horizon: 0xa8ccf2 },
 };
 
 // Regen-/Nässe-Dunst: kühles Grau, in das der Nebel bei "Wetter" überblendet.
@@ -94,15 +93,52 @@ export class Atmosphere {
     this._fogScale = 1.0;
     this._wet = 0.0;
 
-    // --- Himmel ---
-    this.sky = new Sky();
-    this.sky.scale.setScalar(60000);
+    // --- Himmel: eigener Gradient-Dome (sattes Zenit-Blau -> heller Horizont)
+    // mit Sonnenscheibe + Glow und Mondscheibe. Der Preetham-Himmel des
+    // Sky-Addons war am Horizont immer weiß — hier haben wir volle Kontrolle.
+    this.skyUniforms = {
+      uSunDir: { value: new THREE.Vector3(0, 1, 0) },
+      uMoonDir: { value: new THREE.Vector3(0, -1, 0) },
+      uZenith: { value: new THREE.Color(0x2b6bd2) },
+      uHorizon: { value: new THREE.Color(0xa8ccf2) },
+      uSunCol: { value: new THREE.Color(0xfff2da) },
+      uSunGlow: { value: 1 },
+      uMoonVis: { value: 0 },
+    };
+    this.sky = new THREE.Mesh(
+      new THREE.SphereGeometry(29000, 32, 16),
+      new THREE.ShaderMaterial({
+        side: THREE.BackSide, depthWrite: false, fog: false,
+        uniforms: this.skyUniforms,
+        vertexShader: /* glsl */`
+          varying vec3 vDir;
+          void main() {
+            vDir = position;
+            gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+          }`,
+        fragmentShader: /* glsl */`
+          uniform vec3 uSunDir, uMoonDir, uZenith, uHorizon, uSunCol;
+          uniform float uSunGlow, uMoonVis;
+          varying vec3 vDir;
+          void main() {
+            vec3 d = normalize(vDir);
+            float h = clamp(d.y, 0.0, 1.0);
+            // Zenit-Blau -> Horizont; unter dem Horizont dunkler ablaufen
+            vec3 sky = mix(uHorizon, uZenith, pow(h, 0.42));
+            sky = mix(uHorizon * 0.55, sky, smoothstep(-0.12, 0.02, d.y));
+            // Sonne: Scheibe + enger und weiter Glow (warm)
+            float s = max(dot(d, uSunDir), 0.0);
+            sky += uSunCol * smoothstep(0.99955, 0.99985, s) * 5.0;
+            sky += uSunCol * (pow(s, 320.0) * 0.9 + pow(s, 24.0) * 0.16) * uSunGlow;
+            // Mond: kleine kühle Scheibe mit dezentem Hof (nachts)
+            float m = max(dot(d, uMoonDir), 0.0);
+            sky += vec3(0.82, 0.88, 1.0) * (smoothstep(0.99978, 0.99993, m) * 1.6 + pow(m, 900.0) * 0.5) * uMoonVis;
+            gl_FragColor = vec4(sky, 1.0);
+            #include <tonemapping_fragment>
+            #include <colorspace_fragment>
+          }`,
+      }));
     this.sky.frustumCulled = false;
-    const u = this.sky.material.uniforms;
-    u.turbidity.value = 4;
-    u.rayleigh.value = 1.8;
-    u.mieCoefficient.value = 0.004;
-    u.mieDirectionalG.value = 0.82;
     scene.add(this.sky);
 
     // --- Sonne / Lichter ---
@@ -225,7 +261,15 @@ export class Atmosphere {
     const azim = THREE.MathUtils.degToRad(azimuthDeg);
 
     this.sunDir.setFromSphericalCoords(1, Math.PI / 2 - elev, azim);
-    this.sky.material.uniforms.sunPosition.value.copy(this.sunDir);
+    this.skyUniforms.uSunDir.value.copy(this.sunDir);
+
+    // Mond: gegenüber der Sonne, steigt auf, wenn die Sonne untergeht.
+    const moonElev = THREE.MathUtils.degToRad(THREE.MathUtils.clamp(24 - elevationDeg * 0.85, -30, 75));
+    this.moonDir = this.moonDir ?? new THREE.Vector3();
+    this.moonDir.setFromSphericalCoords(1, Math.PI / 2 - moonElev, azim + Math.PI);
+    this.skyUniforms.uMoonDir.value.copy(this.moonDir);
+    const moonVis = THREE.MathUtils.clamp(-elevationDeg / 6, 0, 1); // sichtbar, sobald die Sonne unter dem Horizont ist
+    this.skyUniforms.uMoonVis.value = moonVis;
 
     // Übergangsfaktor für Paletten anhand der Sonnenhöhe
     let from, to, t;
@@ -238,20 +282,27 @@ export class Atmosphere {
 
     // Belichtung: Nacht angehoben, Tag bewusst knapp belichtet — der Kontrast
     // kommt aus der harten Sonne, nicht aus insgesamt mehr Licht.
-    this.renderer.toneMappingExposure = THREE.MathUtils.lerp(0.95, 0.68, dayFactor);
+    this.renderer.toneMappingExposure = THREE.MathUtils.lerp(0.95, 0.78, dayFactor);
 
-    // Sonnenlicht: tagsüber deutlich härter (klare Schatten, modellierte Fassaden)
-    this.sun.position.copy(this.sunDir).multiplyScalar(900);
-    this.sun.color.copy(lerpPalette(from, to, t, 'sun'));
-    this.sun.intensity = THREE.MathUtils.lerp(0.05, 2.7, dayFactor);
+    // Sonnenlicht tagsüber hart; nachts übernimmt der MOND als Schattenwerfer
+    // (kühles, schwaches Licht aus der Mondrichtung).
+    if (moonVis > 0.5) {
+      this.sun.position.copy(this.moonDir).multiplyScalar(900);
+      this.sun.color.set(0xaec4ea);
+      this.sun.intensity = 0.14 * moonVis;
+    } else {
+      this.sun.position.copy(this.sunDir).multiplyScalar(900);
+      this.sun.color.copy(lerpPalette(from, to, t, 'sun'));
+      this.sun.intensity = THREE.MathUtils.lerp(0.08, 2.7, dayFactor);
+    }
 
     // Hemisphäre kräftig (kühles Himmelslicht von oben), Ambient tagsüber
     // ZURÜCKGENOMMEN — flaches Füll-Licht war der Hauptgrund für den Milch-Look.
     this.hemi.color.copy(lerpPalette(from, to, t, 'hemiSky'));
     this.hemi.groundColor.copy(lerpPalette(from, to, t, 'hemiGround'));
-    this.hemi.intensity = THREE.MathUtils.lerp(0.32, 0.7, dayFactor);
+    this.hemi.intensity = THREE.MathUtils.lerp(0.32, 0.8, dayFactor);
     this.ambient.color.copy(lerpPalette(from, to, t, 'amb'));
-    this.ambient.intensity = THREE.MathUtils.lerp(0.4, 0.22, dayFactor);
+    this.ambient.intensity = THREE.MathUtils.lerp(0.4, 0.26, dayFactor);
 
     // Nebel: tagsüber nur dünner Horizontdunst, nachts dichter Stadt-Dunst.
     this._baseFogColor = lerpPalette(from, to, t, 'fog');
@@ -262,11 +313,11 @@ export class Atmosphere {
     this._cloudBase = THREE.MathUtils.lerp(0.10, 0.5, dayFactor);
     this._applyFog();
 
-    // Himmel: tags sattes Blau (kräftiges Rayleigh, klare Luft), bei tiefer
-    // Sonne mehr Streuung und Dunstglühen um die Sonne.
-    this.sky.material.uniforms.rayleigh.value = THREE.MathUtils.lerp(3.0, 2.6, dayFactor);
-    this.sky.material.uniforms.turbidity.value = THREE.MathUtils.lerp(9, 2.2, dayFactor);
-    this.sky.material.uniforms.mieCoefficient.value = THREE.MathUtils.lerp(0.008, 0.0012, dayFactor);
+    // Himmel-Dome: Zenit/Horizont aus der Palette, Sonnenglühen bei tiefer Sonne
+    this.skyUniforms.uZenith.value.copy(lerpPalette(from, to, t, 'zenith'));
+    this.skyUniforms.uHorizon.value.copy(lerpPalette(from, to, t, 'horizon'));
+    this.skyUniforms.uSunCol.value.copy(lerpPalette(from, to, t, 'sun'));
+    this.skyUniforms.uSunGlow.value = THREE.MathUtils.lerp(2.2, 0.75, dayFactor);
 
     // Sterne sichtbar machen, wenn es dunkel ist
     this.stars.material.opacity = THREE.MathUtils.clamp(1 - dayFactor * 2.2, 0, 1);
@@ -276,6 +327,7 @@ export class Atmosphere {
 
     // "Stadt-Beleuchtung" — Faktor, wie stark Fenster leuchten sollen (1 = volle Nacht)
     this.cityLightFactor = THREE.MathUtils.clamp(1.15 - dayFactor * 1.4, 0.04, 1);
+    this.dayFactor = dayFactor; // z.B. für Tag/Nacht-Verkehrsdichte
 
     this._envDirty = true;
   }

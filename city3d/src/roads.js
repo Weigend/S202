@@ -178,18 +178,21 @@ function dijkstra(graph, from, to, mode = 'car') {
     }
   }
   if (!done.has(to)) return null;
-  // Pfad rückwärts einsammeln, Kanten-Polylinien konkatenieren
+  // Pfad rückwärts einsammeln, Kanten-Polylinien konkatenieren; Knoten-IDs
+  // werden mitgeführt (Kreuzungslast für die Hotspot-Anzeige).
   const pts = [];
+  const nodeIds = [to];
   let cur = to;
   while (cur !== from) {
     const p = prev.get(cur);
     const path = p.edge.path; // von p.node -> cur orientiert
     for (let i = path.length - 1; i >= 1; i--) pts.push(path[i].clone());
     cur = p.node;
+    nodeIds.push(cur);
   }
   pts.push(graph.nodes[from].clone());
   pts.reverse();
-  return pts;
+  return { pts, nodeIds };
 }
 
 // ---- Fahrbare Route: Spurversatz (rechts) + gefaste Ecken ---------------------
@@ -206,16 +209,24 @@ function driveablePath(pts, laneOff, maxCut = 1.7) {
     _d0.normalize();
     off.push(pts[i].clone().add(new THREE.Vector3(_d0.z, 0, -_d0.x).multiplyScalar(laneOff)));
   }
-  // 2) Ecken fasen: Innenpunkte durch zwei nahe Punkte ersetzen (weichere Kurven)
+  // 2) Ecken runden: Innenpunkte werden durch einen kleinen Quadratic-Bézier-
+  //    Bogen ersetzt (Einfahrt, Scheitel, Ausfahrt) — echte Kurven statt Knicke.
   const out = [off[0]];
   for (let i = 1; i < off.length - 1; i++) {
     const p = off[i];
     const inL = p.distanceTo(off[i - 1]), outL = p.distanceTo(off[i + 1]);
-    const cut = Math.min(maxCut, inL * 0.4, outL * 0.4);
+    const cut = Math.min(maxCut, inL * 0.42, outL * 0.42);
     if (cut < 0.4) { out.push(p.clone()); continue; }
-    out.push(
-      p.clone().lerp(off[i - 1], cut / inL),
-      p.clone().lerp(off[i + 1], cut / outL));
+    const a = p.clone().lerp(off[i - 1], cut / inL);
+    const b = p.clone().lerp(off[i + 1], cut / outL);
+    // Bézier-Zwischenpunkte bei t=0.25/0.5/0.75 (Kontrollpunkt = Original-Ecke)
+    for (const t of [0, 0.25, 0.5, 0.75, 1]) {
+      const s = 1 - t;
+      out.push(new THREE.Vector3(
+        s * s * a.x + 2 * s * t * p.x + t * t * b.x,
+        s * s * a.y + 2 * s * t * p.y + t * t * b.y,
+        s * s * a.z + 2 * s * t * p.z + t * t * b.z));
+    }
   }
   out.push(off[off.length - 1]);
   return out;
@@ -226,9 +237,10 @@ function driveablePath(pts, laneOff, maxCut = 1.7) {
  * Klasse B (Genutztem). Paketlokale Beziehungen (gleiches Paket) werden zu
  * FUSSGÄNGERN auf dem Gehsteig, paketübergreifende zu AUTOS auf der Fahrbahn.
  * Verstöße (Level steigt/gleich = Zyklus) zuerst, dann Sample bis zum Cap.
- * Rückgabe: [{path, cum, len, violation, local, from, to}].
+ * Rückgabe: {trips: [{path, cum, len, violation, local, from, to}],
+ *            nodeLoad: Map<nodeId, Anzahl Routen>} — die Last je Kreuzung.
  */
-export function buildTrips(graph, model, { maxCars = 320, maxPeds = 220 } = {}) {
+export function buildTrips(graph, model, { maxCars = 600, maxPeds = 400 } = {}) {
   const level = new Map(), district = new Map();
   for (const b of model.buildings ?? []) {
     level.set(b.fullName, b.architectureLevel ?? 0);
@@ -258,17 +270,19 @@ export function buildTrips(graph, model, { maxCars = 320, maxPeds = 220 } = {}) 
   ];
 
   const trips = [];
+  const nodeLoad = new Map();
   for (const c of chosen) {
     const raw = dijkstra(graph, c.a, c.b, c.local ? 'ped' : 'car');
-    if (!raw || raw.length < 2) continue;
+    if (!raw || raw.pts.length < 2) continue;
     const path = c.local
-      ? driveablePath(raw, PED_OFF, 0.9)   // Gehsteig, enge Ecken
-      : driveablePath(raw, LANE_OFF, 1.7); // Fahrbahn rechts, weiche Kurven
+      ? driveablePath(raw.pts, PED_OFF, 1.0)   // Gehsteig, enge Bögen
+      : driveablePath(raw.pts, LANE_OFF, 2.4); // Fahrbahn rechts, weite Kurven
     const cum = [0];
     for (let i = 1; i < path.length; i++) cum.push(cum[i - 1] + path[i].distanceTo(path[i - 1]));
     const len = cum[cum.length - 1];
     if (len < 4) continue;
     trips.push({ path, cum, len, violation: c.violation, local: c.local, from: c.from, to: c.to });
+    for (const id of raw.nodeIds) nodeLoad.set(id, (nodeLoad.get(id) ?? 0) + 1);
   }
-  return trips;
+  return { trips, nodeLoad };
 }
