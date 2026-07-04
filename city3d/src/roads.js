@@ -229,7 +229,13 @@ function driveablePath(pts, laneOff, maxCut = 1.7) {
     }
   }
   out.push(off[off.length - 1]);
-  return out;
+  // Doppelte/fast identische Punkte entfernen — Null-Länge-Segmente ließen die
+  // Fahrzeug-Orientierung in Kurven für einen Frame auf Yaw 0 springen.
+  const clean = [out[0]];
+  for (let i = 1; i < out.length; i++) {
+    if (out[i].distanceToSquared(clean[clean.length - 1]) > 0.01) clean.push(out[i]);
+  }
+  return clean.length > 1 ? clean : out;
 }
 
 /**

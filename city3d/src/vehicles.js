@@ -46,6 +46,7 @@ class Pool {
     this.colOk = colOk;
     this.colViol = colViol;
     this.max = trips.length ? Math.min(Math.max(minCount, Math.round(trips.length * 2.2)), cap) : 0;
+    this.speedScale = 1;
 
     this.mat = new THREE.MeshBasicMaterial({ toneMapped: true });
     this.mesh = new THREE.InstancedMesh(geo, this.mat, Math.max(1, this.max));
@@ -88,7 +89,7 @@ class Pool {
         this.mesh.setMatrixAt(i, _m4);
         continue;
       }
-      car.s += car.speed * dt;
+      car.s += car.speed * this.speedScale * dt;
       const { path, cum, len } = car.trip;
       if (car.s >= len) { // angekommen -> nächste Abhängigkeit
         const fresh = this._spawn();
@@ -105,7 +106,11 @@ class Pool {
       const p0 = path[car.seg], p1 = path[car.seg + 1];
       _pos.lerpVectors(p0, p1, t);
       _dir.subVectors(p1, p0);
-      const horiz = Math.hypot(_dir.x, _dir.z) || 1;
+      let horiz = Math.hypot(_dir.x, _dir.z);
+      if (horiz < 1e-3) { // degeneriertes Segment: letzte bekannte Richtung halten
+        _dir.set(car.dx, 0, car.dz);
+        horiz = 1;
+      }
       _eul.set(-Math.atan2(_dir.y, horiz), Math.atan2(_dir.x, _dir.z), 0);
       _quat.setFromEuler(_eul);
       _scl.set(this.dims[0], this.dims[1], this.dims[2]);
@@ -250,6 +255,11 @@ export class Traffic {
       sprite.material.opacity = 0.85 * THREE.MathUtils.clamp((LABEL_DIST - d) / 35, 0, 1);
       sprite.visible = true;
     }
+  }
+
+  /** Globales Tempo (0.15..2): skaliert Autos und Fußgänger gemeinsam. */
+  setSpeedScale(f) {
+    for (const pool of this.pools) pool.speedScale = f;
   }
 
   setDensity(f, dayFactor = 1) {

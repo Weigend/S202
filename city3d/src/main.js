@@ -412,13 +412,22 @@ renderer.domElement.addEventListener('dblclick', (e) => {
   if (sel && sel.fqn) flyTo(sel.fqn);
 });
 
-renderer.domElement.addEventListener('pointerdown', (e) => { pressXY = [e.clientX, e.clientY]; flight = null; stopFollow(); });
+// Gepickt wird im Moment des DRÜCKENS: zwischen pointerdown und pointerup
+// driftet die Kamera weiter (Kino-Rotation, Orbit-Damping) — ein Pick bei
+// pointerup traf deshalb regelmäßig das Nachbargebäude statt des gemeinten.
+let pressPick = null;
+renderer.domElement.addEventListener('pointerdown', (e) => {
+  pressXY = [e.clientX, e.clientY];
+  pressPick = pick(e.clientX, e.clientY);
+  flight = null;
+  stopFollow();
+});
 renderer.domElement.addEventListener('pointerup', (e) => {
   if (!pressXY) return;
   const moved = Math.hypot(e.clientX - pressXY[0], e.clientY - pressXY[1]);
   pressXY = null;
   if (moved > 5) return; // an orbit drag, not a click
-  const sel = pick(e.clientX, e.clientY);
+  const sel = pressPick;
   // Toggle: Klick auf die bereits ausgewählte Klasse/das Paket hebt die Auswahl auf.
   if (sel && sel.fqn && currentSel && currentSel.fqn === sel.fqn && currentSel.kind === sel.kind) {
     select(null);
@@ -508,6 +517,13 @@ $('s-traffic').addEventListener('input', (e) => {
   trafficDensity = parseFloat(e.target.value);
   applyDensity();
   $('v-traffic').textContent = Math.round(trafficDensity * 100) + '%';
+});
+
+let speedScale = 1;
+$('s-speed').addEventListener('input', (e) => {
+  speedScale = parseFloat(e.target.value);
+  traffic.setSpeedScale(speedScale);
+  $('v-speed').textContent = '×' + speedScale.toFixed(2);
 });
 
 $('s-wet').addEventListener('input', (e) => {
@@ -658,6 +674,7 @@ $('b-regen').addEventListener('click', async () => {
   deps.setMode(depMode);
   city.setMetric(metricMode);
   applyDensity();
+  traffic.setSpeedScale(speedScale);
   searchIndex = buildSearchIndex();
   updateDepStats();
   frameCity();
