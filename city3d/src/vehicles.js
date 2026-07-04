@@ -32,8 +32,8 @@ const _eul = new THREE.Euler(0, 0, 0, 'YXZ');
 const _dir = new THREE.Vector3();
 const _v = new THREE.Vector3();
 
-const MAX_LABELS = 7;
-const LABEL_DIST = 150;
+const MAX_LABELS = 5;
+const LABEL_DIST = 95;
 
 class Pool {
   constructor(scene, trips, { geo, dims, speedMin, speedMax, cap, minCount, colOk, colViol, bob = 0, seed }) {
@@ -126,11 +126,12 @@ class Pool {
   }
 }
 
-// ---- Labels: "Quelle → Ziel"-Schild als Sprite (Textur je Trip gecacht) ------
+// ---- Labels: dezenter Text mit dunkler Kontur (kein Hintergrund-Schild — das
+// Billboard-Rechteck wirkte gegenüber den gedrehten Fahrzeugen wie ein Fehler).
 function labelTexture(trip) {
   if (trip._labelTex) return trip._labelTex;
   const text = `${trip.from.split('.').pop()} → ${trip.to.split('.').pop()}`;
-  const PX = 34, PAD = 14;
+  const PX = 26, PAD = 8;
   const canvas = document.createElement('canvas');
   const ctx = canvas.getContext('2d');
   ctx.font = `600 ${PX}px ui-sans-serif, system-ui, sans-serif`;
@@ -139,12 +140,11 @@ function labelTexture(trip) {
   canvas.width = w; canvas.height = h;
   ctx.font = `600 ${PX}px ui-sans-serif, system-ui, sans-serif`;
   ctx.textBaseline = 'middle'; ctx.textAlign = 'center';
-  ctx.fillStyle = 'rgba(6, 12, 22, 0.78)';
-  ctx.beginPath(); ctx.roundRect(1, 1, w - 2, h - 2, h / 2); ctx.fill();
-  ctx.strokeStyle = trip.violation ? 'rgba(255,90,80,0.9)' : trip.local ? 'rgba(77,230,184,0.8)' : 'rgba(95,200,255,0.8)';
-  ctx.lineWidth = 3;
-  ctx.beginPath(); ctx.roundRect(1, 1, w - 2, h - 2, h / 2); ctx.stroke();
-  ctx.fillStyle = trip.violation ? '#ffc2bb' : '#e2eeff';
+  ctx.lineJoin = 'round';
+  ctx.strokeStyle = 'rgba(4, 8, 16, 0.9)';
+  ctx.lineWidth = 5;
+  ctx.strokeText(text, w / 2, h / 2 + 1);
+  ctx.fillStyle = trip.violation ? '#ffaba2' : trip.local ? '#bdf2df' : '#d9e9ff';
   ctx.fillText(text, w / 2, h / 2 + 1);
   const tex = new THREE.CanvasTexture(canvas);
   tex.colorSpace = THREE.SRGBColorSpace;
@@ -171,11 +171,12 @@ export class Traffic {
     });
     this.pools = [this.carPool, this.pedPool];
 
-    // Label-Sprites (Pool, wiederverwendet für die jeweils nächsten Pods)
+    // Label-Sprites (Pool, wiederverwendet für die jeweils nächsten Pods).
+    // depthTest an: Schilder verschwinden hinter Gebäuden statt durchzuscheinen.
     this.labelSprites = [];
     for (let i = 0; i < MAX_LABELS; i++) {
       const sprite = new THREE.Sprite(new THREE.SpriteMaterial({
-        transparent: true, depthWrite: false, depthTest: false, opacity: 0.95,
+        transparent: true, depthWrite: false, opacity: 0.85,
       }));
       sprite.visible = false;
       sprite.renderOrder = 980;
@@ -209,6 +210,16 @@ export class Traffic {
     return car && car.live ? car : null;
   }
 
+  /** Zufälliger aktiver Pod (Autos bevorzugt) — für die "Rundfahrt". */
+  randomActiveRef() {
+    for (const pool of this.pools) {
+      const live = [];
+      for (let i = 0; i < pool.cars.length; i++) if (pool.cars[i].live) live.push(i);
+      if (live.length) return { pool, i: live[Math.floor(Math.random() * live.length)] };
+    }
+    return null;
+  }
+
   /** Proximity-Labels: Schilder über den nächsten Pods (gedrosselt). */
   updateLabels(camera, dt) {
     this._labelAccum += dt;
@@ -233,10 +244,10 @@ export class Traffic {
         sprite.material.map = tex;
         sprite.material.needsUpdate = true;
       }
-      const h = 2.0 + d * 0.012; // ferne Schilder etwas größer (lesbar halten)
+      const h = 1.5; // klein und konstant — Nähe entscheidet über Sichtbarkeit
       sprite.scale.set(h * car.trip._labelAspect, h, 1);
-      sprite.position.set(car.x, car.y + 3.0 + h / 2, car.z);
-      sprite.material.opacity = 0.95 * THREE.MathUtils.clamp((LABEL_DIST - d) / 40, 0, 1);
+      sprite.position.set(car.x, car.y + 2.5, car.z);
+      sprite.material.opacity = 0.85 * THREE.MathUtils.clamp((LABEL_DIST - d) / 35, 0, 1);
       sprite.visible = true;
     }
   }

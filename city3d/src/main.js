@@ -42,37 +42,41 @@ let city = buildCity(scene, atmosphere, cityModel);
 // Straßengraphen; cyan = regelkonform, rot = Verstoß).
 let trafficDensity = 0.5;
 
-// Kreuzungslast-Hotspots: pulsierende Ringe auf den meistbefahrenen Knoten —
-// dort, wo sich die Abhängigkeits-Routen bündeln (Architektur-Arterien).
+// Kreuzungslast-Hotspots: sanft glühende Flächen auf den meistbefahrenen
+// Kreuzungen (wie viele Abhängigkeits-Routen dort durchlaufen) — zuschaltbar
+// über den "Hotspots"-Knopf, Fläche/Helligkeit wachsen mit der Last.
+let hotspotsOn = false;
 function makeHotspots(graph, nodeLoad) {
   const entries = [...nodeLoad.entries()]
     .filter(([, n]) => n >= 3)
     .sort((a, b) => b[1] - a[1])
     .slice(0, 28);
-  if (!entries.length) return { update() {}, dispose() {} };
-  const geo = new THREE.TorusGeometry(1, 0.09, 6, 28);
-  geo.rotateX(Math.PI / 2);
+  if (!entries.length) return { update() {}, setVisible() {}, dispose() {} };
+  const geo = new THREE.CircleGeometry(1, 24);
+  geo.rotateX(-Math.PI / 2);
   const mat = new THREE.MeshBasicMaterial({
-    color: 0xffa028, transparent: true, opacity: 0.7, toneMapped: false,
+    color: 0xff9a30, transparent: true, opacity: 0.2, toneMapped: false,
     depthWrite: false, blending: THREE.AdditiveBlending,
   });
   const mesh = new THREE.InstancedMesh(geo, mat, entries.length);
   const m4 = new THREE.Matrix4(), q = new THREE.Quaternion();
   entries.forEach(([id, n], i) => {
     const p = graph.nodes[id];
-    const r = 1.6 + Math.sqrt(n) * 0.7;
-    m4.compose(new THREE.Vector3(p.x, p.y + 0.2, p.z), q, new THREE.Vector3(r, 1, r));
+    const r = 2.4 + Math.sqrt(n) * 0.8;
+    m4.compose(new THREE.Vector3(p.x, p.y + 0.16, p.z), q, new THREE.Vector3(r, 1, r));
     mesh.setMatrixAt(i, m4);
   });
   mesh.instanceMatrix.needsUpdate = true;
+  mesh.visible = hotspotsOn;
   scene.add(mesh);
   return {
-    update(t) { mat.opacity = 0.4 + 0.35 * (0.5 + 0.5 * Math.sin(t * 2.6)); },
+    update(t) { mat.opacity = 0.14 + 0.14 * (0.5 + 0.5 * Math.sin(t * 2.2)); },
+    setVisible(on) { mesh.visible = on; },
     dispose() { geo.dispose(); mat.dispose(); scene.remove(mesh); },
   };
 }
 
-let hotspots = { update() {}, dispose() {} };
+let hotspots = { update() {}, setVisible() {}, dispose() {} };
 function makeTraffic() {
   const { trips, nodeLoad } = buildTrips(city.roadGraph, cityModel);
   // Diagnose: wie viele Abhängigkeiten haben eine fahrbare Route gefunden?
@@ -358,12 +362,20 @@ let followRef = null;
 const followDesired = new THREE.Vector3();
 const followLook = new THREE.Vector3();
 function startFollow(ref) {
+  if (!ref) return;
   flight = null;
   followRef = ref;
   nav.setMode('orbit');
   nav.orbit.autoRotate = false;
+  document.getElementById('follow-hint').style.display = 'block';
+  document.getElementById('b-tour').classList.add('active');
 }
-function stopFollow() { followRef = null; }
+function stopFollow() {
+  if (!followRef) return;
+  followRef = null;
+  document.getElementById('follow-hint').style.display = 'none';
+  document.getElementById('b-tour').classList.remove('active');
+}
 
 // ---- Kamera-Anflug: sanfter Tween auf eine Klasse oder ein Paket -------------
 let flight = null;
@@ -541,6 +553,20 @@ function setMetricMode(mode) {
   for (const [k, id] of Object.entries(metricButtons)) $(id).classList.toggle('active', k === mode);
 }
 for (const [k, id] of Object.entries(metricButtons)) $(id).addEventListener('click', () => setMetricMode(k));
+
+// ---- Rundfahrt: der Kamera-Chase auf einen zufälligen Pod, ein Klick genügt ----
+$('b-tour').addEventListener('click', () => {
+  if (followRef) { stopFollow(); return; }
+  hideInfo();
+  startFollow(traffic.randomActiveRef());
+});
+
+// ---- Hotspots: meistbefahrene Kreuzungen ein-/ausblenden -----------------------
+$('b-hotspots').addEventListener('click', () => {
+  hotspotsOn = !hotspotsOn;
+  $('b-hotspots').classList.toggle('active', hotspotsOn);
+  hotspots.setVisible(hotspotsOn);
+});
 
 // ---- Legende ------------------------------------------------------------------
 $('b-legend').addEventListener('click', () => {
