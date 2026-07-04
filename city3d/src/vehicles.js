@@ -131,12 +131,13 @@ class Pool {
   }
 }
 
-// ---- Labels: dezenter Text mit dunkler Kontur (kein Hintergrund-Schild — das
-// Billboard-Rechteck wirkte gegenüber den gedrehten Fahrzeugen wie ein Fehler).
+// ---- Labels: NUR Text, sonst nichts. Kein Hintergrund, keine Kontur — und im
+// Material ein alphaTest, der halbtransparente dunkle Randpixel der Canvas-
+// Textur verwirft (die erschienen sonst als schattiges Rechteck um den Text).
 function labelTexture(trip) {
   if (trip._labelTex) return trip._labelTex;
   const text = `${trip.from.split('.').pop()} → ${trip.to.split('.').pop()}`;
-  const PX = 26, PAD = 8;
+  const PX = 24, PAD = 6;
   const canvas = document.createElement('canvas');
   const ctx = canvas.getContext('2d');
   ctx.font = `600 ${PX}px ui-sans-serif, system-ui, sans-serif`;
@@ -145,10 +146,6 @@ function labelTexture(trip) {
   canvas.width = w; canvas.height = h;
   ctx.font = `600 ${PX}px ui-sans-serif, system-ui, sans-serif`;
   ctx.textBaseline = 'middle'; ctx.textAlign = 'center';
-  ctx.lineJoin = 'round';
-  ctx.strokeStyle = 'rgba(4, 8, 16, 0.9)';
-  ctx.lineWidth = 5;
-  ctx.strokeText(text, w / 2, h / 2 + 1);
   ctx.fillStyle = trip.violation ? '#ffaba2' : trip.local ? '#bdf2df' : '#d9e9ff';
   ctx.fillText(text, w / 2, h / 2 + 1);
   const tex = new THREE.CanvasTexture(canvas);
@@ -181,7 +178,7 @@ export class Traffic {
     this.labelSprites = [];
     for (let i = 0; i < MAX_LABELS; i++) {
       const sprite = new THREE.Sprite(new THREE.SpriteMaterial({
-        transparent: true, depthWrite: false, opacity: 0.85,
+        transparent: true, depthWrite: false, opacity: 0.85, alphaTest: 0.12,
       }));
       sprite.visible = false;
       sprite.renderOrder = 980;
@@ -249,9 +246,9 @@ export class Traffic {
         sprite.material.map = tex;
         sprite.material.needsUpdate = true;
       }
-      const h = 1.5; // klein und konstant — Nähe entscheidet über Sichtbarkeit
+      const h = 1.1; // klein und konstant — Nähe entscheidet über Sichtbarkeit
       sprite.scale.set(h * car.trip._labelAspect, h, 1);
-      sprite.position.set(car.x, car.y + 2.5, car.z);
+      sprite.position.set(car.x, car.y + 2.3, car.z);
       sprite.material.opacity = 0.85 * THREE.MathUtils.clamp((LABEL_DIST - d) / 35, 0, 1);
       sprite.visible = true;
     }
