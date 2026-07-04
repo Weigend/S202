@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { Reflector } from 'three/addons/objects/Reflector.js';
 import { layoutFromModel } from './adapter.js';
 import { makePackageLabels } from './labels.js';
+import { makeGreenery } from './greenery.js';
 import { buildRoadGraph } from './roads.js';
 
 /**
@@ -183,6 +184,10 @@ export function buildCity(scene, atmosphere, model, seed = 1) {
   const labels = makePackageLabels(slabs, maxDepth);
   group.add(labels.group);
 
+  // Grünflächen: Parks in den freien Plaza-Bereichen + Grüngürtel um die Stadt.
+  const greenery = makeGreenery({ slabs, roadNet, anchors, spanX, spanZ });
+  group.add(greenery);
+
   // Das Straßennetz: Asphalt, Gehsteige (mit Lücken an Kreuzungen/Zufahrten),
   // Mittellinien und Laternen — aus den Graph-Daten des Adapters.
   const streetMesh = makeRoadsMesh(roadNet, roadGraph);
@@ -232,6 +237,7 @@ export function buildCity(scene, atmosphere, model, seed = 1) {
       rampMesh.traverse((o) => { o.geometry?.dispose(); o.material?.dispose(); });
       roofDetails.traverse((o) => { o.geometry?.dispose(); o.material?.dispose(); });
       beacons.traverse((o) => { o.geometry?.dispose(); o.material?.dispose(); });
+      greenery.traverse((o) => { o.geometry?.dispose(); o.material?.dispose(); });
       labels.dispose();
       groundDetails.traverse((o) => { o.geometry?.dispose(); o.material?.dispose(); });
       ground.traverse((o) => {
@@ -257,7 +263,8 @@ function makePackageSlabs(slabs, maxDepth) {
     geo, new THREE.MeshStandardMaterial({ roughness: 0.85, metalness: 0.05 }), slabs.length);
   mesh.receiveShadow = true;
 
-  const base = new THREE.Color(0xfffacd), deep = new THREE.Color(0xd6b85a), cyc = new THREE.Color(0x8a3b34);
+  // Gedeckte Töne — Zitronengelb blendete unter voller Tagessonne.
+  const base = new THREE.Color(0xe7dfc2), deep = new THREE.Color(0xbfa050), cyc = new THREE.Color(0x8a3b34);
   const m4 = new THREE.Matrix4(), q = new THREE.Quaternion();
   const pos = new THREE.Vector3(), scl = new THREE.Vector3(), col = new THREE.Color();
   for (let i = 0; i < slabs.length; i++) {
@@ -390,7 +397,7 @@ function makeRoadsMesh(roadNet, graph) {
   if (walks.length) {
     const wm = new THREE.InstancedMesh(
       new THREE.BoxGeometry(1, 1, 1),
-      new THREE.MeshStandardMaterial({ color: 0x686c70, roughness: 0.92, metalness: 0, envMapIntensity: 0.15 }),
+      new THREE.MeshStandardMaterial({ color: 0x54585c, roughness: 0.92, metalness: 0, envMapIntensity: 0.15 }),
       walks.length);
     wm.receiveShadow = true;
     for (let i = 0; i < walks.length; i++) {

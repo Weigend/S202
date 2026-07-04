@@ -44,8 +44,9 @@ let trafficDensity = 0.5;
 function makeTraffic() {
   const trips = buildTrips(city.roadGraph, cityModel);
   // Diagnose: wie viele Abhängigkeiten haben eine fahrbare Route gefunden?
-  console.info(`City3D traffic: ${trips.length} routes (of ${cityModel.dependencies?.length ?? 0} dependencies), `
-    + `${city.roadGraph.nodes.length} graph nodes`);
+  const nCars = trips.filter((t) => !t.local).length;
+  console.info(`City3D traffic: ${trips.length} routes (${nCars} cars, ${trips.length - nCars} pedestrians) `
+    + `of ${cityModel.dependencies?.length ?? 0} dependencies, ${city.roadGraph.nodes.length} graph nodes`);
   const t = new Traffic(scene, trips);
   t.setDensity(trafficDensity);
   return t;
@@ -110,7 +111,12 @@ const selMat4 = new THREE.Matrix4();
 const selScale = new THREE.Matrix4().makeScale(1.1, 1.06, 1.1);
 
 function clearHighlight() {
-  for (let i = highlightGroup.children.length - 1; i >= 0; i--) highlightGroup.remove(highlightGroup.children[i]);
+  for (let i = highlightGroup.children.length - 1; i >= 0; i--) {
+    const o = highlightGroup.children[i];
+    o.geometry?.dispose?.();
+    if (o.material !== glowMat) o.material?.dispose?.();
+    highlightGroup.remove(o);
+  }
 }
 
 function glowInstances(mesh, geo, ids) {
@@ -127,13 +133,30 @@ function glowInstances(mesh, geo, ids) {
   }
 }
 
+function glowClass(fqn) {
+  const ids = [];
+  for (let i = 0; i < city.boxFqns.length; i++) if (city.boxFqns[i] === fqn) ids.push(i);
+  glowInstances(city.buildingMesh, glowBoxBuilding, ids);
+}
+
 function highlight(sel) {
   clearHighlight();
   if (!sel) return;
   if (sel.kind === 'class') {
-    const ids = [];
-    for (let i = 0; i < city.boxFqns.length; i++) if (city.boxFqns[i] === sel.fqn) ids.push(i);
-    glowInstances(city.buildingMesh, glowBoxBuilding, ids);
+    glowClass(sel.fqn);
+  } else if (sel.kind === 'pod') {
+    // Fahrt: Quelle und Ziel glühen, die Route leuchtet auf der Straße.
+    glowClass(sel.data.from);
+    glowClass(sel.data.to);
+    const pts = sel.data.path.map((p) => new THREE.Vector3(p.x, p.y + 0.35, p.z));
+    const line = new THREE.Line(
+      new THREE.BufferGeometry().setFromPoints(pts),
+      new THREE.LineBasicMaterial({
+        color: sel.data.violation ? 0xff5040 : sel.data.local ? 0x54e6b8 : 0x59d0ff,
+        transparent: true, opacity: 0.95, blending: THREE.AdditiveBlending, depthWrite: false,
+      }));
+    line.renderOrder = 998;
+    highlightGroup.add(line);
   } else {
     const i = city.slabFqns.indexOf(sel.fqn);
     if (i >= 0) glowInstances(city.slabPickMesh, glowBoxSlab, [i]);
@@ -206,10 +229,34 @@ function showPackage(d) {
     flyBtnHtml;
 }
 
+// Fahrt-Info: welcher Pod fährt hier, von wo nach wo, und warum in dieser Farbe.
+function showPod(t) {
+  const kind = t.local ? '🚶 Fußgänger' : '🚗 Transport';
+  const tags =
+    ` <span class="tag" style="background:rgba(120,180,255,.14);color:#9fc3ff">${t.local ? 'paketlokal' : 'paketübergreifend'}</span>` +
+    (t.violation ? ' <span class="tag cycle">⚠ Verstoß</span>' : '');
+  infoEl.innerHTML =
+    '<span class="close" title="schließen">×</span>' +
+    `<div class="cls">${kind}${tags}</div>` +
+    `<div class="fqn">${t.from} → ${t.to}</div>` +
+    rows([
+      ['Beziehung', t.violation ? 'aufwärts / Zyklus' : 'regelkonform (Level fällt)'],
+      ['Weg', t.local ? 'Gehsteig' : 'Fahrbahn'],
+      ['Routenlänge', `${Math.round(t.len)}`],
+    ]) +
+    `<div class="dep-sec"><div class="dep-title">Quelle → Ziel</div><div class="dep-wrap">` +
+    `<span class="dep out" data-fqn="${t.from}" title="${t.from}">${t.from.split('.').pop()}</span>` +
+    `<span class="dep-more">→</span>` +
+    `<span class="dep in" data-fqn="${t.to}" title="${t.to}">${t.to.split('.').pop()}</span>` +
+    `</div></div>`;
+}
+
 function select(sel) {
   if (!sel) { hideInfo(); return; }
   currentSel = sel;
-  if (sel.kind === 'class') showClass(sel.data); else showPackage(sel.data);
+  if (sel.kind === 'class') showClass(sel.data);
+  else if (sel.kind === 'pod') showPod(sel.data);
+  else showPackage(sel.data);
   infoEl.style.display = 'block';
   infoEl.querySelector('.close').onclick = hideInfo;
   highlight(sel);
@@ -243,12 +290,15 @@ function pick(clientX, clientY) {
   const targets = [];
   if (city.buildingMesh) targets.push(city.buildingMesh);
   if (city.slabPickMesh) targets.push(city.slabPickMesh);
+  targets.push(...traffic.pickTargets); // Pods (Autos + Fußgänger) sind anklickbar
   if (!targets.length) return null;
   pointer.x = (clientX / window.innerWidth) * 2 - 1;
   pointer.y = -(clientY / window.innerHeight) * 2 + 1;
   raycaster.setFromCamera(pointer, camera);
   const hit = raycaster.intersectObjects(targets, false)[0];
   if (!hit || hit.instanceId == null) return null;
+  const trip = traffic.tripAt(hit.object, hit.instanceId);
+  if (trip) return { kind: 'pod', data: trip, fqn: null };
   if (hit.object === city.buildingMesh) {
     const fqn = city.boxFqns[hit.instanceId];
     const b = fqn && cityModel.buildings.find((x) => x.fullName === fqn);
@@ -291,7 +341,7 @@ function flyTo(fqn) {
 
 renderer.domElement.addEventListener('dblclick', (e) => {
   const sel = pick(e.clientX, e.clientY);
-  if (sel) flyTo(sel.fqn);
+  if (sel && sel.fqn) flyTo(sel.fqn);
 });
 
 renderer.domElement.addEventListener('pointerdown', (e) => { pressXY = [e.clientX, e.clientY]; flight = null; });
@@ -301,8 +351,15 @@ renderer.domElement.addEventListener('pointerup', (e) => {
   pressXY = null;
   if (moved > 5) return; // an orbit drag, not a click
   const sel = pick(e.clientX, e.clientY);
+  // Toggle: Klick auf die bereits ausgewählte Klasse/das Paket hebt die Auswahl auf.
+  if (sel && sel.fqn && currentSel && currentSel.fqn === sel.fqn && currentSel.kind === sel.kind) {
+    select(null);
+    pushSelectionToHost('');
+    return;
+  }
   select(sel);
-  pushSelectionToHost(sel ? sel.fqn : '');   // browser -> app
+  // Pods haben keinen fqn — die Auswahl in der Host-App bleibt dann unberührt.
+  if (!sel || sel.fqn) pushSelectionToHost(sel ? sel.fqn : '');
 });
 renderer.domElement.addEventListener('pointermove', (e) => {
   if (pressXY) return;
@@ -561,8 +618,9 @@ function animate() {
     if (flight.s >= 1) flight = null;
   }
 
-  traffic.update(dt);
+  traffic.update(dt, clock.elapsedTime);
   deps.update(clock.elapsedTime);
+  atmosphere.update(dt); // Wolken driften
   city.labels?.update(camera, dt);
   // Zyklus-Beacons: harter Doppelherzschlag-Blink, nachts kräftiger.
   if (city.beaconMat) {

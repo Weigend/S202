@@ -2,26 +2,29 @@ import * as THREE from 'three';
 import { Sky } from 'three/addons/objects/Sky.js';
 
 /**
- * Atmosphäre: prozeduraler Himmel, Sonne/Mond, Beleuchtung, Nebel, Sterne und
- * eine aus dem Himmel gerenderte Environment-Map für realistische Reflexionen.
+ * Atmosphäre: prozeduraler Himmel, Sonne/Mond, Beleuchtung, Nebel, Sterne,
+ * eine driftende Wolkenschicht und eine aus dem Himmel gerenderte
+ * Environment-Map für Reflexionen.
  *
  * `time` ∈ [0,1] steuert den kompletten Tagesbogen:
  *   0.00  tiefe Nacht        0.16  blaue Stunde (default)
  *   0.30  goldene Stunde     0.50  Mittag
  *   0.70  goldene Stunde     0.85  blaue Stunde      1.0  Nacht
+ *
+ * Das Tagesmodell ist auf "klarer, knackiger Vormittag" abgestimmt: tiefer
+ * blauer Himmel (niedrige Turbidity), harte warme Sonne mit vollem Kontrast,
+ * kühles Himmelslicht von oben, dünner Horizontdunst statt Milchsuppe.
  */
 
 const tmpColor = new THREE.Color();
 
 // Farbpaletten je nach Sonnenhöhe — werden interpoliert.
-// fog = Dunst-/Horizontfarbe. Nachts bewusst NICHT schwarz, sondern ein
-// angehobener "Lichtverschmutzungs"-Schimmer, damit ferne Gebäude in Dunst
-// statt in Schwärze verschwinden (sonst wirkt Nebel nur als "hinten dunkel").
+// fog = Dunst-/Horizontfarbe. Nachts bewusst NICHT schwarz (Lichtverschmutzung).
 const PALETTE = {
-  night:  { sun: 0x223047, amb: 0x0a1326, hemiSky: 0x14233f, hemiGround: 0x05070d, fog: 0x1a2335 },
-  blue:   { sun: 0x4a6fa5, amb: 0x1b2c4a, hemiSky: 0x2a4670, hemiGround: 0x0a1020, fog: 0x26344f },
-  golden: { sun: 0xffb070, amb: 0x40364a, hemiSky: 0x9a7bb0, hemiGround: 0x20161a, fog: 0x5a4660 },
-  day:    { sun: 0xfff4e0, amb: 0x62738f, hemiSky: 0x8eaee0, hemiGround: 0x343b49, fog: 0x8195b0 },
+  night:  { sun: 0x223047, amb: 0x0a1326, hemiSky: 0x14233f, hemiGround: 0x05070d, fog: 0x1a2335, cloud: 0x1b2436 },
+  blue:   { sun: 0x4a6fa5, amb: 0x1b2c4a, hemiSky: 0x2a4670, hemiGround: 0x0a1020, fog: 0x26344f, cloud: 0x3a4c6e },
+  golden: { sun: 0xffab5e, amb: 0x4a3c4e, hemiSky: 0xb08cc0, hemiGround: 0x241a1c, fog: 0x8a6a72, cloud: 0xffc9a0 },
+  day:    { sun: 0xfff2da, amb: 0x51617c, hemiSky: 0x8fb6ea, hemiGround: 0x3a4148, fog: 0xa9c4e2, cloud: 0xffffff },
 };
 
 // Regen-/Nässe-Dunst: kühles Grau, in das der Nebel bei "Wetter" überblendet.
@@ -29,6 +32,56 @@ const RAIN_FOG = new THREE.Color(0x2c3340);
 
 function lerpPalette(a, b, t, key) {
   return tmpColor.set(a[key]).lerp(new THREE.Color(b[key]), t).clone();
+}
+
+// ---- prozedurale Wolkentextur (Value-Noise-FBM auf Canvas, kachelbar) --------
+function makeCloudTexture(seed = 7) {
+  const S = 256;
+  let s = seed >>> 0;
+  const rnd = () => {
+    s |= 0; s = (s + 0x6d2b79f5) | 0;
+    let t = Math.imul(s ^ (s >>> 15), 1 | s);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+  // kachelbare Zufallsgitter für 4 Oktaven
+  const octaves = [8, 16, 32, 64].map((n) => {
+    const g = new Float32Array(n * n);
+    for (let i = 0; i < g.length; i++) g[i] = rnd();
+    return { n, g };
+  });
+  const smooth = (t) => t * t * (3 - 2 * t);
+  const sample = ({ n, g }, u, v) => {
+    const x = u * n, y = v * n;
+    const x0 = Math.floor(x) % n, y0 = Math.floor(y) % n;
+    const x1 = (x0 + 1) % n, y1 = (y0 + 1) % n;
+    const fx = smooth(x - Math.floor(x)), fy = smooth(y - Math.floor(y));
+    const a = g[y0 * n + x0], b = g[y0 * n + x1], c = g[y1 * n + x0], d = g[y1 * n + x1];
+    return a + (b - a) * fx + (c - a) * fy + (a - b - c + d) * fx * fy;
+  };
+  const canvas = document.createElement('canvas');
+  canvas.width = canvas.height = S;
+  const ctx = canvas.getContext('2d');
+  const img = ctx.createImageData(S, S);
+  for (let y = 0; y < S; y++) {
+    for (let x = 0; x < S; x++) {
+      const u = x / S, v = y / S;
+      let n = 0, wsum = 0, w = 1;
+      for (const o of octaves) { n += sample(o, u, v) * w; wsum += w; w *= 0.55; }
+      n /= wsum;
+      // weiche Cumulus-Felder: unterhalb der Schwelle klarer Himmel
+      const a = THREE.MathUtils.smoothstep(n, 0.52, 0.74);
+      const i = (y * S + x) * 4;
+      img.data[i] = img.data[i + 1] = img.data[i + 2] = 255;
+      img.data[i + 3] = Math.round(a * 235);
+    }
+  }
+  ctx.putImageData(img, 0, 0);
+  const tex = new THREE.CanvasTexture(canvas);
+  tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
+  tex.repeat.set(3, 3);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  return tex;
 }
 
 export class Atmosphere {
@@ -46,10 +99,10 @@ export class Atmosphere {
     this.sky.scale.setScalar(60000);
     this.sky.frustumCulled = false;
     const u = this.sky.material.uniforms;
-    u.turbidity.value = 6;
-    u.rayleigh.value = 2.2;
-    u.mieCoefficient.value = 0.005;
-    u.mieDirectionalG.value = 0.8;
+    u.turbidity.value = 4;
+    u.rayleigh.value = 1.8;
+    u.mieCoefficient.value = 0.004;
+    u.mieDirectionalG.value = 0.82;
     scene.add(this.sky);
 
     // --- Sonne / Lichter ---
@@ -57,6 +110,7 @@ export class Atmosphere {
     this.sun.castShadow = true;
     this.sun.shadow.mapSize.set(2048, 2048);
     this.sun.shadow.bias = -0.0004;
+    this.sun.shadow.normalBias = 0.02; // weniger Schatten-Akne auf den flachen Plattformen
     const cam = this.sun.shadow.camera;
     cam.near = 10; cam.far = 1600;
     cam.left = -700; cam.right = 700; cam.top = 700; cam.bottom = -700;
@@ -72,6 +126,32 @@ export class Atmosphere {
     // --- Sterne (faden bei Nacht ein) ---
     this.stars = this._makeStars();
     scene.add(this.stars);
+
+    // --- Wolkenschicht: Ebene hoch über der Stadt, driftet langsam. Ein
+    // radialer Alpha-Fade lässt sie zum Horizont hin verschwinden — sonst
+    // integriert die fast blickparallele Ebene dort zu einem Milchschleier.
+    this.cloudTex = makeCloudTexture();
+    const cloudGeo = new THREE.PlaneGeometry(18000, 18000);
+    cloudGeo.rotateX(Math.PI / 2); // Fläche zeigt nach unten zur Kamera
+    this.cloudMat = new THREE.MeshBasicMaterial({
+      map: this.cloudTex, transparent: true, opacity: 0,
+      depthWrite: false, fog: false, side: THREE.DoubleSide,
+    });
+    this.cloudMat.onBeforeCompile = (sh) => {
+      sh.vertexShader = sh.vertexShader
+        .replace('#include <common>', '#include <common>\n varying vec3 vCloudWorld;')
+        .replace('#include <begin_vertex>', '#include <begin_vertex>\n vCloudWorld = (modelMatrix * vec4(position, 1.0)).xyz;');
+      sh.fragmentShader = sh.fragmentShader
+        .replace('#include <common>', '#include <common>\n varying vec3 vCloudWorld;')
+        .replace('#include <map_fragment>',
+          `#include <map_fragment>
+           diffuseColor.a *= 1.0 - smoothstep(4800.0, 8400.0, length(vCloudWorld.xz));`);
+    };
+    this.clouds = new THREE.Mesh(cloudGeo, this.cloudMat);
+    this.clouds.position.y = 1500;
+    this.clouds.renderOrder = -1;
+    this.clouds.frustumCulled = false;
+    scene.add(this.clouds);
 
     this.sunDir = new THREE.Vector3();
     scene.fog = new THREE.FogExp2(0x121d33, 0.0016);
@@ -110,6 +190,12 @@ export class Atmosphere {
     return pts;
   }
 
+  /** Pro Frame: Wolken driften lassen (Windrichtung leicht diagonal). */
+  update(dt) {
+    this.cloudTex.offset.x += dt * 0.00055;
+    this.cloudTex.offset.y += dt * 0.00013;
+  }
+
   setFog(scale) { this._fogScale = scale; this._envDirty = true; this._applyFog(); }
 
   /** Nässe/Wetter 0..1 — verdichtet und vergraut den Dunst (Regenstimmung). */
@@ -123,13 +209,15 @@ export class Atmosphere {
     const col = this._baseFogColor.clone().lerp(RAIN_FOG, wet * 0.55);
     this.scene.fog.color.copy(col);
     this.renderer.setClearColor(col, 1);
+    // Regenwetter = geschlossene, graue Wolkendecke
+    this.cloudMat.opacity = Math.min(1, this._cloudBase + wet * 0.5);
+    this.cloudMat.color.copy(this._cloudColor).lerp(RAIN_FOG, wet * 0.6);
   }
 
   setTime(time) {
     this.time = time;
-    // Sonnenhöhe als symmetrischer Bogen. Die Potenz dehnt den Bereich nahe dem
-    // Horizont (blaue/goldene Stunde), damit die Tageszeiten intuitiv verteilt sind:
-    //   ~0.11 blaue Stunde · ~0.22 goldene Stunde · 0.5 Mittag.
+    // Sonnenhöhe als symmetrischer Bogen; die Potenz dehnt den Bereich nahe dem
+    // Horizont (blaue/goldene Stunde), damit die Tageszeiten intuitiv verteilt sind.
     const arc = Math.pow(Math.sin(time * Math.PI), 2.2);
     const elevationDeg = -12 + arc * 104;
     const azimuthDeg = 70 + time * 140;            // wandert über den Himmel
@@ -148,35 +236,43 @@ export class Atmosphere {
 
     const dayFactor = THREE.MathUtils.clamp((elevationDeg + 4) / 16, 0, 1); // 0 nachts → 1 tags
 
-    // Einfache Belichtungsanpassung: Nacht darf angehoben werden, während
-    // Mittagssonne und heller Himmel nicht ausbrennen.
-    this.renderer.toneMappingExposure = THREE.MathUtils.lerp(0.95, 0.72, dayFactor);
+    // Belichtung: Nacht angehoben, Tag bewusst knapp belichtet — der Kontrast
+    // kommt aus der harten Sonne, nicht aus insgesamt mehr Licht.
+    this.renderer.toneMappingExposure = THREE.MathUtils.lerp(0.95, 0.68, dayFactor);
 
-    // Sonnenlicht
+    // Sonnenlicht: tagsüber deutlich härter (klare Schatten, modellierte Fassaden)
     this.sun.position.copy(this.sunDir).multiplyScalar(900);
     this.sun.color.copy(lerpPalette(from, to, t, 'sun'));
-    this.sun.intensity = THREE.MathUtils.lerp(0.05, 2.2, dayFactor);
+    this.sun.intensity = THREE.MathUtils.lerp(0.05, 2.7, dayFactor);
 
-    // Hemisphäre / Ambient
+    // Hemisphäre kräftig (kühles Himmelslicht von oben), Ambient tagsüber
+    // ZURÜCKGENOMMEN — flaches Füll-Licht war der Hauptgrund für den Milch-Look.
     this.hemi.color.copy(lerpPalette(from, to, t, 'hemiSky'));
     this.hemi.groundColor.copy(lerpPalette(from, to, t, 'hemiGround'));
-    this.hemi.intensity = THREE.MathUtils.lerp(0.32, 0.88, dayFactor);
+    this.hemi.intensity = THREE.MathUtils.lerp(0.32, 0.7, dayFactor);
     this.ambient.color.copy(lerpPalette(from, to, t, 'amb'));
-    this.ambient.intensity = THREE.MathUtils.lerp(0.4, 0.5, dayFactor);
+    this.ambient.intensity = THREE.MathUtils.lerp(0.4, 0.22, dayFactor);
 
-    // Nebel — Basisfarbe/-dichte je Tageszeit; Nässe kommt in _applyFog dazu.
+    // Nebel: tagsüber nur dünner Horizontdunst, nachts dichter Stadt-Dunst.
     this._baseFogColor = lerpPalette(from, to, t, 'fog');
-    // Dichter angesetzt: greift schon im mittleren Stadtbereich statt erst am
-    // hinteren Rand (Stadt ist ~1000+ Units, alte 0.0013 wirkten erst bei ~770).
-    this._baseFog = THREE.MathUtils.lerp(0.0030, 0.0011, dayFactor);
+    this._baseFog = THREE.MathUtils.lerp(0.0030, 0.0003, dayFactor);
+
+    // Wolken: tagsüber weiß und präsent, zur Nacht hin dunkel und dünn.
+    this._cloudColor = lerpPalette(from, to, t, 'cloud');
+    this._cloudBase = THREE.MathUtils.lerp(0.10, 0.5, dayFactor);
     this._applyFog();
 
-    // Atmosphäre dichter bei tiefer Sonne (mehr Streuung)
-    this.sky.material.uniforms.rayleigh.value = THREE.MathUtils.lerp(3.2, 1.4, dayFactor);
-    this.sky.material.uniforms.turbidity.value = THREE.MathUtils.lerp(10, 5, dayFactor);
+    // Himmel: tags sattes Blau (kräftiges Rayleigh, klare Luft), bei tiefer
+    // Sonne mehr Streuung und Dunstglühen um die Sonne.
+    this.sky.material.uniforms.rayleigh.value = THREE.MathUtils.lerp(3.0, 2.6, dayFactor);
+    this.sky.material.uniforms.turbidity.value = THREE.MathUtils.lerp(9, 2.2, dayFactor);
+    this.sky.material.uniforms.mieCoefficient.value = THREE.MathUtils.lerp(0.008, 0.0012, dayFactor);
 
     // Sterne sichtbar machen, wenn es dunkel ist
     this.stars.material.opacity = THREE.MathUtils.clamp(1 - dayFactor * 2.2, 0, 1);
+
+    // Reflexionen: tags kräftigere Env-Map (Glasfassaden spiegeln den Himmel)
+    this.scene.environmentIntensity = THREE.MathUtils.lerp(0.35, 0.5, dayFactor);
 
     // "Stadt-Beleuchtung" — Faktor, wie stark Fenster leuchten sollen (1 = volle Nacht)
     this.cityLightFactor = THREE.MathUtils.clamp(1.15 - dayFactor * 1.4, 0.04, 1);
@@ -191,11 +287,12 @@ export class Atmosphere {
     if (this._envRT) this._envRT.dispose();
     this._envRT = this.pmrem.fromScene(this.sky, 0, 1, 60000);
     this.scene.environment = this._envRT.texture;
-    this.scene.environmentIntensity = 0.35;
   }
 
   dispose() {
     this._envRT?.dispose();
     this.pmrem.dispose();
+    this.cloudTex.dispose();
+    this.cloudMat.dispose();
   }
 }

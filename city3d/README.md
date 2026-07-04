@@ -23,7 +23,9 @@ the 2D architecture view's **nested** packages and the 3D view's elevation:
 | **Metric lighting** | window-light density per building follows a chosen metric (fan-in / fan-out / methods) — hotspots glow at night, dead classes stay dark |
 | **Cycle beacons** | blinking red rooftop warning lights on classes inside a dependency cycle |
 | **Road network** (`src/adapter.js` → `src/roads.js`) | a real routable graph: perimeter **ring road** per package, **cross streets** between level rows, **side streets** between siblings, a **driveway** per building and **ramps** down every terrace step; sidewalks with kerb cuts at junctions, centre-line dashes, street lamps |
-| **Traffic = dependencies** (`src/vehicles.js`) | every (sampled) dependency drives: a glowing pod takes the street route from the using class to the used one — cyan = rule-conform, **red = violation**; density slider in the panel |
+| **Traffic = dependencies** (`src/vehicles.js`) | every (sampled) dependency moves: cross-package = **car** on the roadway, package-local = **pedestrian** on the sidewalk; cyan = rule-conform, **red = violation**; routing uses edge weights (cars bundle onto wide boulevards, ramps are penalised); pods are clickable → source/target + glowing route; density slider |
+| **Greenery** (`src/greenery.js`) | parks with lawns, trees and bushes in the free plaza areas + a green belt around the city (sampled against buildings/roads/ramps/platforms) |
+| **Sky & daylight** (`src/sky.js`) | reworked day model: crisp blue sky (low turbidity), hard warm sun with full-contrast shadows, thin horizon haze, drifting procedural cloud layer |
 | **Package labels** (`src/labels.js`) | district name signs at platform edges, fading in with camera distance |
 
 UI: search box (press `/`) with fly-to, clickable uses/used-by chips in the info

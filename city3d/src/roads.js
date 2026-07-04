@@ -15,7 +15,14 @@ import * as THREE from 'three';
 
 const EPS = 0.08;      // Toleranz für Kreuzungserkennung
 const MERGE = 0.25;    // Stationen näher als das verschmelzen
-const LANE_OFF = 1.15; // Spurversatz nach rechts (Fahrtrichtung)
+const LANE_OFF = 1.15; // Auto-Spurversatz nach rechts (Fahrtrichtung)
+const PED_OFF = 2.95;  // Fußgänger laufen auf dem Gehsteig (w/2 + Bordstein)
+
+// Kantengewichte (Bündelung): Autos bevorzugen breite Boulevards, meiden
+// Rampen (kein Abkürzen über fremde Paket-Decks); Fußgänger mögen es ruhig
+// und nehmen lieber die schmalen Seitenstraßen.
+const carFactor = (w, isRamp) => (1 + 0.14 * Math.max(0, 6.4 - w)) * (isRamp ? 2.2 : 1);
+const pedFactor = (w, isRamp) => (1 + 0.09 * Math.max(0, w - 4.6)) * (isRamp ? 1.3 : 1);
 
 export function buildRoadGraph(roadNet) {
   const roads = new Map(roadNet.roads.map((r) => [r.id, r]));
@@ -66,12 +73,13 @@ export function buildRoadGraph(roadNet) {
     if (i == null) { i = nodes.length; nodes.push(new THREE.Vector3(x, y, z)); adj.push([]); nodeKey.set(k, i); }
     return i;
   };
-  const link = (a, b, path) => {
+  const link = (a, b, path, w, isRamp = false) => {
     if (a === b) return;
     let len = 0;
     for (let i = 1; i < path.length; i++) len += path[i].distanceTo(path[i - 1]);
-    adj[a].push({ to: b, len, path });
-    adj[b].push({ to: a, len, path: [...path].slice().reverse() });
+    const carF = carFactor(w, isRamp), pedF = pedFactor(w, isRamp);
+    adj[a].push({ to: b, len, carF, pedF, path });
+    adj[b].push({ to: a, len, carF, pedF, path: [...path].slice().reverse() });
   };
 
   const stationsByRoad = new Map(); // roadId -> [{pos, cw, node}] sortiert (für Gehsteig-Lücken)
@@ -88,7 +96,7 @@ export function buildRoadGraph(roadNet) {
     stationsByRoad.set(id, merged);
     for (let i = 0; i < merged.length - 1; i++) {
       link(merged[i].node, merged[i + 1].node,
-        [nodes[merged[i].node].clone(), nodes[merged[i + 1].node].clone()]);
+        [nodes[merged[i].node].clone(), nodes[merged[i + 1].node].clone()], r.w);
     }
   }
 
@@ -108,7 +116,7 @@ export function buildRoadGraph(roadNet) {
         pa.y + (pb.y - pa.y) * e,
         pa.z + (pb.z - pa.z) * t));
     }
-    link(a, b, path);
+    link(a, b, path, rp.w, true);
   }
 
   // Zufahrts-Knoten je Klasse (Stichstraßen-Ende am Gebäude)
@@ -120,8 +128,9 @@ export function buildRoadGraph(roadNet) {
   return { nodes, adj, accessNode, stationsByRoad };
 }
 
-// ---- Dijkstra (Binärheap), Ziel-Abbruch --------------------------------------
-function dijkstra(graph, from, to) {
+// ---- Dijkstra (Binärheap), Ziel-Abbruch, gewichtete Kanten --------------------
+// mode 'car' bündelt auf breite Straßen, 'ped' bevorzugt schmale ruhige Wege.
+function dijkstra(graph, from, to, mode = 'car') {
   const { adj } = graph;
   const dist = new Map([[from, 0]]);
   const prev = new Map(); // node -> {node, edge}
@@ -160,7 +169,7 @@ function dijkstra(graph, from, to) {
     done.add(n);
     if (n === to) break;
     for (const e of adj[n]) {
-      const nd = d + e.len;
+      const nd = d + e.len * (mode === 'ped' ? e.pedF : e.carF);
       if (nd < (dist.get(e.to) ?? Infinity)) {
         dist.set(e.to, nd);
         prev.set(e.to, { node: n, edge: e });
@@ -186,7 +195,7 @@ function dijkstra(graph, from, to) {
 // ---- Fahrbare Route: Spurversatz (rechts) + gefaste Ecken ---------------------
 const _d0 = new THREE.Vector3(), _d1 = new THREE.Vector3();
 
-function driveablePath(pts, laneOff) {
+function driveablePath(pts, laneOff, maxCut = 1.7) {
   // 1) Spurversatz: jeden Punkt senkrecht zur gemittelten Fahrtrichtung versetzen
   const off = [];
   for (let i = 0; i < pts.length; i++) {
@@ -202,7 +211,7 @@ function driveablePath(pts, laneOff) {
   for (let i = 1; i < off.length - 1; i++) {
     const p = off[i];
     const inL = p.distanceTo(off[i - 1]), outL = p.distanceTo(off[i + 1]);
-    const cut = Math.min(1.7, inL * 0.4, outL * 0.4);
+    const cut = Math.min(maxCut, inL * 0.4, outL * 0.4);
     if (cut < 0.4) { out.push(p.clone()); continue; }
     out.push(
       p.clone().lerp(off[i - 1], cut / inL),
@@ -213,39 +222,53 @@ function driveablePath(pts, laneOff) {
 }
 
 /**
- * Trips = Abhängigkeiten als Fahrten: Route von Klasse A (Nutzer) zu Klasse B
- * (Genutztem). Verstöße (Level steigt/gleich = Zyklus) zuerst, dann Sample der
- * restlichen Kanten bis zum Cap. Rückgabe: [{path, cum, len, violation}].
+ * Trips = Abhängigkeiten als Fahrten/Fußwege: Route von Klasse A (Nutzer) zu
+ * Klasse B (Genutztem). Paketlokale Beziehungen (gleiches Paket) werden zu
+ * FUSSGÄNGERN auf dem Gehsteig, paketübergreifende zu AUTOS auf der Fahrbahn.
+ * Verstöße (Level steigt/gleich = Zyklus) zuerst, dann Sample bis zum Cap.
+ * Rückgabe: [{path, cum, len, violation, local, from, to}].
  */
-export function buildTrips(graph, model, { max = 320 } = {}) {
-  const level = new Map();
-  for (const b of model.buildings ?? []) level.set(b.fullName, b.architectureLevel ?? 0);
+export function buildTrips(graph, model, { maxCars = 320, maxPeds = 220 } = {}) {
+  const level = new Map(), district = new Map();
+  for (const b of model.buildings ?? []) {
+    level.set(b.fullName, b.architectureLevel ?? 0);
+    district.set(b.fullName, b.districtFullName ?? null);
+  }
 
   const cand = [];
   for (const dep of model.dependencies ?? []) {
     const a = graph.accessNode[dep.from], b = graph.accessNode[dep.to];
     if (a == null || b == null || a === b) continue;
     const violation = (level.get(dep.from) ?? 0) <= (level.get(dep.to) ?? 0);
-    cand.push({ a, b, violation });
+    const local = district.get(dep.from) != null && district.get(dep.from) === district.get(dep.to);
+    cand.push({ a, b, violation, local, from: dep.from, to: dep.to });
   }
   // Verstöße immer zeigen; den Rest deterministisch mischen und auffüllen.
-  const viol = cand.filter((c) => c.violation);
-  const ok = cand.filter((c) => !c.violation);
   let s = 0x51ab7e;
   const rnd = () => { s = (Math.imul(s, 1103515245) + 12345) & 0x7fffffff; return s / 0x7fffffff; };
-  for (let i = ok.length - 1; i > 0; i--) { const j = Math.floor(rnd() * (i + 1)); [ok[i], ok[j]] = [ok[j], ok[i]]; }
-  const chosen = [...viol.slice(0, max), ...ok.slice(0, Math.max(0, max - viol.length))];
+  const pickFrom = (list, max) => {
+    const viol = list.filter((c) => c.violation);
+    const ok = list.filter((c) => !c.violation);
+    for (let i = ok.length - 1; i > 0; i--) { const j = Math.floor(rnd() * (i + 1)); [ok[i], ok[j]] = [ok[j], ok[i]]; }
+    return [...viol.slice(0, max), ...ok.slice(0, Math.max(0, max - viol.length))];
+  };
+  const chosen = [
+    ...pickFrom(cand.filter((c) => !c.local), maxCars),
+    ...pickFrom(cand.filter((c) => c.local), maxPeds),
+  ];
 
   const trips = [];
   for (const c of chosen) {
-    const raw = dijkstra(graph, c.a, c.b);
+    const raw = dijkstra(graph, c.a, c.b, c.local ? 'ped' : 'car');
     if (!raw || raw.length < 2) continue;
-    const path = driveablePath(raw, LANE_OFF);
+    const path = c.local
+      ? driveablePath(raw, PED_OFF, 0.9)   // Gehsteig, enge Ecken
+      : driveablePath(raw, LANE_OFF, 1.7); // Fahrbahn rechts, weiche Kurven
     const cum = [0];
     for (let i = 1; i < path.length; i++) cum.push(cum[i - 1] + path[i].distanceTo(path[i - 1]));
     const len = cum[cum.length - 1];
     if (len < 4) continue;
-    trips.push({ path, cum, len, violation: c.violation });
+    trips.push({ path, cum, len, violation: c.violation, local: c.local, from: c.from, to: c.to });
   }
   return trips;
 }

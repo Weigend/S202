@@ -34,10 +34,11 @@ const GradeShader = {
       vec4 tex = texture2D(tDiffuse, vUv);
       vec3 c = tex.rgb;
       vec3 graded = c;
-      // Teal-Orange: Schatten leicht ins Kühle, Lichter ins Warme
+      // Teal-Orange: Schatten leicht ins Kühle, Lichter ins Warme — dezent,
+      // sonst tönt der Grade den hellen Tageshimmel cremefarben ein.
       float luma = dot(c, vec3(0.299, 0.587, 0.114));
-      vec3 shadowTint = vec3(0.92, 1.0, 1.06);
-      vec3 highTint   = vec3(1.07, 1.0, 0.93);
+      vec3 shadowTint = vec3(0.95, 1.0, 1.04);
+      vec3 highTint   = vec3(1.035, 1.0, 0.965);
       graded *= mix(shadowTint, highTint, smoothstep(0.0, 0.6, luma));
       graded = (graded - 0.5) * uContrast + 0.5;
       c = mix(c, graded, uGrade);
