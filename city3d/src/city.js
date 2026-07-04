@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { Reflector } from 'three/addons/objects/Reflector.js';
 import { layoutFromModel } from './adapter.js';
 import { makePackageLabels } from './labels.js';
+import { buildRoadGraph } from './roads.js';
 
 /**
  * Prozedurale Manhattan-Stadt.
@@ -95,8 +96,12 @@ export function buildCity(scene, atmosphere, model, seed = 1) {
   // stacked package slabs, and the gaps between them are the (hierarchical) streets.
   // Meaning: package nesting = terraces raised by depth, height = methods,
   // footprint = fan-in/out, building type = architecture level. See adapter.js.
-  const { boxes, rooftops, groundFacades, slabs, streets, ramps, anchors, spanX, spanZ, x0, z0, maxDepth }
+  const { boxes, rooftops, groundFacades, slabs, roadNet, anchors, spanX, spanZ, x0, z0, maxDepth }
     = layoutFromModel(model);
+
+  // Routbarer Straßengraph — fürs Rendering (Gehsteig-Lücken an Kreuzungen)
+  // und für den Verkehr (Dijkstra-Routen der Abhängigkeits-Fahrten).
+  const roadGraph = buildRoadGraph(roadNet);
 
   // ---- InstancedMesh aufbauen ------------------------------------------------
   const count = boxes.length;
@@ -178,12 +183,13 @@ export function buildCity(scene, atmosphere, model, seed = 1) {
   const labels = makePackageLabels(slabs, maxDepth);
   group.add(labels.group);
 
-  // Hierarchical streets on the platforms (the gap corridors between children).
-  const streetMesh = makeStreets(streets);
+  // Das Straßennetz: Asphalt, Gehsteige (mit Lücken an Kreuzungen/Zufahrten),
+  // Mittellinien und Laternen — aus den Graph-Daten des Adapters.
+  const streetMesh = makeRoadsMesh(roadNet, roadGraph);
   group.add(streetMesh);
 
-  // Ramp connectors down the terrace edges to the parent's streets.
-  const rampMesh = makeRamps(ramps);
+  // Rampen: Kind-Deck -> Eltern-Korridor, als Cosinus-Bänder (wie die Fahrwege).
+  const rampMesh = makeRamps(roadNet);
   group.add(rampMesh);
 
   // ---- Boden -----------------------------------------------------------------
@@ -206,7 +212,7 @@ export function buildCity(scene, atmosphere, model, seed = 1) {
       ...(groundDetails.userData.nightMaterials ?? []),
       ...(streetMesh.userData.nightMaterials ?? []),
     ].filter(Boolean),
-    streetsX: [], streetsZ: [],
+    roadNet, roadGraph,                        // Straßengraph (Verkehrs-Routing)
     bounds: { spanX, spanZ },
     stats: { buildings: rooftops.length, boxes: count, grid: [slabs.length, count] },
     anchors,                                   // fqn -> Position (Bögen, Kamera-Anflug)
@@ -304,39 +310,63 @@ function makeCycleBeacons(rooftops) {
   return group;
 }
 
-// ---- Hierarchical streets --------------------------------------------------
-// Dark asphalt strips with dashed centre lines, laid in the gap corridors of
-// each package (on its platform). Same look as the original grid streets, but
-// nested: a package's avenues sit in the free space of its parent's avenues.
-function makeStreets(streets) {
+// ---- Das Straßennetz ---------------------------------------------------------
+// Asphaltbänder je Straßensegment, Gehsteige mit Bordstein beidseitig (mit
+// Lücken an Kreuzungen, Zufahrten und Rampen-Anschlüssen — aus den Stationen
+// des Straßengraphen), Mittellinien und Laternen entlang der Boulevards.
+function makeRoadsMesh(roadNet, graph) {
   const group = new THREE.Group();
-  group.name = 'streets';
-  if (!streets.length) return group;
+  group.name = 'roads';
+  const roads = roadNet.roads;
+  if (!roads.length) return group;
 
   const m4 = new THREE.Matrix4(), q = new THREE.Quaternion();
   const p = new THREE.Vector3(), s = new THREE.Vector3();
   const asphaltMat = makeWetRoadMaterial({ roughness: 0.82, envMapIntensity: 0.45 });
+  // Minimaler Höhenversatz pro Straße gegen Z-Fighting an Kreuzungsflächen.
+  const jit = (r) => (r.id % 5) * 0.005;
 
-  const asphalt = new THREE.InstancedMesh(
-    new THREE.BoxGeometry(1, 1, 1),
-    asphaltMat,
-    streets.length);
+  const asphalt = new THREE.InstancedMesh(new THREE.BoxGeometry(1, 1, 1), asphaltMat, roads.length);
   asphalt.receiveShadow = true;
 
-  const DASH = 5, GAP = 6;
+  const DASH = 4.2, GAP = 5.2;
   const dashes = [];
-  for (let i = 0; i < streets.length; i++) {
-    const st = streets[i];
-    p.set(st.x, st.y + 0.04, st.z);
-    s.set(Math.max(0.2, st.w), 0.08, Math.max(0.2, st.d));
+  const walks = [];
+  for (let i = 0; i < roads.length; i++) {
+    const r = roads[i];
+    const len = r.a1 - r.a0, mid = (r.a0 + r.a1) / 2;
+    const cx = r.axis === 'x' ? mid : r.c;
+    const cz = r.axis === 'x' ? r.c : mid;
+    p.set(cx, r.y + 0.045 + jit(r), cz);
+    s.set(r.axis === 'x' ? len : r.w, 0.09, r.axis === 'x' ? r.w : len);
     m4.compose(p, q, s);
     asphalt.setMatrixAt(i, m4);
-    if (st.axis === 'x') {
-      for (let x = -st.w / 2 + DASH / 2; x < st.w / 2; x += DASH + GAP)
-        dashes.push({ x: st.x + x, y: st.y + 0.09, z: st.z, w: DASH, d: 0.25 });
-    } else {
-      for (let z = -st.d / 2 + DASH / 2; z < st.d / 2; z += DASH + GAP)
-        dashes.push({ x: st.x, y: st.y + 0.09, z: st.z + z, w: 0.25, d: DASH });
+
+    // Mittellinie (nicht auf Zufahrten)
+    if (r.kind !== 'drive' && len > 10) {
+      for (let a = r.a0 + 2 + DASH / 2; a < r.a1 - 2; a += DASH + GAP) {
+        dashes.push(r.axis === 'x'
+          ? { x: a, y: r.y + 0.105 + jit(r), z: r.c, w: DASH, d: 0.22 }
+          : { x: r.c, y: r.y + 0.105 + jit(r), z: a, w: 0.22, d: DASH });
+      }
+    }
+
+    // Gehsteige: Segmente zwischen den Stationen, mit Freischnitt an jeder
+    // Kreuzung (halbe Breite der querenden Straße + Bordsteinradius).
+    if (r.kind === 'ring' || r.kind === 'cross' || r.kind === 'side') {
+      const sts = graph.stationsByRoad.get(r.id) ?? [];
+      for (let k = 0; k < sts.length - 1; k++) {
+        const from = sts[k].pos + (sts[k].cw ? sts[k].cw / 2 + 0.9 : 0.4);
+        const to = sts[k + 1].pos - (sts[k + 1].cw ? sts[k + 1].cw / 2 + 0.9 : 0.4);
+        if (to - from < 1.6) continue;
+        const wm = (from + to) / 2, wl = to - from;
+        for (const side of [-1, 1]) {
+          const off = r.c + side * (r.w / 2 + 0.65);
+          walks.push(r.axis === 'x'
+            ? { x: wm, y: r.y + 0.07, z: off, w: wl, d: 1.3 }
+            : { x: off, y: r.y + 0.07, z: wm, w: 1.3, d: wl });
+        }
+      }
     }
   }
   asphalt.instanceMatrix.needsUpdate = true;
@@ -350,29 +380,44 @@ function makeStreets(streets) {
       dashes.length);
     for (let i = 0; i < dashes.length; i++) {
       const d = dashes[i];
-      p.set(d.x, d.y, d.z); s.set(d.w, 0.06, d.d); m4.compose(p, q, s);
+      p.set(d.x, d.y, d.z); s.set(d.w, 0.03, d.d); m4.compose(p, q, s);
       dm.setMatrixAt(i, m4);
     }
     dm.instanceMatrix.needsUpdate = true;
     group.add(dm);
   }
 
-  // Straßenlaternen entlang der längeren Boulevards, alternierend links/rechts.
-  // Die Leuchtköpfe hängen am Tag/Nacht-Zyklus (nightBase/nightScale wie die
-  // Laden-Schilder) und geben den Plattformen nachts Straßenleben.
+  if (walks.length) {
+    const wm = new THREE.InstancedMesh(
+      new THREE.BoxGeometry(1, 1, 1),
+      new THREE.MeshStandardMaterial({ color: 0x686c70, roughness: 0.92, metalness: 0, envMapIntensity: 0.15 }),
+      walks.length);
+    wm.receiveShadow = true;
+    for (let i = 0; i < walks.length; i++) {
+      const d = walks[i];
+      p.set(d.x, d.y, d.z); s.set(d.w, 0.14, d.d); m4.compose(p, q, s);
+      wm.setMatrixAt(i, m4);
+    }
+    wm.instanceMatrix.needsUpdate = true;
+    group.add(wm);
+  }
+
+  // Straßenlaternen entlang der längeren Ring-/Querstraßen, alternierend.
   const LAMP_EVERY = 30;
   const poles = [], heads = [];
-  for (const st of streets) {
-    const along = st.axis === 'x' ? st.w : st.d;
-    if (along < LAMP_EVERY * 0.9) continue;
-    const n = Math.floor(along / LAMP_EVERY);
+  for (const r of roads) {
+    if (r.kind !== 'ring' && r.kind !== 'cross') continue;
+    const len = r.a1 - r.a0;
+    if (len < LAMP_EVERY * 0.9) continue;
+    const n = Math.floor(len / LAMP_EVERY);
     for (let i = 0; i < n; i++) {
-      const off = -along / 2 + LAMP_EVERY * (i + 0.5);
+      const a = r.a0 + len / 2 - (n * LAMP_EVERY) / 2 + LAMP_EVERY * (i + 0.5);
       const side = i % 2 === 0 ? 1 : -1;
-      const lx = st.axis === 'x' ? st.x + off : st.x + side * (st.w / 2 + 0.5);
-      const lz = st.axis === 'x' ? st.z + side * (st.d / 2 + 0.5) : st.z + off;
-      poles.push({ x: lx, y: st.y + 2.1, z: lz, radius: 0.07, h: 4.2 });
-      heads.push({ x: lx, y: st.y + 4.25, z: lz, w: 0.5, h: 0.22, d: 0.5 });
+      const off = r.c + side * (r.w / 2 + 2.2);
+      const lx = r.axis === 'x' ? a : off;
+      const lz = r.axis === 'x' ? off : a;
+      poles.push({ x: lx, y: r.y + 2.1, z: lz, radius: 0.07, h: 4.2 });
+      heads.push({ x: lx, y: r.y + 4.25, z: lz, w: 0.5, h: 0.22, d: 0.5 });
     }
   }
   if (poles.length) {
@@ -390,12 +435,18 @@ function makeStreets(streets) {
   return group;
 }
 
-// ---- Soft ramp connectors (street A -> lower street B over a package edge) ----
+// ---- Soft ramp connectors (child deck -> parent corridor) --------------------
 // A curved ribbon following a cosine profile: tangent-flat where it meets the
 // upper street and the lower one, steepest in the middle — no sharp edges.
-function makeRamps(ramps) {
+function makeRamps(roadNet) {
   const group = new THREE.Group();
   group.name = 'ramps';
+  const roadById = new Map(roadNet.roads.map((r) => [r.id, r]));
+  const ramps = roadNet.ramps.map((rp) => {
+    const ra = roadById.get(rp.aRoad), rb = roadById.get(rp.bRoad);
+    // a auf der Kind-Verbindungsstraße (axis z), b auf dem Eltern-Korridor (axis x)
+    return { ax: ra.c, ay: ra.y, az: rp.aPos, bx: rp.bPos, by: rb.y, bz: rb.c, w: rp.w };
+  });
   if (!ramps.length) return group;
   const mat = makeWetRoadMaterial({ roughness: 0.82, envMapIntensity: 0.45 });
   mat.side = THREE.DoubleSide;

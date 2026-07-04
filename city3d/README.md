@@ -22,16 +22,15 @@ the 2D architecture view's **nested** packages and the 3D view's elevation:
 | **Dependency arcs** (`src/deps.js`) | animated roof-to-roof light arcs with flying "data packets"; cyan = rule-conform (level falls), **red = violation/cycle**; modes off / selection / all / violations-only |
 | **Metric lighting** | window-light density per building follows a chosen metric (fan-in / fan-out / methods) — hotspots glow at night, dead classes stay dark |
 | **Cycle beacons** | blinking red rooftop warning lights on classes inside a dependency cycle |
-| **Street lamps & leaf streets** | streets also between the class buildings of leaf packages, with lamps that come on at night |
+| **Road network** (`src/adapter.js` → `src/roads.js`) | a real routable graph: perimeter **ring road** per package, **cross streets** between level rows, **side streets** between siblings, a **driveway** per building and **ramps** down every terrace step; sidewalks with kerb cuts at junctions, centre-line dashes, street lamps |
+| **Traffic = dependencies** (`src/vehicles.js`) | every (sampled) dependency drives: a glowing pod takes the street route from the using class to the used one — cyan = rule-conform, **red = violation**; density slider in the panel |
 | **Package labels** (`src/labels.js`) | district name signs at platform edges, fading in with camera distance |
 
 UI: search box (press `/`) with fly-to, clickable uses/used-by chips in the info
 panel (navigate the dependency graph), double-click = fly to building, legend.
 
-Traffic is currently off (the nested layout has no straight full-span avenues for cars).
-
-Everything else (`city.js` rendering, `sky.js`, `weather.js`, `traffic.js`,
-`postfx.js`, `controls.js`) is the original City3JS view.
+Everything else (`city.js` rendering, `sky.js`, `weather.js`, `postfx.js`,
+`controls.js`) is the original City3JS view.
 
 ## In the app (Structure202)
 

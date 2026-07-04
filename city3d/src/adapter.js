@@ -13,16 +13,19 @@
 //   - a class is a building sitting on top of its own package's platform;
 //     height = method count, footprint = fan-in/out, building type = level.
 
-// Layout metrics (Layout3D-style). Gaps become the streets between platforms.
-// Street width = the gap the asphalt fills. Keep both equal so horizontal and
-// vertical streets are the same width.
-const NODE_GAP = 12;   // gap between siblings in a level row (vertical streets)
-const GROUP_GAP = 12;  // gap between level rows (horizontal streets) — equal to NODE_GAP
-const PAD = 7;         // inner margin of a package             (its surrounding street)
-const EDGE = 8;        // keep streets this far from the slab edge (uniform border)
-const STREET_FILL = 2 / 3; // asphalt fills 2/3 of the gap (centred, leaving a border)
+// Layout metrics (Layout3D-style). The gaps host a real, routable road network:
+// every package gets a perimeter RING road, CROSS streets between its level
+// rows, SIDE streets between siblings, a DRIVEWAY stub per building and RAMPS
+// down each terrace step — emitted as graph data so traffic can route on it.
+const NODE_GAP = 14;   // gap between siblings in a level row (side streets)
+const GROUP_GAP = 15;  // gap between level rows (cross streets)
+const PAD = 10;        // inner margin of a package (fits the ring road + sidewalk)
 const STEP = 1.5;      // elevation added per nesting level (minimal / flat terracing)
 const SLAB_T = 1.5;    // package platform thickness (kept equal to STEP -> uniform pedestals)
+const RING_IN = 4.5;   // ring-road centreline inset from the slab edge
+const DRIVE_W = 3;     // driveway width
+// Boulevards are wider low in the hierarchy, lanes narrower deep inside.
+const roadW = (depth) => (depth <= 0 ? 6.4 : depth === 1 ? 5.4 : 4.6);
 
 function mulberry32(seed) {
   let a = seed >>> 0;
@@ -152,55 +155,83 @@ export function layoutFromModel(model) {
   const rooftops = [];
   const slabs = [];
   const anchors = {}; // fqn -> {x, z, baseY, roofY, w, d} for dependency arcs / fly-to
-  const streets = []; // gap corridors between a package's children (its streets)
-  const ramps = [];   // connector segments (traced from the requests below, terrain-following)
-  const rampReqs = []; // {ax, ay, az, dir, w}: a street reaching an edge, to descend outward
 
-  // The gaps between a package's children are its streets, drawn on the package's
-  // slab surface. Because a package sits inside the free space (streets) of its
-  // parent, these nested street grids connect up the hierarchy automatically.
-  function emitStreets(node, cellX, cellZ, cellW, cellD, ox, oz) {
+  // The road network, emitted as GRAPH data (not just decoration): roads are
+  // axis-aligned segments on a package surface, ramps join a child deck to its
+  // parent's corridor (always exactly one STEP down), access points anchor each
+  // building's driveway. roads.js turns this into a routable graph for traffic.
+  let roadId = 0;
+  const roads = [];     // {id, pkg, axis:'x'|'z', y, c, a0, a1, w, kind:'ring'|'cross'|'side'|'drive'|'link'}
+  const rampLinks = []; // {aRoad, aPos, bRoad, bPos, w} — a = upper (child deck), b = lower (parent corridor)
+  const access = {};    // class fqn -> {road, pos} (the driveway end at the building)
+
+  function emitRoads(node, cellX, cellZ, cellW, cellD, ox, oz) {
     const items = [...node.children, ...node.classes].filter((it) => it._cellX != null);
     if (!items.length) return;
-    const y = node.depth >= 0 ? node.depth * STEP + SLAB_T : 0; // this package's ground
+    const depth = node.depth;
+    const y = depth >= 0 ? depth * STEP + SLAB_T : 0; // this package's ground
+    const w = roadW(depth);
+    const pkg = node.fqn || '<root>';
+    const x0 = cellX + RING_IN, x1 = cellX + cellW - RING_IN;
+    const z0 = cellZ + RING_IN, z1 = cellZ + cellD - RING_IN;
+    const add = (r) => { r.id = roadId++; r.pkg = pkg; r.y = y; roads.push(r); return r; };
+
+    // Perimeter ring road — guarantees every internal street connects.
+    const ringF = add({ axis: 'x', c: z0, a0: x0, a1: x1, w, kind: 'ring' });
+    const ringB = add({ axis: 'x', c: z1, a0: x0, a1: x1, w, kind: 'ring' });
+    add({ axis: 'z', c: x0, a0: z0, a1: z1, w, kind: 'ring' });
+    add({ axis: 'z', c: x1, a0: z0, a1: z1, w, kind: 'ring' });
 
     // group items into their level rows by the row band (_rowZ0)
-    const rows = new Map();
+    const rowsM = new Map();
     for (const it of items) {
-      if (!rows.has(it._rowZ0)) rows.set(it._rowZ0, []);
-      rows.get(it._rowZ0).push(it);
+      if (!rowsM.has(it._rowZ0)) rowsM.set(it._rowZ0, []);
+      rowsM.get(it._rowZ0).push(it);
     }
-    const rowKeys = [...rows.keys()].sort((a, b) => a - b);
-    const rowD = rowKeys.map((k) => rows.get(k)[0]._rowD);
+    const rowKeys = [...rowsM.keys()].sort((a, b) => a - b);
+    const rowD = rowKeys.map((k) => rowsM.get(k)[0]._rowD);
 
-    // vertical streets (run along Z) between the cells within each row, extended
-    // toward the package edge — but only to the cross street (inter-row gap)
-    // before the neighbouring row's buildings; to the slab edge if none.
+    // Cross streets between successive rows; with the two ring segments they
+    // form the corridor list: corridor[i] runs in front of row i, [i+1] behind.
+    const corridors = [ringF];
+    for (let ri = 0; ri < rowKeys.length - 1; ri++) {
+      const zc = oz + (rowKeys[ri] + rowD[ri] + rowKeys[ri + 1]) / 2;
+      corridors.push(add({ axis: 'x', c: zc, a0: x0, a1: x1, w, kind: 'cross' }));
+    }
+    corridors.push(ringB);
+
     rowKeys.forEach((zk, ri) => {
-      const row = rows.get(zk).sort((a, b) => a._cellX - b._cellX);
-      const zFront = ri > 0 ? oz + rowKeys[ri - 1] + rowD[ri - 1] : cellZ + EDGE;         // prev row's back edge, else near slab edge
-      const zBack = ri < rowKeys.length - 1 ? oz + rowKeys[ri + 1] : cellZ + cellD - EDGE; // next row's front edge, else near slab edge
-      const zc = (zFront + zBack) / 2, dd = zBack - zFront;
+      const row = rowsM.get(zk).sort((a, b) => a._cellX - b._cellX);
+      const before = corridors[ri], after = corridors[ri + 1];
+      // side streets between neighbouring cells, spanning corridor to corridor
       for (let i = 0; i < row.length - 1; i++) {
         const a = row[i], b = row[i + 1];
-        const g0 = a._cellX + a._cellW, g1 = b._cellX;
-        streets.push({ x: ox + (g0 + g1) / 2, z: zc, w: (g1 - g0) * STREET_FILL, d: dd, y, axis: 'z' });
+        const xc = ox + (a._cellX + a._cellW + b._cellX) / 2;
+        add({ axis: 'z', c: xc, a0: before.c, a1: after.c, w, kind: 'side' });
+      }
+      for (const it of row) {
+        if (it.kind === 'cls') {
+          // driveway from the building's south face to the corridor behind its row
+          const bx = ox + it._cellX + it._cellW / 2;
+          const bz1 = oz + it._cellZ + it.d;
+          const drv = add({ axis: 'z', c: bx, a0: bz1, a1: after.c + 0.05, w: DRIVE_W, kind: 'drive' });
+          access[it.fqn] = { road: drv.id, pos: bz1 };
+        } else if (it.children.length || it.classes.length) {
+          // sub-package: a short connector on the child's deck (crossing the
+          // child's own ring) plus a ramp down to the corridor on either side.
+          const chX0 = ox + it._cellX, chZ0 = oz + it._cellZ;
+          const chZ1 = chZ0 + it._cellD;
+          const cx = chX0 + it._cellW / 2;
+          const cw = roadW(depth + 1), cy = y + STEP;
+          const front = { axis: 'z', c: cx, a0: chZ0, a1: chZ0 + RING_IN + 0.05, w: cw, kind: 'link' };
+          front.id = roadId++; front.pkg = it.fqn; front.y = cy; roads.push(front);
+          rampLinks.push({ aRoad: front.id, aPos: chZ0, bRoad: before.id, bPos: cx, w: cw });
+          const back = { axis: 'z', c: cx, a0: chZ1 - RING_IN - 0.05, a1: chZ1, w: cw, kind: 'link' };
+          back.id = roadId++; back.pkg = it.fqn; back.y = cy; roads.push(back);
+          rampLinks.push({ aRoad: back.id, aPos: chZ1, bRoad: after.id, bPos: cx, w: cw });
+        }
       }
     });
-    // horizontal streets (run along X) between successive level rows, inset from
-    // the L/R edges, plus a ramp at each end running DOWN over the package edge to
-    // the parent street one terrace below — connecting the higher street to it.
-    for (let ri = 0; ri < rowKeys.length - 1; ri++) {
-      const g0 = rowKeys[ri] + rowD[ri], g1 = rowKeys[ri + 1];
-      const sz = oz + (g0 + g1) / 2, sw = (g1 - g0) * STREET_FILL;
-      // Cross street runs to the package edge so it meets the ramp seamlessly.
-      streets.push({ x: cellX + cellW / 2, z: sz, w: cellW, d: sw, y, axis: 'x' });
-      // Request a connector from each edge; it is traced down the terrain later,
-      // so a drop over more than one terrace becomes a staircase, not a straight
-      // ramp cutting through the intermediate ledge.
-      rampReqs.push({ ax: cellX, ay: y, az: sz, dir: -1, w: sw });        // left
-      rampReqs.push({ ax: cellX + cellW, ay: y, az: sz, dir: 1, w: sw }); // right
-    }
   }
 
   function emitBuilding(c, ox, oz, parentDepth) {
@@ -250,53 +281,19 @@ export function layoutFromModel(model) {
     // Centre the node's (tight) content within the cell it was given to fill.
     const ox = cellX + (cellW - node.w) / 2;
     const oz = cellZ + (cellD - node.d) / 2;
-    // Streets in every package — including leaf packages, where the gaps between
+    // Roads in every package — including leaf packages, where the gaps between
     // the class buildings themselves become the local street grid.
-    if (node.kind === 'pkg' && (node.children.length > 0 || node.classes.length > 1)) {
-      emitStreets(node, cellX, cellZ, cellW, cellD, ox, oz);
-    }
+    if (node.kind === 'pkg') emitRoads(node, cellX, cellZ, cellW, cellD, ox, oz);
     for (const child of node.children) place(child, ox + child._cellX, oz + child._cellZ, child._cellW, child._cellD);
     for (const cls of node.classes) emitBuilding(cls, ox + cls._cellX, oz + cls._cellZ, node.depth);
   }
   // Centre the city on the origin; the root fills a cell equal to its own size.
   place(root, -root.w / 2, -root.d / 2, root.w, root.d);
 
-  // ---- trace each ramp request down the terrain into a staircase of segments --
-  // Surface height at a point = the top of the highest slab covering it (else 0).
-  function surfaceAt(x, z) {
-    let y = 0;
-    for (const s of slabs) {
-      if (x >= s.x - s.w / 2 && x <= s.x + s.w / 2 && z >= s.z - s.d / 2 && z <= s.z + s.d / 2) y = Math.max(y, s.topY);
-    }
-    return y;
-  }
-  const RUN = NODE_GAP / 2; // horizontal length of one step's descent
-  for (const req of rampReqs) {
-    const { az, dir, w } = req;
-    let x = req.ax, curY = req.ay, guard = 0;
-    while (guard++ < 40 && curY > 0.01) {
-      const ahead = surfaceAt(x + dir * 0.6, az); // surface just outside current x
-      if (ahead < curY - 0.01) {
-        ramps.push({ ax: x, ay: curY, az, bx: x + dir * RUN, by: ahead, bz: az, w }); // descend one step
-        x += dir * RUN; curY = ahead;
-      } else if (ahead > curY + 0.01) {
-        break; // a higher neighbour blocks the way -> stop (don't run under it)
-      } else {
-        // same level: run flat until the surface changes (a drop or an obstacle)
-        let d = 1;
-        while (d < 200 && Math.abs(surfaceAt(x + dir * d, az) - curY) < 0.6) d++;
-        if (d >= 200) break; // flat with no further change -> reached the low street
-        const flatEnd = x + dir * (d - 1);
-        if (Math.abs(flatEnd - x) > 0.5) ramps.push({ ax: x, ay: curY, az, bx: flatEnd, by: curY, bz: az, w }); // flat over the terrace
-        x = flatEnd;
-      }
-    }
-  }
-
   return {
-    boxes, rooftops, slabs, streets, ramps, anchors,
+    boxes, rooftops, slabs, anchors,
+    roadNet: { roads, ramps: rampLinks, access },
     groundFacades: [],           // shopfronts assume ground-level buildings; N/A on platforms
-    streetsX: [], streetsZ: [],  // no straight full-span avenues (traffic stays off)
     spanX: root.w, spanZ: root.d, x0: -root.w / 2, z0: -root.d / 2,
     maxDepth: Math.max(0, ...slabs.map((s) => s.depth), 0),
     grid: [slabs.length, boxes.length],

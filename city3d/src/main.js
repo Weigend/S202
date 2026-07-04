@@ -1,7 +1,8 @@
 import * as THREE from 'three';
 import { Atmosphere } from './sky.js';
 import { buildCity } from './city.js';
-import { buildTraffic } from './traffic.js';
+import { buildTrips } from './roads.js';
+import { Traffic } from './vehicles.js';
 import { Navigation } from './controls.js';
 import { createComposer } from './postfx.js';
 import { createRain } from './weather.js';
@@ -36,12 +37,18 @@ async function loadCityModel() {
 }
 let cityModel = await loadCityModel();
 let city = buildCity(scene, atmosphere, cityModel);
-// Traffic needs straight full-span avenues; the nested layout's streets are the
-// gaps between terraced platforms, so it is disabled (no such avenues) for now.
+// Verkehr = Abhängigkeiten: für jede (gesampelte) Kante fährt ein Pod die
+// Straßenroute von der nutzenden zur genutzten Klasse (Dijkstra über den
+// Straßengraphen; cyan = regelkonform, rot = Verstoß).
+let trafficDensity = 0.5;
 function makeTraffic() {
-  return (city.streetsX.length || city.streetsZ.length)
-    ? buildTraffic(scene, city.streetsX, city.streetsZ, city.bounds)
-    : { update() {}, dispose() {} };
+  const trips = buildTrips(city.roadGraph, cityModel);
+  // Diagnose: wie viele Abhängigkeiten haben eine fahrbare Route gefunden?
+  console.info(`City3D traffic: ${trips.length} routes (of ${cityModel.dependencies?.length ?? 0} dependencies), `
+    + `${city.roadGraph.nodes.length} graph nodes`);
+  const t = new Traffic(scene, trips);
+  t.setDensity(trafficDensity);
+  return t;
 }
 let traffic = makeTraffic();
 document.title = `City3D · ${cityModel.buildings.length} classes · ${cityModel.districts.length} packages`;
@@ -360,6 +367,12 @@ $('s-fog').addEventListener('input', (e) => {
   const f = parseFloat(e.target.value);
   atmosphere.setFog(f);
   $('v-fog').textContent = f.toFixed(2);
+});
+
+$('s-traffic').addEventListener('input', (e) => {
+  trafficDensity = parseFloat(e.target.value);
+  traffic.setDensity(trafficDensity);
+  $('v-traffic').textContent = Math.round(trafficDensity * 100) + '%';
 });
 
 $('s-wet').addEventListener('input', (e) => {
