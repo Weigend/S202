@@ -8,7 +8,8 @@ import java.nio.file.Path;
  * every few seconds so an SSE client ({@code curl -N .../events}) can observe it.
  *
  * <pre>
- * mvn -q -o exec:java -Dexec.mainClass=de.weigend.s202.ui.city3d.CitySyncSmoke -Dexec.args="../city3d/dist"
+ * mvn -q -o org.codehaus.mojo:exec-maven-plugin:3.1.0:java \
+ *   -Dexec.mainClass=de.weigend.s202.ui.city3d.CitySyncSmoke -Dexec.args="../city3d/dist"
  * </pre>
  */
 public final class CitySyncSmoke {
