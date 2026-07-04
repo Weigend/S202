@@ -111,7 +111,67 @@
       }
       button.ui:hover { background: rgba(120,180,255,0.22); border-color: var(--accent); }
       button.ui.active { background: var(--accent); color: #05070d; border-color: var(--accent); }
+      button.ui.sm { font-size: 10px; letter-spacing: 0.03em; padding: 6px 0; }
+      button.ui.viol.active { background: #ff5a4d; border-color: #ff5a4d; color: #1a0505; }
       #panel { pointer-events: auto; }
+      #dep-stats .n { color: var(--accent); }
+      #dep-stats .v { color: #ff7a70; }
+
+      /* ---- Suche (oben Mitte) ---- */
+      #search-box {
+        position: fixed; z-index: 30; top: 20px; left: 50%; transform: translateX(-50%);
+        width: 340px; pointer-events: auto;
+      }
+      #search {
+        width: 100%; padding: 9px 14px; font-size: 12.5px; color: var(--fg);
+        background: var(--panel); border: 1px solid var(--panel-brd); border-radius: 10px;
+        backdrop-filter: blur(10px); outline: none;
+      }
+      #search:focus { border-color: var(--accent); box-shadow: 0 0 12px rgba(95,200,255,0.25); }
+      #search::placeholder { color: #62779f; }
+      #search-results {
+        margin-top: 6px; border-radius: 10px; overflow: hidden; display: none;
+        background: rgba(10, 16, 28, 0.92); border: 1px solid var(--panel-brd);
+        backdrop-filter: blur(12px); max-height: 320px; overflow-y: auto;
+      }
+      .sr { padding: 8px 14px; cursor: pointer; font-size: 12px; }
+      .sr:hover, .sr.hot { background: rgba(120,180,255,0.14); }
+      .sr .srk { float: right; font-size: 10px; color: #7f97c2; letter-spacing: 0.08em; }
+      .sr .srf { color: #62779f; font-size: 10.5px; word-break: break-all; }
+
+      /* ---- Legende (unten rechts) ---- */
+      #legend-wrap { position: fixed; z-index: 20; right: 24px; bottom: 44px; pointer-events: auto;
+        display: flex; flex-direction: column; align-items: flex-end; gap: 8px; }
+      #legend-wrap > button { flex: none; padding: 6px 14px; }
+      #legend {
+        display: none; width: 250px; padding: 12px 14px; font-size: 11px; line-height: 1.6;
+        background: var(--panel); border: 1px solid var(--panel-brd); border-radius: 12px;
+        backdrop-filter: blur(10px);
+      }
+      #legend.open { display: block; }
+      #legend h3 { margin: 8px 0 4px; font-size: 9.5px; letter-spacing: 0.24em;
+        text-transform: uppercase; color: #7f97c2; font-weight: 600; }
+      #legend h3:first-child { margin-top: 0; }
+      .lg { display: flex; align-items: center; gap: 8px; color: #c4d4f0; }
+      .lg .sw { flex: none; width: 14px; height: 10px; border-radius: 2px; }
+      .lg .ln { flex: none; width: 16px; height: 2px; border-radius: 2px; }
+      .lg .dot { flex: none; width: 8px; height: 8px; border-radius: 50%; margin: 0 4px 0 3px; }
+      @keyframes blink { 0%, 55% { opacity: 1; } 70%, 100% { opacity: 0.15; } }
+
+      /* ---- Abhängigkeits-Chips im Info-Panel ---- */
+      .dep-sec { margin-top: 10px; }
+      .dep-title { color: #9fb4da; margin-bottom: 5px; }
+      .dep-wrap { display: flex; flex-wrap: wrap; gap: 4px; }
+      .dep {
+        padding: 2px 8px; border-radius: 6px; font-size: 10.5px; cursor: pointer;
+        background: rgba(120,180,255,0.10); border: 1px solid rgba(120,180,255,0.22);
+        color: #cfe0ff; transition: background 0.15s;
+      }
+      .dep:hover { background: rgba(120,180,255,0.28); }
+      .dep.out { border-color: rgba(255,178,77,0.45); color: #ffd9a8; }
+      .dep.in { border-color: rgba(77,230,200,0.4); color: #b3f3e4; }
+      .dep.viol { border-color: rgba(255,80,70,0.55); color: #ffb4ac; background: rgba(255,80,70,0.1); }
+      .dep-more { color: #62779f; font-size: 10.5px; padding: 2px 4px; }
 
       .credit { position: fixed; bottom: 22px; right: 24px; z-index: 20;
         color: #44557a; font-size: 10px; letter-spacing: 0.18em; }
@@ -182,6 +242,24 @@
         <input id="s-wet" type="range" min="0" max="1" step="0.01" value="0.0" />
       </div>
       <div class="ctl">
+        <label>Abhängigkeiten <span id="dep-stats"></span></label>
+        <div class="btn-row">
+          <button class="ui sm" id="b-dep-off">Aus</button>
+          <button class="ui sm active" id="b-dep-sel">Auswahl</button>
+          <button class="ui sm" id="b-dep-all">Alle</button>
+          <button class="ui sm viol" id="b-dep-viol">Verstöße</button>
+        </div>
+      </div>
+      <div class="ctl">
+        <label>Metrik-Licht <span style="color:#7f97c2">Fenster</span></label>
+        <div class="btn-row">
+          <button class="ui sm active" id="b-met-off">Aus</button>
+          <button class="ui sm" id="b-met-fanin">Fan-In</button>
+          <button class="ui sm" id="b-met-fanout">Fan-Out</button>
+          <button class="ui sm" id="b-met-methods">Meth.</button>
+        </div>
+      </div>
+      <div class="ctl">
         <div class="btn-row">
           <button class="ui active" id="b-ssao">SSAO</button>
           <button class="ui active" id="b-grade">Grade</button>
@@ -193,6 +271,30 @@
           <button class="ui" id="b-regen">Neu bauen</button>
         </div>
       </div>
+    </div>
+
+    <div id="search-box">
+      <input id="search" type="text" placeholder="Klasse oder Paket suchen …  ( / )" autocomplete="off" spellcheck="false" />
+      <div id="search-results"></div>
+    </div>
+
+    <div id="legend-wrap">
+      <div id="legend">
+        <h3>Gebäude</h3>
+        <div class="lg"><span class="sw" style="background:linear-gradient(120deg,#20313d,#3a4c58)"></span> Glas = hohes Level · Interface</div>
+        <div class="lg"><span class="sw" style="background:#8b8478"></span> Stein / <span class="sw" style="background:#5e3021"></span> Backstein = Mitte</div>
+        <div class="lg"><span class="sw" style="background:#6a6c68"></span> Beton = Basis-Level (unten)</div>
+        <div class="lg">Höhe = Methoden · Fläche = Fan-In/Out</div>
+        <div class="lg">Terrassen = Paket-Verschachtelung</div>
+        <h3>Abhängigkeiten</h3>
+        <div class="lg"><span class="ln" style="background:#3fa8ff"></span> regelkonform (Level fällt)</div>
+        <div class="lg"><span class="ln" style="background:#ff4040"></span> Verstoß: aufwärts / Zyklus</div>
+        <div class="lg"><span class="ln" style="background:#ffb24d"></span> ausgehend · <span class="ln" style="background:#4de6c8"></span> eingehend</div>
+        <h3>Warnsignale</h3>
+        <div class="lg"><span class="dot" style="background:#ff3020; box-shadow:0 0 6px #ff3020; animation: blink 1.6s infinite"></span> Dach-Beacon = Klasse im Zyklus</div>
+        <div class="lg"><span class="sw" style="background:#8a3b34"></span> rote Plattform = Paket-Tangle</div>
+      </div>
+      <button class="ui" id="b-legend">Legende</button>
     </div>
 
     <div class="credit">WEBGL · THREE.JS</div>

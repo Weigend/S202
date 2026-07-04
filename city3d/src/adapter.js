@@ -151,6 +151,7 @@ export function layoutFromModel(model) {
   const boxes = [];
   const rooftops = [];
   const slabs = [];
+  const anchors = {}; // fqn -> {x, z, baseY, roofY, w, d} for dependency arcs / fly-to
   const streets = []; // gap corridors between a package's children (its streets)
   const ramps = [];   // connector segments (traced from the requests below, terrain-following)
   const rampReqs = []; // {ax, ay, az, dir, w}: a street reaching an edge, to descend outward
@@ -215,7 +216,10 @@ export function layoutFromModel(model) {
     const steps = h > 90 ? 3 : h > 50 ? 2 : 1;
     for (let s = 0; s < steps; s++) {
       const segH = s === steps - 1 ? remain : remain * (0.45 + rng() * 0.2);
-      boxes.push({ x: cx, z: cz, baseY, w: cw, h: segH, d: cd, seed, style, layout, fqn: c.fqn });
+      boxes.push({
+        x: cx, z: cz, baseY, w: cw, h: segH, d: cd, seed, style, layout, fqn: c.fqn,
+        fanIn: c.fanIn, fanOut: c.fanOut, methodCount: c.methodCount, inCycle: c.inCycle,
+      });
       topW = cw; topD = cd;
       baseY += segH; remain -= segH;
       cw *= 0.76 + rng() * 0.1;
@@ -223,10 +227,12 @@ export function layoutFromModel(model) {
     }
     rooftops.push({
       x: cx, z: cz, y: baseY, w: topW, d: topD, h, style, seed,
+      inCycle: c.inCycle, fqn: c.fqn,
       bulkhead: rng() < 0.7,
       hvacCount: topW > 12 && topD > 10 ? 1 + (rng() < 0.35 ? 1 : 0) : 0,
       waterTank: (style === 1 || style === 2) && h > 40 && rng() < 0.25,
     });
+    anchors[c.fqn] = { x: cx, z: cz, baseY: slabTop, roofY: slabTop + h, w: c.w, d: c.d };
   }
 
   function place(node, cellX, cellZ, cellW, cellD) {
@@ -244,9 +250,11 @@ export function layoutFromModel(model) {
     // Centre the node's (tight) content within the cell it was given to fill.
     const ox = cellX + (cellW - node.w) / 2;
     const oz = cellZ + (cellD - node.d) / 2;
-    // Packages that consist only of classes (no sub-packages) get NO internal
-    // streets for now — the class-level street layout is still to be designed.
-    if (node.kind === 'pkg' && node.children.length > 0) emitStreets(node, cellX, cellZ, cellW, cellD, ox, oz);
+    // Streets in every package — including leaf packages, where the gaps between
+    // the class buildings themselves become the local street grid.
+    if (node.kind === 'pkg' && (node.children.length > 0 || node.classes.length > 1)) {
+      emitStreets(node, cellX, cellZ, cellW, cellD, ox, oz);
+    }
     for (const child of node.children) place(child, ox + child._cellX, oz + child._cellZ, child._cellW, child._cellD);
     for (const cls of node.classes) emitBuilding(cls, ox + cls._cellX, oz + cls._cellZ, node.depth);
   }
@@ -286,7 +294,7 @@ export function layoutFromModel(model) {
   }
 
   return {
-    boxes, rooftops, slabs, streets, ramps,
+    boxes, rooftops, slabs, streets, ramps, anchors,
     groundFacades: [],           // shopfronts assume ground-level buildings; N/A on platforms
     streetsX: [], streetsZ: [],  // no straight full-span avenues (traffic stays off)
     spanX: root.w, spanZ: root.d, x0: -root.w / 2, z0: -root.d / 2,

@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { Reflector } from 'three/addons/objects/Reflector.js';
 import { layoutFromModel } from './adapter.js';
+import { makePackageLabels } from './labels.js';
 
 /**
  * Prozedurale Manhattan-Stadt.
@@ -94,7 +95,7 @@ export function buildCity(scene, atmosphere, model, seed = 1) {
   // stacked package slabs, and the gaps between them are the (hierarchical) streets.
   // Meaning: package nesting = terraces raised by depth, height = methods,
   // footprint = fan-in/out, building type = architecture level. See adapter.js.
-  const { boxes, rooftops, groundFacades, slabs, streets, ramps, spanX, spanZ, x0, z0, maxDepth }
+  const { boxes, rooftops, groundFacades, slabs, streets, ramps, anchors, spanX, spanZ, x0, z0, maxDepth }
     = layoutFromModel(model);
 
   // ---- InstancedMesh aufbauen ------------------------------------------------
@@ -113,6 +114,7 @@ export function buildCity(scene, atmosphere, model, seed = 1) {
   const aStyle = new Float32Array(count);
   const aLayout = new Float32Array(count);
   const aBaseY = new Float32Array(count);
+  const aAct = new Float32Array(count); // Metrik-Aktivität 0..1 (Fensterlicht-Dichte)
   const m4 = new THREE.Matrix4();
   const q = new THREE.Quaternion();
   const pos = new THREE.Vector3();
@@ -135,11 +137,35 @@ export function buildCity(scene, atmosphere, model, seed = 1) {
   geo.setAttribute('aStyle', new THREE.InstancedBufferAttribute(aStyle, 1));
   geo.setAttribute('aLayout', new THREE.InstancedBufferAttribute(aLayout, 1));
   geo.setAttribute('aBaseY', new THREE.InstancedBufferAttribute(aBaseY, 1));
+  const actAttr = new THREE.InstancedBufferAttribute(aAct, 1);
+  geo.setAttribute('aAct', actAttr);
   mesh.instanceMatrix.needsUpdate = true;
   group.add(mesh);
 
+  // Metrik-Beleuchtung: Fensterlicht-Dichte pro Gebäude nach gewählter Metrik.
+  // Log-normalisiert, damit einzelne Ausreißer die Skala nicht plattdrücken.
+  function setMetric(metric) {
+    const get = metric === 'fanin' ? (b) => b.fanIn ?? 0
+      : metric === 'fanout' ? (b) => b.fanOut ?? 0
+        : metric === 'methods' ? (b) => Math.max(0, b.methodCount ?? 0)
+          : null;
+    if (!get) {
+      mat.userData.uniforms.uMetricOn.value = 0;
+      return;
+    }
+    const max = Math.max(1, ...boxes.map(get));
+    const norm = Math.log2(1 + max);
+    for (let i = 0; i < count; i++) aAct[i] = Math.log2(1 + get(boxes[i])) / norm;
+    actAttr.needsUpdate = true;
+    mat.userData.uniforms.uMetricOn.value = 1;
+  }
+
   const roofDetails = makeRoofDetails(rooftops);
   group.add(roofDetails);
+
+  // Rot blinkende Warnleuchten auf Gebäuden, die in einem Zyklus stecken.
+  const beacons = makeCycleBeacons(rooftops);
+  group.add(beacons);
 
   const groundDetails = makeGroundFloorDetails(groundFacades, atmosphere);
   group.add(groundDetails);
@@ -147,6 +173,10 @@ export function buildCity(scene, atmosphere, model, seed = 1) {
   // Rectangular package platforms (districts), stacked by nesting depth.
   const slabMesh = makePackageSlabs(slabs, maxDepth);
   group.add(slabMesh);
+
+  // Paket-Namensschilder an den Plattform-Vorderkanten (distanzabhängig sichtbar).
+  const labels = makePackageLabels(slabs, maxDepth);
+  group.add(labels.group);
 
   // Hierarchical streets on the platforms (the gap corridors between children).
   const streetMesh = makeStreets(streets);
@@ -170,11 +200,19 @@ export function buildCity(scene, atmosphere, model, seed = 1) {
     boxFqns: boxes.map((b) => b.fqn),          // instanceId -> class fqn (undefined for antennas)
     slabPickMesh: slabMesh.userData.mesh,      // the package platforms (InstancedMesh) for picking
     slabFqns: slabs.map((s) => s.fqn),         // instanceId -> package fqn
+    slabs,                                     // Plattform-Geometrie (Kamera-Anflug auf Pakete)
     streetLightMaterial: null,
-    nightMaterials: [...(groundDetails.userData.nightMaterials ?? [])].filter(Boolean),
+    nightMaterials: [
+      ...(groundDetails.userData.nightMaterials ?? []),
+      ...(streetMesh.userData.nightMaterials ?? []),
+    ].filter(Boolean),
     streetsX: [], streetsZ: [],
     bounds: { spanX, spanZ },
     stats: { buildings: rooftops.length, boxes: count, grid: [slabs.length, count] },
+    anchors,                                   // fqn -> Position (Bögen, Kamera-Anflug)
+    beaconMat: beacons.userData.beaconMat,     // für den Blink-Puls im Render-Loop
+    setMetric,
+    labels,                                    // Paket-Schilder: labels.update(camera, dt)
     setWetness: (w) => {
       ground.userData.setWetness?.(w);
       streetMesh.userData.setWetness?.(w);
@@ -187,6 +225,8 @@ export function buildCity(scene, atmosphere, model, seed = 1) {
       streetMesh.traverse((o) => { o.geometry?.dispose(); o.material?.dispose(); });
       rampMesh.traverse((o) => { o.geometry?.dispose(); o.material?.dispose(); });
       roofDetails.traverse((o) => { o.geometry?.dispose(); o.material?.dispose(); });
+      beacons.traverse((o) => { o.geometry?.dispose(); o.material?.dispose(); });
+      labels.dispose();
       groundDetails.traverse((o) => { o.geometry?.dispose(); o.material?.dispose(); });
       ground.traverse((o) => {
         if (o.isReflector) o.dispose();        // Render-Target + Material
@@ -228,6 +268,39 @@ function makePackageSlabs(slabs, maxDepth) {
   if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true;
   group.add(mesh);
   group.userData.mesh = mesh; // exposed for picking (instanceId -> slab)
+  return group;
+}
+
+// ---- Zyklus-Beacons ----------------------------------------------------------
+// Klassen in einem Abhängigkeits-Zyklus tragen eine rot blinkende Warnleuchte
+// auf dem Dach (Luftfahrt-Look). Der Blink-Puls wird im Render-Loop über
+// beaconMat.emissiveIntensity gefahren; Bloom macht daraus ein echtes Signal.
+function makeCycleBeacons(rooftops) {
+  const group = new THREE.Group();
+  group.name = 'cycle-beacons';
+  const spots = rooftops.filter((r) => r.inCycle);
+  if (!spots.length) return group;
+
+  const mastMat = new THREE.MeshStandardMaterial({ color: 0x1c1e22, roughness: 0.5, metalness: 0.6 });
+  const beaconMat = new THREE.MeshStandardMaterial({
+    color: 0x2a0605, emissive: 0xff2418, emissiveIntensity: 2.0,
+    roughness: 0.4, metalness: 0, toneMapped: false,
+  });
+
+  const masts = spots.map((r) => ({ x: r.x, y: r.y + 1.1, z: r.z, w: 0.16, h: 2.2, d: 0.16 }));
+  group.add(makeBoxInstances(masts, mastMat, true));
+
+  const bulbGeo = new THREE.SphereGeometry(0.55, 10, 8);
+  const bulbs = new THREE.InstancedMesh(bulbGeo, beaconMat, spots.length);
+  const m4 = new THREE.Matrix4();
+  for (let i = 0; i < spots.length; i++) {
+    const r = spots[i];
+    m4.makeTranslation(r.x, r.y + 2.35, r.z);
+    bulbs.setMatrixAt(i, m4);
+  }
+  bulbs.instanceMatrix.needsUpdate = true;
+  group.add(bulbs);
+  group.userData.beaconMat = beaconMat;
   return group;
 }
 
@@ -282,6 +355,37 @@ function makeStreets(streets) {
     }
     dm.instanceMatrix.needsUpdate = true;
     group.add(dm);
+  }
+
+  // Straßenlaternen entlang der längeren Boulevards, alternierend links/rechts.
+  // Die Leuchtköpfe hängen am Tag/Nacht-Zyklus (nightBase/nightScale wie die
+  // Laden-Schilder) und geben den Plattformen nachts Straßenleben.
+  const LAMP_EVERY = 30;
+  const poles = [], heads = [];
+  for (const st of streets) {
+    const along = st.axis === 'x' ? st.w : st.d;
+    if (along < LAMP_EVERY * 0.9) continue;
+    const n = Math.floor(along / LAMP_EVERY);
+    for (let i = 0; i < n; i++) {
+      const off = -along / 2 + LAMP_EVERY * (i + 0.5);
+      const side = i % 2 === 0 ? 1 : -1;
+      const lx = st.axis === 'x' ? st.x + off : st.x + side * (st.w / 2 + 0.5);
+      const lz = st.axis === 'x' ? st.z + side * (st.d / 2 + 0.5) : st.z + off;
+      poles.push({ x: lx, y: st.y + 2.1, z: lz, radius: 0.07, h: 4.2 });
+      heads.push({ x: lx, y: st.y + 4.25, z: lz, w: 0.5, h: 0.22, d: 0.5 });
+    }
+  }
+  if (poles.length) {
+    const poleMat = new THREE.MeshStandardMaterial({ color: 0x24282a, roughness: 0.58, metalness: 0.62 });
+    const headMat = new THREE.MeshStandardMaterial({
+      color: 0x4a4033, emissive: 0xffd18c, emissiveIntensity: 1.2,
+      roughness: 0.34, metalness: 0, toneMapped: false,
+    });
+    headMat.userData.nightBase = 0.06;
+    headMat.userData.nightScale = 2.2;
+    group.add(makeCylinderInstances(poles, poleMat, 6, true));
+    group.add(makeBoxInstances(heads, headMat));
+    group.userData.nightMaterials = [headMat];
   }
   return group;
 }
@@ -1058,10 +1162,12 @@ function makeBuildingMaterial(atmosphere) {
 
   mat.userData.uniforms = {
     uLightFactor: { value: atmosphere?.cityLightFactor ?? 1.0 },
+    uMetricOn: { value: 0 }, // 1 = Fensterlicht folgt der Metrik (aAct) statt Zufall
   };
 
   mat.onBeforeCompile = (shader) => {
     shader.uniforms.uLightFactor = mat.userData.uniforms.uLightFactor;
+    shader.uniforms.uMetricOn = mat.userData.uniforms.uMetricOn;
 
     // --- Vertex: metrische Wand-Koordinaten an den Fragment-Shader reichen ---
     shader.vertexShader = shader.vertexShader
@@ -1073,6 +1179,7 @@ function makeBuildingMaterial(atmosphere) {
          attribute float aStyle;
          attribute float aLayout;
          attribute float aBaseY;
+         attribute float aAct;
          varying vec3 vMetric;
          flat varying vec3 vDim;
          flat varying vec3 vONormal;
@@ -1080,7 +1187,8 @@ function makeBuildingMaterial(atmosphere) {
          flat varying float vStyle;
          flat varying float vLayout;
          flat varying float vBaseY;
-         flat varying float vHeight;`
+         flat varying float vHeight;
+         flat varying float vAct;`
       )
       .replace(
         '#include <begin_vertex>',
@@ -1092,7 +1200,8 @@ function makeBuildingMaterial(atmosphere) {
          vStyle = aStyle;
          vLayout = aLayout;
          vBaseY = aBaseY;
-         vHeight = aDim.y;`
+         vHeight = aDim.y;
+         vAct = aAct;`
       );
 
     // --- Fragment: Fassadenlayouts, Raumbelegung und Glas ---------------------
@@ -1101,6 +1210,7 @@ function makeBuildingMaterial(atmosphere) {
         '#include <common>',
         `#include <common>
          uniform float uLightFactor;
+         uniform float uMetricOn;
          varying vec3 vMetric;
          flat varying vec3 vDim;
          flat varying vec3 vONormal;
@@ -1109,6 +1219,7 @@ function makeBuildingMaterial(atmosphere) {
          flat varying float vLayout;
          flat varying float vBaseY;
          flat varying float vHeight;
+         flat varying float vAct;
 
          float hash11(float p){ p=fract(p*0.1031); p*=p+33.33; p*=p+p; return fract(p); }
          float hash21(vec2 p){ vec3 p3=fract(vec3(p.xyx)*0.1031); p3+=dot(p3,p3.yzx+33.33); return fract((p3.x+p3.y)*p3.z); }
@@ -1267,7 +1378,11 @@ function makeBuildingMaterial(atmosphere) {
               float roomX = isShopGlass ? floor(shopU) : floor(cx / roomSpanX);
               float roomY = isShopGlass ? 0.0 : floor(cy / roomSpanY);
               float roomRnd = hash21(vec2(roomX, roomY) + vSeed * 11.7 + faceOff);
-              float litProb = (isShopGlass ? 0.34 : 0.22) * uLightFactor;
+              // Metrik-Modus: Die Fensterlicht-Dichte folgt der Gebäude-Aktivität
+              // (aAct 0..1) statt dem Zufall — Hotspots leuchten wie Türme mit
+              // Nachtschicht, tote Klassen bleiben dunkel.
+              float baseProb = isShopGlass ? 0.34 : 0.22;
+              float litProb = mix(baseProb, 0.03 + 0.95 * vAct, uMetricOn) * uLightFactor;
               bool lit = roomRnd < litProb;
               float litAmount = mix(lit ? 1.0 : 0.0, litProb, farLod);
 
@@ -1284,6 +1399,8 @@ function makeBuildingMaterial(atmosphere) {
                 hash11(vSeed * 2.0 + faceOff * 0.7),
                 farLod
               );
+              // Im Metrik-Modus leuchten aktive Gebäude auch heller, nicht nur dichter.
+              bri *= mix(1.0, 0.6 + 1.0 * vAct, uMetricOn);
 
               // Dunkle Scheiben spiegeln den Himmel bei flachem Blickwinkel
               // stärker. MeshStandard liefert die physikalische Reflexion;

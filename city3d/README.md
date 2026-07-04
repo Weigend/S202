@@ -19,6 +19,14 @@ the 2D architecture view's **nested** packages and the 3D view's elevation:
 | Building **footprint** | fan-in (width) / fan-out (depth) |
 | Building **type** (glass/stone/brick/concrete) | architecture level — interfaces are glass |
 | Setbacks, rooftops, wet reflections, sky, weather | kept from City3JS for the city look |
+| **Dependency arcs** (`src/deps.js`) | animated roof-to-roof light arcs with flying "data packets"; cyan = rule-conform (level falls), **red = violation/cycle**; modes off / selection / all / violations-only |
+| **Metric lighting** | window-light density per building follows a chosen metric (fan-in / fan-out / methods) — hotspots glow at night, dead classes stay dark |
+| **Cycle beacons** | blinking red rooftop warning lights on classes inside a dependency cycle |
+| **Street lamps & leaf streets** | streets also between the class buildings of leaf packages, with lamps that come on at night |
+| **Package labels** (`src/labels.js`) | district name signs at platform edges, fading in with camera distance |
+
+UI: search box (press `/`) with fly-to, clickable uses/used-by chips in the info
+panel (navigate the dependency graph), double-click = fly to building, legend.
 
 Traffic is currently off (the nested layout has no straight full-span avenues for cars).
 

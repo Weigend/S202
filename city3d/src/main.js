@@ -5,6 +5,7 @@ import { buildTraffic } from './traffic.js';
 import { Navigation } from './controls.js';
 import { createComposer } from './postfx.js';
 import { createRain } from './weather.js';
+import { DependencyViz } from './deps.js';
 
 const app = document.getElementById('app');
 
@@ -44,6 +45,12 @@ function makeTraffic() {
 }
 let traffic = makeTraffic();
 document.title = `City3D · ${cityModel.buildings.length} classes · ${cityModel.districts.length} packages`;
+
+// ---- Abhängigkeits-Visualisierung (Bögen + Datenpakete über der Stadt) ------
+let depMode = 'sel';     // 'off' | 'sel' | 'all' | 'viol'
+let metricMode = 'off';  // 'off' | 'fanin' | 'fanout' | 'methods'
+let deps = new DependencyViz(scene, cityModel, city.anchors);
+deps.setMode(depMode);
 
 const nav = new Navigation(camera, renderer.domElement);
 // Frame the camera on the actual (compact, nested) city instead of a fixed far pose.
@@ -126,17 +133,38 @@ function highlight(sel) {
   }
 }
 
-function hideInfo() { infoEl.style.display = 'none'; clearHighlight(); }
+let currentSel = null;
+
+function hideInfo() {
+  infoEl.style.display = 'none';
+  clearHighlight();
+  currentSel = null;
+  deps.setFocus(null);
+}
 
 function rows(pairs) {
   return pairs.map(([k, v]) => `<div class="row"><span class="k">${k}</span><span class="v">${v}</span></div>`).join('');
 }
+
+// Klickbare Abhängigkeits-Chips (uses / used by) für das Info-Panel.
+function depListHtml(title, list, cls) {
+  if (!list.length) return '';
+  const MAX = 10;
+  const items = list.slice(0, MAX).map((d) =>
+    `<span class="dep ${d.violation ? 'viol' : cls}" data-fqn="${d.fqn}" title="${d.fqn}">${d.fqn.split('.').pop()}</span>`
+  ).join('');
+  const more = list.length > MAX ? `<span class="dep-more">+${list.length - MAX} weitere</span>` : '';
+  return `<div class="dep-sec"><div class="dep-title">${title} (${list.length})</div><div class="dep-wrap">${items}${more}</div></div>`;
+}
+
+const flyBtnHtml = '<div class="btn-row" style="margin-top:12px"><button class="ui" data-fly>✈ Anfliegen</button></div>';
 
 function showClass(b) {
   const tags =
     ' <span class="tag" style="background:rgba(127,179,255,.14);color:#7fb3ff">class</span>' +
     (b.isInterface ? ' <span class="tag iface">interface</span>' : '') +
     (b.inCycle ? ' <span class="tag cycle">⟲ cycle</span>' : '');
+  const { uses, usedBy } = deps.edgesFor(b.fullName);
   infoEl.innerHTML =
     '<span class="close" title="schließen">×</span>' +
     `<div class="cls">${b.simpleName}${tags}</div>` +
@@ -146,7 +174,10 @@ function showClass(b) {
       ['architecture level', b.architectureLevel],
       ['methods', b.methodCount >= 0 ? b.methodCount : '–'],
       ['fan-in / fan-out', `${b.fanIn} / ${b.fanOut}`],
-    ]);
+    ]) +
+    depListHtml('→ verwendet', uses, 'out') +
+    depListHtml('← wird verwendet von', usedBy, 'in') +
+    flyBtnHtml;
 }
 
 function showPackage(d) {
@@ -164,16 +195,32 @@ function showPackage(d) {
       ['nesting depth', d.nestingDepth],
       ['direct classes', classes],
       ['sub-packages', subs],
-    ]);
+    ]) +
+    flyBtnHtml;
 }
 
 function select(sel) {
   if (!sel) { hideInfo(); return; }
+  currentSel = sel;
   if (sel.kind === 'class') showClass(sel.data); else showPackage(sel.data);
   infoEl.style.display = 'block';
   infoEl.querySelector('.close').onclick = hideInfo;
   highlight(sel);
+  deps.setFocus(sel.kind === 'class' ? sel.fqn : null);
 }
+
+// Delegierter Klick im Info-Panel: Chip = dorthin springen, ✈ = Auswahl anfliegen.
+infoEl.addEventListener('click', (e) => {
+  const chip = e.target.closest('[data-fqn]');
+  if (chip) {
+    const fqn = chip.dataset.fqn;
+    selectByFqn(fqn);
+    flyTo(fqn);
+    pushSelectionToHost(fqn);
+    return;
+  }
+  if (e.target.closest('[data-fly]') && currentSel) flyTo(currentSel.fqn);
+});
 
 // Select by fqn — resolves class vs package from the model (used by the host-app sync).
 function selectByFqn(fqn) {
@@ -205,7 +252,42 @@ function pick(clientX, clientY) {
   return d ? { kind: 'package', data: d, fqn } : null;
 }
 
-renderer.domElement.addEventListener('pointerdown', (e) => { pressXY = [e.clientX, e.clientY]; });
+// ---- Kamera-Anflug: sanfter Tween auf eine Klasse oder ein Paket -------------
+let flight = null;
+
+function flyTo(fqn) {
+  let target = null, dist = 90;
+  const a = city.anchors?.[fqn];
+  if (a) {
+    target = new THREE.Vector3(a.x, (a.baseY + a.roofY) / 2, a.z);
+    dist = Math.max(65, (a.roofY - a.baseY) * 1.7, Math.max(a.w, a.d) * 4);
+  } else {
+    const s = city.slabs?.find((x) => x.fqn === fqn);
+    if (!s) return;
+    target = new THREE.Vector3(s.x, s.topY, s.z);
+    dist = Math.max(s.w, s.d) * 1.15 + 40;
+  }
+  nav.setMode('orbit');
+  nav.orbit.autoRotate = false;
+  // Aktuellen Blickwinkel (Azimut) beibehalten, nur Position/Ziel wechseln.
+  const dir = camera.position.clone().sub(target);
+  dir.y = 0;
+  if (dir.lengthSq() < 1) dir.set(0.6, 0, 1);
+  dir.normalize();
+  const end = target.clone().addScaledVector(dir, dist).add(new THREE.Vector3(0, dist * 0.55, 0));
+  flight = {
+    p0: camera.position.clone(), p1: end,
+    t0: nav.orbit.target.clone(), t1: target,
+    s: 0,
+  };
+}
+
+renderer.domElement.addEventListener('dblclick', (e) => {
+  const sel = pick(e.clientX, e.clientY);
+  if (sel) flyTo(sel.fqn);
+});
+
+renderer.domElement.addEventListener('pointerdown', (e) => { pressXY = [e.clientX, e.clientY]; flight = null; });
 renderer.domElement.addEventListener('pointerup', (e) => {
   if (!pressXY) return;
   const moved = Math.hypot(e.clientX - pressXY[0], e.clientY - pressXY[1]);
@@ -298,6 +380,102 @@ const toggle = (id, pass) => {
 toggle('b-ssao', gtao);
 toggle('b-grade', grade);
 
+// ---- Abhängigkeits-Modi -------------------------------------------------------
+const depButtons = { off: 'b-dep-off', sel: 'b-dep-sel', all: 'b-dep-all', viol: 'b-dep-viol' };
+function setDepMode(mode) {
+  depMode = mode;
+  deps.setMode(mode);
+  for (const [k, id] of Object.entries(depButtons)) $(id).classList.toggle('active', k === mode);
+}
+for (const [k, id] of Object.entries(depButtons)) $(id).addEventListener('click', () => setDepMode(k));
+
+function updateDepStats() {
+  const s = deps.stats;
+  $('dep-stats').innerHTML = s.violations > 0
+    ? `<span class="n">${s.total}</span> · <span class="v">${s.violations} ⚠</span>`
+    : `<span class="n">${s.total}</span>`;
+}
+updateDepStats();
+
+// ---- Metrik-Fensterlicht --------------------------------------------------------
+const metricButtons = { off: 'b-met-off', fanin: 'b-met-fanin', fanout: 'b-met-fanout', methods: 'b-met-methods' };
+function setMetricMode(mode) {
+  metricMode = mode;
+  city.setMetric(mode);
+  for (const [k, id] of Object.entries(metricButtons)) $(id).classList.toggle('active', k === mode);
+}
+for (const [k, id] of Object.entries(metricButtons)) $(id).addEventListener('click', () => setMetricMode(k));
+
+// ---- Legende ------------------------------------------------------------------
+$('b-legend').addEventListener('click', () => {
+  $('legend').classList.toggle('open');
+  $('b-legend').classList.toggle('active', $('legend').classList.contains('open'));
+});
+
+// ---- Suche (Klassen + Pakete, Anflug bei Auswahl) -------------------------------
+const searchEl = $('search');
+const searchResEl = $('search-results');
+function buildSearchIndex() {
+  return [
+    ...cityModel.buildings.map((b) => ({ fqn: b.fullName, simple: b.simpleName, kind: 'class' })),
+    ...cityModel.districts.map((d) => ({ fqn: d.fullName, simple: d.simpleName, kind: 'package' })),
+  ];
+}
+let searchIndex = buildSearchIndex();
+
+function hideSearch() { searchResEl.style.display = 'none'; searchResEl.innerHTML = ''; }
+
+function chooseSearch(fqn) {
+  hideSearch();
+  searchEl.value = '';
+  searchEl.blur();
+  selectByFqn(fqn);
+  flyTo(fqn);
+  pushSelectionToHost(fqn);
+}
+
+searchEl.addEventListener('input', () => {
+  const q = searchEl.value.trim().toLowerCase();
+  if (q.length < 2) { hideSearch(); return; }
+  // Treffer auf dem einfachen Namen zuerst, dann Volltreffer im FQN.
+  const starts = [], contains = [];
+  for (const it of searchIndex) {
+    const simple = it.simple.toLowerCase();
+    if (simple.startsWith(q)) starts.push(it);
+    else if (simple.includes(q) || it.fqn.toLowerCase().includes(q)) contains.push(it);
+    if (starts.length >= 10) break;
+  }
+  const hits = [...starts, ...contains].slice(0, 10);
+  if (!hits.length) { hideSearch(); return; }
+  searchResEl.innerHTML = hits.map((h, i) =>
+    `<div class="sr${i === 0 ? ' hot' : ''}" data-fqn="${h.fqn}">${h.simple}` +
+    `<span class="srk">${h.kind === 'class' ? 'CLASS' : 'PKG'}</span>` +
+    `<div class="srf">${h.fqn}</div></div>`
+  ).join('');
+  searchResEl.style.display = 'block';
+});
+searchResEl.addEventListener('pointerdown', (e) => {
+  const row = e.target.closest('.sr');
+  if (row) { e.preventDefault(); chooseSearch(row.dataset.fqn); }
+});
+searchEl.addEventListener('keydown', (e) => {
+  if (e.key === 'Enter') {
+    const first = searchResEl.querySelector('.sr');
+    if (first) chooseSearch(first.dataset.fqn);
+  } else if (e.key === 'Escape') {
+    hideSearch(); searchEl.value = ''; searchEl.blur();
+  }
+  e.stopPropagation();
+});
+searchEl.addEventListener('blur', () => setTimeout(hideSearch, 150));
+window.addEventListener('keydown', (e) => {
+  if (e.key === '/' && document.activeElement !== searchEl
+    && !/^(INPUT|TEXTAREA|SELECT)$/.test(document.activeElement?.tagName ?? '')) {
+    e.preventDefault();
+    searchEl.focus();
+  }
+});
+
 const cineBtn = $('b-cinematic');
 cineBtn.addEventListener('click', () => {
   const on = !cineBtn.classList.contains('active');
@@ -308,10 +486,16 @@ cineBtn.addEventListener('click', () => {
 $('b-regen').addEventListener('click', async () => {
   hideInfo();
   traffic.dispose();
+  deps.dispose();
   city.dispose();
   cityModel = await loadCityModel(); // re-read city.json (pick up a fresh export)
   city = buildCity(scene, atmosphere, cityModel);
   traffic = makeTraffic();
+  deps = new DependencyViz(scene, cityModel, city.anchors);
+  deps.setMode(depMode);
+  city.setMetric(metricMode);
+  searchIndex = buildSearchIndex();
+  updateDepStats();
   frameCity();
   syncCityLight();
   city.setWetness(wetness); // Nässe auf das neue Stadt-Material übertragen
@@ -354,7 +538,24 @@ function animate() {
   const dt = Math.min(clock.getDelta(), 0.05);
 
   nav.update(dt);
+
+  // Kamera-Anflug (überschreibt Orbit-Damping, solange der Flug läuft).
+  if (flight) {
+    flight.s = Math.min(1, flight.s + dt / 1.3);
+    const e = flight.s * flight.s * (3 - 2 * flight.s); // smoothstep
+    camera.position.lerpVectors(flight.p0, flight.p1, e);
+    nav.orbit.target.lerpVectors(flight.t0, flight.t1, e);
+    if (flight.s >= 1) flight = null;
+  }
+
   traffic.update(dt);
+  deps.update(clock.elapsedTime);
+  city.labels?.update(camera, dt);
+  // Zyklus-Beacons: harter Doppelherzschlag-Blink, nachts kräftiger.
+  if (city.beaconMat) {
+    const blink = Math.pow(Math.max(0, Math.sin(clock.elapsedTime * 3.4)), 6);
+    city.beaconMat.emissiveIntensity = 0.2 + blink * (0.9 + 2.8 * atmosphere.cityLightFactor);
+  }
   updatePerf(dt);
   grade.uniforms.uTime.value = clock.elapsedTime; // Filmkorn pro Frame variieren
   // Regen setzt erst über leichter Nässe ein (20% = nur feucht, kein Regen).
