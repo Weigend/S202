@@ -326,7 +326,7 @@ function showPod(t) {
     `<div class="cls">${kind}${tags}</div>` +
     `<div class="fqn">${t.from} → ${t.to}</div>` +
     rows([
-      ['Beziehung', t.violation ? 'aufwärts / Zyklus' : 'regelkonform (Level fällt)'],
+      ['Beziehung', t.violation ? 'Verstoß: Level steigt' : 'regelkonform'],
       ['Weg', t.local ? 'Gehsteig' : 'Fahrbahn'],
       ['Routenlänge', `${Math.round(t.len)}`],
     ]) +

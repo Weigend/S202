@@ -277,7 +277,10 @@ export function buildTrips(graph, model, { maxCars = 600, maxPeds = 400 } = {}) 
     const a = graph.accessNode[dep.from], b = graph.accessNode[dep.to];
     if (!a?.length || !b?.length || dep.from === dep.to) continue;
     const lf = level.get(dep.from) ?? 0, lt = level.get(dep.to) ?? 0;
-    const violation = lf <= lt;
+    // Verstoß = die Kante läuft echt AUFWÄRTS (Quell-Level < Ziel-Level).
+    // Gleiches Level (SCC-intern) zählt NICHT — sonst wäre in hochzyklischen
+    // Anwendungen praktisch jedes Fahrzeug rot und die Farbe wertlos.
+    const violation = lf < lt;
     const local = district.get(dep.from) != null && district.get(dep.from) === district.get(dep.to);
     // Tempo-Faktor 0..1: großer globaler Level-Sprung = weite Fahrt = schnell.
     const speedT = Math.min(1, Math.abs(lf - lt) / maxLevel);

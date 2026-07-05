@@ -101,8 +101,10 @@ export class DependencyViz {
     for (const dep of model.dependencies ?? []) {
       const a = anchors[dep.from], b = anchors[dep.to];
       if (!a || !b || dep.from === dep.to) continue;
-      // Regelkonform, wenn das Level fällt; aufwärts/gleich = Verstoß/Zyklus.
-      const violation = (level.get(dep.from) ?? 0) <= (level.get(dep.to) ?? 0);
+      // Verstoß nur, wenn die Kante echt AUFWÄRTS läuft (Quell- < Ziel-Level);
+      // Gleich-Level-Kanten (SCC-intern) bleiben neutral, sonst ist in
+      // hochzyklischen Systemen fast alles rot.
+      const violation = (level.get(dep.from) ?? 0) < (level.get(dep.to) ?? 0);
       const e = { from: dep.from, to: dep.to, a, b, violation };
       this.edges.push(e);
       if (!this.byFrom.has(dep.from)) this.byFrom.set(dep.from, []);
