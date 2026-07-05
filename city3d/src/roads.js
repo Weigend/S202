@@ -207,7 +207,9 @@ function driveablePath(pts, laneOff, maxCut = 1.7) {
     if (i < pts.length - 1) _d0.add(_d1.subVectors(pts[i + 1], pts[i]).setY(0).normalize());
     if (_d0.lengthSq() < 1e-6) { off.push(pts[i].clone()); continue; }
     _d0.normalize();
-    off.push(pts[i].clone().add(new THREE.Vector3(_d0.z, 0, -_d0.x).multiplyScalar(laneOff)));
+    // Rechtsverkehr: rechts von Fahrtrichtung d ist (-d.z, 0, d.x) — das
+    // vorherige (d.z, 0, -d.x) war die linke Seite (Australien-Modus).
+    off.push(pts[i].clone().add(new THREE.Vector3(-_d0.z, 0, _d0.x).multiplyScalar(laneOff)));
   }
   // 2) Ecken runden: Innenpunkte werden durch einen kleinen Quadratic-Bézier-
   //    Bogen ersetzt (Einfahrt, Scheitel, Ausfahrt) — echte Kurven statt Knicke.
