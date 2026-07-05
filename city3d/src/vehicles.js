@@ -259,6 +259,7 @@ export class Traffic {
       }));
       sprite.visible = false;
       sprite.renderOrder = 980;
+      sprite.userData.noAO = true; // nicht in den SSAO-Tiefenpass (schwarze Balken)
       scene.add(sprite);
       this.labelSlots.push({ sprite, ref: null, key: '' });
     }

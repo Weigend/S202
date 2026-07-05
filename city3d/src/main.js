@@ -68,6 +68,7 @@ function makeHotspots(graph, nodeLoad) {
   });
   mesh.instanceMatrix.needsUpdate = true;
   mesh.visible = hotspotsOn;
+  mesh.userData.noAO = true;
   scene.add(mesh);
   return {
     update(t) { mat.opacity = 0.14 + 0.14 * (0.5 + 0.5 * Math.sin(t * 2.2)); },
@@ -115,6 +116,26 @@ nav.setCinematic(true);
 
 const { composer, bloom, gtao, grade } = createComposer(renderer, scene, camera);
 
+// SSAO-Ausschluss: GTAO rendert die Szene intern mit Override-Material für
+// Tiefe/Normalen neu. Overlay-Objekte (Sprites, additive Bögen, Glow) landen
+// dabei als un-gebillboardete Quads im Tiefenpuffer und werfen "AO-Schatten"
+// — die schwarzen Balken neben den Textlabels. Alles mit userData.noAO wird
+// deshalb für die Dauer des GTAO-Passes ausgeblendet.
+{
+  const gtaoRender = gtao.render.bind(gtao);
+  const hidden = [];
+  gtao.render = (...args) => {
+    hidden.length = 0;
+    scene.traverse((o) => {
+      if (o.userData.noAO && o.visible) { o.visible = false; hidden.push(o); }
+    });
+    gtaoRender(...args);
+    for (const o of hidden) o.visible = true;
+  };
+}
+atmosphere.clouds.userData.noAO = true;
+atmosphere.stars.userData.noAO = true;
+
 // ---- Picking: click a class building -> info overlay ------------------------
 const infoEl = document.getElementById('info');
 const raycaster = new THREE.Raycaster();
@@ -125,6 +146,7 @@ let pressXY = null;
 // selected package's platform.
 const highlightGroup = new THREE.Group();
 highlightGroup.name = 'selection';
+highlightGroup.userData.noAO = true;
 scene.add(highlightGroup);
 const glowBoxBuilding = new THREE.BoxGeometry(1, 1, 1).translate(0, 0.5, 0); // base at y=0
 const glowBoxSlab = new THREE.BoxGeometry(1, 1, 1);                          // centred

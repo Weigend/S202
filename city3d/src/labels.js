@@ -9,6 +9,7 @@ import * as THREE from 'three';
 export function makePackageLabels(slabs, maxDepth) {
   const group = new THREE.Group();
   group.name = 'package-labels';
+  group.userData.noAO = true; // Sprites nicht in den SSAO-Tiefenpass
   const entries = [];
 
   // Bei sehr großen Architekturen die tiefsten Schilder weglassen (Sprite-Budget).

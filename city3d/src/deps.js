@@ -84,6 +84,7 @@ export class DependencyViz {
     this.scene = scene;
     this.group = new THREE.Group();
     this.group.name = 'dependencies';
+    this.group.userData.noAO = true; // additive Bögen gehören nicht in den SSAO-Tiefenpass
     scene.add(this.group);
     this.mode = 'off';
     this.focus = null;
