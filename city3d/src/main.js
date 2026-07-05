@@ -273,7 +273,7 @@ function showPackage(d) {
 
 // Fahrt-Info: welcher Pod fährt hier, von wo nach wo, und warum in dieser Farbe.
 function showPod(t) {
-  const kind = t.local ? '🚶 Fußgänger' : '🚗 Transport';
+  const kind = t.local ? '🚶 Fußgänger' : '🚕 Cab';
   const tags =
     ` <span class="tag" style="background:rgba(120,180,255,.14);color:#9fc3ff">${t.local ? 'paketlokal' : 'paketübergreifend'}</span>` +
     (t.violation ? ' <span class="tag cycle">⚠ Verstoß</span>' : '');

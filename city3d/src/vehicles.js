@@ -1,26 +1,23 @@
 import * as THREE from 'three';
+import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 
 /**
  * Verkehr = Abhängigkeiten in Bewegung, in zwei Populationen:
  *
- *  - AUTOS (paketübergreifende Beziehungen): leuchtende Pods auf der Fahrbahn,
- *    schnell, gebündelt auf den Boulevards (Kantengewichte im Routing).
- *  - FUSSGÄNGER (paketlokale Beziehungen): kleine Figuren auf dem Gehsteig,
- *    langsam, mit leichtem Geh-Wippen.
+ *  - AUTOS (paketübergreifend): stilisierte NY CABS — gelber Korpus, dunkle
+ *    Glaskabine, weiße Scheinwerfer vorn, rote Rücklichter hinten. Die
+ *    SEMANTIK sitzt in der Taxi-Dachleuchte: cyan = regelkonform,
+ *    rot = Architektur-Verstoß.
+ *  - FUSSGÄNGER (paketlokal): einfarbige Spielfiguren (Körper + Kopf,
+ *    Meeple-Stil) auf dem Gehsteig; Farbe = Semantik, leichtes Geh-Wippen.
  *
- * Farben: cyan/türkis = regelkonform, rot = Architektur-Verstoß.
- *
- * Interaktion:
- *  - podAtScreen(): Screen-Space-Picking — der nächste Pod im Pixel-Radius
- *    gewinnt (Raycasts gegen die winzigen, beweglichen Instanzen waren zu
- *    unzuverlässig und kollidierten mit dem darunterliegenden Paket).
- *  - updateLabels(): Proximity-Labels — kommt die Kamera nahe genug, blendet
- *    über den nächsten Pods ein Schild "Quelle → Ziel" ein.
- *  - carState(ref): Position/Richtung eines Pods für die Verfolger-Kamera.
+ * Interaktion: podAtScreen() (Screen-Space-Picking), carState() (Verfolger-
+ * Kamera), updateLabels() (Textschilder über nahen Pods — Position wird jeden
+ * Frame nachgeführt, nur die Neuzuweisung der Schilder ist gedrosselt).
  */
 
-const CAR_OK = new THREE.Color(0.35, 0.85, 1.25);
-const CAR_VIOL = new THREE.Color(1.9, 0.28, 0.22);
+const SIGN_OK = new THREE.Color(0.35, 1.6, 2.3);   // Dachleuchte: regelkonform
+const SIGN_VIOL = new THREE.Color(2.4, 0.25, 0.18); // Dachleuchte: Verstoß
 const PED_OK = new THREE.Color(0.4, 0.95, 0.75);
 const PED_VIOL = new THREE.Color(1.7, 0.3, 0.25);
 
@@ -35,11 +32,62 @@ const _v = new THREE.Vector3();
 const MAX_LABELS = 5;
 const LABEL_DIST = 95;
 
+// ---- Geometrie-Bausteine ------------------------------------------------------
+function paint(geo, r, g, b) {
+  const n = geo.attributes.position.count;
+  const col = new Float32Array(n * 3);
+  for (let i = 0; i < n; i++) col.set([r, g, b], i * 3);
+  geo.setAttribute('color', new THREE.BufferAttribute(col, 3));
+  return geo;
+}
+function coloredBox(w, h, d, x, y, z, r, g, b) {
+  const geo = new THREE.BoxGeometry(w, h, d);
+  geo.translate(x, y, z);
+  return paint(geo, r, g, b);
+}
+
+// NY Cab: Chassis + Kabine (beleuchtet, Vertex-Farben)
+function cabBodyGeometry() {
+  return mergeGeometries([
+    coloredBox(1.35, 0.5, 2.9, 0, 0.31, 0, 0.92, 0.60, 0.04),      // Chassis: Cab-Gelb
+    coloredBox(1.16, 0.42, 1.5, 0, 0.75, -0.15, 0.07, 0.09, 0.13), // Kabine: dunkles Glas
+  ]);
+}
+// Lichter: unbeleuchtet, Werte > 1 -> glühen nachts im Bloom
+function cabLightGeometry() {
+  return mergeGeometries([
+    coloredBox(0.2, 0.12, 0.09, 0.44, 0.32, 1.44, 2.4, 2.4, 2.1),   // Scheinwerfer weiß
+    coloredBox(0.2, 0.12, 0.09, -0.44, 0.32, 1.44, 2.4, 2.4, 2.1),
+    coloredBox(0.2, 0.12, 0.09, 0.44, 0.34, -1.44, 2.2, 0.16, 0.1), // Rücklichter rot
+    coloredBox(0.2, 0.12, 0.09, -0.44, 0.34, -1.44, 2.2, 0.16, 0.1),
+  ]);
+}
+// Taxi-Dachleuchte: Farbe pro Instanz (Semantik)
+function cabSignGeometry() {
+  const geo = new THREE.BoxGeometry(0.34, 0.2, 0.55);
+  geo.translate(0, 1.06, -0.15);
+  return geo;
+}
+// Fußgänger als Spielfigur: kegeliger Körper + Kopf (Meeple)
+function pedGeometry() {
+  const body = new THREE.CylinderGeometry(0.14, 0.27, 0.88, 10);
+  body.translate(0, 0.44, 0);
+  paint(body, 0.95, 0.95, 0.95);
+  const head = new THREE.SphereGeometry(0.185, 10, 8);
+  head.translate(0, 1.06, 0);
+  paint(head, 1.15, 1.15, 1.15);
+  return mergeGeometries([body, head]);
+}
+
 class Pool {
-  constructor(scene, trips, { geo, dims, speedMin, speedMax, cap, minCount, colOk, colViol, bob = 0, seed }) {
+  /**
+   * layers: [{geo, mat, semantic, castShadow}] — alle Layer teilen sich die
+   * Instanz-Matrizen (ein Fahrzeug = gleiche Matrix in jedem Layer); nur
+   * "semantic"-Layer bekommen die Trip-Farbe als Instanzfarbe.
+   */
+  constructor(scene, trips, { layers, speedMin, speedMax, cap, minCount, colOk, colViol, bob = 0, scaleJitter = 0, seed }) {
     this.scene = scene;
     this.trips = trips;
-    this.dims = dims;
     this.speedMin = speedMin;
     this.speedMax = speedMax;
     this.bob = bob;
@@ -48,10 +96,16 @@ class Pool {
     this.max = trips.length ? Math.min(Math.max(minCount, Math.round(trips.length * 2.2)), cap) : 0;
     this.speedScale = 1;
 
-    this.mat = new THREE.MeshBasicMaterial({ toneMapped: true });
-    this.mesh = new THREE.InstancedMesh(geo, this.mat, Math.max(1, this.max));
-    this.mesh.frustumCulled = false;
-    scene.add(this.mesh);
+    this.meshes = [];
+    this.semanticMeshes = [];
+    for (const layer of layers) {
+      const mesh = new THREE.InstancedMesh(layer.geo, layer.mat, Math.max(1, this.max));
+      mesh.frustumCulled = false;
+      mesh.castShadow = !!layer.castShadow;
+      scene.add(mesh);
+      this.meshes.push(mesh);
+      if (layer.semantic) this.semanticMeshes.push(mesh);
+    }
 
     let s = seed;
     this.rnd = () => { s = (Math.imul(s, 1103515245) + 12345) & 0x7fffffff; return s / 0x7fffffff; };
@@ -59,10 +113,10 @@ class Pool {
     for (let i = 0; i < this.max; i++) {
       const car = this._spawn();
       car.s = car.trip.len * this.rnd(); // anfangs über die Route verteilt
+      car.sc = 1 + (scaleJitter ? (this.rnd() - 0.4) * scaleJitter : 0);
       this.cars.push(car);
-      this.mesh.setColorAt(i, car.trip.violation ? this.colViol : this.colOk);
+      this._applyColor(i, car);
     }
-    if (this.mesh.instanceColor) this.mesh.instanceColor.needsUpdate = true;
     this._active = this.max;
   }
 
@@ -71,33 +125,51 @@ class Pool {
     return {
       trip, s: 0, seg: 0,
       speed: this.speedMin + this.rnd() * (this.speedMax - this.speedMin),
-      pause: this.rnd() * 1.5,
+      pause: this.rnd() * 1.5, sc: 1,
       x: 0, y: -1e6, z: 0, dx: 0, dz: 1, live: false,
     };
   }
 
+  _applyColor(i, car) {
+    for (const mesh of this.semanticMeshes) {
+      mesh.setColorAt(i, car.trip.violation ? this.colViol : this.colOk);
+      if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true;
+    }
+  }
+
   setDensity(f) { this._active = Math.round(this.max * THREE.MathUtils.clamp(f, 0, 1)); }
+
+  /** Fahrt des Instanz-Index (für das Picking) — null, wenn gerade geparkt. */
+  tripAt(i) {
+    const car = this.cars[i];
+    return car && i < this._active && car.pause <= 0 ? car.trip : null;
+  }
+
+  _setMatrixAll(i) {
+    for (const mesh of this.meshes) mesh.setMatrixAt(i, _m4);
+  }
 
   update(dt) {
     if (!this.max) return;
-    for (let i = 0; i < this.mesh.count; i++) {
+    for (let i = 0; i < this.cars.length; i++) {
       const car = this.cars[i];
       if (i >= this._active || car.pause > 0) {
         if (car && car.pause > 0) car.pause -= dt;
         car.live = false;
         _m4.makeScale(0, 0, 0);
-        this.mesh.setMatrixAt(i, _m4);
+        this._setMatrixAll(i);
         continue;
       }
       car.s += car.speed * this.speedScale * dt;
       const { path, cum, len } = car.trip;
       if (car.s >= len) { // angekommen -> nächste Abhängigkeit
+        const sc = car.sc;
         const fresh = this._spawn();
+        fresh.sc = sc;
         this.cars[i] = fresh;
-        this.mesh.setColorAt(i, fresh.trip.violation ? this.colViol : this.colOk);
-        this.mesh.instanceColor.needsUpdate = true;
+        this._applyColor(i, fresh);
         _m4.makeScale(0, 0, 0);
-        this.mesh.setMatrixAt(i, _m4);
+        this._setMatrixAll(i);
         continue;
       }
       while (car.s > cum[car.seg + 1]) car.seg++;
@@ -113,27 +185,27 @@ class Pool {
       }
       _eul.set(-Math.atan2(_dir.y, horiz), Math.atan2(_dir.x, _dir.z), 0);
       _quat.setFromEuler(_eul);
-      _scl.set(this.dims[0], this.dims[1], this.dims[2]);
+      _scl.setScalar(car.sc);
       _pos.y += 0.12 + (this.bob ? Math.abs(Math.sin(car.s * 4.2)) * this.bob : 0);
       _m4.compose(_pos, _quat, _scl);
-      this.mesh.setMatrixAt(i, _m4);
+      this._setMatrixAll(i);
       car.x = _pos.x; car.y = _pos.y; car.z = _pos.z;
       car.dx = _dir.x / horiz; car.dz = _dir.z / horiz;
       car.live = true;
     }
-    this.mesh.instanceMatrix.needsUpdate = true;
+    for (const mesh of this.meshes) mesh.instanceMatrix.needsUpdate = true;
   }
 
   dispose() {
-    this.mesh.geometry.dispose();
-    this.mat.dispose();
-    this.scene.remove(this.mesh);
+    for (const mesh of this.meshes) {
+      mesh.geometry.dispose();
+      mesh.material.dispose();
+      this.scene.remove(mesh);
+    }
   }
 }
 
-// ---- Labels: NUR Text, sonst nichts. Kein Hintergrund, keine Kontur — und im
-// Material ein alphaTest, der halbtransparente dunkle Randpixel der Canvas-
-// Textur verwirft (die erschienen sonst als schattiges Rechteck um den Text).
+// ---- Labels: NUR Text, sonst nichts (alphaTest verwirft Randpixel) -----------
 function labelTexture(trip) {
   if (trip._labelTex) return trip._labelTex;
   const text = `${trip.from.split('.').pop()} → ${trip.to.split('.').pop()}`;
@@ -158,24 +230,29 @@ function labelTexture(trip) {
 export class Traffic {
   constructor(scene, trips) {
     this.scene = scene;
-    const carGeo = new THREE.BoxGeometry(1, 1, 1);
-    carGeo.translate(0, 0.5, 0);
-    const pedGeo = new THREE.CapsuleGeometry(0.3, 0.9, 3, 8);
-    pedGeo.translate(0, 0.75, 0);
 
     this.carPool = new Pool(scene, trips.filter((t) => !t.local), {
-      geo: carGeo, dims: [1.35, 0.8, 2.9], speedMin: 8, speedMax: 13,
-      cap: 900, minCount: 16, colOk: CAR_OK, colViol: CAR_VIOL, seed: 0xbee5,
+      layers: [
+        { geo: cabBodyGeometry(), mat: new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.55, metalness: 0.15 }), castShadow: true },
+        { geo: cabLightGeometry(), mat: new THREE.MeshBasicMaterial({ vertexColors: true }) },
+        { geo: cabSignGeometry(), mat: new THREE.MeshBasicMaterial(), semantic: true },
+      ],
+      speedMin: 8, speedMax: 13, cap: 900, minCount: 16,
+      colOk: SIGN_OK, colViol: SIGN_VIOL, seed: 0xbee5,
     });
     this.pedPool = new Pool(scene, trips.filter((t) => t.local), {
-      geo: pedGeo, dims: [0.85, 0.85, 0.85], speedMin: 1.7, speedMax: 2.9,
-      cap: 600, minCount: 8, colOk: PED_OK, colViol: PED_VIOL, bob: 0.07, seed: 0x5eed,
+      layers: [
+        { geo: pedGeometry(), mat: new THREE.MeshBasicMaterial({ vertexColors: true }), semantic: true },
+      ],
+      speedMin: 1.7, speedMax: 2.9, cap: 600, minCount: 8,
+      colOk: PED_OK, colViol: PED_VIOL, bob: 0.06, scaleJitter: 0.3, seed: 0x5eed,
     });
     this.pools = [this.carPool, this.pedPool];
 
-    // Label-Sprites (Pool, wiederverwendet für die jeweils nächsten Pods).
-    // depthTest an: Schilder verschwinden hinter Gebäuden statt durchzuscheinen.
-    this.labelSprites = [];
+    // Label-Slots: jeder Slot hält "sein" Fahrzeug fest — die Position wird
+    // JEDEN Frame nachgeführt (kein Ruckeln), nur die Neuzuweisung, welche
+    // Pods ein Schild verdienen, läuft gedrosselt.
+    this.labelSlots = [];
     for (let i = 0; i < MAX_LABELS; i++) {
       const sprite = new THREE.Sprite(new THREE.SpriteMaterial({
         transparent: true, depthWrite: false, opacity: 0.85, alphaTest: 0.12,
@@ -183,7 +260,7 @@ export class Traffic {
       sprite.visible = false;
       sprite.renderOrder = 980;
       scene.add(sprite);
-      this.labelSprites.push(sprite);
+      this.labelSlots.push({ sprite, ref: null, key: '' });
     }
     this._labelAccum = 1;
   }
@@ -222,35 +299,52 @@ export class Traffic {
     return null;
   }
 
-  /** Proximity-Labels: Schilder über den nächsten Pods (gedrosselt). */
+  /** Schilder über den nächsten Pods; Positionen laufen pro Frame mit. */
   updateLabels(camera, dt) {
     this._labelAccum += dt;
-    if (this._labelAccum < 0.15) return;
-    this._labelAccum = 0;
-    const near = [];
-    for (const pool of this.pools) {
-      for (const car of pool.cars) {
-        if (!car.live) continue;
-        const d = camera.position.distanceTo(_v.set(car.x, car.y, car.z));
-        if (d < LABEL_DIST) near.push({ car, d });
+    if (this._labelAccum >= 0.3) {
+      this._labelAccum = 0;
+      // Neu entscheiden, welche Pods ein Schild bekommen — bestehende Slots
+      // behalten ihr Fahrzeug (kein Textur-Flackern), frei werdende rücken nach.
+      const near = [];
+      for (const pool of this.pools) {
+        for (let i = 0; i < pool.cars.length; i++) {
+          const car = pool.cars[i];
+          if (!car.live) continue;
+          const d = camera.position.distanceTo(_v.set(car.x, car.y, car.z));
+          if (d < LABEL_DIST) near.push({ pool, i, d, key: (pool === this.carPool ? 'c' : 'p') + i });
+        }
+      }
+      near.sort((a, b) => a.d - b.d);
+      const wanted = new Map(near.slice(0, MAX_LABELS).map((e) => [e.key, e]));
+      for (const slot of this.labelSlots) {
+        if (slot.ref && wanted.has(slot.key)) wanted.delete(slot.key);
+        else { slot.ref = null; slot.key = ''; }
+      }
+      const rest = [...wanted.values()];
+      for (const slot of this.labelSlots) {
+        if (slot.ref || !rest.length) continue;
+        const e = rest.shift();
+        slot.ref = { pool: e.pool, i: e.i };
+        slot.key = e.key;
       }
     }
-    near.sort((a, b) => a.d - b.d);
-    for (let i = 0; i < this.labelSprites.length; i++) {
-      const sprite = this.labelSprites[i];
-      const hit = near[i];
-      if (!hit) { sprite.visible = false; continue; }
-      const { car, d } = hit;
-      const tex = labelTexture(car.trip);
-      if (sprite.material.map !== tex) {
+    // Jeden Frame: Position, Textur (bei Trip-Wechsel) und Opacity nachführen.
+    for (const slot of this.labelSlots) {
+      const sprite = slot.sprite;
+      const car = slot.ref ? slot.ref.pool.cars[slot.ref.i] : null;
+      if (!car || !car.live) { sprite.visible = false; continue; }
+      if (sprite.userData.trip !== car.trip) {
+        const tex = labelTexture(car.trip);
         sprite.material.map = tex;
         sprite.material.needsUpdate = true;
+        sprite.userData.trip = car.trip;
+        sprite.scale.set(1.1 * car.trip._labelAspect, 1.1, 1);
       }
-      const h = 1.1; // klein und konstant — Nähe entscheidet über Sichtbarkeit
-      sprite.scale.set(h * car.trip._labelAspect, h, 1);
       sprite.position.set(car.x, car.y + 2.3, car.z);
+      const d = camera.position.distanceTo(sprite.position);
       sprite.material.opacity = 0.85 * THREE.MathUtils.clamp((LABEL_DIST - d) / 35, 0, 1);
-      sprite.visible = true;
+      sprite.visible = sprite.material.opacity > 0.02;
     }
   }
 
@@ -276,9 +370,9 @@ export class Traffic {
       for (const t of pool.trips) { t._labelTex?.dispose(); t._labelTex = null; }
       pool.dispose();
     }
-    for (const s of this.labelSprites) {
-      s.material.dispose();
-      this.scene.remove(s);
+    for (const slot of this.labelSlots) {
+      slot.sprite.material.dispose();
+      this.scene.remove(slot.sprite);
     }
   }
 }
