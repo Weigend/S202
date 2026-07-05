@@ -558,16 +558,18 @@ $('s-wet').addEventListener('input', (e) => {
   $('v-wet').textContent = wetness.toFixed(2);
 });
 
-// Effekt-Schalter — bei riesigen Architekturen für mehr FPS abschaltbar.
-const toggle = (id, pass) => {
-  const btn = $(id);
-  btn.addEventListener('click', () => {
-    pass.enabled = !pass.enabled;
-    btn.classList.toggle('active', pass.enabled);
-  });
-};
-toggle('b-ssao', gtao);
-toggle('b-grade', grade);
+// SSAO-Schalter — bei riesigen Architekturen für mehr FPS abschaltbar.
+// (Der Grade-Pass ist inzwischen so dezent, dass er keinen eigenen Schalter
+// mehr verdient — er läuft billig und immer.)
+$('b-ssao').addEventListener('click', () => {
+  gtao.enabled = !gtao.enabled;
+  $('b-ssao').classList.toggle('active', gtao.enabled);
+});
+
+// Panels ein-/ausklappbar (wie die Legende): Kopfzeile klicken.
+for (const [head, box] of [['panel-head', 'panel'], ['help-head', 'help']]) {
+  $(head).addEventListener('click', () => $(box).classList.toggle('collapsed'));
+}
 
 // ---- Abhängigkeits-Modi -------------------------------------------------------
 const depButtons = { off: 'b-dep-off', sel: 'b-dep-sel', all: 'b-dep-all', viol: 'b-dep-viol' };
