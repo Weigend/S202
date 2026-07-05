@@ -20,7 +20,7 @@ const tmpColor = new THREE.Color();
 // Farbpaletten je nach Sonnenhöhe — werden interpoliert.
 // fog = Dunst-/Horizontfarbe. Nachts bewusst NICHT schwarz (Lichtverschmutzung).
 const PALETTE = {
-  night:  { sun: 0x223047, amb: 0x0a1326, hemiSky: 0x14233f, hemiGround: 0x05070d, fog: 0x141d30, cloud: 0x1b2436, zenith: 0x030710, horizon: 0x101b30 },
+  night:  { sun: 0x223047, amb: 0x101d38, hemiSky: 0x1b2d52, hemiGround: 0x0a0f18, fog: 0x1c2740, cloud: 0x232e44, zenith: 0x050a16, horizon: 0x152238 },
   blue:   { sun: 0x4a6fa5, amb: 0x1b2c4a, hemiSky: 0x2a4670, hemiGround: 0x0a1020, fog: 0x243350, cloud: 0x3a4c6e, zenith: 0x0d2148, horizon: 0x3d5a8a },
   golden: { sun: 0xffab5e, amb: 0x4a3c4e, hemiSky: 0xb08cc0, hemiGround: 0x241a1c, fog: 0x9a7a80, cloud: 0xffc9a0, zenith: 0x2c53a0, horizon: 0xffb072 },
   day:    { sun: 0xfff2da, amb: 0x51617c, hemiSky: 0x8fb6ea, hemiGround: 0x3a4148, fog: 0x9fc0e4, cloud: 0xffffff, zenith: 0x2b6bd2, horizon: 0xa8ccf2 },
@@ -130,9 +130,9 @@ export class Atmosphere {
             float s = max(dot(d, uSunDir), 0.0);
             sky += uSunCol * smoothstep(0.99955, 0.99985, s) * 5.0;
             sky += uSunCol * (pow(s, 320.0) * 0.9 + pow(s, 24.0) * 0.16) * uSunGlow;
-            // Mond: kleine kühle Scheibe mit dezentem Hof (nachts)
+            // Mond: kühle Scheibe mit deutlichem Hof (Mondlichtphase)
             float m = max(dot(d, uMoonDir), 0.0);
-            sky += vec3(0.82, 0.88, 1.0) * (smoothstep(0.99978, 0.99993, m) * 1.6 + pow(m, 900.0) * 0.5) * uMoonVis;
+            sky += vec3(0.82, 0.88, 1.0) * (smoothstep(0.99978, 0.99993, m) * 2.6 + pow(m, 600.0) * 0.9) * uMoonVis;
             gl_FragColor = vec4(sky, 1.0);
             #include <tonemapping_fragment>
             #include <colorspace_fragment>
@@ -280,16 +280,17 @@ export class Atmosphere {
 
     const dayFactor = THREE.MathUtils.clamp((elevationDeg + 4) / 16, 0, 1); // 0 nachts → 1 tags
 
-    // Belichtung: Nacht angehoben, Tag bewusst knapp belichtet — der Kontrast
-    // kommt aus der harten Sonne, nicht aus insgesamt mehr Licht.
-    this.renderer.toneMappingExposure = THREE.MathUtils.lerp(0.95, 0.78, dayFactor);
+    // Belichtung: Nacht deutlich angehoben (Mondnacht, kein schwarzes Loch),
+    // Tag bewusst knapp — der Kontrast kommt aus der harten Sonne.
+    this.renderer.toneMappingExposure = THREE.MathUtils.lerp(1.12, 0.78, dayFactor);
 
-    // Sonnenlicht tagsüber hart; nachts übernimmt der MOND als Schattenwerfer
-    // (kühles, schwaches Licht aus der Mondrichtung).
+    // Sonnenlicht tagsüber hart; nachts übernimmt der MOND: eine echte
+    // Mondlichtphase mit kühlem, klar sichtbarem Licht und Schattenwurf —
+    // Boden und Straßen bleiben lesbar, die Stadt badet in Blau.
     if (moonVis > 0.5) {
       this.sun.position.copy(this.moonDir).multiplyScalar(900);
-      this.sun.color.set(0xaec4ea);
-      this.sun.intensity = 0.14 * moonVis;
+      this.sun.color.set(0x9fb9ea);
+      this.sun.intensity = 1.05 * moonVis;
     } else {
       this.sun.position.copy(this.sunDir).multiplyScalar(900);
       this.sun.color.copy(lerpPalette(from, to, t, 'sun'));
@@ -300,9 +301,9 @@ export class Atmosphere {
     // ZURÜCKGENOMMEN — flaches Füll-Licht war der Hauptgrund für den Milch-Look.
     this.hemi.color.copy(lerpPalette(from, to, t, 'hemiSky'));
     this.hemi.groundColor.copy(lerpPalette(from, to, t, 'hemiGround'));
-    this.hemi.intensity = THREE.MathUtils.lerp(0.32, 0.8, dayFactor);
+    this.hemi.intensity = THREE.MathUtils.lerp(0.72, 0.8, dayFactor);
     this.ambient.color.copy(lerpPalette(from, to, t, 'amb'));
-    this.ambient.intensity = THREE.MathUtils.lerp(0.4, 0.26, dayFactor);
+    this.ambient.intensity = THREE.MathUtils.lerp(0.7, 0.26, dayFactor);
 
     // Nebel: tagsüber nur dünner Horizontdunst, nachts dichter Stadt-Dunst.
     this._baseFogColor = lerpPalette(from, to, t, 'fog');

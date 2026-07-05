@@ -526,9 +526,9 @@ function makeRamps(roadNet) {
 const DRY_ROAD = new THREE.Color(0x11151a);
 const WET_ROAD = new THREE.Color(0x070a0e);
 
-function makeWetRoadMaterial({ roughness = 0.72, envMapIntensity = 0.35 } = {}) {
+function makeWetRoadMaterial({ roughness = 0.72, envMapIntensity = 0.35, dry = DRY_ROAD, wet = WET_ROAD } = {}) {
   const mat = new THREE.MeshStandardMaterial({
-    color: DRY_ROAD.clone(), roughness, metalness: 0, envMapIntensity,
+    color: dry.clone(), roughness, metalness: 0, envMapIntensity,
   });
   mat.userData.wet = { value: 0 };
   mat.onBeforeCompile = (sh) => {
@@ -550,7 +550,7 @@ function makeWetRoadMaterial({ roughness = 0.72, envMapIntensity = 0.35 } = {}) 
   };
   mat.userData.setWetness = (w) => {
     mat.userData.wet.value = w;
-    mat.color.copy(DRY_ROAD).lerp(WET_ROAD, w);
+    mat.color.copy(dry).lerp(wet, w);
     mat.roughness = THREE.MathUtils.lerp(roughness, 0.14, w);
     mat.envMapIntensity = THREE.MathUtils.lerp(envMapIntensity, 1.4, w);
   };
@@ -626,10 +626,13 @@ function makeGroundBase(spanX, spanZ, atmosphere) {
   island.receiveShadow = true;
   g.add(island);
 
-  // Deckplatte mit dem Nass-Asphalt-Material (Wetness-Regler wirkt hier).
+  // Deckplatte: hellerer Beton statt Schwarz-Asphalt — sonst säuft der Boden
+  // nachts im Mondlicht ab (Wetness-Regler wirkt weiterhin hier).
   const topGeo = new THREE.PlaneGeometry(isW, isD);
   topGeo.rotateX(-Math.PI / 2);
-  const mat = makeWetRoadMaterial();
+  const mat = makeWetRoadMaterial({
+    dry: new THREE.Color(0x272d34), wet: new THREE.Color(0x161c24),
+  });
   const plate = new THREE.Mesh(topGeo, mat);
   plate.position.y = -0.01;
   plate.receiveShadow = true;

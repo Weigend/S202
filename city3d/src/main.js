@@ -742,7 +742,10 @@ function animate() {
   requestAnimationFrame(animate);
   const dt = Math.min(clock.getDelta(), 0.05);
 
-  nav.update(dt);
+  // Während der Verfolgungsfahrt bleibt die Orbit-Steuerung stumm: ihr
+  // Damping schob die Kamera jeden Frame gegen den Follow-Lerp zurück —
+  // das war das Restruckeln der Kamerafahrt.
+  if (!followRef) nav.update(dt);
 
   // Zeitraffer: Sonnen-/Mondstand rotiert kontinuierlich.
   if (cycleOn) {
