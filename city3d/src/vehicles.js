@@ -245,7 +245,7 @@ export class Traffic {
         { geo: cabLightGeometry(), mat: new THREE.MeshBasicMaterial({ vertexColors: true }) },
         { geo: cabSignGeometry(), mat: new THREE.MeshBasicMaterial(), semantic: true },
       ],
-      speedMin: 6.5, speedMax: 16, cap: carCap, minCount: 16, mult: 3.5,
+      speedMin: 6.5, speedMax: 16, cap: carCap, minCount: 40, mult: 10,
       colOk: SIGN_OK, colViol: SIGN_VIOL, seed: 0xbee5,
     });
     this.pedPool = new Pool(scene, trips.filter((t) => t.local), {
@@ -254,7 +254,7 @@ export class Traffic {
       ],
       // Fußgänger sind langsam: damit die Gehsteige so belebt wirken wie die
       // Straßen, braucht es deutlich mehr Läufer pro Route als Autos.
-      speedMin: 1.4, speedMax: 3.4, cap: pedCap, minCount: 16, mult: 6,
+      speedMin: 1.4, speedMax: 3.4, cap: pedCap, minCount: 40, mult: 16,
       colOk: PED_OK, colViol: PED_VIOL, bob: 0.06, scaleJitter: 0.3, seed: 0x5eed,
     });
     this.pools = [this.carPool, this.pedPool];

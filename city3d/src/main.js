@@ -84,12 +84,12 @@ function makeTraffic() {
   // als das Test-Dorf.
   const nB = cityModel.buildings.length;
   const { trips, nodeLoad } = buildTrips(city.roadGraph, cityModel, {
-    maxCars: Math.min(2600, Math.max(600, Math.round(nB * 1.5))),
-    maxPeds: Math.min(1600, Math.max(400, nB)),
+    maxCars: Math.min(4000, Math.max(600, nB * 2)),
+    maxPeds: Math.min(2500, Math.max(400, Math.round(nB * 1.5))),
   });
   const t = new Traffic(scene, trips, {
-    carCap: Math.min(5000, Math.max(900, nB * 3)),
-    pedCap: Math.min(3000, Math.max(600, nB * 2)),
+    carCap: Math.min(24000, Math.max(2400, nB * 12)),
+    pedCap: Math.min(14000, Math.max(1600, nB * 8)),
   });
   // Diagnose: wie viele Abhängigkeiten haben eine fahrbare Route gefunden?
   const nCars = trips.filter((t2) => !t2.local).length;
