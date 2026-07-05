@@ -254,14 +254,18 @@ export function buildTrips(graph, model, { maxCars = 600, maxPeds = 400 } = {}) 
     level.set(b.fullName, b.architectureLevel ?? 0);
     district.set(b.fullName, b.districtFullName ?? null);
   }
+  const maxLevel = Math.max(1, model.maxLevel ?? 1);
 
   const cand = [];
   for (const dep of model.dependencies ?? []) {
     const a = graph.accessNode[dep.from], b = graph.accessNode[dep.to];
     if (a == null || b == null || a === b) continue;
-    const violation = (level.get(dep.from) ?? 0) <= (level.get(dep.to) ?? 0);
+    const lf = level.get(dep.from) ?? 0, lt = level.get(dep.to) ?? 0;
+    const violation = lf <= lt;
     const local = district.get(dep.from) != null && district.get(dep.from) === district.get(dep.to);
-    cand.push({ a, b, violation, local, from: dep.from, to: dep.to });
+    // Tempo-Faktor 0..1: großer globaler Level-Sprung = weite Fahrt = schnell.
+    const speedT = Math.min(1, Math.abs(lf - lt) / maxLevel);
+    cand.push({ a, b, violation, local, speedT, from: dep.from, to: dep.to });
   }
   // Verstöße immer zeigen; den Rest deterministisch mischen und auffüllen.
   let s = 0x51ab7e;
@@ -289,7 +293,7 @@ export function buildTrips(graph, model, { maxCars = 600, maxPeds = 400 } = {}) 
     for (let i = 1; i < path.length; i++) cum.push(cum[i - 1] + path[i].distanceTo(path[i - 1]));
     const len = cum[cum.length - 1];
     if (len < 4) continue;
-    trips.push({ path, cum, len, violation: c.violation, local: c.local, from: c.from, to: c.to });
+    trips.push({ path, cum, len, violation: c.violation, local: c.local, speedT: c.speedT, from: c.from, to: c.to });
     for (const id of raw.nodeIds) nodeLoad.set(id, (nodeLoad.get(id) ?? 0) + 1);
   }
   return { trips, nodeLoad };
