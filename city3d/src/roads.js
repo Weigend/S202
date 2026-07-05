@@ -281,12 +281,16 @@ export function buildTrips(graph, model, { maxCars = 600, maxPeds = 400 } = {}) 
     const local = district.get(dep.from) != null && district.get(dep.from) === district.get(dep.to);
     // Tempo-Faktor 0..1: großer globaler Level-Sprung = weite Fahrt = schnell.
     const speedT = Math.min(1, Math.abs(lf - lt) / maxLevel);
-    // Natürliche Abhängigkeitsrichtung: die Fahrt verlässt den Nutzer über
-    // die SÜDSEITE (access[0]) und erreicht den Genutzten über die NORDSEITE
-    // (access[1]) — der Verkehr fließt "bergab" durch die Level-Reihen;
-    // Verstöße müssen sichtbar gegen den Strom fahren.
+    // Natürliche Abhängigkeitsrichtung für AUTOS: die Fahrt verlässt den
+    // Nutzer über die SÜDSEITE (access[0]) und erreicht den Genutzten über
+    // die NORDSEITE (access[1]) — der Verkehr fließt "bergab" durch die
+    // Level-Reihen; Verstöße fahren sichtbar gegen den Strom.
+    // FUSSGÄNGER (paketlokal) nehmen schlicht den kürzesten Weg: beide
+    // Gebäudeseiten an beiden Enden erlaubt — sonst müsste jeder Weg zum
+    // Nachbarn eine Halbrunde über die "richtige" Seite laufen.
     cand.push({
-      a: [a[0]], b: [b[b.length - 1]],
+      a: local ? a : [a[0]],
+      b: local ? b : [b[b.length - 1]],
       violation, local, speedT, from: dep.from, to: dep.to,
     });
   }
