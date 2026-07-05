@@ -89,8 +89,15 @@ export function buildRoadGraph(roadNet) {
     const merged = [];
     for (const s of sts) {
       const last = merged[merged.length - 1];
-      if (last && Math.abs(last.pos - s.pos) < MERGE) last.cw = Math.max(last.cw, s.cw);
-      else merged.push({ pos: s.pos, cw: s.cw });
+      if (last && Math.abs(last.pos - s.pos) < MERGE) {
+        // Kreuzungs-Stationen (cw > 0) gewinnen die Position: nur so landet
+        // der Anschlussknoten EXAKT auf dem Knoten der querenden Straße —
+        // sonst dedupliziert er je nach Rundung nicht und die Zufahrt hängt
+        // als isolierte Insel im Graphen (unerreichbares Gebäude).
+        if (s.cw > last.cw) { last.pos = s.pos; last.cw = s.cw; }
+      } else {
+        merged.push({ pos: s.pos, cw: s.cw });
+      }
     }
     for (const s of merged) s.node = nodeAt(...pointOf(r, s.pos));
     stationsByRoad.set(id, merged);
@@ -274,7 +281,14 @@ export function buildTrips(graph, model, { maxCars = 600, maxPeds = 400 } = {}) 
     const local = district.get(dep.from) != null && district.get(dep.from) === district.get(dep.to);
     // Tempo-Faktor 0..1: großer globaler Level-Sprung = weite Fahrt = schnell.
     const speedT = Math.min(1, Math.abs(lf - lt) / maxLevel);
-    cand.push({ a, b, violation, local, speedT, from: dep.from, to: dep.to });
+    // Natürliche Abhängigkeitsrichtung: die Fahrt verlässt den Nutzer über
+    // die SÜDSEITE (access[0]) und erreicht den Genutzten über die NORDSEITE
+    // (access[1]) — der Verkehr fließt "bergab" durch die Level-Reihen;
+    // Verstöße müssen sichtbar gegen den Strom fahren.
+    cand.push({
+      a: [a[0]], b: [b[b.length - 1]],
+      violation, local, speedT, from: dep.from, to: dep.to,
+    });
   }
   // Verstöße immer zeigen; den Rest deterministisch mischen und auffüllen.
   let s = 0x51ab7e;
