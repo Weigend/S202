@@ -37,8 +37,18 @@ export class Navigation {
     dom.tabIndex = 0;
     dom.addEventListener('pointerdown', () => dom.focus({ preventScroll: true }));
 
-    // Nutzerinteraktion stoppt die Kinofahrt
+    // Nutzerinteraktion (Drag/Zoom) stoppt die Kinofahrt dauerhaft
     this.orbit.addEventListener('start', () => { this.orbit.autoRotate = false; this._userMoved = true; });
+
+    // Zielen braucht eine stehende Welt: schon eine Mausbewegung über der Szene
+    // pausiert die Autorotation (sonst schießt die Selektion am Ziel vorbei,
+    // weil sich die Stadt zwischen Zielen und Klicken weiterdreht). Nach 2,5 s
+    // Maus-Ruhe läuft die Kinofahrt weiter — bis zur ersten echten Interaktion.
+    this._hoverT = 0;
+    dom.addEventListener('pointermove', () => {
+      this._hoverT = performance.now();
+      if (this.mode === 'orbit') this.orbit.autoRotate = false;
+    });
 
     this.fly.addEventListener('unlock', () => { if (this.mode === 'fly') this.setMode('orbit'); });
   }
@@ -115,6 +125,11 @@ export class Navigation {
       this.camera.position.y += this.velocity.y * dt;
       if (this.camera.position.y < 3) { this.camera.position.y = 3; this.velocity.y = 0; }
     } else {
+      // Kinofahrt nach Maus-Ruhe wieder aufnehmen (solange nie gedreht/gezoomt wurde)
+      if (this._cinematic && !this._userMoved && !this.orbit.autoRotate
+        && performance.now() - this._hoverT > 2500) {
+        this.orbit.autoRotate = true;
+      }
       this.orbit.update();
     }
   }

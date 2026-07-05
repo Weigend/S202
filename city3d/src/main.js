@@ -332,6 +332,7 @@ function selectByFqn(fqn) {
 }
 
 function pick(clientX, clientY) {
+  camera.updateMatrixWorld(); // frische Matrizen, auch wenn direkt nach dem Start geklickt wird
   // Pods zuerst, per Screen-Space-Abstand: der Raycast gegen die winzigen,
   // beweglichen Instanzen verlor sonst immer gegen das Paket darunter.
   const pod = traffic.podAtScreen(camera, clientX, clientY, window.innerWidth, window.innerHeight);
