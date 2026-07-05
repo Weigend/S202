@@ -89,8 +89,10 @@ Dijkstra Routen berechnet ([`roads.js`](../city3d/src/roads.js)):
 
 - **Ringstraße** innen an jeder Plattformkante (garantiert Konnektivität),
   **Querstraßen** zwischen den Level-Reihen, **Seitenstraßen** zwischen
-  Nachbarn, **Stichstraße** (Zufahrt) je Gebäude, **Rampen** von jedem
-  Kind-Deck zu den Eltern-Korridoren (durch die Hierarchie immer genau eine
+  Nachbarn, **Stichstraßen** (Zufahrten) an *beiden* Gebäudeseiten — das
+  Routing startet/endet per Multi-Source-Dijkstra an der günstigeren
+  Ausfahrt, statt ums Paket zu fahren —, **Rampen** von jedem Kind-Deck zu
+  den Eltern-Korridoren (durch die Hierarchie immer genau eine
   Terrassenstufe).
 - **Kantengewichte erzeugen Bündelung:** Autos zahlen Aufschlag auf schmale
   Straßen (Verkehr sammelt sich auf den breiten Boulevards der Wurzel) und

@@ -203,6 +203,11 @@ function glowClass(fqn) {
   glowInstances(city.buildingMesh, glowBoxBuilding, ids);
 }
 
+// Klick-Selektion leuchtet cyan; während der Kamerafahrt wird in dunklerem
+// Blau markiert (Quelle/Ziel + Pfad), damit beides unterscheidbar bleibt.
+const GLOW_CLICK = new THREE.Color(0x7fe0ff);
+const GLOW_FOLLOW = new THREE.Color(0x3059b8);
+
 function highlight(sel) {
   clearHighlight();
   if (!sel) return;
@@ -225,6 +230,23 @@ function highlight(sel) {
     const i = city.slabFqns.indexOf(sel.fqn);
     if (i >= 0) glowInstances(city.slabPickMesh, glowBoxSlab, [i]);
   }
+}
+
+// Markierung der aktuell verfolgten Fahrt (dunkelblau, folgt Trip-Wechseln).
+function followHighlight(trip) {
+  clearHighlight();
+  if (!trip) return;
+  glowClass(trip.from);
+  glowClass(trip.to);
+  const pts = trip.path.map((p) => new THREE.Vector3(p.x, p.y + 0.35, p.z));
+  const line = new THREE.Line(
+    new THREE.BufferGeometry().setFromPoints(pts),
+    new THREE.LineBasicMaterial({
+      color: GLOW_FOLLOW, transparent: true, opacity: 0.85,
+      blending: THREE.AdditiveBlending, depthWrite: false,
+    }));
+  line.renderOrder = 998;
+  highlightGroup.add(line);
 }
 
 let currentSel = null;
@@ -382,12 +404,15 @@ function pick(clientX, clientY) {
 // Fährt der Pod an sein Ziel, übernimmt derselbe Wagen die nächste Abhängigkeit
 // — die Verfolgung wird so zur endlosen Stadtrundfahrt entlang echter Kanten.
 let followRef = null;
+let followTrip = null;
 const followDesired = new THREE.Vector3();
 const followLook = new THREE.Vector3();
 function startFollow(ref) {
   if (!ref) return;
   flight = null;
   followRef = ref;
+  followTrip = null; // erzwingt das (dunkelblaue) Fahrt-Highlight im nächsten Frame
+  glowMat.uniforms.uColor.value.copy(GLOW_FOLLOW);
   traffic.setProtected(ref); // der verfolgte Pod darf nie weggedrosselt werden
   nav.setMode('orbit');
   nav.orbit.autoRotate = false;
@@ -397,6 +422,9 @@ function startFollow(ref) {
 function stopFollow() {
   if (!followRef) return;
   followRef = null;
+  followTrip = null;
+  glowMat.uniforms.uColor.value.copy(GLOW_CLICK);
+  clearHighlight();
   traffic.setProtected(null);
   document.getElementById('follow-hint').style.display = 'none';
   document.getElementById('b-tour').classList.remove('active');
@@ -782,6 +810,11 @@ function animate() {
   if (followRef) {
     const st = traffic.carState(followRef);
     if (st) {
+      // Fahrt-Highlight nachziehen (auch wenn der Pod auf einen neuen Trip wechselt)
+      if (st.trip !== followTrip) {
+        followTrip = st.trip;
+        followHighlight(st.trip);
+      }
       const back = followRef.pool === traffic.pedPool ? 8 : 15;
       followDesired.set(st.x - st.dx * back, st.y + back * 0.55, st.z - st.dz * back);
       followLook.set(st.x + st.dx * 7, st.y + 1.4, st.z + st.dz * 7);

@@ -119,22 +119,27 @@ export function buildRoadGraph(roadNet) {
     link(a, b, path, rp.w, true);
   }
 
-  // Zufahrts-Knoten je Klasse (Stichstraßen-Ende am Gebäude)
+  // Zufahrts-Knoten je Klasse: BEIDE Stichstraßen-Enden am Gebäude (Nord+Süd);
+  // das Routing startet/endet am jeweils günstigeren.
   const accessNode = {};
-  for (const [fqn, ac] of Object.entries(roadNet.access)) {
-    accessNode[fqn] = nodeAt(...pointOf(roads.get(ac.road), ac.pos));
+  for (const [fqn, list] of Object.entries(roadNet.access)) {
+    accessNode[fqn] = list.map((ac) => nodeAt(...pointOf(roads.get(ac.road), ac.pos)));
   }
 
   return { nodes, adj, accessNode, stationsByRoad };
 }
 
-// ---- Dijkstra (Binärheap), Ziel-Abbruch, gewichtete Kanten --------------------
+// ---- Dijkstra (Binärheap), gewichtete Kanten ---------------------------------
+// Multi-Source/Multi-Target: startet an ALLEN Zufahrten der Quell-Klasse und
+// endet an der zuerst erreichten Zufahrt der Ziel-Klasse — so wählt die Route
+// automatisch die günstigere Gebäudeseite (kein Umweg ums halbe Paket mehr).
 // mode 'car' bündelt auf breite Straßen, 'ped' bevorzugt schmale ruhige Wege.
-function dijkstra(graph, from, to, mode = 'car') {
+function dijkstra(graph, fromList, toList, mode = 'car') {
   const { adj } = graph;
-  const dist = new Map([[from, 0]]);
+  const targets = new Set(toList);
+  const dist = new Map();
   const prev = new Map(); // node -> {node, edge}
-  const heap = [[0, from]];
+  const heap = [];
   const pop = () => {
     const top = heap[0], last = heap.pop();
     if (heap.length) {
@@ -162,12 +167,16 @@ function dijkstra(graph, from, to, mode = 'car') {
       i = p;
     }
   };
+  for (const f of fromList) {
+    if (!dist.has(f)) { dist.set(f, 0); push(0, f); }
+  }
   const done = new Set();
+  let end = -1;
   while (heap.length) {
     const [d, n] = pop();
     if (done.has(n)) continue;
     done.add(n);
-    if (n === to) break;
+    if (targets.has(n)) { end = n; break; }
     for (const e of adj[n]) {
       const nd = d + e.len * (mode === 'ped' ? e.pedF : e.carF);
       if (nd < (dist.get(e.to) ?? Infinity)) {
@@ -177,20 +186,20 @@ function dijkstra(graph, from, to, mode = 'car') {
       }
     }
   }
-  if (!done.has(to)) return null;
+  if (end < 0) return null;
   // Pfad rückwärts einsammeln, Kanten-Polylinien konkatenieren; Knoten-IDs
   // werden mitgeführt (Kreuzungslast für die Hotspot-Anzeige).
   const pts = [];
-  const nodeIds = [to];
-  let cur = to;
-  while (cur !== from) {
+  const nodeIds = [end];
+  let cur = end;
+  while (prev.has(cur)) {
     const p = prev.get(cur);
     const path = p.edge.path; // von p.node -> cur orientiert
     for (let i = path.length - 1; i >= 1; i--) pts.push(path[i].clone());
     cur = p.node;
     nodeIds.push(cur);
   }
-  pts.push(graph.nodes[from].clone());
+  pts.push(graph.nodes[cur].clone());
   pts.reverse();
   return { pts, nodeIds };
 }
@@ -259,7 +268,7 @@ export function buildTrips(graph, model, { maxCars = 600, maxPeds = 400 } = {}) 
   const cand = [];
   for (const dep of model.dependencies ?? []) {
     const a = graph.accessNode[dep.from], b = graph.accessNode[dep.to];
-    if (a == null || b == null || a === b) continue;
+    if (!a?.length || !b?.length || dep.from === dep.to) continue;
     const lf = level.get(dep.from) ?? 0, lt = level.get(dep.to) ?? 0;
     const violation = lf <= lt;
     const local = district.get(dep.from) != null && district.get(dep.from) === district.get(dep.to);

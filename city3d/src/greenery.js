@@ -11,8 +11,8 @@ import * as THREE from 'three';
  * Alles deterministisch (Seed) und instanziert.
  */
 
-const TREE_CAP = 2200;
-const LAWN_CAP = 700;
+const TREE_CAP = 3400;
+const LAWN_CAP = 900;
 
 function mulberry32(seed) {
   let a = seed >>> 0;
@@ -80,7 +80,7 @@ export function makeGreenery({ slabs, roadNet, anchors, spanX, spanZ }) {
   function plantCluster(cx, cz, y, pkg, rect, onLawn = false) {
     const r = 2.6 + rng() * 2.8;
     if (!onLawn && lawns.length < LAWN_CAP) lawns.push({ x: cx, z: cz, y, r });
-    const n = 2 + Math.floor(rng() * 4);
+    const n = 3 + Math.floor(rng() * 4);
     for (let i = 0; i < n && treeCount < TREE_CAP; i++) {
       const a = rng() * Math.PI * 2, d = rng() * r * 0.8;
       const tx = cx + Math.cos(a) * d, tz = cz + Math.sin(a) * d;
@@ -93,7 +93,7 @@ export function makeGreenery({ slabs, roadNet, anchors, spanX, spanZ }) {
       else crownsCone.push({ x: tx, z: tz, y: y + h, r: cr * 0.75, h: cr * 2.6, tint });
       treeCount++;
     }
-    const nb = 2 + Math.floor(rng() * 3);
+    const nb = 3 + Math.floor(rng() * 4);
     for (let i = 0; i < nb; i++) {
       const a = rng() * Math.PI * 2, d = r * (0.5 + rng() * 0.6);
       const bx = cx + Math.cos(a) * d, bz = cz + Math.sin(a) * d;
@@ -106,7 +106,7 @@ export function makeGreenery({ slabs, roadNet, anchors, spanX, spanZ }) {
   const lawnRects = [], padRects = [];
   const RECT_PROBE = [[0, 0], [-0.5, -0.5], [0.5, -0.5], [-0.5, 0.5], [0.5, 0.5], [0.5, 0], [-0.5, 0], [0, 0.5], [0, -0.5]];
   function seedRects(rect, y, pkg, area) {
-    const n = Math.min(3, Math.round(area / 1500));
+    const n = Math.min(4, Math.round(area / 1100));
     for (let k = 0; k < n; k++) {
       for (let attempt = 0; attempt < 12; attempt++) {
         const w = 7 + rng() * 13, d = 6 + rng() * 11;
@@ -130,7 +130,7 @@ export function makeGreenery({ slabs, roadNet, anchors, spanX, spanZ }) {
 
   function seedArea(rect, y, pkg, area) {
     seedRects(rect, y, pkg, area);
-    const clusters = Math.min(8, Math.max(1, Math.round(area / 850)));
+    const clusters = Math.min(10, Math.max(1, Math.round(area / 550)));
     for (let c = 0; c < clusters && treeCount < TREE_CAP; c++) {
       for (let attempt = 0; attempt < 14; attempt++) {
         const x = rect.x0 + rng() * (rect.x1 - rect.x0);

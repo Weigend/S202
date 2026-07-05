@@ -211,11 +211,18 @@ export function layoutFromModel(model) {
       }
       for (const it of row) {
         if (it.kind === 'cls') {
-          // driveway from the building's south face to the corridor behind its row
+          // Zufahrten auf BEIDEN Seiten (Süd -> Korridor dahinter, Nord ->
+          // Korridor davor): das Routing nimmt die nähere Ausfahrt, statt für
+          // das direkt gegenüberliegende Gebäude ums halbe Paket zu fahren.
           const bx = ox + it._cellX + it._cellW / 2;
-          const bz1 = oz + it._cellZ + it.d;
-          const drv = add({ axis: 'z', c: bx, a0: bz1, a1: after.c + 0.05, w: DRIVE_W, kind: 'drive' });
-          access[it.fqn] = { road: drv.id, pos: bz1 };
+          const bz0 = oz + it._cellZ;
+          const bz1 = bz0 + it.d;
+          const south = add({ axis: 'z', c: bx, a0: bz1, a1: after.c + 0.05, w: DRIVE_W, kind: 'drive' });
+          const north = add({ axis: 'z', c: bx, a0: before.c - 0.05, a1: bz0, w: DRIVE_W, kind: 'drive' });
+          access[it.fqn] = [
+            { road: south.id, pos: bz1 },
+            { road: north.id, pos: bz0 },
+          ];
         } else if (it.children.length || it.classes.length) {
           // sub-package: a short connector on the child's deck (crossing the
           // child's own ring) plus a ramp down to the corridor on either side.
