@@ -85,7 +85,7 @@ class Pool {
    * Instanz-Matrizen (ein Fahrzeug = gleiche Matrix in jedem Layer); nur
    * "semantic"-Layer bekommen die Trip-Farbe als Instanzfarbe.
    */
-  constructor(scene, trips, { layers, speedMin, speedMax, cap, minCount, colOk, colViol, bob = 0, scaleJitter = 0, seed }) {
+  constructor(scene, trips, { layers, speedMin, speedMax, cap, minCount, colOk, colViol, bob = 0, scaleJitter = 0, mult = 2.2, seed }) {
     this.scene = scene;
     this.trips = trips;
     this.speedMin = speedMin;
@@ -93,7 +93,7 @@ class Pool {
     this.bob = bob;
     this.colOk = colOk;
     this.colViol = colViol;
-    this.max = trips.length ? Math.min(Math.max(minCount, Math.round(trips.length * 2.2)), cap) : 0;
+    this.max = trips.length ? Math.min(Math.max(minCount, Math.round(trips.length * mult)), cap) : 0;
     this.speedScale = 1;
 
     this.meshes = [];
@@ -244,7 +244,9 @@ export class Traffic {
       layers: [
         { geo: pedGeometry(), mat: new THREE.MeshBasicMaterial({ vertexColors: true }), semantic: true },
       ],
-      speedMin: 1.7, speedMax: 2.9, cap: 600, minCount: 8,
+      // Fußgänger sind langsam: damit die Gehsteige so belebt wirken wie die
+      // Straßen, braucht es deutlich mehr Läufer pro Route als Autos.
+      speedMin: 1.7, speedMax: 2.9, cap: 600, minCount: 16, mult: 5,
       colOk: PED_OK, colViol: PED_VIOL, bob: 0.06, scaleJitter: 0.3, seed: 0x5eed,
     });
     this.pools = [this.carPool, this.pedPool];
@@ -355,10 +357,11 @@ export class Traffic {
   }
 
   setDensity(f, dayFactor = 1) {
-    // Tag/Nacht-Rhythmus: tagsüber Berufsverkehr, nachts leere Straßen;
-    // Fußgänger ziehen sich nachts noch stärker zurück.
-    this.carPool.setDensity(f * (0.45 + 0.55 * dayFactor));
-    this.pedPool.setDensity(f * (0.22 + 0.78 * dayFactor));
+    // Tag/Nacht-Rhythmus: tagsüber voller Betrieb, nachts ruhiger — Fußgänger
+    // laufen dabei genauso durch wie die Autos (gleiche Kurve).
+    const rhythm = 0.45 + 0.55 * dayFactor;
+    this.carPool.setDensity(f * rhythm);
+    this.pedPool.setDensity(f * rhythm);
   }
 
   update(dt) {
