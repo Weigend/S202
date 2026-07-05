@@ -297,14 +297,26 @@ export function buildTrips(graph, model, { maxCars = 600, maxPeds = 400 } = {}) 
       violation, local, speedT, from: dep.from, to: dep.to,
     });
   }
-  // Verstöße immer zeigen; den Rest deterministisch mischen und auffüllen.
+  // Sampling: Verstöße PROPORTIONAL zu ihrem echten Anteil abbilden (mit
+  // mildem Boden, damit seltene Verstöße sichtbar bleiben, und Deckel 50 %).
+  // "Verstöße zuerst bis zum Cap" hatte bei hochzyklischen Systemen wie
+  // Minecraft dazu geführt, dass das gesamte Sample rot war.
   let s = 0x51ab7e;
   const rnd = () => { s = (Math.imul(s, 1103515245) + 12345) & 0x7fffffff; return s / 0x7fffffff; };
+  const shuffle = (arr) => {
+    for (let i = arr.length - 1; i > 0; i--) { const j = Math.floor(rnd() * (i + 1)); [arr[i], arr[j]] = [arr[j], arr[i]]; }
+    return arr;
+  };
   const pickFrom = (list, max) => {
-    const viol = list.filter((c) => c.violation);
-    const ok = list.filter((c) => !c.violation);
-    for (let i = ok.length - 1; i > 0; i--) { const j = Math.floor(rnd() * (i + 1)); [ok[i], ok[j]] = [ok[j], ok[i]]; }
-    return [...viol.slice(0, max), ...ok.slice(0, Math.max(0, max - viol.length))];
+    const viol = shuffle(list.filter((c) => c.violation));
+    const ok = shuffle(list.filter((c) => !c.violation));
+    const share = list.length ? viol.length / list.length : 0;
+    const targetShare = Math.min(0.5, Math.max(share, viol.length ? 0.08 : 0));
+    const nViol = Math.min(viol.length, Math.round(max * targetShare));
+    const chosen = [...viol.slice(0, nViol), ...ok.slice(0, Math.max(0, max - nViol))];
+    // Rest auffüllen, falls eine Seite nicht genug hergibt
+    if (chosen.length < max) chosen.push(...viol.slice(nViol, nViol + (max - chosen.length)));
+    return chosen;
   };
   const chosen = [
     ...pickFrom(cand.filter((c) => !c.local), maxCars),

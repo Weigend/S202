@@ -79,14 +79,27 @@ function makeHotspots(graph, nodeLoad) {
 
 let hotspots = { update() {}, setVisible() {}, dispose() {} };
 function makeTraffic() {
-  const { trips, nodeLoad } = buildTrips(city.roadGraph, cityModel);
+  // Verkehrsmenge skaliert mit der Stadtgröße: große Systeme bekommen mehr
+  // Routen UND größere Fahrzeug-Pools — sonst wirkt eine Metropole leerer
+  // als das Test-Dorf.
+  const nB = cityModel.buildings.length;
+  const { trips, nodeLoad } = buildTrips(city.roadGraph, cityModel, {
+    maxCars: Math.min(2600, Math.max(600, Math.round(nB * 1.5))),
+    maxPeds: Math.min(1600, Math.max(400, nB)),
+  });
+  const t = new Traffic(scene, trips, {
+    carCap: Math.min(5000, Math.max(900, nB * 3)),
+    pedCap: Math.min(3000, Math.max(600, nB * 2)),
+  });
   // Diagnose: wie viele Abhängigkeiten haben eine fahrbare Route gefunden?
-  const nCars = trips.filter((t) => !t.local).length;
-  console.info(`City3D traffic: ${trips.length} routes (${nCars} cars, ${trips.length - nCars} pedestrians) `
-    + `of ${cityModel.dependencies?.length ?? 0} dependencies, ${city.roadGraph.nodes.length} graph nodes`);
+  const nCars = trips.filter((t2) => !t2.local).length;
+  const nViol = trips.filter((t2) => t2.violation).length;
+  console.info(`City3D traffic: ${trips.length} routes (${nCars} cars, ${trips.length - nCars} pedestrians, `
+    + `${nViol} violations) of ${cityModel.dependencies?.length ?? 0} dependencies, `
+    + `${city.roadGraph.nodes.length} graph nodes, pools ${t.carPool.max}/${t.pedPool.max}`);
   hotspots.dispose();
   hotspots = makeHotspots(city.roadGraph, nodeLoad);
-  return new Traffic(scene, trips);
+  return t;
 }
 let traffic = makeTraffic();
 
