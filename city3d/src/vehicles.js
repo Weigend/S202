@@ -95,6 +95,7 @@ class Pool {
     this.colViol = colViol;
     this.max = trips.length ? Math.min(Math.max(minCount, Math.round(trips.length * mult)), cap) : 0;
     this.speedScale = 1;
+    this.protectedIndex = -1; // verfolgter Pod: immun gegen Dichte-Drosselung
 
     this.meshes = [];
     this.semanticMeshes = [];
@@ -156,7 +157,7 @@ class Pool {
     if (!this.max) return;
     for (let i = 0; i < this.cars.length; i++) {
       const car = this.cars[i];
-      if (i >= this._active || car.pause > 0) {
+      if ((i >= this._active && i !== this.protectedIndex) || car.pause > 0) {
         if (car && car.pause > 0) car.pause -= dt;
         car.live = false;
         _m4.makeScale(0, 0, 0);
@@ -271,9 +272,15 @@ export class Traffic {
     this._labelAccum = 1;
   }
 
-  /** Screen-Space-Picking: nächster aktiver Pod im Pixelradius um den Klick. */
-  podAtScreen(camera, clientX, clientY, width, height, tolPx = 16) {
-    let best = null, bestPx = tolPx;
+  /**
+   * Screen-Space-Picking: nächster aktiver Pod um den Klick. Die Trefferzone
+   * ist großzügig und skaliert mit der projizierten Pod-Größe — nah heran-
+   * gezoomte Cabs haben einen breiten Fangbereich, ferne den Mindestradius.
+   * So zielt man nicht daneben (und trifft nicht das Paket darunter).
+   */
+  podAtScreen(camera, clientX, clientY, width, height) {
+    const fovScale = height / (2 * Math.tan(THREE.MathUtils.degToRad(camera.fov) / 2));
+    let best = null, bestPx = Infinity;
     for (const pool of this.pools) {
       for (let i = 0; i < pool.cars.length; i++) {
         const car = pool.cars[i];
@@ -283,10 +290,18 @@ export class Traffic {
         const px = (_v.x * 0.5 + 0.5) * width;
         const py = (-_v.y * 0.5 + 0.5) * height;
         const d = Math.hypot(px - clientX, py - clientY);
-        if (d < bestPx) { bestPx = d; best = { trip: car.trip, ref: { pool, i } }; }
+        const dist = Math.max(1, Math.hypot(car.x - camera.position.x, car.y - camera.position.y, car.z - camera.position.z));
+        const tol = Math.min(70, 16 + (fovScale / dist) * 2.2); // ~Fahrzeuglänge in Pixeln + Reserve
+        if (d < tol && d < bestPx) { bestPx = d; best = { trip: car.trip, ref: { pool, i } }; }
       }
     }
     return best;
+  }
+
+  /** Bestandsschutz für den verfolgten Pod (überlebt Dichte-/Zeitänderungen). */
+  setProtected(ref) {
+    for (const pool of this.pools) pool.protectedIndex = -1;
+    if (ref) ref.pool.protectedIndex = ref.i;
   }
 
   /** Zustand eines verfolgten Pods — Position/Fahrtrichtung, null wenn geparkt. */

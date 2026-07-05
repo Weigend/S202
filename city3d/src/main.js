@@ -388,6 +388,7 @@ function startFollow(ref) {
   if (!ref) return;
   flight = null;
   followRef = ref;
+  traffic.setProtected(ref); // der verfolgte Pod darf nie weggedrosselt werden
   nav.setMode('orbit');
   nav.orbit.autoRotate = false;
   document.getElementById('follow-hint').style.display = 'block';
@@ -396,6 +397,7 @@ function startFollow(ref) {
 function stopFollow() {
   if (!followRef) return;
   followRef = null;
+  traffic.setProtected(null);
   document.getElementById('follow-hint').style.display = 'none';
   document.getElementById('b-tour').classList.remove('active');
 }
@@ -687,6 +689,7 @@ cineBtn.addEventListener('click', () => {
 
 $('b-regen').addEventListener('click', async () => {
   hideInfo();
+  stopFollow(); // alte Pool-Referenz nicht in die neue Stadt mitnehmen
   traffic.dispose();
   deps.dispose();
   city.dispose();
