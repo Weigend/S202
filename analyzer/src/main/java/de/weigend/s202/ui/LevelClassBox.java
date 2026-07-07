@@ -15,6 +15,7 @@
  */
 package de.weigend.s202.ui;
 
+import de.weigend.s202.ui.graph.ArchitectureViewSettings;
 import javafx.geometry.Pos;
 import javafx.scene.Cursor;
 import javafx.scene.control.Label;
@@ -79,11 +80,11 @@ public class LevelClassBox extends HBox implements GraphSelection.Selectable {
                 : new FontIcon(MaterialDesignA.ALPHA_C_CIRCLE);
         icon.getStyleClass().add("architecture-icon");
         icon.setIconColor(isInterface ? INTERFACE_COLOR : CLASS_COLOR);
-        icon.visibleProperty().bind(ArchitectureView.showIconsProperty());
-        icon.managedProperty().bind(ArchitectureView.showIconsProperty());
+        icon.visibleProperty().bind(ArchitectureViewSettings.showIconsProperty());
+        icon.managedProperty().bind(ArchitectureViewSettings.showIconsProperty());
 
         nameLabel = new Label(BoxLabelFormatter.format(name, level, architectureLevel,
-                ArchitectureView.showArchitectureLevelProperty().get()));
+                ArchitectureViewSettings.showArchitectureLevelProperty().get()));
         nameLabel.setWrapText(true);
         // text-fill doesn't cascade through HBox to descendant Label, so the
         // dark theme's derived text color (light on -fx-base #3c3f41) would win.
@@ -91,7 +92,7 @@ public class LevelClassBox extends HBox implements GraphSelection.Selectable {
 
         // Live toggle: re-render the label whenever the global architecture-level
         // visibility flips, without rebuilding the tree.
-        ArchitectureView.showArchitectureLevelProperty().addListener((obs, oldVal, newVal) ->
+        ArchitectureViewSettings.showArchitectureLevelProperty().addListener((obs, oldVal, newVal) ->
                 nameLabel.setText(BoxLabelFormatter.format(simpleName, this.level,
                         this.architectureLevel, newVal)));
 

@@ -15,6 +15,7 @@
  */
 package de.weigend.s202.ui;
 
+import de.weigend.s202.ui.graph.ArchitectureViewSettings;
 import javafx.geometry.Insets;
 import javafx.geometry.Pos;
 import javafx.scene.Cursor;
@@ -113,7 +114,7 @@ public class LevelPackageBox extends VBox implements GraphSelection.Selectable {
         this.currentLocalLevel = level;
         this.architectureLevel = architectureLevel;
         this.levelName = BoxLabelFormatter.format(levelName, level, architectureLevel,
-                ArchitectureView.showArchitectureLevelProperty().get());
+                ArchitectureViewSettings.showArchitectureLevelProperty().get());
         this.transparent = transparent;
         this.fullName = fullName;
 
@@ -139,7 +140,7 @@ public class LevelPackageBox extends VBox implements GraphSelection.Selectable {
 
         // Live toggle: re-render the label whenever the global architecture-level
         // visibility flips, without rebuilding the tree.
-        ArchitectureView.showArchitectureLevelProperty().addListener((obs, oldVal, newVal) -> applyLabelText());
+        ArchitectureViewSettings.showArchitectureLevelProperty().addListener((obs, oldVal, newVal) -> applyLabelText());
 
         // Selectable click target on the package frame itself (free area outside
         // the header). The toggle icon and inner boxes consume their own clicks
@@ -216,8 +217,8 @@ public class LevelPackageBox extends VBox implements GraphSelection.Selectable {
         FontIcon packageIcon = new FontIcon(MaterialDesignP.PACKAGE_VARIANT_CLOSED);
         packageIcon.getStyleClass().add("architecture-icon");
         packageIcon.setIconColor(PACKAGE_COLOR);
-        packageIcon.visibleProperty().bind(ArchitectureView.showIconsProperty());
-        packageIcon.managedProperty().bind(ArchitectureView.showIconsProperty());
+        packageIcon.visibleProperty().bind(ArchitectureViewSettings.showIconsProperty());
+        packageIcon.managedProperty().bind(ArchitectureViewSettings.showIconsProperty());
 
         nameLabel = new Label(levelName);
         nameLabel.getStyleClass().add("package-name");
@@ -358,7 +359,7 @@ public class LevelPackageBox extends VBox implements GraphSelection.Selectable {
 
     private void applyLabelText() {
         String text = BoxLabelFormatter.format(simpleName, currentLocalLevel, architectureLevel,
-                ArchitectureView.showArchitectureLevelProperty().get());
+                ArchitectureViewSettings.showArchitectureLevelProperty().get());
         if (!text.equals(this.levelName)) {
             this.levelName = text;
             if (nameLabel != null) {

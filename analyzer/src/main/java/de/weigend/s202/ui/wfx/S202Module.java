@@ -33,6 +33,7 @@ import de.weigend.s202.reader.DependencyModel;
 import de.weigend.s202.reader.LanguageAnalyzer;
 import de.weigend.s202.reader.ProjectScanner;
 import de.weigend.s202.ui.ArchitectureView;
+import de.weigend.s202.ui.graph.ArchitectureViewSettings;
 import de.weigend.s202.ui.city3d.CityModelSerializer;
 import de.weigend.s202.ui.city3d.CityView3DServer;
 import de.weigend.s202.ui.ArchitectureViewStyle;
@@ -760,7 +761,7 @@ public class S202Module implements Module {
         showIconsCheckbox.setTooltip(new Tooltip("Toggle package/class/interface icons in the architecture view"));
         showIconsCheckbox.selectedProperty().addListener((obs, was, isNow) -> {
             if (boundView != null) {
-                boundView.setShowIcons(isNow);
+                ArchitectureViewSettings.setShowIcons(isNow);
             }
         });
 
@@ -769,7 +770,7 @@ public class S202Module implements Module {
                 "Toggle the global architecture level (G:n) suffix next to each box's local level (L:n)"));
         showArchLevelCheckbox.selectedProperty().addListener((obs, was, isNow) -> {
             if (boundView != null) {
-                boundView.setShowArchitectureLevel(isNow);
+                ArchitectureViewSettings.setShowArchitectureLevel(isNow);
             }
         });
 
@@ -862,8 +863,8 @@ public class S202Module implements Module {
         showPackageSccCheckbox.setSelected(view.isShowPackageScc());
         showWhatIfViolationsCheckbox.setSelected(view.isShowWhatIfViolations());
         debugLinesCheckbox.setSelected(view.isShowTangleDebugLines());
-        showIconsCheckbox.setSelected(view.isShowIcons());
-        showArchLevelCheckbox.setSelected(view.isShowArchitectureLevel());
+        showIconsCheckbox.setSelected(ArchitectureViewSettings.isShowIcons());
+        showArchLevelCheckbox.setSelected(ArchitectureViewSettings.isShowArchitectureLevel());
 
         ReadOnlyDoubleProperty zoomProp = view.zoomFactorProperty();
         if (zoomProp != null) {
