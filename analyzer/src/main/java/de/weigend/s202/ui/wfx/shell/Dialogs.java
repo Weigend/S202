@@ -13,7 +13,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package de.weigend.s202.ui.wfx;
+package de.weigend.s202.ui.wfx.shell;
 
 import javafx.application.Platform;
 import javafx.scene.control.Alert;
