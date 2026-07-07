@@ -147,7 +147,6 @@ public class S202Module implements Module {
     private final ProjectStore projectStore = Lookup.lookup(ProjectStore.class);
     private final ProjectMapper projectMapper = Lookup.lookup(ProjectMapper.class);
 
-    private int viewCounter;
     private int reportCounter;
 
     /** Sentinel source for selection events injected from the browser (to skip echoing them back). */
@@ -186,13 +185,9 @@ public class S202Module implements Module {
     // Reusable listener so we can detach it cleanly (no-op when boundView is null).
     private ChangeListener<Number> zoomLabelListener;
 
-    // Dedicated tangle tabs keyed by the tangle's member set. Each tangle row
-    // gets one view instance and reopens/focuses that view on later requests.
-    private final Map<String, ArchitectureWfxView> tangleViews = new HashMap<>();
-    private final Map<ArchitectureView, S202Project.Source> viewSources = new HashMap<>();
-    private final Map<ArchitectureView, LayoutInvariantReport> viewInvariantReports = new HashMap<>();
-    private final Set<DependencyEdge> refactoringPreviewCuts = new HashSet<>();
-    private boolean propagatingArchitectureAnnotations;
+    private final RefactoringPreviewState previewState = new RefactoringPreviewState();
+    private final ArchitectureViewManager viewManager =
+            new ArchitectureViewManager(progressPublisher, previewState);
 
     public S202Module(ApplicationWindow applicationWindow) {
         this.applicationWindow = applicationWindow;
@@ -225,62 +220,12 @@ public class S202Module implements Module {
         }
     }
 
-    @SuppressWarnings("unchecked")
-    private ArchitectureWfxView createArchitectureView() {
-        return createArchitectureView(null);
-    }
-
-    @SuppressWarnings("unchecked")
-    private ArchitectureWfxView createArchitectureView(String title) {
-        viewCounter++;
-        ArchitectureView view = new ArchitectureView();
-        view.setStatusSink(this::publishStatus);
-
-        // Bridge graph node selections (class or package) onto the bus so
-        // the outline (and any future listener) can react without a direct
-        // dependency.
-        EventBus<EventObject> bus = Lookup.lookup(EventBus.class);
-        view.setOnNodeSelected(fqn -> bus.publish(new NodeSelectionEvent(fqn, view)));
-
-        var css = getClass().getResource("/de/weigend/s202/ui/styles.css");
-        if (css != null) {
-            view.getStylesheets().add(css.toExternalForm());
-        }
-
-        return new ArchitectureWfxView(
-                ArchitectureWfxView.VIEW_ID_PREFIX + viewCounter,
-                title == null || title.isBlank() ? "Architecture " + viewCounter : title,
-                view);
-    }
-
     private void publishStatus(String message) {
         progressPublisher.status(message);
     }
 
     private void publishProgress(String message, double progress) {
         progressPublisher.progress(message, progress);
-    }
-
-    private ArchitectureWfxView focusedArchitectureView() {
-        WindowManager wm = Lookup.lookup(WindowManager.class);
-        View focused = wm.getFocusedView();
-        if (focused instanceof ArchitectureWfxView a) {
-            return a;
-        }
-        // When a tool panel (Outline, Quality, …) is focused, fall back to the
-        // last architecture view that held focus rather than blindly picking the
-        // first registered one.  This keeps toolbar actions and node-selection
-        // events targeting the view the user was working in before switching to
-        // the side panel.
-        View last = wm.getLastFocusedView();
-        if (last instanceof ArchitectureWfxView a) {
-            return a;
-        }
-        return wm.getRegisteredViews().stream()
-                .filter(ArchitectureWfxView.class::isInstance)
-                .map(ArchitectureWfxView.class::cast)
-                .findFirst()
-                .orElse(null);
     }
 
     @Override
@@ -315,7 +260,7 @@ public class S202Module implements Module {
 
     private void subscribeToOpenScope(EventBus<EventObject> bus) {
         bus.subscribe(OpenScopeEvent.class, ev -> {
-            openScopeView(ev.getScope(), ev.getArchitectureView());
+            viewManager.openScopeView(ev.getScope(), ev.getArchitectureView());
             return true;
         });
     }
@@ -348,11 +293,11 @@ public class S202Module implements Module {
         bus.subscribe(MenuRequestEvent.LoadProject.class, ev -> { loadProject(); return true; });
         bus.subscribe(MenuRequestEvent.CloseProject.class, ev -> { closeProject(); return true; });
         bus.subscribe(MenuRequestEvent.Exit.class, ev -> { Platform.exit(); return true; });
-        bus.subscribe(MenuRequestEvent.NewView.class, ev -> { newArchitectureWindow(); return true; });
-        bus.subscribe(MenuRequestEvent.OpenComponentView.class, ev -> { openComponentView(); return true; });
-        bus.subscribe(MenuRequestEvent.OpenHexagonalView.class, ev -> { openHexagonalView(); return true; });
-        bus.subscribe(MenuRequestEvent.CloseFocusedView.class, ev -> { closeFocusedView(); return true; });
-        bus.subscribe(MenuRequestEvent.CloseAllViews.class, ev -> { closeAllViews(); return true; });
+        bus.subscribe(MenuRequestEvent.NewView.class, ev -> { viewManager.newArchitectureWindow(); return true; });
+        bus.subscribe(MenuRequestEvent.OpenComponentView.class, ev -> { viewManager.openComponentView(); return true; });
+        bus.subscribe(MenuRequestEvent.OpenHexagonalView.class, ev -> { viewManager.openHexagonalView(); return true; });
+        bus.subscribe(MenuRequestEvent.CloseFocusedView.class, ev -> { viewManager.closeFocusedView(); return true; });
+        bus.subscribe(MenuRequestEvent.CloseAllViews.class, ev -> { viewManager.closeAllViews(); return true; });
         bus.subscribe(MenuRequestEvent.RestoreDefaultLayout.class, ev -> {
             Lookup.lookup(WindowManager.class).restoreDefaultLayout();
             return true;
@@ -363,7 +308,7 @@ public class S202Module implements Module {
 
     private void subscribeToNodeSelection(EventBus<EventObject> bus) {
         bus.subscribe(NodeSelectionEvent.class, ev -> {
-            ArchitectureWfxView focused = focusedArchitectureView();
+            ArchitectureWfxView focused = viewManager.focusedArchitectureView();
             if (focused == null) {
                 return true;
             }
@@ -418,258 +363,6 @@ public class S202Module implements Module {
             stage.getScene().getStylesheets().add(url.toExternalForm());
             LOGGER.info("Attached stylesheet to Scene: {}", url);
         }
-    }
-
-    private void newArchitectureWindow() {
-        ArchitectureWfxView wrapper = createArchitectureView();
-        registerArchitectureView(wrapper);
-    }
-
-    private void openComponentView() {
-        ArchitectureWfxView sourceWrapper = focusedSourceArchitectureView();
-        if (sourceWrapper == null) {
-            publishProgress("No architecture view available for component projection", 1);
-            return;
-        }
-
-        ArchitectureView sourceView = sourceWrapper.getArchitectureView();
-        ArchitectureNode sourceRoot = sourceView.getArchitectureRoot();
-        if (sourceRoot == null) {
-            publishProgress("No architecture loaded for component projection", 1);
-            return;
-        }
-
-        WindowManager wm = Lookup.lookup(WindowManager.class);
-        ArchitectureWfxView wrapper = createArchitectureView("Component View");
-        ArchitectureView componentView = wrapper.getArchitectureView();
-        componentView.setViewStyle(ArchitectureViewStyle.COMPONENT);
-        componentView.setArchitectureAnnotations(sourceView.getArchitectureAnnotations());
-        componentView.setRawDependencyModel(sourceView.getRawDependencyModel());
-        componentView.setDomainModel(sourceView.getDomainModel());
-        componentView.setCycleBreakEdges(sourceView.getCycleBreakEdges());
-        componentView.setAppliedTangleCutEdges(refactoringPreviewCuts);
-        viewSources.put(componentView, viewSources.get(sourceView));
-        viewInvariantReports.put(componentView, viewInvariantReports.get(sourceView));
-
-        registerArchitectureView(wrapper);
-        wm.showView(wrapper);
-
-        componentView.setArchitectureRootAsync(
-                sourceRoot,
-                progress -> publishJavaFxBuildProgress("Building JavaFX component view", progress),
-                () -> {
-                    componentView.setQualityMetrics(sourceView.getQualityMetrics());
-                    publishProgress("Opened component view", 1);
-                });
-    }
-
-    private void openHexagonalView() {
-        ArchitectureWfxView sourceWrapper = focusedSourceArchitectureView();
-        if (sourceWrapper == null) {
-            publishProgress("No architecture view available for hexagonal projection", 1);
-            return;
-        }
-
-        ArchitectureView sourceView = sourceWrapper.getArchitectureView();
-        ArchitectureNode sourceRoot = sourceView.getArchitectureRoot();
-        if (sourceRoot == null) {
-            publishProgress("No architecture loaded for hexagonal projection", 1);
-            return;
-        }
-
-        WindowManager wm = Lookup.lookup(WindowManager.class);
-        ArchitectureWfxView wrapper = createArchitectureView("Hexagonal View");
-        ArchitectureView hexagonalView = wrapper.getArchitectureView();
-        hexagonalView.setViewStyle(ArchitectureViewStyle.HEXAGONAL);
-        hexagonalView.setArchitectureAnnotations(sourceView.getArchitectureAnnotations());
-        hexagonalView.setRawDependencyModel(sourceView.getRawDependencyModel());
-        hexagonalView.setDomainModel(sourceView.getDomainModel());
-        hexagonalView.setCycleBreakEdges(sourceView.getCycleBreakEdges());
-        hexagonalView.setAppliedTangleCutEdges(refactoringPreviewCuts);
-        viewSources.put(hexagonalView, viewSources.get(sourceView));
-        viewInvariantReports.put(hexagonalView, viewInvariantReports.get(sourceView));
-
-        registerArchitectureView(wrapper);
-        wm.showView(wrapper);
-
-        hexagonalView.setArchitectureRootAsync(
-                sourceRoot,
-                progress -> publishJavaFxBuildProgress("Building JavaFX hexagonal view", progress),
-                () -> {
-                    hexagonalView.setQualityMetrics(sourceView.getQualityMetrics());
-                    publishProgress("Opened hexagonal view", 1);
-                });
-    }
-
-    /**
-     * Register an architecture wrapper with the {@link WindowManager} and,
-     * on first call, dock the What-If Dependencies panel under it. Every
-     * code path that creates an architecture view (Open JAR, New Window,
-     * Open Scope, Open Tangle, Load Project) routes through here so the
-     * Dependencies panel reliably attaches to the first chart that
-     * appears.
-     */
-    private void registerArchitectureView(ArchitectureWfxView wrapper) {
-        Lookup.lookup(WindowManager.class).register(wrapper);
-        ArchitectureView view = wrapper.getArchitectureView();
-        view.architectureAnnotationsProperty().addListener((obs, oldValue, newValue) ->
-                propagateArchitectureAnnotations(view, newValue));
-        Lookup.lookup(de.weigend.s202.ui.wfx.whatif.WhatIfDependenciesModule.class)
-                .dockUnder(wrapper);
-    }
-
-    private void propagateArchitectureAnnotations(ArchitectureView source,
-                                                  ArchitectureAnnotations annotations) {
-        if (propagatingArchitectureAnnotations || source == null || source.getDomainModel() == null) {
-            return;
-        }
-        propagatingArchitectureAnnotations = true;
-        try {
-            ArchitectureAnnotations effective =
-                    annotations == null ? ArchitectureAnnotations.empty() : annotations;
-            WindowManager wm = Lookup.lookup(WindowManager.class);
-            for (View registered : wm.getRegisteredViews()) {
-                if (!(registered instanceof ArchitectureWfxView wrapper)) {
-                    continue;
-                }
-                ArchitectureView target = wrapper.getArchitectureView();
-                if (target == source || target.getDomainModel() != source.getDomainModel()) {
-                    continue;
-                }
-                target.setArchitectureAnnotations(effective);
-                if ((target.getViewStyle() == ArchitectureViewStyle.COMPONENT
-                        || target.getViewStyle() == ArchitectureViewStyle.HEXAGONAL)
-                        && target.hasRoot()) {
-                    target.refreshStyleProjection();
-                }
-            }
-        } finally {
-            propagatingArchitectureAnnotations = false;
-        }
-    }
-
-    private void openScopeView(String scope, ArchitectureView requestedSourceView) {
-        if (scope == null || scope.isBlank()) {
-            return;
-        }
-        ArchitectureView sourceView = requestedSourceView;
-        if (sourceView == null) {
-            ArchitectureWfxView source = focusedSourceArchitectureView();
-            sourceView = source == null ? null : source.getArchitectureView();
-        }
-        if (sourceView == null) {
-            return;
-        }
-        ArchitectureView finalSourceView = sourceView;
-        ArchitectureNode sourceRoot = sourceView.getScopeExtensionSourceRoot();
-        if (sourceRoot == null) {
-            sourceRoot = sourceView.getArchitectureRoot();
-        }
-        if (sourceRoot == null) {
-            return;
-        }
-        ArchitectureNode scopedRoot = filterPackageScope(sourceRoot, scope);
-        if (scopedRoot == null) {
-            showError("Open Scope", "Package scope was not found in the focused architecture: " + scope);
-            return;
-        }
-
-        WindowManager wm = Lookup.lookup(WindowManager.class);
-        ArchitectureWfxView wrapper = createArchitectureView("Scope " + simple(scope));
-        ArchitectureView scopeView = wrapper.getArchitectureView();
-        scopeView.setPreferredTopTanglesScope(scope);
-        scopeView.enableScopeExtensionFrom(sourceRoot);
-        scopeView.setArchitectureAnnotations(sourceView.getArchitectureAnnotations());
-        scopeView.setDomainModel(sourceView.getDomainModel());
-        scopeView.setRawDependencyModel(sourceView.getRawDependencyModel());
-        scopeView.setCycleBreakEdges(sourceView.getCycleBreakEdges());
-        scopeView.setAppliedTangleCutEdges(refactoringPreviewCuts);
-        viewSources.put(scopeView, viewSources.get(sourceView));
-        viewInvariantReports.put(scopeView, viewInvariantReports.get(sourceView));
-
-        registerArchitectureView(wrapper);
-        wm.showView(wrapper);
-
-        scopeView.setArchitectureRootAsync(
-                scopedRoot,
-                progress -> publishJavaFxBuildProgress("Building JavaFX scope view", progress),
-                () -> {
-                    scopeView.setQualityMetrics(finalSourceView.getQualityMetrics());
-                    scopeView.selectByFullName(scope);
-                    publishProgress("Opened scope " + scope, 1);
-                });
-    }
-
-    private static ArchitectureNode filterPackageScope(ArchitectureNode sourceRoot, String scope) {
-        ArchitectureNode scopeNode = findPackageNode(sourceRoot, scope);
-        if (scopeNode == null) {
-            return null;
-        }
-        ArchitectureNode root = ArchitectureNodeCloner.cloneShallow(sourceRoot);
-        root.addChild(ArchitectureNodeCloner.cloneTree(scopeNode));
-        return root;
-    }
-
-    private static ArchitectureNode findPackageNode(ArchitectureNode node, String scope) {
-        if (node.getType() == ArchitectureNode.NodeType.PACKAGE
-                && scope.equals(node.getFullName())) {
-            return node;
-        }
-        for (ArchitectureNode child : node.getChildren()) {
-            ArchitectureNode found = findPackageNode(child, scope);
-            if (found != null) {
-                return found;
-            }
-        }
-        return null;
-    }
-
-    private static String simple(String fqn) {
-        if (fqn == null) {
-            return "";
-        }
-        int dot = fqn.lastIndexOf('.');
-        return dot < 0 ? fqn : fqn.substring(dot + 1);
-    }
-
-    private void closeFocusedView() {
-        WindowManager wm = Lookup.lookup(WindowManager.class);
-        View focused = wm.getFocusedView();
-        if (focused != null) {
-            if (focused instanceof ArchitectureWfxView a) {
-                forgetView(a);
-            }
-            // closeView is kind-aware: TOOL is hidden (still in View menu);
-            // DOCUMENT is fully unregistered. Old code called unregister
-            // unconditionally, which forcibly removed Outline/Quality from
-            // the registry when the user happened to focus them.
-            wm.closeView(focused);
-        }
-    }
-
-    private void closeAllViews() {
-        WindowManager wm = Lookup.lookup(WindowManager.class);
-        // "Close All" means "close all open documents" — the user's analyses,
-        // not the side panels. Filter to DOCUMENTs so TOOLs (Outline, Quality)
-        // stay alive.
-        for (View v : new ArrayList<>(wm.getVisibleViews())) {
-            if (v.getKind() == ViewKind.DOCUMENT) {
-                if (v instanceof ArchitectureWfxView a) {
-                    forgetView(a);
-                }
-                wm.closeView(v);
-            }
-        }
-    }
-
-    private void forgetView(ArchitectureWfxView wrapper) {
-        if (wrapper == null) {
-            return;
-        }
-        ArchitectureView view = wrapper.getArchitectureView();
-        viewSources.remove(view);
-        viewInvariantReports.remove(view);
-        tangleViews.values().removeIf(wrapper::equals);
     }
 
     private void installToolbar() {
@@ -824,7 +517,7 @@ public class S202Module implements Module {
         boundView = null;
         zoomLabelListener = null;
 
-        ArchitectureWfxView focused = focusedArchitectureView();
+        ArchitectureWfxView focused = viewManager.focusedArchitectureView();
         boolean enabled = focused != null;
         for (Node n : viewDependentToolbarNodes) {
             n.setDisable(!enabled);
@@ -1248,8 +941,8 @@ public class S202Module implements Module {
         if (jarFiles == null || jarFiles.isEmpty()) {
             return;
         }
-        ArchitectureWfxView target = createArchitectureView();
-        registerArchitectureView(target);
+        ArchitectureWfxView target = viewManager.createArchitectureView();
+        viewManager.registerArchitectureView(target);
         final ArchitectureView view = target.getArchitectureView();
         final String fileNames = jarFiles.stream().map(File::getName).collect(Collectors.joining(", "));
         final List<String> jarPaths = jarFiles.stream().map(File::getAbsolutePath).toList();
@@ -1300,8 +993,8 @@ public class S202Module implements Module {
             return;
         }
         File rootFile = root.toFile();
-        ArchitectureWfxView target = createArchitectureView(titlePrefix + ": " + rootFile.getName());
-        registerArchitectureView(target);
+        ArchitectureWfxView target = viewManager.createArchitectureView(titlePrefix + ": " + rootFile.getName());
+        viewManager.registerArchitectureView(target);
         final ArchitectureView view = target.getArchitectureView();
         final String rootPath = rootFile.getAbsolutePath();
         final S202Project.Source source = new S202Project.Source(sourceKind, List.of(rootPath), rootPath);
@@ -1395,7 +1088,7 @@ public class S202Module implements Module {
 
     private void applyAnalysisResult(AnalysisInputSummary summary, ArchitectureView view,
                                      S202Project.Source source, AnalysisResult result) {
-        refactoringPreviewCuts.clear();
+        previewState.clear();
         // Domain model first so listeners on architectureRoot/metrics can
         // already query scoped data (e.g. quality module on package select).
         view.setDomainModel(result.domainModel());
@@ -1410,8 +1103,8 @@ public class S202Module implements Module {
     private void finishAppliedAnalysisResult(AnalysisInputSummary summary, ArchitectureView view,
                                              S202Project.Source source, AnalysisResult result) {
         view.setQualityMetrics(result.metrics());
-        viewSources.put(view, source);
-        viewInvariantReports.put(view, result.invariants());
+        viewManager.putSource(view, source);
+        viewManager.putInvariants(view, result.invariants());
 
         LayoutInvariantReport invariants = result.invariants();
         String invariantSuffix = invariantSuffix(invariants);
@@ -1453,7 +1146,7 @@ public class S202Module implements Module {
     }
 
     private void saveProject() {
-        ArchitectureWfxView focused = focusedSourceArchitectureView();
+        ArchitectureWfxView focused = viewManager.focusedSourceArchitectureView();
         if (focused == null || focused.getArchitectureView().getDomainModel() == null
                 || focused.getArchitectureView().getRawDependencyModel() == null) {
             showError("Save Project", "There is no loaded analysis to save.");
@@ -1469,7 +1162,7 @@ public class S202Module implements Module {
         recentDirs.setLastProjectFileDirectory(target.getParentFile());
 
         ArchitectureView view = focused.getArchitectureView();
-        S202Project.Source source = viewSources.getOrDefault(view,
+        S202Project.Source source = viewManager.sourceOf(view,
                 new S202Project.Source("UNKNOWN", List.of(), null));
         S202Project project = projectMapper.toProject(
                 appVersion(),
@@ -1477,7 +1170,7 @@ public class S202Module implements Module {
                 view.getRawDependencyModel(),
                 view.getDomainModel(),
                 view.getArchitectureAnnotations(),
-                viewInvariantReports.get(view),
+                viewManager.invariantsOf(view),
                 view.getCycleBreakEdges());
 
         try {
@@ -1507,7 +1200,7 @@ public class S202Module implements Module {
      * (after showing an error) when there is nothing to show or the web bundle is missing.
      */
     private CityView3DServer prepareCity3DServer() {
-        ArchitectureWfxView focused = focusedSourceArchitectureView();
+        ArchitectureWfxView focused = viewManager.focusedSourceArchitectureView();
         ArchitectureView view = focused == null ? null : focused.getArchitectureView();
         if (view == null || view.getArchitectureRoot() == null
                 || view.getDomainModel() == null || view.getRawDependencyModel() == null) {
@@ -1615,7 +1308,7 @@ public class S202Module implements Module {
     }
 
     private void exportQualityReport() {
-        ArchitectureWfxView focused = focusedSourceArchitectureView();
+        ArchitectureWfxView focused = viewManager.focusedSourceArchitectureView();
         if (focused == null || focused.getArchitectureView().getDomainModel() == null
                 || focused.getArchitectureView().getRawDependencyModel() == null
                 || focused.getArchitectureView().getArchitectureRoot() == null) {
@@ -1633,7 +1326,7 @@ public class S202Module implements Module {
         }
 
         ArchitectureView view = focused.getArchitectureView();
-        S202Project.Source source = viewSources.getOrDefault(view,
+        S202Project.Source source = viewManager.sourceOf(view,
                 new S202Project.Source("UNKNOWN", List.of(), null));
         QualityReportInput input = new QualityReportInput(
                 "S202 Quality Report",
@@ -1643,10 +1336,10 @@ public class S202Module implements Module {
                 view.getDomainModel(),
                 view.getArchitectureAnnotations(),
                 view.getQualityMetrics(),
-                viewInvariantReports.get(view));
+                viewManager.invariantsOf(view));
         ArchitectureNode reportRoot = ArchitectureNodeCloner.cloneTree(view.getArchitectureRoot());
         Set<DependencyEdge> reportCycleBreakEdges = Set.copyOf(view.getCycleBreakEdges());
-        Set<DependencyEdge> reportPreviewCuts = Set.copyOf(refactoringPreviewCuts);
+        Set<DependencyEdge> reportPreviewCuts = Set.copyOf(previewState.cuts());
         int scopeImageLimit = qualityReportScopeImageLimit(input);
 
         publishProgress(scopeImageLimit < 5
@@ -1887,8 +1580,8 @@ public class S202Module implements Module {
     private void applyLoadedProject(Path path, LoadedProject loaded) {
         resetProjectUi();
 
-        ArchitectureWfxView target = createArchitectureView();
-        registerArchitectureView(target);
+        ArchitectureWfxView target = viewManager.createArchitectureView();
+        viewManager.registerArchitectureView(target);
         ArchitectureView view = target.getArchitectureView();
         view.setArchitectureAnnotations(loaded.annotations());
         view.setDomainModel(loaded.domainModel());
@@ -1899,8 +1592,8 @@ public class S202Module implements Module {
                 progress -> publishJavaFxBuildProgress("Building JavaFX project view", progress),
                 () -> {
                     view.setQualityMetrics(loaded.metrics());
-                    viewSources.put(view, loaded.project().source());
-                    viewInvariantReports.put(view, loaded.invariants());
+                    viewManager.putSource(view, loaded.project().source());
+                    viewManager.putInvariants(view, loaded.invariants());
 
                     publishProgress(String.format(
                             "Loaded project %s | %d classes | %d levels | Max level %d",
@@ -1917,19 +1610,8 @@ public class S202Module implements Module {
     }
 
     private void resetProjectUi() {
-        WindowManager wm = Lookup.lookup(WindowManager.class);
-        for (View v : new ArrayList<>(wm.getRegisteredViews())) {
-            if (v.getKind() == ViewKind.DOCUMENT) {
-                if (v instanceof ArchitectureWfxView a) {
-                    forgetView(a);
-                }
-                wm.closeView(v);
-            }
-        }
-        tangleViews.clear();
-        viewSources.clear();
-        viewInvariantReports.clear();
-        refactoringPreviewCuts.clear();
+        viewManager.resetDocuments();
+        previewState.clear();
         boundView = null;
         zoomLabelListener = null;
         Lookup.lookup(WindowManager.class).restoreDefaultLayout();
@@ -1992,7 +1674,7 @@ public class S202Module implements Module {
         if (members == null || members.isEmpty()) {
             return;
         }
-        ArchitectureWfxView source = focusedSourceArchitectureView();
+        ArchitectureWfxView source = viewManager.focusedSourceArchitectureView();
         if (source == null) {
             return;
         }
@@ -2032,7 +1714,7 @@ public class S202Module implements Module {
         tangleView.setDomainModel(sourceView.getDomainModel());
         tangleView.setRawDependencyModel(sourceView.getRawDependencyModel());
         tangleView.setCycleBreakEdges(sourceView.getCycleBreakEdges());
-        tangleView.setAppliedTangleCutEdges(refactoringPreviewCuts);
+        tangleView.setAppliedTangleCutEdges(previewState.cuts());
         tangleView.setArchitectureRoot(filteredRoot);
         tangleView.setQualityMetrics(sourceView.getQualityMetrics());
 
@@ -2057,11 +1739,11 @@ public class S202Module implements Module {
      */
     @SuppressWarnings("unchecked")
     private ArchitectureWfxView reusableTangleWrapper(WindowManager wm, String key, String title) {
-        ArchitectureWfxView existing = tangleViews.get(key);
+        ArchitectureWfxView existing = viewManager.tangleViewFor(key);
         if (existing != null && wm.hasRegisteredView(existing)) {
             return existing;
         }
-        viewCounter++;
+        String viewId = viewManager.nextViewId();
         ArchitectureView tangleView = new ArchitectureView();
         tangleView.setTopTanglesScopeOwner(false);
         tangleView.setStatusSink(this::publishStatus);
@@ -2078,18 +1760,15 @@ public class S202Module implements Module {
             tangleView.getStylesheets().add(css.toExternalForm());
         }
         String viewTitle = title == null || title.isBlank() ? "Tangle" : title;
-        ArchitectureWfxView wrapper = new ArchitectureWfxView(
-                ArchitectureWfxView.VIEW_ID_PREFIX + viewCounter,
-                viewTitle,
-                tangleView);
-        registerArchitectureView(wrapper);
-        tangleViews.put(key, wrapper);
+        ArchitectureWfxView wrapper = new ArchitectureWfxView(viewId, viewTitle, tangleView);
+        viewManager.registerArchitectureView(wrapper);
+        viewManager.putTangleView(key, wrapper);
         return wrapper;
     }
 
     private void applyTanglePreviewCutToViews(String from, String to) {
-        refactoringPreviewCuts.add(new DependencyEdge(from, to));
-        for (ArchitectureWfxView wrapper : registeredArchitectureViews()) {
+        previewState.add(new DependencyEdge(from, to));
+        for (ArchitectureWfxView wrapper : viewManager.registeredArchitectureViews()) {
             wrapper.getArchitectureView().applyTangleEdgeCut(from, to);
         }
     }
@@ -2098,24 +1777,17 @@ public class S202Module implements Module {
         if (edges == null || edges.isEmpty()) {
             return;
         }
-        refactoringPreviewCuts.addAll(edges);
-        for (ArchitectureWfxView wrapper : registeredArchitectureViews()) {
+        previewState.addAll(edges);
+        for (ArchitectureWfxView wrapper : viewManager.registeredArchitectureViews()) {
             wrapper.getArchitectureView().applyTangleEdgeCuts(edges);
         }
     }
 
     private void restoreTanglePreviewCutInViews(String from, String to) {
-        refactoringPreviewCuts.remove(new DependencyEdge(from, to));
-        for (ArchitectureWfxView wrapper : registeredArchitectureViews()) {
+        previewState.remove(new DependencyEdge(from, to));
+        for (ArchitectureWfxView wrapper : viewManager.registeredArchitectureViews()) {
             wrapper.getArchitectureView().restoreTangleEdgeCut(from, to);
         }
-    }
-
-    private List<ArchitectureWfxView> registeredArchitectureViews() {
-        return Lookup.lookup(WindowManager.class).getRegisteredViews().stream()
-                .filter(ArchitectureWfxView.class::isInstance)
-                .map(ArchitectureWfxView.class::cast)
-                .toList();
     }
 
     private void publishTangleEdgeSelection(EventBus<EventObject> bus,
@@ -2196,21 +1868,6 @@ public class S202Module implements Module {
             }
         }
         return result;
-    }
-
-    /** Pick a non-tangle architecture tab to use as the source for tangle filtering. */
-    private ArchitectureWfxView focusedSourceArchitectureView() {
-        WindowManager wm = Lookup.lookup(WindowManager.class);
-        View focused = wm.getFocusedView();
-        if (focused instanceof ArchitectureWfxView arch && !tangleViews.containsValue(arch)) {
-            return arch;
-        }
-        return wm.getRegisteredViews().stream()
-                .filter(ArchitectureWfxView.class::isInstance)
-                .map(ArchitectureWfxView.class::cast)
-                .filter(v -> !tangleViews.containsValue(v))
-                .findFirst()
-                .orElse(null);
     }
 
     private void showError(String title, String message) {
