@@ -23,7 +23,7 @@ import de.weigend.s202.reader.DependencyModel;
 import de.weigend.s202.reader.EdgeKind;
 import de.weigend.s202.ui.ArchitectureView;
 import de.weigend.s202.ui.model.ArchitectureNode;
-import de.weigend.s202.ui.wfx.ArchitectureWfxView;
+import de.weigend.s202.ui.wfx.view.ArchitectureWfxView;
 import de.weigend.s202.ui.wfx.events.CutTangleEdgeEvent;
 import de.weigend.s202.ui.wfx.events.CutTangleEdgesEvent;
 import de.weigend.s202.ui.wfx.events.OpenTangleEvent;

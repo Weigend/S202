@@ -13,7 +13,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package de.weigend.s202.ui.wfx;
+package de.weigend.s202.ui.wfx.view;
 
 import de.weigend.s202.ui.ArchitectureView;
 import io.softwareecg.wfx.windowmanager.api.Position;

@@ -42,6 +42,7 @@ import de.weigend.s202.ui.model.ArchitectureNode;
 import de.weigend.s202.ui.model.ArchitectureNodeBuilder;
 import de.weigend.s202.ui.model.ArchitectureNodeCloner;
 import de.weigend.s202.ui.rendering.TangleEdgeRenderer;
+import de.weigend.s202.ui.wfx.view.ArchitectureWfxView;
 import de.weigend.s202.ui.wfx.events.CutTangleEdgeEvent;
 import de.weigend.s202.ui.wfx.events.CutTangleEdgesEvent;
 import de.weigend.s202.ui.wfx.events.MethodSelectionEvent;
