@@ -53,6 +53,7 @@ import de.weigend.s202.ui.wfx.events.OpenTangleEvent;
 import de.weigend.s202.ui.wfx.events.RestoreTangleEdgeEvent;
 import de.weigend.s202.ui.wfx.report.QualityReportView;
 import de.weigend.s202.ui.wfx.report.impl.JavaFxQualityReportImageRenderer;
+import de.weigend.s202.ui.wfx.tangles.TangleEdgeMethodResolver;
 import de.weigend.s202.ui.wfx.tangles.TangleFilter;
 import io.softwareecg.wfx.lookup.api.Lookup;
 import io.softwareecg.wfx.platform.api.EventBus;
@@ -152,10 +153,8 @@ public class S202Module implements Module {
     /** Sentinel source for selection events injected from the browser (to skip echoing them back). */
     private static final Object BROWSER_SELECTION_SOURCE = new Object();
     private boolean city3dSyncWired;
-    private File lastDirectory;
-    private File lastProjectDirectory;
-    private File lastProjectFileDirectory;
-    private File lastReportDirectory;
+    private final RecentDirectories recentDirs = new RecentDirectories();
+    private final ProgressPublisher progressPublisher = new ProgressPublisher(this);
 
     private S202StatusBar statusBar;
 
@@ -255,18 +254,11 @@ public class S202Module implements Module {
     }
 
     private void publishStatus(String message) {
-        publishProgress(message, 0.0);
+        progressPublisher.status(message);
     }
 
-    @SuppressWarnings("unchecked")
     private void publishProgress(String message, double progress) {
-        Runnable publish = () -> Lookup.lookup(EventBus.class)
-                .publish(new ProgressEvent(message, progress, this));
-        if (Platform.isFxApplicationThread()) {
-            publish.run();
-        } else {
-            Platform.runLater(publish);
-        }
+        progressPublisher.progress(message, progress);
     }
 
     private ArchitectureWfxView focusedArchitectureView() {
@@ -958,23 +950,23 @@ public class S202Module implements Module {
             fileChooser.getExtensionFilters().addAll(
                     new FileChooser.ExtensionFilter("JAR Files", "*.jar"),
                     new FileChooser.ExtensionFilter("All Files", "*.*"));
-            if (lastDirectory != null && lastDirectory.isDirectory()) {
-                fileChooser.setInitialDirectory(lastDirectory);
+            if (recentDirs.initialJarDirectory() != null) {
+                fileChooser.setInitialDirectory(recentDirs.initialJarDirectory());
             }
             List<File> picked = fileChooser.showOpenMultipleDialog(owner);
             if (picked == null || picked.isEmpty()) {
                 return List.of();
             }
-            lastDirectory = picked.get(0).getParentFile();
+            recentDirs.setLastDirectory(picked.get(0).getParentFile());
             if (picked.size() == 1) {
                 return picked.stream().map(File::toPath).toList();
             }
-            return SourceSetDialog.chooseSourceSet(applicationWindow.getStage(), lastDirectory, picked)
+            return SourceSetDialog.chooseSourceSet(applicationWindow.getStage(), recentDirs.lastDirectory(), picked)
                     .map(selected -> {
                         if (selected.isEmpty()) {
                             return List.<Path>of();
                         }
-                        lastDirectory = selected.get(0).getParentFile();
+                        recentDirs.setLastDirectory(selected.get(0).getParentFile());
                         return selected.stream().map(File::toPath).toList();
                     })
                     .orElseGet(List::of);
@@ -1029,7 +1021,7 @@ public class S202Module implements Module {
         public List<Path> chooseInput(Window owner) {
             DirectoryChooser chooser = new DirectoryChooser();
             chooser.setTitle(title);
-            File initial = initialSourceDirectory();
+            File initial = recentDirs.initialSourceDirectory();
             if (initial != null) {
                 chooser.setInitialDirectory(initial);
             }
@@ -1037,16 +1029,11 @@ public class S202Module implements Module {
             if (root == null) {
                 return List.of();
             }
-            lastProjectDirectory = root;
+            recentDirs.setLastProjectDirectory(root);
             return List.of(root.toPath());
         }
     }
 
-    private File initialSourceDirectory() {
-        return lastProjectDirectory != null && lastProjectDirectory.isDirectory()
-                ? lastProjectDirectory
-                : (lastDirectory != null && lastDirectory.isDirectory() ? lastDirectory : null);
-    }
 
     private static List<File> toFiles(List<Path> paths) {
         return paths.stream().map(Path::toFile).toList();
@@ -1071,9 +1058,7 @@ public class S202Module implements Module {
                         "settings.gradle", "settings.gradle.kts",
                         "build.gradle", "build.gradle.kts"),
                 new FileChooser.ExtensionFilter("All Files", "*.*"));
-        File initial = lastDirectory != null && lastDirectory.isDirectory()
-                ? lastDirectory
-                : (lastProjectDirectory != null && lastProjectDirectory.isDirectory() ? lastProjectDirectory : null);
+        File initial = recentDirs.initialAnyDirectory();
         if (initial != null) {
             fileChooser.setInitialDirectory(initial);
         }
@@ -1117,23 +1102,23 @@ public class S202Module implements Module {
         if (picked == null || picked.isEmpty()) {
             return;
         }
-        lastDirectory = picked.get(0).getParentFile();
+        recentDirs.setLastDirectory(picked.get(0).getParentFile());
 
         if (picked.size() == 1) {
             loadJarFiles(picked);
             return;
         }
-        SourceSetDialog.chooseSourceSet(applicationWindow.getStage(), lastDirectory, picked)
+        SourceSetDialog.chooseSourceSet(applicationWindow.getStage(), recentDirs.lastDirectory(), picked)
                 .ifPresent(selected -> {
                     if (!selected.isEmpty()) {
-                        lastDirectory = selected.get(0).getParentFile();
+                        recentDirs.setLastDirectory(selected.get(0).getParentFile());
                         loadJarFiles(selected);
                     }
                 });
     }
 
     private void scanMavenProjectAt(File root) {
-        lastProjectDirectory = root;
+        recentDirs.setLastProjectDirectory(root);
         ProjectScanner scanner = requireProjectScanner(MAVEN_SCANNER);
         runProjectScan(scanner.displayName(), root,
                 () -> toScanResult(scanner.scan(root.toPath())),
@@ -1141,7 +1126,7 @@ public class S202Module implements Module {
     }
 
     private void scanGradleProjectAt(File root) {
-        lastProjectDirectory = root;
+        recentDirs.setLastProjectDirectory(root);
         ProjectScanner scanner = requireProjectScanner(GRADLE_SCANNER);
         runProjectScan(scanner.displayName(), root,
                 () -> toScanResult(scanner.scan(root.toPath())),
@@ -1153,9 +1138,7 @@ public class S202Module implements Module {
         chooser.setTitle(title);
         chooser.getExtensionFilters().addAll(filter,
                 new FileChooser.ExtensionFilter("All Files", "*.*"));
-        File initial = lastProjectDirectory != null && lastProjectDirectory.isDirectory()
-                ? lastProjectDirectory
-                : (lastDirectory != null && lastDirectory.isDirectory() ? lastDirectory : null);
+        File initial = recentDirs.initialSourceDirectory();
         if (initial != null) {
             chooser.setInitialDirectory(initial);
         }
@@ -1230,7 +1213,7 @@ public class S202Module implements Module {
         SourceSetDialog.chooseSourceSet(applicationWindow.getStage(), initialDir, jars)
                 .ifPresent(selected -> {
                     if (!selected.isEmpty()) {
-                        lastDirectory = selected.get(0).getParentFile();
+                        recentDirs.setLastDirectory(selected.get(0).getParentFile());
                         loadJarFiles(selected, projectSource(kind, root, selected));
                     }
                 });
@@ -1466,11 +1449,7 @@ public class S202Module implements Module {
     }
 
     private void publishJavaFxBuildProgress(String label, ArchitectureView.BuildProgress progress) {
-        int total = Math.max(1, progress.totalNodes());
-        int processed = Math.min(progress.processedNodes(), total);
-        double fraction = Math.max(0.0, Math.min(1.0, (double) processed / total));
-        double mapped = 0.97 + fraction * 0.025;
-        publishProgress(String.format("%s: %,d/%,d nodes", label, processed, total), mapped);
+        progressPublisher.javaFxBuildProgress(label, progress);
     }
 
     private void saveProject() {
@@ -1487,7 +1466,7 @@ public class S202Module implements Module {
             return;
         }
         target = withDefaultProjectExtension(target);
-        lastProjectFileDirectory = target.getParentFile();
+        recentDirs.setLastProjectFileDirectory(target.getParentFile());
 
         ArchitectureView view = focused.getArchitectureView();
         S202Project.Source source = viewSources.getOrDefault(view,
@@ -1766,7 +1745,7 @@ public class S202Module implements Module {
     private void exportGeneratedQualityReport(Path sourceDirectory) {
         DirectoryChooser chooser = new DirectoryChooser();
         chooser.setTitle("Export Quality Report");
-        File initial = initialReportDirectory();
+        File initial = recentDirs.initialReportDirectory();
         if (initial != null) {
             chooser.setInitialDirectory(initial);
         }
@@ -1774,7 +1753,7 @@ public class S202Module implements Module {
         if (targetDirectory == null) {
             return;
         }
-        lastReportDirectory = targetDirectory;
+        recentDirs.setLastReportDirectory(targetDirectory);
 
         Path target = targetDirectory.toPath();
         if (isInside(sourceDirectory, target)) {
@@ -1862,18 +1841,6 @@ public class S202Module implements Module {
         return 5;
     }
 
-    private File initialReportDirectory() {
-        if (lastReportDirectory != null && lastReportDirectory.isDirectory()) {
-            return lastReportDirectory;
-        }
-        if (lastProjectFileDirectory != null && lastProjectFileDirectory.isDirectory()) {
-            return lastProjectFileDirectory;
-        }
-        if (lastProjectDirectory != null && lastProjectDirectory.isDirectory()) {
-            return lastProjectDirectory;
-        }
-        return lastDirectory != null && lastDirectory.isDirectory() ? lastDirectory : null;
-    }
 
     private void loadProject() {
         FileChooser chooser = projectFileChooser("Load Structure202 Project");
@@ -1881,7 +1848,7 @@ public class S202Module implements Module {
         if (file == null) {
             return;
         }
-        lastProjectFileDirectory = file.getParentFile();
+        recentDirs.setLastProjectFileDirectory(file.getParentFile());
         publishProgress("Loading project: " + file.getName() + "...", -1);
 
         Task<LoadedProject> task = new Task<>() {
@@ -1976,9 +1943,7 @@ public class S202Module implements Module {
                 new FileChooser.ExtensionFilter("Structure202 Project", "*.s202.json"),
                 new FileChooser.ExtensionFilter("JSON Files", "*.json"),
                 new FileChooser.ExtensionFilter("All Files", "*.*"));
-        File initial = lastProjectFileDirectory != null && lastProjectFileDirectory.isDirectory()
-                ? lastProjectFileDirectory
-                : (lastDirectory != null && lastDirectory.isDirectory() ? lastDirectory : null);
+        File initial = recentDirs.initialProjectFileDirectory();
         if (initial != null) {
             chooser.setInitialDirectory(initial);
         }
@@ -2161,117 +2126,15 @@ public class S202Module implements Module {
             bus.publish(new MethodSelectionEvent(null, null, null, tangleView));
             return;
         }
-        TargetMethod targetMethod =
-                firstTargetMethodCalledByDependency(tangleView.getRawDependencyModel(), from, to);
+        TangleEdgeMethodResolver.TargetMethod targetMethod =
+                TangleEdgeMethodResolver.firstTargetMethodCalledByDependency(
+                        tangleView.getRawDependencyModel(), from, to);
         if (targetMethod != null) {
             bus.publish(new MethodSelectionEvent(
                     targetMethod.className(), targetMethod.methodName(), targetMethod.descriptor(), tangleView));
             return;
         }
         bus.publish(new NodeSelectionEvent(to != null ? to : from, tangleView));
-    }
-
-    record TargetMethod(String className, String methodName, String descriptor, int callCount) {}
-
-    static TargetMethod firstTargetMethodCalledByDependency(DependencyModel rawModel,
-                                                            String from,
-                                                            String to) {
-        if (rawModel == null || from == null || to == null) {
-            return null;
-        }
-        DependencyModel.ClassInfo sourceClass = rawModel.getClass(from);
-        if (sourceClass == null) {
-            return null;
-        }
-        Map<String, TargetMethod> candidates = new HashMap<>();
-        for (DependencyModel.MethodInfo sourceMethod : sourceClass.methods.values()) {
-            for (Map.Entry<String, Integer> call : sourceMethod.methodCalls.entrySet()) {
-                String methodCall = call.getKey();
-                if (!callOwnerMatchesTarget(methodCall, to)) {
-                    continue;
-                }
-                String targetMethodName = methodCallName(methodCall);
-                if (targetMethodName == null) {
-                    continue;
-                }
-                Set<String> descriptors = sourceMethod.methodCallDescriptors.get(methodCall);
-                if (descriptors == null || descriptors.isEmpty()) {
-                    addTargetMethodCandidate(candidates, rawModel, to, targetMethodName, null, call.getValue());
-                } else {
-                    for (String descriptor : descriptors) {
-                        addTargetMethodCandidate(candidates, rawModel, to, targetMethodName, descriptor, call.getValue());
-                    }
-                }
-            }
-        }
-        return candidates.values().stream()
-                .sorted(Comparator
-                        .comparingInt(TargetMethod::callCount)
-                        .reversed()
-                        .thenComparing(TargetMethod::methodName)
-                        .thenComparing(method -> method.descriptor() == null ? "" : method.descriptor()))
-                .findFirst()
-                .orElse(null);
-    }
-
-    private static void addTargetMethodCandidate(Map<String, TargetMethod> candidates,
-                                                 DependencyModel rawModel,
-                                                 String targetClass,
-                                                 String methodName,
-                                                 String descriptor,
-                                                 Integer count) {
-        String knownDescriptor = knownTargetDescriptor(rawModel, targetClass, methodName, descriptor);
-        String key = targetClass + "#" + methodName + "#" + (knownDescriptor == null ? "" : knownDescriptor);
-        int callCount = count == null ? 0 : count;
-        TargetMethod existing = candidates.get(key);
-        if (existing == null) {
-            candidates.put(key, new TargetMethod(targetClass, methodName, knownDescriptor, callCount));
-        } else {
-            candidates.put(key, new TargetMethod(
-                    existing.className(), existing.methodName(), existing.descriptor(),
-                    existing.callCount() + callCount));
-        }
-    }
-
-    private static String knownTargetDescriptor(DependencyModel rawModel,
-                                                String targetClass,
-                                                String methodName,
-                                                String descriptor) {
-        if (descriptor == null) {
-            return null;
-        }
-        DependencyModel.ClassInfo targetInfo = rawModel.getClass(targetClass);
-        if (targetInfo == null || targetInfo.getMethod(methodName, descriptor) == null) {
-            return null;
-        }
-        return descriptor;
-    }
-
-    private static boolean callOwnerMatchesTarget(String methodCall, String targetClass) {
-        String owner = methodCallOwner(methodCall);
-        return owner != null
-                && (targetClass.equals(owner) || targetClass.equals(outerClassName(owner)));
-    }
-
-    private static String methodCallOwner(String methodCall) {
-        if (methodCall == null) {
-            return null;
-        }
-        int dot = methodCall.lastIndexOf('.');
-        return dot <= 0 ? null : methodCall.substring(0, dot);
-    }
-
-    private static String methodCallName(String methodCall) {
-        if (methodCall == null) {
-            return null;
-        }
-        int dot = methodCall.lastIndexOf('.');
-        return dot < 0 || dot == methodCall.length() - 1 ? null : methodCall.substring(dot + 1);
-    }
-
-    private static String outerClassName(String className) {
-        int dollar = className.indexOf('$');
-        return dollar < 0 ? className : className.substring(0, dollar);
     }
 
     /**
@@ -2351,12 +2214,6 @@ public class S202Module implements Module {
     }
 
     private void showError(String title, String message) {
-        Platform.runLater(() -> {
-            Alert alert = new Alert(Alert.AlertType.ERROR);
-            alert.setTitle(title);
-            alert.setHeaderText(null);
-            alert.setContentText(message);
-            alert.showAndWait();
-        });
+        Dialogs.showError(title, message);
     }
 }

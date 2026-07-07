@@ -13,7 +13,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package de.weigend.s202.ui.wfx;
+package de.weigend.s202.ui.wfx.tangles;
 
 import de.weigend.s202.reader.DependencyModel;
 import org.junit.jupiter.api.Test;
@@ -21,7 +21,7 @@ import org.junit.jupiter.api.Test;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
 
-class S202ModuleTest {
+class TangleEdgeMethodResolverTest {
 
     @Test
     void edgeSelectionResolvesCalledTargetMethod() {
@@ -40,8 +40,8 @@ class S202ModuleTest {
         model.addClass("pkg.A", caller);
         model.addClass("pkg.B", target);
 
-        S202Module.TargetMethod selected =
-                S202Module.firstTargetMethodCalledByDependency(model, "pkg.A", "pkg.B");
+        TangleEdgeMethodResolver.TargetMethod selected =
+                TangleEdgeMethodResolver.firstTargetMethodCalledByDependency(model, "pkg.A", "pkg.B");
 
         assertEquals("pkg.B", selected.className());
         assertEquals("called", selected.methodName());
@@ -61,8 +61,8 @@ class S202ModuleTest {
         model.addClass("pkg.A", caller);
         model.addClass("pkg.B", target);
 
-        S202Module.TargetMethod selected =
-                S202Module.firstTargetMethodCalledByDependency(model, "pkg.A", "pkg.B");
+        TangleEdgeMethodResolver.TargetMethod selected =
+                TangleEdgeMethodResolver.firstTargetMethodCalledByDependency(model, "pkg.A", "pkg.B");
 
         assertEquals("pkg.B", selected.className());
         assertEquals("called", selected.methodName());
