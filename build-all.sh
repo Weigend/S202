@@ -8,6 +8,8 @@
 #   2. Installs WFX into the local Maven cache (~/.m2) if not already present
 #      (clones https://github.com/Weigend/wfx and runs mvn install -DskipTests)
 #   3. Builds S202
+#   4. Builds the City3D web bundle (city3d/dist) if Node.js 18+ is available
+#      (optional — without it the app runs, only File > Show City3D View is unavailable)
 #
 # Usage:
 #   chmod +x build-all.sh
@@ -113,9 +115,41 @@ echo ""
         || error "S202 build failed. See Maven output above."
 )
 
+# ── Step 3: build the City3D web bundle (optional, needs Node.js 18+) ────────
+
+echo ""
+CITY3D_STATUS="skipped"
+if command -v npm >/dev/null 2>&1 && command -v node >/dev/null 2>&1; then
+    NODE_MAJOR=$(node --version | sed 's/^v\([0-9]*\).*/\1/')
+    if [[ "$NODE_MAJOR" =~ ^[0-9]+$ ]] && [ "$NODE_MAJOR" -ge 18 ]; then
+        info "Node $(node --version)  OK — building the City3D web bundle …"
+        echo ""
+        (
+            cd "$S202_DIR/city3d"
+            npm install --no-audit --no-fund \
+                || error "npm install for City3D failed. See npm output above."
+            npm run build \
+                || error "City3D build failed. See npm output above."
+        )
+        CITY3D_STATUS="built"
+        echo ""
+        info "City3D web bundle built (city3d/dist)."
+    else
+        info "WARNING: Node.js 18+ required for City3D (found $(node --version)) — skipping."
+        info "         The app runs without it; only File > Show City3D View is unavailable."
+    fi
+else
+    info "WARNING: Node.js/npm not found — skipping the City3D web bundle."
+    info "         The app runs without it; only File > Show City3D View is unavailable."
+    info "         To enable it later: install Node.js 18+, then: cd city3d && npm install && npm run build"
+fi
+
 echo ""
 echo "========================================"
 echo "  Build successful!"
+if [ "$CITY3D_STATUS" = "skipped" ]; then
+    echo "  (City3D web bundle skipped — no Node.js 18+)"
+fi
 echo ""
 echo "  Run the application:"
 echo "    mvn javafx:run -pl analyzer"
