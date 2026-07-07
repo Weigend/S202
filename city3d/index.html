@@ -1,0 +1,357 @@
+<!doctype html>
+<html lang="de">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+    <title>City3JS — Manhattan Prototype</title>
+    <style>
+      :root {
+        --fg: #e8f0ff;
+        --accent: #5fc8ff;
+        --panel: rgba(10, 16, 28, 0.62);
+        --panel-brd: rgba(120, 180, 255, 0.18);
+      }
+      * { box-sizing: border-box; }
+      html, body {
+        margin: 0;
+        height: 100%;
+        overflow: hidden;
+        background: #05070d;
+        color: var(--fg);
+        font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+        -webkit-font-smoothing: antialiased;
+      }
+      #app { position: fixed; inset: 0; }
+      canvas { display: block; outline: none; }
+
+      /* ---- Loading screen ---- */
+      #loader {
+        position: fixed; inset: 0; z-index: 50;
+        display: flex; flex-direction: column; gap: 18px;
+        align-items: center; justify-content: center;
+        background: radial-gradient(ellipse at 50% 40%, #0d1830 0%, #05070d 70%);
+        transition: opacity 0.8s ease;
+      }
+      #loader.hidden { opacity: 0; pointer-events: none; }
+      #loader .title {
+        font-size: 13px; letter-spacing: 0.55em; text-transform: uppercase;
+        color: var(--accent); opacity: 0.9; padding-left: 0.55em;
+      }
+      #loader .sub { font-size: 12px; letter-spacing: 0.2em; color: #6f86b0; }
+      .bar { width: 220px; height: 2px; background: rgba(120,180,255,0.15); overflow: hidden; border-radius: 2px; }
+      .bar > i {
+        display: block; height: 100%; width: 35%;
+        background: linear-gradient(90deg, transparent, var(--accent), transparent);
+        animation: slide 1.1s ease-in-out infinite;
+      }
+      @keyframes slide { 0% { transform: translateX(-100%);} 100% { transform: translateX(330%);} }
+
+      /* ---- HUD ---- */
+      .hud {
+        position: fixed; z-index: 20; pointer-events: none;
+        font-size: 12px; line-height: 1.5;
+      }
+      #title-hud { top: 22px; left: 24px; }
+      #title-hud h1 {
+        margin: 0; font-size: 15px; font-weight: 600; letter-spacing: 0.32em;
+        text-transform: uppercase;
+      }
+      #title-hud h1 span { color: var(--accent); }
+      #title-hud p { margin: 4px 0 0; color: #7f97c2; letter-spacing: 0.12em; font-size: 11px; }
+
+      #help {
+        bottom: 22px; left: 24px;
+        background: var(--panel); border: 1px solid var(--panel-brd);
+        border-radius: 12px; padding: 14px 16px; backdrop-filter: blur(10px);
+        max-width: 280px;
+      }
+      #help b { color: var(--accent); font-weight: 600; }
+      #help .k {
+        display: inline-block; min-width: 20px; text-align: center;
+        padding: 1px 6px; margin: 0 1px;
+        background: rgba(120,180,255,0.12); border: 1px solid var(--panel-brd);
+        border-radius: 5px; font-size: 11px; color: #cfe0ff;
+      }
+      #help .row { display: flex; justify-content: space-between; gap: 12px; margin-top: 4px; }
+      #help .row span:last-child { color: #9fb4da; }
+
+      /* ---- Control panel ---- */
+      #panel {
+        position: fixed; z-index: 20; top: 22px; right: 24px;
+        background: var(--panel); border: 1px solid var(--panel-brd);
+        border-radius: 12px; padding: 14px 16px; backdrop-filter: blur(10px);
+        width: 230px; font-size: 12px;
+      }
+      #panel h2 {
+        margin: 0 0 10px; font-size: 10px; letter-spacing: 0.28em;
+        text-transform: uppercase; color: #7f97c2; font-weight: 600;
+        display: flex; justify-content: space-between; align-items: center; gap: 12px;
+        cursor: pointer; user-select: none;
+      }
+      .chev { color: var(--accent); transition: transform 0.2s; font-size: 11px; }
+      .collapsed .chev { transform: rotate(-90deg); }
+      #panel.collapsed { width: auto; }
+      #panel.collapsed #panel-body { display: none; }
+      #panel.collapsed h2 { margin-bottom: 0; }
+      #help { pointer-events: auto; }
+      #help .head {
+        font-size: 10px; letter-spacing: 0.28em; text-transform: uppercase;
+        color: #7f97c2; font-weight: 600; margin-bottom: 8px;
+        display: flex; justify-content: space-between; align-items: center; gap: 12px;
+        cursor: pointer; user-select: none;
+      }
+      #help.collapsed #help-body { display: none; }
+      #help.collapsed .head { margin-bottom: 0; }
+      .ctl { margin-bottom: 12px; }
+      .ctl label { display: flex; justify-content: space-between; margin-bottom: 5px; color: #c4d4f0; }
+      .ctl label span { color: var(--accent); font-variant-numeric: tabular-nums; }
+      input[type="range"] {
+        -webkit-appearance: none; appearance: none; width: 100%; height: 3px;
+        background: rgba(120,180,255,0.2); border-radius: 3px; outline: none;
+      }
+      input[type="range"]::-webkit-slider-thumb {
+        -webkit-appearance: none; width: 13px; height: 13px; border-radius: 50%;
+        background: var(--accent); cursor: pointer; box-shadow: 0 0 8px var(--accent);
+      }
+      input[type="range"]::-moz-range-thumb {
+        width: 13px; height: 13px; border-radius: 50%; border: none;
+        background: var(--accent); cursor: pointer; box-shadow: 0 0 8px var(--accent);
+      }
+      .btn-row { display: flex; gap: 8px; }
+      button.ui {
+        flex: 1; pointer-events: auto; cursor: pointer;
+        background: rgba(120,180,255,0.1); color: #cfe0ff;
+        border: 1px solid var(--panel-brd); border-radius: 8px;
+        padding: 7px 0; font-size: 11px; letter-spacing: 0.08em;
+        transition: background 0.15s, border-color 0.15s;
+      }
+      button.ui:hover { background: rgba(120,180,255,0.22); border-color: var(--accent); }
+      button.ui.active { background: var(--accent); color: #05070d; border-color: var(--accent); }
+      button.ui.sm { font-size: 10px; letter-spacing: 0.03em; padding: 6px 0; }
+      button.ui.viol.active { background: #ff5a4d; border-color: #ff5a4d; color: #1a0505; }
+      #panel { pointer-events: auto; }
+      #dep-stats .n { color: var(--accent); }
+      #dep-stats .v { color: #ff7a70; }
+
+      /* ---- Suche (oben Mitte) ---- */
+      #search-box {
+        position: fixed; z-index: 30; top: 20px; left: 50%; transform: translateX(-50%);
+        width: 340px; pointer-events: auto;
+      }
+      #search {
+        width: 100%; padding: 9px 14px; font-size: 12.5px; color: var(--fg);
+        background: var(--panel); border: 1px solid var(--panel-brd); border-radius: 10px;
+        backdrop-filter: blur(10px); outline: none;
+      }
+      #search:focus { border-color: var(--accent); box-shadow: 0 0 12px rgba(95,200,255,0.25); }
+      #search::placeholder { color: #62779f; }
+      #search-results {
+        margin-top: 6px; border-radius: 10px; overflow: hidden; display: none;
+        background: rgba(10, 16, 28, 0.92); border: 1px solid var(--panel-brd);
+        backdrop-filter: blur(12px); max-height: 320px; overflow-y: auto;
+      }
+      .sr { padding: 8px 14px; cursor: pointer; font-size: 12px; }
+      .sr:hover, .sr.hot { background: rgba(120,180,255,0.14); }
+      .sr .srk { float: right; font-size: 10px; color: #7f97c2; letter-spacing: 0.08em; }
+      .sr .srf { color: #62779f; font-size: 10.5px; word-break: break-all; }
+
+      /* ---- Legende (unten rechts) ---- */
+      #legend-wrap { position: fixed; z-index: 20; right: 24px; bottom: 44px; pointer-events: auto;
+        display: flex; flex-direction: column; align-items: flex-end; gap: 8px; }
+      #legend-wrap > button { flex: none; padding: 6px 14px; }
+      #legend {
+        display: none; width: 250px; padding: 12px 14px; font-size: 11px; line-height: 1.6;
+        background: var(--panel); border: 1px solid var(--panel-brd); border-radius: 12px;
+        backdrop-filter: blur(10px);
+      }
+      #legend.open { display: block; }
+      #legend h3 { margin: 8px 0 4px; font-size: 9.5px; letter-spacing: 0.24em;
+        text-transform: uppercase; color: #7f97c2; font-weight: 600; }
+      #legend h3:first-child { margin-top: 0; }
+      .lg { display: flex; align-items: center; gap: 8px; color: #c4d4f0; flex-wrap: wrap; }
+      .lg .sw { flex: none; width: 14px; height: 10px; border-radius: 2px; }
+      .lg .ln { flex: none; width: 16px; height: 2px; border-radius: 2px; }
+      .lg .dot { flex: none; width: 8px; height: 8px; border-radius: 50%; margin: 0 4px 0 3px; }
+      @keyframes blink { 0%, 55% { opacity: 1; } 70%, 100% { opacity: 0.15; } }
+
+      /* ---- Abhängigkeits-Chips im Info-Panel ---- */
+      .dep-sec { margin-top: 10px; }
+      .dep-title { color: #9fb4da; margin-bottom: 5px; }
+      .dep-wrap { display: flex; flex-wrap: wrap; gap: 4px; }
+      .dep {
+        padding: 2px 8px; border-radius: 6px; font-size: 10.5px; cursor: pointer;
+        background: rgba(120,180,255,0.10); border: 1px solid rgba(120,180,255,0.22);
+        color: #cfe0ff; transition: background 0.15s;
+      }
+      .dep:hover { background: rgba(120,180,255,0.28); }
+      .dep.out { border-color: rgba(255,178,77,0.45); color: #ffd9a8; }
+      .dep.in { border-color: rgba(77,230,200,0.4); color: #b3f3e4; }
+      .dep.viol { border-color: rgba(255,80,70,0.55); color: #ffb4ac; background: rgba(255,80,70,0.1); }
+      .dep-more { color: #62779f; font-size: 10.5px; padding: 2px 4px; }
+
+      .credit { position: fixed; bottom: 22px; right: 24px; z-index: 20;
+        color: #44557a; font-size: 10px; letter-spacing: 0.18em; }
+
+      /* ---- Hinweis während der Verfolgungsfahrt ---- */
+      #follow-hint {
+        position: fixed; z-index: 30; bottom: 26px; left: 50%; transform: translateX(-50%);
+        display: none; padding: 8px 18px; font-size: 12px; letter-spacing: 0.08em;
+        background: var(--panel); border: 1px solid var(--panel-brd); border-radius: 10px;
+        backdrop-filter: blur(10px); color: #cfe0ff; pointer-events: none;
+      }
+
+      /* ---- Class info overlay (on click) ---- */
+      #info {
+        position: fixed; z-index: 25; left: 24px; top: 50%; transform: translateY(-50%);
+        background: var(--panel); border: 1px solid var(--panel-brd);
+        border-radius: 12px; padding: 14px 16px; backdrop-filter: blur(10px);
+        width: 300px; font-size: 12px; line-height: 1.55; pointer-events: auto;
+      }
+      #info .cls { font-size: 15px; font-weight: 600; color: var(--fg); padding-right: 18px; }
+      #info .fqn { color: #7f97c2; word-break: break-all; margin: 3px 0 10px; font-size: 11px; }
+      #info .row { display: flex; justify-content: space-between; gap: 16px; }
+      #info .k { color: #9fb4da; }
+      #info .v { color: var(--accent); font-variant-numeric: tabular-nums; }
+      #info .tag { display: inline-block; padding: 1px 7px; border-radius: 6px; font-size: 10px; letter-spacing: 0.06em; vertical-align: middle; }
+      #info .cycle { background: rgba(248,113,113,0.18); color: #fca5a5; }
+      #info .iface { background: rgba(95,200,255,0.16); color: var(--accent); }
+      #info .close { position: absolute; top: 10px; right: 12px; cursor: pointer; color: #7f97c2; font-size: 16px; line-height: 1; }
+      #info .close:hover { color: var(--fg); }
+    </style>
+  </head>
+  <body>
+    <div id="app"></div>
+
+    <div id="info" style="display:none"></div>
+
+    <div id="loader">
+      <div class="title">City3D</div>
+      <div class="bar"><i></i></div>
+      <div class="sub">baue software-stadt…</div>
+    </div>
+
+    <div id="title-hud" class="hud">
+      <h1>STRUCTURE<span>202</span></h1>
+      <p>Software City · data-driven (City3JS view)</p>
+      <p id="perf" style="margin-top:6px; color:#5fc8ff; font-variant-numeric:tabular-nums;">– fps</p>
+    </div>
+
+    <div id="help" class="hud">
+      <div class="head" id="help-head">Navigation <span class="chev">▾</span></div>
+      <div id="help-body">
+        <div class="row"><span><b>Orbit</b> · Maus ziehen</span><span>drehen</span></div>
+        <div class="row"><span>Scroll</span><span>zoom</span></div>
+        <div class="row"><span class="k">F</span> Fly-Modus</div>
+        <div class="row"><span><b>🎥 Rundfahrt</b> · Pod-Klick → 📍</span><span>Mitfahrt</span></div>
+        <div class="row" id="fly-help" style="display:none; flex-direction:column; align-items:flex-start; gap:2px;">
+          <span><span class="k">W</span><span class="k">A</span><span class="k">S</span><span class="k">D</span> bewegen</span>
+          <span><span class="k">Q</span><span class="k">E</span> hoch/runter · <span class="k">⇧</span> boost</span>
+          <span><span class="k">Esc</span> Maus freigeben</span>
+        </div>
+      </div>
+    </div>
+
+    <div id="panel">
+      <h2 id="panel-head">Einstellungen <span class="chev">▾</span></h2>
+      <div id="panel-body">
+      <div class="ctl">
+        <label>Tageszeit <span id="v-time">Blaue Stunde</span></label>
+        <input id="s-time" type="range" min="0" max="1" step="0.001" value="0.11" />
+      </div>
+      <div class="ctl">
+        <label>Bloom <span id="v-bloom">0.22</span></label>
+        <input id="s-bloom" type="range" min="0" max="1.5" step="0.01" value="0.22" />
+      </div>
+      <div class="ctl">
+        <label>Nebel <span id="v-fog">1.0</span></label>
+        <input id="s-fog" type="range" min="0" max="3" step="0.01" value="1.0" />
+      </div>
+      <div class="ctl">
+        <label>Nässe / Wetter <span id="v-wet">0.0</span></label>
+        <input id="s-wet" type="range" min="0" max="1" step="0.01" value="0.0" />
+      </div>
+      <div class="ctl">
+        <label>Verkehr <span id="v-traffic">50%</span></label>
+        <input id="s-traffic" type="range" min="0" max="1" step="0.01" value="0.5" />
+      </div>
+      <div class="ctl">
+        <label>Tempo <span id="v-speed">×1.00</span></label>
+        <input id="s-speed" type="range" min="0.15" max="2" step="0.05" value="1" />
+      </div>
+      <div class="ctl">
+        <label>Abhängigkeiten <span id="dep-stats"></span></label>
+        <div class="btn-row">
+          <button class="ui sm" id="b-dep-off">Aus</button>
+          <button class="ui sm active" id="b-dep-sel">Auswahl</button>
+          <button class="ui sm" id="b-dep-all">Alle</button>
+          <button class="ui sm viol" id="b-dep-viol">Verstöße</button>
+        </div>
+      </div>
+      <div class="ctl">
+        <label>Metrik-Licht <span style="color:#7f97c2">Fenster</span></label>
+        <div class="btn-row">
+          <button class="ui sm active" id="b-met-off">Aus</button>
+          <button class="ui sm" id="b-met-fanin">Fan-In</button>
+          <button class="ui sm" id="b-met-fanout">Fan-Out</button>
+          <button class="ui sm" id="b-met-methods">Meth.</button>
+        </div>
+      </div>
+      <div class="ctl">
+        <div class="btn-row">
+          <button class="ui active" id="b-ssao" title="Umgebungsverschattung — bei riesigen Architekturen abschalten für mehr FPS">SSAO</button>
+          <button class="ui" id="b-hotspots" title="Meistbefahrene Kreuzungen hervorheben">Hotspots</button>
+        </div>
+      </div>
+      <div class="ctl">
+        <div class="btn-row">
+          <button class="ui" id="b-tour" title="Kamera folgt einem zufälligen Fahrzeug">🎥 Rundfahrt</button>
+        </div>
+      </div>
+      <div class="ctl">
+        <div class="btn-row">
+          <button class="ui sm active" id="b-cinematic">Kino-Kamera</button>
+          <button class="ui sm" id="b-cycle">Zeitraffer</button>
+          <button class="ui sm" id="b-regen">Neu bauen</button>
+        </div>
+      </div>
+      </div>
+    </div>
+
+    <div id="search-box">
+      <input id="search" type="text" placeholder="Klasse oder Paket suchen …  ( / )" autocomplete="off" spellcheck="false" />
+      <div id="search-results"></div>
+    </div>
+
+    <div id="legend-wrap">
+      <div id="legend">
+        <h3>Gebäude</h3>
+        <div class="lg"><span class="sw" style="background:linear-gradient(120deg,#20313d,#3a4c58)"></span> Glas = hohes Level · Interface</div>
+        <div class="lg"><span class="sw" style="background:#8b8478"></span> Stein / <span class="sw" style="background:#5e3021"></span> Backstein = Mitte</div>
+        <div class="lg"><span class="sw" style="background:#6a6c68"></span> Beton = Basis-Level (unten)</div>
+        <div class="lg">Höhe = Methoden · Fläche = Fan-In/Out</div>
+        <div class="lg">Terrassen = Paket-Verschachtelung</div>
+        <h3>Abhängigkeiten</h3>
+        <div class="lg"><span class="ln" style="background:#3fa8ff"></span> regelkonform (Level fällt)</div>
+        <div class="lg"><span class="ln" style="background:#ff4040"></span> Verstoß: Level steigt (aufwärts)</div>
+        <div class="lg"><span class="ln" style="background:#ffb24d"></span> ausgehend · <span class="ln" style="background:#4de6c8"></span> eingehend</div>
+        <h3>Verkehr (klickbar)</h3>
+        <div class="lg">🚕 Cab = paketübergreifend</div>
+        <div class="lg">🚶 Figur = paketlokal (Gehsteig)</div>
+        <div class="lg"><span class="dot" style="background:#59d0ff"></span> Dachleuchte/Figur cyan = regelkonform</div>
+        <div class="lg"><span class="dot" style="background:#ff5040"></span> rot = Verstoß · Tempo = Level-Sprung</div>
+        <div class="lg"><span class="dot" style="background:#ffa028"></span> Hotspots (Schalter): Glühen = viele Routen über diese Kreuzung</div>
+        <div class="lg">Klick auf Pod: Fahrt-Info + 📍 Verfolgen · 🎥 Rundfahrt = Zufalls-Pod</div>
+        <h3>Warnsignale</h3>
+        <div class="lg"><span class="dot" style="background:#ff3020; box-shadow:0 0 6px #ff3020; animation: blink 1.6s infinite"></span> Dach-Beacon = Klasse im Zyklus</div>
+        <div class="lg"><span class="sw" style="background:#8a3b34"></span> rote Plattform = Paket-Tangle</div>
+      </div>
+      <button class="ui" id="b-legend">Legende</button>
+    </div>
+
+    <div id="follow-hint">🎥 Verfolgungsfahrt — <b>Esc</b> oder Klick beendet</div>
+
+    <div class="credit">WEBGL · THREE.JS</div>
+
+    <script type="module" src="/src/main.js"></script>
+  </body>
+</html>
