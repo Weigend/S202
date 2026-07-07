@@ -131,14 +131,6 @@ public class ArchitectureView extends BorderPane {
     private ArchitectureTreeBuilder treeBuilder;
     private ZoomController zoomController;
 
-    // Pending tangle visualisation snapshot, applied once setArchitectureRoot
-    // (re-)builds the renderer. Set by setTangleVisualization before the root
-    // is assigned, or restored after a refreshLayout.
-    private List<DependencyEdge> pendingTangleEdges;
-    private String pendingTangleSelFrom;
-    private String pendingTangleSelTo;
-    private Set<DependencyEdge> cycleBreakEdges = Set.of();
-    private final Set<DependencyEdge> appliedCutEdges = new HashSet<>();
 
     // Lines need redraw after zoom/scroll changes (perf optimization).
     private boolean linesNeedUpdate = false;
@@ -149,18 +141,13 @@ public class ArchitectureView extends BorderPane {
     private final PulseCoalescer arrowsCoalescer =
             new PulseCoalescer(javafx.application.Platform::runLater, this::flushArrowsRedraw);
 
-    // What-If layer: drives the orange "moved" glow on the affected boxes.
-    // Cleared on every fresh analysis (setRawDependencyModel with a non-null
-    // model). The structural truth of where each box currently sits lives in
-    // {@link #whatIfArchitecture}; this set only tracks "user touched it" for
-    // the cosmetic decoration.
-    private final Set<String> movedFqns = new HashSet<>();
-    private ArchitectureDragController.DropListener whatIfDropListener;
-
-    // Undo/redo for What-If moves.
-    private final WhatIfUndoManager undoManager = new WhatIfUndoManager();
     // Top-level VBox of the current layout — used by applyMoveToScene for root-level moves.
     private VBox whatIfRootContainer;
+
+    // Feature-Controller (nach setupUI initialisiert, s. Konstruktor).
+    private final TangleOverlayController tangleOverlay;
+    private final WhatIfEditController whatIfEdit;
+    private final ScopeAndReportController scopeReport;
 
     // Pulses every time the arrow overlay finishes a redraw. WFX side panels
     // (e.g. the Dependencies module) can subscribe to refresh themselves.
@@ -172,9 +159,6 @@ public class ArchitectureView extends BorderPane {
     private Consumer<String> nodeSelectionSink = fqn -> { /* no-op default */ };
     private final Consumer<String> graphSelectionSink = this::handleGraphSelectionChanged;
     private boolean suppressSelectionSink = false;
-    private BiConsumer<String, String> tangleEdgeClickedSink = (a, b) -> { /* no-op default */ };
-    private BiConsumer<String, String> tangleEdgeCutSink = (a, b) -> { /* no-op default */ };
-    private BiConsumer<String, String> tangleEdgeRestoreSink = (a, b) -> { /* no-op default */ };
 
     // Externally bindable settings.
     private final IntegerProperty packageDepth = new SimpleIntegerProperty(3);
@@ -196,7 +180,6 @@ public class ArchitectureView extends BorderPane {
     private boolean skipTransparentTopLevelPackages = true;
     private ArchitectureNode scopeExtensionSourceRoot;
     private ArchitectureViewStyle viewStyle = ArchitectureViewStyle.LAYERED;
-    private final java.util.LinkedHashMap<String, String> plannedPackageNames = new java.util.LinkedHashMap<>();
     private static final Set<ViolationKind> LAYERED_VIOLATION_OVERLAY_KINDS =
             Set.of(ViolationKind.UPWARD);
     private static final Set<ViolationKind> COMPONENT_VIOLATION_OVERLAY_KINDS =
@@ -211,6 +194,44 @@ public class ArchitectureView extends BorderPane {
 
     public ArchitectureView() {
         setupUI();
+        tangleOverlay = new TangleOverlayController(tanglePane, this::setStatus);
+        whatIfEdit = new WhatIfEditController(
+                this,
+                elementRegistry,
+                arrowsCoalescer,
+                this::setStatus,
+                projection::getWhatIfArchitecture,
+                this::getViewStyle,
+                () -> whatIfRootContainer,
+                new WhatIfEditController.ComponentApiAnnotator() {
+                    @Override
+                    public void addToApi(String fqn) {
+                        setArchitectureAnnotations(getArchitectureAnnotations().withComponentApiIncluded(fqn));
+                        refreshStyleProjection("Added to API: " + fqn);
+                    }
+
+                    @Override
+                    public void removeFromApi(String fqn) {
+                        setArchitectureAnnotations(getArchitectureAnnotations().withComponentApiExcluded(fqn));
+                        refreshStyleProjection("Removed from API: " + fqn);
+                    }
+                },
+                this::resetVisualLayout,
+                showWhatIfViolations);
+        scopeReport = new ScopeAndReportController(
+                elementRegistry,
+                this::setStatus,
+                () -> currentRootNode,
+                () -> scopeExtensionSourceRoot,
+                this::getViewStyle,
+                () -> getScene() == null ? null : getScene().getWindow(),
+                this::getArchitectureAnnotations,
+                () -> whatIfEdit.undoManager().effectiveMoves(),
+                tangleOverlay::appliedCutEdges,
+                graphSelectionSink,
+                this::setArchitectureRoot,
+                this::selectByFullName,
+                this::refreshStyleProjection);
         wirePropertyListeners();
     }
 
@@ -692,8 +713,8 @@ public class ArchitectureView extends BorderPane {
         if (preservedState != null) {
             restoreExpansionState(topLevelContainer, preservedState);
         }
-        if (viewStyle == ArchitectureViewStyle.COMPONENT && !plannedPackageNames.isEmpty()) {
-            injectPlannedPackagesIntoScene(topLevelContainer);
+        if (viewStyle == ArchitectureViewStyle.COMPONENT && scopeReport.hasPlannedPackages()) {
+            scopeReport.injectPlannedPackagesIntoScene(topLevelContainer);
         }
         dependencyPane.getChildren().clear();
         dependencyPane.setVisible(false);
@@ -710,7 +731,7 @@ public class ArchitectureView extends BorderPane {
 
         StackPane contentWithOverlay = new StackPane();
         contentWithOverlay.getChildren().addAll(topLevelContainer, overlayPane);
-        installScopeExtensionContextMenu(contentWithOverlay);
+        scopeReport.installScopeExtensionContextMenu(contentWithOverlay);
 
         this.zoomableContent = contentWithOverlay;
 
@@ -757,11 +778,7 @@ public class ArchitectureView extends BorderPane {
 
         tangleRenderer = new TangleEdgeRenderer(tanglePane, elementRegistry, this::setStatus);
         tangleRenderer.setCoordinateContext(zoomableContent, overlayPane);
-        tangleRenderer.setOnEdgeClicked(this::handleTangleEdgeClicked);
-        tangleRenderer.setOnEdgeCut(this::handleTangleEdgeCut);
-        tangleRenderer.setOnEdgeRestore(this::handleTangleEdgeRestore);
-        tangleRenderer.setCycleBreakEdges(cycleBreakEdges);
-        tangleRenderer.setAppliedCutEdges(appliedCutEdges);
+        tangleOverlay.attachRenderer(tangleRenderer);
         tangleRenderer.setShowDebugLines(showTangleDebugLines.get());
 
         dependencyRenderer.clearDependencyArrows();
@@ -782,11 +799,7 @@ public class ArchitectureView extends BorderPane {
 
         // Re-apply any pending tangle visualisation now that the renderer
         // exists and the new tree is in place.
-        if (pendingTangleEdges != null) {
-            tangleRenderer.setEdges(pendingTangleEdges);
-            tangleRenderer.setSelectedEdge(pendingTangleSelFrom, pendingTangleSelTo);
-            tanglePane.setVisible(true);
-        }
+        tangleOverlay.reapplyPendingEdges();
 
         setStatus("Architecture loaded: " + rootNode.getLevelCount() + " levels");
 
@@ -795,320 +808,8 @@ public class ArchitectureView extends BorderPane {
         architectureRoot.set(rootNode);
     }
 
-    private void installScopeExtensionContextMenu(javafx.scene.Node target) {
-        boolean componentMode = viewStyle == ArchitectureViewStyle.COMPONENT;
-        if (scopeExtensionSourceRoot == null && !componentMode) {
-            target.setOnContextMenuRequested(null);
-            return;
-        }
-
-        target.setOnContextMenuRequested(event -> {
-            ContextMenu menu = new ContextMenu();
-            if (componentMode) {
-                MenuItem addPkg = new MenuItem("Add Planned Package...");
-                addPkg.setOnAction(action -> showAddPlannedPackageDialog());
-                menu.getItems().add(addPkg);
-                MenuItem reportItem = new MenuItem("Refactoring Report...");
-                reportItem.setOnAction(action -> showRefactoringReport());
-                menu.getItems().add(reportItem);
-            }
-            if (scopeExtensionSourceRoot != null) {
-                MenuItem addToScope = new MenuItem("Add to Scope...");
-                addToScope.setOnAction(action -> showScopeExtensionDialog());
-                menu.getItems().add(addToScope);
-            }
-            if (!menu.getItems().isEmpty()) {
-                menu.show(target, event.getScreenX(), event.getScreenY());
-                event.consume();
-            }
-        });
-    }
-
-    private void showScopeExtensionDialog() {
-        if (scopeExtensionSourceRoot == null || currentRootNode == null) {
-            return;
-        }
-
-        List<ScopeExtensionModel.Candidate> candidates =
-                ScopeExtensionModel.candidates(scopeExtensionSourceRoot, currentRootNode);
-        if (candidates.isEmpty()) {
-            setStatus("Scope already contains all packages and classes");
-            return;
-        }
-
-        Dialog<ScopeExtensionModel.Candidate> dialog = new Dialog<>();
-        dialog.setTitle("Add to Scope");
-        dialog.setHeaderText("Select a package or class");
-        if (getScene() != null && getScene().getWindow() != null) {
-            dialog.initOwner(getScene().getWindow());
-        }
-
-        ButtonType addButtonType = new ButtonType("Add", ButtonBar.ButtonData.OK_DONE);
-        DialogPane dialogPane = dialog.getDialogPane();
-        dialogPane.getButtonTypes().addAll(addButtonType, ButtonType.CANCEL);
-
-        TextField filterField = new TextField();
-        filterField.setPromptText("Filter packages/classes");
-
-        ObservableList<ScopeExtensionModel.Candidate> items = FXCollections.observableArrayList(candidates);
-        FilteredList<ScopeExtensionModel.Candidate> filteredItems = new FilteredList<>(items, item -> true);
-        filterField.textProperty().addListener((obs, oldValue, newValue) -> {
-            String query = newValue == null ? "" : newValue.trim().toLowerCase(Locale.ROOT);
-            filteredItems.setPredicate(item -> query.isEmpty()
-                    || item.fullName().toLowerCase(Locale.ROOT).contains(query)
-                    || item.kind().toLowerCase(Locale.ROOT).contains(query));
-        });
-
-        ListView<ScopeExtensionModel.Candidate> candidateList = new ListView<>(filteredItems);
-        candidateList.setPrefWidth(620);
-        candidateList.setPrefHeight(420);
-        candidateList.setCellFactory(view -> new ListCell<>() {
-            @Override
-            protected void updateItem(ScopeExtensionModel.Candidate item, boolean empty) {
-                super.updateItem(item, empty);
-                setText(empty || item == null ? null : item.label());
-            }
-        });
-        candidateList.setOnMouseClicked(event -> {
-            if (event.getButton() == MouseButton.PRIMARY
-                    && event.getClickCount() == 2
-                    && candidateList.getSelectionModel().getSelectedItem() != null) {
-                dialog.setResult(candidateList.getSelectionModel().getSelectedItem());
-                dialog.close();
-            }
-        });
-
-        javafx.scene.Node addButton = dialogPane.lookupButton(addButtonType);
-        addButton.disableProperty().bind(candidateList.getSelectionModel().selectedItemProperty().isNull());
-
-        VBox content = new VBox(8, filterField, candidateList);
-        dialogPane.setContent(content);
-        dialog.setResultConverter(button -> button == addButtonType
-                ? candidateList.getSelectionModel().getSelectedItem()
-                : null);
-
-        Optional<ScopeExtensionModel.Candidate> selected = dialog.showAndWait();
-        selected.ifPresent(this::addScopeCandidate);
-    }
-
-    private void addScopeCandidate(ScopeExtensionModel.Candidate candidate) {
-        if (candidate == null || currentRootNode == null || scopeExtensionSourceRoot == null) {
-            return;
-        }
-
-        ArchitectureNode extendedRoot = ArchitectureNodeCloner.cloneTree(currentRootNode);
-        boolean added = ScopeExtensionModel.addToScope(
-                extendedRoot,
-                scopeExtensionSourceRoot,
-                candidate.fullName());
-        if (!added) {
-            setStatus("Scope already contains " + candidate.fullName());
-            return;
-        }
-
-        setArchitectureRoot(extendedRoot);
-        selectByFullName(candidate.fullName());
-        setStatus("Scope extended: " + candidate.fullName());
-    }
-
-    private void showAddPlannedPackageDialog() {
-        javafx.scene.control.TextInputDialog dialog = new javafx.scene.control.TextInputDialog();
-        dialog.setTitle("Add Planned Package");
-        dialog.setHeaderText("Enter a name for the new planned package");
-        dialog.setContentText("Package name:");
-        if (getScene() != null && getScene().getWindow() != null) {
-            dialog.initOwner(getScene().getWindow());
-        }
-        dialog.showAndWait()
-                .map(String::trim)
-                .filter(name -> !name.isEmpty())
-                .ifPresent(name -> {
-                    String fqn = "virtual-pkg-" + java.util.UUID.randomUUID().toString().replace("-", "");
-                    plannedPackageNames.put(fqn, name);
-                    refreshStyleProjection("Added planned package: " + name);
-                });
-    }
-
-    private void showRenamePlannedPackageDialog(String fqn) {
-        String currentName = plannedPackageNames.getOrDefault(fqn, "");
-        javafx.scene.control.TextInputDialog dialog = new javafx.scene.control.TextInputDialog(currentName);
-        dialog.setTitle("Rename Package");
-        dialog.setHeaderText("Enter a new name for the planned package");
-        dialog.setContentText("Package name:");
-        if (getScene() != null && getScene().getWindow() != null) {
-            dialog.initOwner(getScene().getWindow());
-        }
-        dialog.showAndWait()
-                .map(String::trim)
-                .filter(name -> !name.isEmpty() && !name.equals(currentName))
-                .ifPresent(name -> {
-                    plannedPackageNames.put(fqn, name);
-                    refreshStyleProjection("Renamed planned package to: " + name);
-                });
-    }
-
-    private void deletePlannedPackage(String fqn) {
-        String name = plannedPackageNames.remove(fqn);
-        if (name != null) {
-            refreshStyleProjection("Deleted planned package: " + name);
-        }
-    }
-
     public void showRefactoringReport() {
-        String json = buildRefactoringReportJson();
-
-        javafx.scene.control.TextArea area = new javafx.scene.control.TextArea(json);
-        area.setEditable(false);
-        area.setWrapText(false);
-        area.setFont(javafx.scene.text.Font.font("Monospaced", 12));
-        area.setPrefRowCount(28);
-        area.setPrefColumnCount(80);
-
-        javafx.scene.control.ButtonType copyButton = new javafx.scene.control.ButtonType(
-                "Copy to Clipboard", javafx.scene.control.ButtonBar.ButtonData.LEFT);
-        javafx.scene.control.ButtonType closeButton = javafx.scene.control.ButtonType.CLOSE;
-
-        javafx.scene.control.Dialog<Void> dialog = new javafx.scene.control.Dialog<>();
-        dialog.setTitle("Refactoring Report");
-        dialog.setHeaderText("All architecture changes made in this session — paste into an AI prompt.");
-        if (getScene() != null && getScene().getWindow() != null) {
-            dialog.initOwner(getScene().getWindow());
-        }
-        dialog.getDialogPane().getButtonTypes().addAll(copyButton, closeButton);
-        dialog.getDialogPane().setContent(area);
-        dialog.getDialogPane().setPrefSize(820, 560);
-
-        javafx.scene.Node copyNode = dialog.getDialogPane().lookupButton(copyButton);
-        copyNode.addEventFilter(javafx.scene.input.MouseEvent.MOUSE_RELEASED, e -> {
-            javafx.scene.input.ClipboardContent cc = new javafx.scene.input.ClipboardContent();
-            cc.putString(json);
-            javafx.scene.input.Clipboard.getSystemClipboard().setContent(cc);
-            e.consume();
-        });
-
-        dialog.showAndWait();
-    }
-
-    private String buildRefactoringReportJson() {
-        // Deduplicate moves: keep only the last move per FQN (latest destination wins).
-        java.util.LinkedHashMap<String, WhatIfUndoManager.Move> lastMove = new java.util.LinkedHashMap<>();
-        for (WhatIfUndoManager.Move m : undoManager.effectiveMoves()) {
-            lastMove.put(m.fqn(), m);
-        }
-
-        ArchitectureAnnotations ann = getArchitectureAnnotations();
-        java.util.List<String> apiAdded = new java.util.ArrayList<>(ann.componentApiIncludes());
-        java.util.List<String> apiRemoved = new java.util.ArrayList<>(ann.componentApiExcludes());
-
-        StringBuilder sb = new StringBuilder();
-        sb.append("{\n");
-        sb.append("  \"tool\": \"Structure202\",\n");
-        sb.append("  \"view\": \"Component View\",\n");
-        sb.append("  \"summary\": {\n");
-        sb.append("    \"plannedPackages\": ").append(plannedPackageNames.size()).append(",\n");
-        sb.append("    \"movedElements\": ").append(lastMove.size()).append(",\n");
-        sb.append("    \"cutDependencies\": ").append(appliedCutEdges.size()).append(",\n");
-        sb.append("    \"apiAdded\": ").append(apiAdded.size()).append(",\n");
-        sb.append("    \"apiRemoved\": ").append(apiRemoved.size()).append("\n");
-        sb.append("  },\n");
-        sb.append("  \"changes\": [\n");
-
-        java.util.List<String> entries = new java.util.ArrayList<>();
-
-        for (String displayName : plannedPackageNames.values()) {
-            entries.add("    {\n"
-                    + "      \"action\": \"CREATE_PACKAGE\",\n"
-                    + "      \"name\": " + jsonStr(displayName) + ",\n"
-                    + "      \"note\": \"Planned package for cycle-free refactoring\"\n"
-                    + "    }");
-        }
-
-        for (WhatIfUndoManager.Move m : lastMove.values()) {
-            String dest = m.containerFqn() == null || m.containerFqn().isEmpty()
-                    ? "(top-level)" : m.containerFqn();
-            entries.add("    {\n"
-                    + "      \"action\": \"MOVE\",\n"
-                    + "      \"element\": " + jsonStr(m.fqn()) + ",\n"
-                    + "      \"toPackage\": " + jsonStr(dest) + ",\n"
-                    + "      \"toRow\": " + m.rowIndex() + ",\n"
-                    + "      \"note\": \"Move class/package to new position to eliminate layer violation\"\n"
-                    + "    }");
-        }
-
-        for (de.weigend.s202.domain.DependencyEdge e : appliedCutEdges) {
-            entries.add("    {\n"
-                    + "      \"action\": \"CUT_DEPENDENCY\",\n"
-                    + "      \"from\": " + jsonStr(e.from()) + ",\n"
-                    + "      \"to\": " + jsonStr(e.to()) + ",\n"
-                    + "      \"note\": \"Remove this direct dependency to break the tangle\"\n"
-                    + "    }");
-        }
-
-        for (String fqn : apiAdded) {
-            entries.add("    {\n"
-                    + "      \"action\": \"ADD_TO_API\",\n"
-                    + "      \"element\": " + jsonStr(fqn) + ",\n"
-                    + "      \"note\": \"Expose this element as part of the component's public API\"\n"
-                    + "    }");
-        }
-
-        for (String fqn : apiRemoved) {
-            entries.add("    {\n"
-                    + "      \"action\": \"REMOVE_FROM_API\",\n"
-                    + "      \"element\": " + jsonStr(fqn) + ",\n"
-                    + "      \"note\": \"Remove this element from the public API surface\"\n"
-                    + "    }");
-        }
-
-        sb.append(String.join(",\n", entries));
-        if (!entries.isEmpty()) {
-            sb.append("\n");
-        }
-        sb.append("  ]\n");
-        sb.append("}");
-        return sb.toString();
-    }
-
-    private static String jsonStr(String s) {
-        if (s == null) return "null";
-        return "\"" + s.replace("\\", "\\\\").replace("\"", "\\\"") + "\"";
-    }
-
-    private void injectPlannedPackagesIntoScene(VBox topLevelContainer) {
-        HBox plannedRow = new HBox(10);
-        plannedRow.setMaxWidth(Double.MAX_VALUE);
-        plannedRow.setAlignment(Pos.CENTER);
-        VBox.setVgrow(plannedRow, Priority.ALWAYS);
-        ArchitectureDragController.markAsRow(plannedRow);
-
-        for (Map.Entry<String, String> entry : plannedPackageNames.entrySet()) {
-            String fqn = entry.getKey();
-            String displayName = entry.getValue();
-            ComponentBox box = new ComponentBox(displayName, fqn, 0);
-            box.setSelectionChangeSink(graphSelectionSink);
-            box.setCustomStyles(
-                    "-fx-background-color: #f0f7e8; -fx-border-color: #4a8a3a; -fx-border-width: 2;"
-                  + " -fx-border-style: dashed; -fx-background-radius: 7; -fx-border-radius: 7;",
-                    "-fx-background-color: #f0f7e8; -fx-border-color: #ff8a00; -fx-border-width: 3;"
-                  + " -fx-border-style: dashed; -fx-background-radius: 7; -fx-border-radius: 7;");
-            attachPlannedPackageContextMenu(box, fqn);
-            elementRegistry.put(fqn, box);
-            HBox.setHgrow(box, Priority.ALWAYS);
-            plannedRow.getChildren().add(box);
-        }
-
-        topLevelContainer.getChildren().add(plannedRow);
-    }
-
-    private void attachPlannedPackageContextMenu(ComponentBox box, String fqn) {
-        box.setOnContextMenuRequested(event -> {
-            MenuItem rename = new MenuItem("Rename Package...");
-            rename.setOnAction(a -> showRenamePlannedPackageDialog(fqn));
-            MenuItem delete = new MenuItem("Delete Package");
-            delete.setOnAction(a -> deletePlannedPackage(fqn));
-            new ContextMenu(rename, delete).show(box, event.getScreenX(), event.getScreenY());
-            event.consume();
-        });
+        scopeReport.showRefactoringReport();
     }
 
     /**
@@ -1154,7 +855,7 @@ public class ArchitectureView extends BorderPane {
     }
 
     public void setDomainModel(DomainModel model) {
-        undoManager.clear();
+        whatIfEdit.undoManager().clear();
         projection.setDomainModel(model);
     }
 
@@ -1241,132 +942,14 @@ public class ArchitectureView extends BorderPane {
 
     public void setRawDependencyModel(DependencyModel model) {
         projection.setRawDependencyModelValue(model);
-        movedFqns.clear();
+        whatIfEdit.clearMovedFqns();
         if ((viewStyle == ArchitectureViewStyle.COMPONENT
                 || viewStyle == ArchitectureViewStyle.HEXAGONAL)
                 && projection.getDomainModel() != null) {
             projection.rebuildArchitectureProjection();
         }
-        ensureWhatIfDropListenerRegistered();
+        whatIfEdit.ensureDropListenerRegistered();
         arrowsCoalescer.markDirty();
-    }
-
-    private void ensureWhatIfDropListenerRegistered() {
-        if (whatIfDropListener != null) {
-            return;
-        }
-        whatIfDropListener = this::handleWhatIfDrop;
-        ArchitectureDragController.addDropListener(whatIfDropListener);
-    }
-
-    private void handleWhatIfDrop(javafx.scene.Node movedSource,
-                                  javafx.scene.layout.HBox destinationRow,
-                                  boolean wasNewRow) {
-        if (!isInsideThisView(movedSource)) {
-            return;
-        }
-        if (!(movedSource instanceof GraphSelection.Selectable selectable)) {
-            return;
-        }
-        String movedFqcn = selectable.getFullName();
-        if (movedFqcn == null || movedFqcn.isEmpty()) {
-            return;
-        }
-        if (viewStyle == ArchitectureViewStyle.COMPONENT
-                && handleComponentApiDrop(movedSource, movedFqcn, destinationRow)) {
-            return;
-        }
-        String destinationContainerFqcn = resolveDestinationContainer(destinationRow);
-        if (destinationContainerFqcn == null) {
-            return;
-        }
-        WhatIfArchitecture wif = projection.getWhatIfArchitecture();
-        if (wif == null) {
-            return;
-        }
-        if (!(destinationRow.getParent() instanceof javafx.scene.layout.VBox stack)) {
-            return;
-        }
-        int rowIndex = stack.getChildren().indexOf(destinationRow);
-        if (rowIndex < 0) {
-            return;
-        }
-        if (wasNewRow) {
-            undoManager.record(new WhatIfUndoManager.Move.AsNewRow(movedFqcn, destinationContainerFqcn, rowIndex));
-            wif.moveElementAsNewRow(movedFqcn, destinationContainerFqcn, rowIndex);
-        } else {
-            int colIndex = destinationRow.getChildren().indexOf(movedSource);
-            if (colIndex < 0) {
-                return;
-            }
-            undoManager.record(new WhatIfUndoManager.Move.InRow(movedFqcn, destinationContainerFqcn, rowIndex, colIndex));
-            wif.moveElement(movedFqcn, destinationContainerFqcn, rowIndex, colIndex);
-        }
-        movedFqns.add(movedFqcn);
-        arrowsCoalescer.markDirty();
-        setStatus(buildWhatIfStatusMessage(movedFqcn, destinationContainerFqcn));
-    }
-
-    private boolean handleComponentApiDrop(javafx.scene.Node movedSource,
-                                           String movedFqcn,
-                                           javafx.scene.layout.HBox destinationRow) {
-        boolean apiDestination = ComponentBox.isApiDropTarget(destinationRow);
-        boolean apiSource = ComponentBox.isApiElement(movedSource);
-        if (!apiDestination && !apiSource) {
-            return false;
-        }
-        if (apiDestination && apiSource) {
-            arrowsCoalescer.markDirty();
-            return true;
-        }
-        if (apiDestination) {
-            setArchitectureAnnotations(getArchitectureAnnotations().withComponentApiIncluded(movedFqcn));
-            refreshStyleProjection("Added to API: " + movedFqcn);
-        } else {
-            setArchitectureAnnotations(getArchitectureAnnotations().withComponentApiExcluded(movedFqcn));
-            refreshStyleProjection("Removed from API: " + movedFqcn);
-        }
-        return true;
-    }
-
-    private boolean isInsideThisView(javafx.scene.Node node) {
-        javafx.scene.Node n = node;
-        while (n != null) {
-            if (n == this) {
-                return true;
-            }
-            n = n.getParent();
-        }
-        return false;
-    }
-
-    /**
-     * Resolve the static fqcn of the package container the drop landed in.
-     * Walks up the scene graph from the destination row: the first enclosing
-     * {@link LevelPackageBox} wins. If the drop lands at top level (no
-     * enclosing package box), the row stack is tagged with the effective
-     * root's fqcn by the tree builder, but the {@link WhatIfArchitecture}
-     * uses {@code ""} for its root regardless of any transparent passthroughs
-     * the builder skipped, so the empty string is what we return here.
-     */
-    private static String resolveDestinationContainer(javafx.scene.Node row) {
-        javafx.scene.Node n = row == null ? null : row.getParent();
-        while (n != null) {
-            if (n instanceof LevelPackageBox lpb) {
-                String fqcn = lpb.getFullName();
-                return fqcn == null ? "" : fqcn;
-            }
-            if (n.getProperties().get("s202.whatif.rootFqcn") instanceof String) {
-                return "";
-            }
-            n = n.getParent();
-        }
-        return null;
-    }
-
-    private String buildWhatIfStatusMessage(String movedFqcn, String destinationContainerFqcn) {
-        String parentLabel = destinationContainerFqcn.isEmpty() ? "<root>" : destinationContainerFqcn;
-        return String.format("What-If: %s → %s — marked as moved", simple(movedFqcn), parentLabel);
     }
 
     /** Renderer that paints wrong-direction edges — exposed so side panels can query violations. */
@@ -1570,7 +1153,7 @@ public class ArchitectureView extends BorderPane {
                 whatIfRenderer.clear();
             }
         }
-        applyVirtuallyMovedDecorations();
+        whatIfEdit.applyVirtuallyMovedDecorations();
     }
 
     private Architecture violationOverlayArchitecture() {
@@ -1588,19 +1171,6 @@ public class ArchitectureView extends BorderPane {
             case HEXAGONAL -> HEXAGONAL_VIOLATION_OVERLAY_KINDS;
             case LAYERED -> LAYERED_VIOLATION_OVERLAY_KINDS;
         };
-    }
-
-    private void applyVirtuallyMovedDecorations() {
-        for (Map.Entry<String, javafx.scene.Node> entry : elementRegistry.entrySet()) {
-            String fqcn = entry.getKey();
-            boolean moved = movedFqns.contains(fqcn);
-            javafx.scene.Node node = entry.getValue();
-            if (node instanceof LevelClassBox cls) {
-                cls.setVirtuallyMoved(moved);
-            } else if (node instanceof LevelPackageBox pkg) {
-                pkg.setVirtuallyMoved(moved);
-            }
-        }
     }
 
     /**
@@ -1673,7 +1243,7 @@ public class ArchitectureView extends BorderPane {
      */
     public void refreshLayout() {
         resetVisualLayout();
-        undoManager.clear();
+        whatIfEdit.undoManager().clear();
     }
 
     private void resetVisualLayout() {
@@ -1693,7 +1263,7 @@ public class ArchitectureView extends BorderPane {
         if (wif != null) {
             wif.reset();
         }
-        movedFqns.clear();
+        whatIfEdit.clearMovedFqns();
         setArchitectureRoot(currentRootNode);
 
         showDependencies.set(depsSave);
@@ -1703,76 +1273,15 @@ public class ArchitectureView extends BorderPane {
     }
 
     public void undoWhatIf() {
-        if (projection.getWhatIfArchitecture() == null) return;
-        List<WhatIfUndoManager.Move> remaining = undoManager.decrement();
-        if (remaining == null) return;
-        boolean violations = showWhatIfViolations.get();
-        resetVisualLayout();
-        remaining.forEach(this::applyMoveToScene);
-        showWhatIfViolations.set(violations);
-        arrowsCoalescer.markDirty();
+        whatIfEdit.undo();
     }
 
     public void redoWhatIf() {
-        if (projection.getWhatIfArchitecture() == null) return;
-        WhatIfUndoManager.Move m = undoManager.increment();
-        if (m == null) return;
-        applyMoveToScene(m);
-        arrowsCoalescer.markDirty();
+        whatIfEdit.redo();
     }
 
-    public BooleanProperty canUndoWhatIfProperty() { return undoManager.canUndoProperty(); }
-    public BooleanProperty canRedoWhatIfProperty() { return undoManager.canRedoProperty(); }
-
-    private VBox findRowStack(String containerFqn) {
-        if (containerFqn == null || containerFqn.isEmpty()) {
-            return whatIfRootContainer;
-        }
-        javafx.scene.Node container = elementRegistry.get(containerFqn);
-        return container instanceof LevelPackageBox lpb ? lpb.getContentContainer() : null;
-    }
-
-    private void applyMoveToScene(WhatIfUndoManager.Move move) {
-        javafx.scene.Node node = elementRegistry.get(move.fqn());
-        if (node == null) return;
-        VBox stack = findRowStack(move.containerFqn());
-        if (stack == null) return;
-        WhatIfArchitecture wif = projection.getWhatIfArchitecture();
-        if (wif == null) return;
-
-        if (node.getParent() instanceof HBox srcRow) {
-            srcRow.getChildren().remove(node);
-            if (srcRow.getChildren().isEmpty() && srcRow.getParent() instanceof VBox v) {
-                v.getChildren().remove(srcRow);
-            }
-        }
-
-        if (move instanceof WhatIfUndoManager.Move.AsNewRow asNewRow) {
-            HBox newRow = new HBox(8);
-            newRow.setMaxWidth(Double.MAX_VALUE);
-            newRow.setMaxHeight(Double.MAX_VALUE);
-            newRow.setAlignment(Pos.CENTER);
-            newRow.setStyle("-fx-background-color: transparent;");
-            VBox.setVgrow(newRow, Priority.ALWAYS);
-            ArchitectureDragController.markAsRow(newRow);
-            int idx = Math.max(0, Math.min(asNewRow.rowIndex(), stack.getChildren().size()));
-            stack.getChildren().add(idx, newRow);
-            newRow.getChildren().add(node);
-            wif.moveElementAsNewRow(move.fqn(), move.containerFqn(), asNewRow.rowIndex());
-        } else if (move instanceof WhatIfUndoManager.Move.InRow inRow) {
-            while (stack.getChildren().size() <= inRow.rowIndex()) {
-                HBox gap = new HBox(8);
-                ArchitectureDragController.markAsRow(gap);
-                stack.getChildren().add(gap);
-            }
-            HBox targetRow = (HBox) stack.getChildren().get(inRow.rowIndex());
-            int col = Math.max(0, Math.min(inRow.colIndex(), targetRow.getChildren().size()));
-            targetRow.getChildren().add(col, node);
-            wif.moveElement(move.fqn(), move.containerFqn(), inRow.rowIndex(), inRow.colIndex());
-        }
-
-        movedFqns.add(move.fqn());
-    }
+    public BooleanProperty canUndoWhatIfProperty() { return whatIfEdit.undoManager().canUndoProperty(); }
+    public BooleanProperty canRedoWhatIfProperty() { return whatIfEdit.undoManager().canRedoProperty(); }
 
     public boolean hasRoot() {
         return currentRootNode != null;
@@ -1903,155 +1412,38 @@ public class ArchitectureView extends BorderPane {
         }
     }
 
-    /**
-     * Install a tangle-specific edge overlay on top of the architecture
-     * tree. Replaces the legacy SCC visualisation for this view with
-     * properly clipped arrows that dock to the box perimeters and a single
-     * highlighted "selected" edge.
-     * <p>
-     * Pass {@code null} or an empty list to remove the overlay. Pinning is
-     * the caller's job — calling this method again with new data updates
-     * the overlay in place. Survives {@link #refreshLayout()}.
-     */
     public void setTangleVisualization(List<DependencyEdge> edges,
                                        String selectedFrom, String selectedTo) {
-        if (edges == null || edges.isEmpty()) {
-            pendingTangleEdges = null;
-            pendingTangleSelFrom = null;
-            pendingTangleSelTo = null;
-            if (tangleRenderer != null) {
-                tangleRenderer.clear();
-            }
-            if (tanglePane != null) {
-                tanglePane.setVisible(false);
-            }
-            return;
-        }
-        pendingTangleEdges = List.copyOf(edges);
-        pendingTangleSelFrom = selectedFrom;
-        pendingTangleSelTo = selectedTo;
-        if (tangleRenderer != null) {
-            tangleRenderer.setEdges(pendingTangleEdges);
-            tangleRenderer.setSelectedEdge(selectedFrom, selectedTo);
-        }
-        if (tanglePane != null) {
-            tanglePane.setVisible(true);
-        }
+        tangleOverlay.setVisualization(edges, selectedFrom, selectedTo);
     }
 
     /** Update only the selected tangle edge without re-supplying the edge list. */
     public void setSelectedTangleEdge(String from, String to) {
-        pendingTangleSelFrom = from;
-        pendingTangleSelTo = to;
-        if (tangleRenderer != null) {
-            tangleRenderer.setSelectedEdge(from, to);
-        }
+        tangleOverlay.setSelectedEdge(from, to);
     }
 
     public Set<DependencyEdge> getCycleBreakEdges() {
-        return cycleBreakEdges;
+        return tangleOverlay.getCycleBreakEdges();
     }
 
     public void setCycleBreakEdges(Set<DependencyEdge> cycleBreakEdges) {
-        this.cycleBreakEdges = cycleBreakEdges == null ? Set.of() : Set.copyOf(cycleBreakEdges);
-        if (tangleRenderer != null) {
-            tangleRenderer.setCycleBreakEdges(this.cycleBreakEdges);
-        }
+        tangleOverlay.setCycleBreakEdges(cycleBreakEdges);
     }
 
     public void setAppliedTangleCutEdges(Set<DependencyEdge> appliedCutEdges) {
-        this.appliedCutEdges.clear();
-        if (appliedCutEdges != null) {
-            this.appliedCutEdges.addAll(appliedCutEdges);
-        }
-        if (tangleRenderer != null) {
-            tangleRenderer.setAppliedCutEdges(this.appliedCutEdges);
-        }
+        tangleOverlay.setAppliedCutEdges(appliedCutEdges);
     }
 
     public void applyTangleEdgeCut(String from, String to) {
-        if (from == null || to == null) {
-            return;
-        }
-        DependencyEdge cut = new DependencyEdge(from, to);
-        if (!appliedCutEdges.add(cut)) {
-            return;
-        }
-        if (from.equals(pendingTangleSelFrom) && to.equals(pendingTangleSelTo)) {
-            pendingTangleSelFrom = null;
-            pendingTangleSelTo = null;
-            tangleEdgeClickedSink.accept(null, null);
-        }
-        if (tangleRenderer != null) {
-            tangleRenderer.setAppliedCutEdges(appliedCutEdges);
-            tangleRenderer.setSelectedEdge(pendingTangleSelFrom, pendingTangleSelTo);
-        }
-        setStatus("Refactoring Preview: cut " + simple(from) + " -> " + simple(to));
+        tangleOverlay.applyEdgeCut(from, to);
     }
 
     public void applyTangleEdgeCuts(Collection<DependencyEdge> cuts) {
-        if (cuts == null || cuts.isEmpty()) {
-            return;
-        }
-        int added = 0;
-        for (DependencyEdge cut : cuts) {
-            if (cut == null || cut.from() == null || cut.to() == null) {
-                continue;
-            }
-            if (appliedCutEdges.add(cut)) {
-                added++;
-            }
-            if (cut.from().equals(pendingTangleSelFrom) && cut.to().equals(pendingTangleSelTo)) {
-                pendingTangleSelFrom = null;
-                pendingTangleSelTo = null;
-                tangleEdgeClickedSink.accept(null, null);
-            }
-        }
-        if (added == 0) {
-            return;
-        }
-        if (tangleRenderer != null) {
-            tangleRenderer.setAppliedCutEdges(appliedCutEdges);
-            tangleRenderer.setSelectedEdge(pendingTangleSelFrom, pendingTangleSelTo);
-        }
-        setStatus("Refactoring Preview: cut " + added + " tangle edge" + (added == 1 ? "" : "s"));
+        tangleOverlay.applyEdgeCuts(cuts);
     }
 
     public void restoreTangleEdgeCut(String from, String to) {
-        if (from == null || to == null) {
-            return;
-        }
-        DependencyEdge cut = new DependencyEdge(from, to);
-        if (!appliedCutEdges.remove(cut)) {
-            return;
-        }
-        if (tangleRenderer != null) {
-            tangleRenderer.setAppliedCutEdges(appliedCutEdges);
-        }
-        setStatus("Restored preview cut: " + simple(from) + " -> " + simple(to));
-    }
-
-    private void handleTangleEdgeClicked(String from, String to) {
-        pendingTangleSelFrom = from;
-        pendingTangleSelTo = to;
-        tangleEdgeClickedSink.accept(from, to);
-    }
-
-    private void handleTangleEdgeCut(String from, String to) {
-        if (from == null || to == null || pendingTangleEdges == null) {
-            return;
-        }
-        DependencyEdge cut = new DependencyEdge(from, to);
-        if (!pendingTangleEdges.contains(cut)) {
-            return;
-        }
-        applyTangleEdgeCut(from, to);
-        tangleEdgeCutSink.accept(from, to);
-    }
-
-    private void handleTangleEdgeRestore(String from, String to) {
-        restoreTangleEdgeCut(from, to);
-        tangleEdgeRestoreSink.accept(from, to);
+        tangleOverlay.restoreEdgeCut(from, to);
     }
 
     private static String simple(String fqn) {
@@ -2127,10 +1519,7 @@ public class ArchitectureView extends BorderPane {
      * {@code null} to detach.
      */
     public void setOnTangleEdgeClicked(BiConsumer<String, String> sink) {
-        this.tangleEdgeClickedSink = sink == null ? (a, b) -> {} : sink;
-        if (tangleRenderer != null) {
-            tangleRenderer.setOnEdgeClicked(this::handleTangleEdgeClicked);
-        }
+        tangleOverlay.setOnEdgeClicked(sink);
     }
 
     /**
@@ -2138,10 +1527,7 @@ public class ArchitectureView extends BorderPane {
      * recommended cut edge in the tangle overlay. Pass {@code null} to detach.
      */
     public void setOnTangleEdgeCut(BiConsumer<String, String> sink) {
-        this.tangleEdgeCutSink = sink == null ? (a, b) -> {} : sink;
-        if (tangleRenderer != null) {
-            tangleRenderer.setOnEdgeCut(this::handleTangleEdgeCut);
-        }
+        tangleOverlay.setOnEdgeCut(sink);
     }
 
     /**
@@ -2149,9 +1535,6 @@ public class ArchitectureView extends BorderPane {
      * refactoring-preview cut edge in the tangle overlay. Pass {@code null} to detach.
      */
     public void setOnTangleEdgeRestore(BiConsumer<String, String> sink) {
-        this.tangleEdgeRestoreSink = sink == null ? (a, b) -> {} : sink;
-        if (tangleRenderer != null) {
-            tangleRenderer.setOnEdgeRestore(this::handleTangleEdgeRestore);
-        }
+        tangleOverlay.setOnEdgeRestore(sink);
     }
 }
