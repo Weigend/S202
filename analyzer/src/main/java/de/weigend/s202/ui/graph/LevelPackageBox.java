@@ -13,9 +13,8 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package de.weigend.s202.ui;
+package de.weigend.s202.ui.graph;
 
-import de.weigend.s202.ui.graph.ArchitectureViewSettings;
 import javafx.geometry.Insets;
 import javafx.geometry.Pos;
 import javafx.scene.Cursor;

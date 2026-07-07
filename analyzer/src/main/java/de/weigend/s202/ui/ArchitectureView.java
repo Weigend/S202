@@ -15,6 +15,11 @@
  */
 package de.weigend.s202.ui;
 
+import de.weigend.s202.ui.graph.ArchitectureDragController;
+import de.weigend.s202.ui.graph.GraphSelection;
+import de.weigend.s202.ui.graph.LevelClassBox;
+import de.weigend.s202.ui.graph.LevelPackageBox;
+import de.weigend.s202.ui.graph.PulseCoalescer;
 import de.weigend.s202.analysis.quality.QualityMetrics;
 import de.weigend.s202.domain.DependencyEdge;
 import de.weigend.s202.domain.DomainModel;

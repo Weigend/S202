@@ -15,8 +15,8 @@
  */
 package de.weigend.s202.ui.component;
 
-import de.weigend.s202.ui.ArchitectureDragController;
-import de.weigend.s202.ui.GraphSelection;
+import de.weigend.s202.ui.graph.ArchitectureDragController;
+import de.weigend.s202.ui.graph.GraphSelection;
 import javafx.application.Platform;
 import javafx.geometry.Insets;
 import javafx.geometry.Pos;

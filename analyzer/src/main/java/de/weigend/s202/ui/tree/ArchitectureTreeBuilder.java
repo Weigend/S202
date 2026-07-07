@@ -15,9 +15,9 @@
  */
 package de.weigend.s202.ui.tree;
 
-import de.weigend.s202.ui.ArchitectureDragController;
-import de.weigend.s202.ui.LevelClassBox;
-import de.weigend.s202.ui.LevelPackageBox;
+import de.weigend.s202.ui.graph.ArchitectureDragController;
+import de.weigend.s202.ui.graph.LevelClassBox;
+import de.weigend.s202.ui.graph.LevelPackageBox;
 import de.weigend.s202.ui.layout.horizontal.HorizontalLayoutOrdering;
 import de.weigend.s202.ui.model.ArchitectureNode;
 import de.weigend.s202.ui.model.ArchitectureNode.NodeType;

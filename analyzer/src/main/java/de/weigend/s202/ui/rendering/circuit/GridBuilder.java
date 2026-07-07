@@ -15,8 +15,8 @@
  */
 package de.weigend.s202.ui.rendering.circuit;
 
-import de.weigend.s202.ui.LevelClassBox;
-import de.weigend.s202.ui.LevelPackageBox;
+import de.weigend.s202.ui.graph.LevelClassBox;
+import de.weigend.s202.ui.graph.LevelPackageBox;
 import de.weigend.s202.ui.component.ComponentBox;
 import javafx.geometry.Bounds;
 import javafx.scene.Node;

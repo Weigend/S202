@@ -15,9 +15,9 @@
  */
 package de.weigend.s202.ui.rendering;
 
-import de.weigend.s202.ui.GraphSelection;
-import de.weigend.s202.ui.LevelClassBox;
-import de.weigend.s202.ui.LevelPackageBox;
+import de.weigend.s202.ui.graph.GraphSelection;
+import de.weigend.s202.ui.graph.LevelClassBox;
+import de.weigend.s202.ui.graph.LevelPackageBox;
 import de.weigend.s202.ui.component.ComponentBox;
 import de.weigend.s202.ui.model.ArchitectureNode;
 import de.weigend.s202.ui.zoom.ZoomController;

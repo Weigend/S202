@@ -55,7 +55,7 @@ import static org.junit.jupiter.api.Assertions.fail;
 public class SelfArchitectureTest {
 
     // Ist-Stand Juli 2026 — absenken, nie erhöhen (Ziel: 0 / 0 / 0).
-    private static final int PACKAGE_TANGLE_BUDGET = 2;
+    private static final int PACKAGE_TANGLE_BUDGET = 1;
     private static final int CLASS_CYCLE_BUDGET = 0;
     private static final int CLASS_BACK_EDGE_BUDGET = 0;
 
