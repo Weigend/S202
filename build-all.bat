@@ -8,6 +8,8 @@
 ::   2. Installs WFX into the local Maven cache (%USERPROFILE%\.m2) if not present
 ::      (clones https://github.com/Weigend/wfx and runs mvn install -DskipTests)
 ::   3. Builds S202
+::   4. Builds the City3D web bundle (city3d\dist) if Node.js 18+ is available
+::      (optional - without it the app runs, only File > Show City3D View is unavailable)
 ::
 :: Usage: double-click or run from cmd / PowerShell
 
@@ -127,9 +129,49 @@ if errorlevel 1 (
 )
 popd
 
+:: ── Step 3: build the City3D web bundle (optional, needs Node.js 18+) ───────
+echo.
+set CITY3D_STATUS=skipped
+where npm >nul 2>&1
+if errorlevel 1 (
+    echo   [build-all] WARNING: Node.js/npm not found -- skipping the City3D web bundle.
+    echo   [build-all]          The app runs without it; only File ^> Show City3D View is unavailable.
+    echo   [build-all]          To enable it later: install Node.js 18+, then: cd city3d ^&^& npm install ^&^& npm run build
+    goto :city3d_done
+)
+set NODE_MAJOR=
+for /f "tokens=1 delims=v." %%n in ('node --version 2^>nul') do if not defined NODE_MAJOR set NODE_MAJOR=%%n
+if "%NODE_MAJOR%"=="" set NODE_MAJOR=0
+if %NODE_MAJOR% LSS 18 (
+    echo   [build-all] WARNING: Node.js 18+ required for City3D -- skipping.
+    echo   [build-all]          The app runs without it; only File ^> Show City3D View is unavailable.
+    goto :city3d_done
+)
+echo   [build-all] Node.js %NODE_MAJOR%  OK -- building the City3D web bundle ...
+echo.
+pushd "%S202_DIR%city3d"
+call npm install --no-audit --no-fund
+if errorlevel 1 (
+    popd
+    echo   [build-all] ERROR: npm install for City3D failed. See npm output above.
+    goto :fail
+)
+call npm run build
+if errorlevel 1 (
+    popd
+    echo   [build-all] ERROR: City3D build failed. See npm output above.
+    goto :fail
+)
+popd
+set CITY3D_STATUS=built
+echo.
+echo   [build-all] City3D web bundle built (city3d\dist^).
+:city3d_done
+
 echo.
 echo ========================================
 echo   Build successful!
+if "%CITY3D_STATUS%"=="skipped" echo   (City3D web bundle skipped -- no Node.js 18+^)
 echo.
 echo   Run the application:
 echo     mvn javafx:run -pl analyzer
