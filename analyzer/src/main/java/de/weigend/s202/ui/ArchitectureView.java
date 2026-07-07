@@ -186,12 +186,10 @@ public class ArchitectureView extends BorderPane {
     private final ReadOnlyDoubleWrapper zoomFactor = new ReadOnlyDoubleWrapper(1.0);
     private final ReadOnlyObjectWrapper<ArchitectureNode> architectureRoot = new ReadOnlyObjectWrapper<>(null);
     private final ReadOnlyObjectWrapper<QualityMetrics> qualityMetrics = new ReadOnlyObjectWrapper<>(null);
-    private final ReadOnlyObjectWrapper<DomainModel> domainModel = new ReadOnlyObjectWrapper<>(null);
-    private final SimpleObjectProperty<ArchitectureAnnotations> architectureAnnotations =
-            new SimpleObjectProperty<>(ArchitectureAnnotations.empty());
-    private final ReadOnlyObjectWrapper<Architecture> architecture = new ReadOnlyObjectWrapper<>(null);
-    private final ReadOnlyObjectWrapper<WhatIfArchitecture> whatIfArchitecture = new ReadOnlyObjectWrapper<>(null);
-    private final ReadOnlyObjectWrapper<DependencyModel> rawDependencyModel = new ReadOnlyObjectWrapper<>(null);
+    private final ArchitectureProjectionModel projection =
+            new ArchitectureProjectionModel(this::getViewStyle, this::updateSccRendererTangles);
+    private final ElementBoundsExporter boundsExporter =
+            new ElementBoundsExporter(elementRegistry, () -> zoomableContent, this::getScene);
     private final ReadOnlyStringWrapper selectedFullName = new ReadOnlyStringWrapper(null);
     private String preferredTopTanglesScope;
     private boolean topTanglesScopeOwner = true;
@@ -398,8 +396,8 @@ public class ArchitectureView extends BorderPane {
                             elementRegistry,
                             graphSelectionSink,
                             getArchitectureAnnotations(),
-                            rawDependencyModel.get(),
-                            architecture.get() instanceof ComponentArchitecture component ? component : null,
+                            projection.getRawDependencyModel(),
+                            projection.getArchitecture() instanceof ComponentArchitecture component ? component : null,
                             this::handleComponentApiChanged);
             return componentBuilder.buildTree(rootNode, maxDepth);
         }
@@ -409,7 +407,7 @@ public class ArchitectureView extends BorderPane {
                             elementRegistry,
                             graphSelectionSink,
                             getArchitectureAnnotations(),
-                            architecture.get() instanceof HexagonalArchitecture hex ? hex : null,
+                            projection.getArchitecture() instanceof HexagonalArchitecture hex ? hex : null,
                             this::handleHexagonalAnnotationsChanged,
                             arrowsCoalescer::markDirty,
                             hexagonalPackageExpansionState);
@@ -430,8 +428,8 @@ public class ArchitectureView extends BorderPane {
                             elementRegistry,
                             graphSelectionSink,
                             getArchitectureAnnotations(),
-                            rawDependencyModel.get(),
-                            architecture.get() instanceof ComponentArchitecture component ? component : null,
+                            projection.getRawDependencyModel(),
+                            projection.getArchitecture() instanceof ComponentArchitecture component ? component : null,
                             this::handleComponentApiChanged);
             componentBuilder.buildTreeAsync(rootNode, maxDepth, progressSink, onComplete);
             return;
@@ -442,7 +440,7 @@ public class ArchitectureView extends BorderPane {
                             elementRegistry,
                             graphSelectionSink,
                             getArchitectureAnnotations(),
-                            architecture.get() instanceof HexagonalArchitecture hex ? hex : null,
+                            projection.getArchitecture() instanceof HexagonalArchitecture hex ? hex : null,
                             this::handleHexagonalAnnotationsChanged,
                             arrowsCoalescer::markDirty,
                             hexagonalPackageExpansionState);
@@ -1148,17 +1146,16 @@ public class ArchitectureView extends BorderPane {
      * scoped metrics (e.g. quality view for a selected package).
      */
     public ReadOnlyObjectProperty<DomainModel> domainModelProperty() {
-        return domainModel.getReadOnlyProperty();
+        return projection.domainModelProperty();
     }
 
     public DomainModel getDomainModel() {
-        return domainModel.get();
+        return projection.getDomainModel();
     }
 
     public void setDomainModel(DomainModel model) {
-        domainModel.set(model);
         undoManager.clear();
-        rebuildArchitectureProjection();
+        projection.setDomainModel(model);
     }
 
     /**
@@ -1169,11 +1166,11 @@ public class ArchitectureView extends BorderPane {
      * consume from here.
      */
     public ReadOnlyObjectProperty<Architecture> architectureProperty() {
-        return architecture.getReadOnlyProperty();
+        return projection.architectureProperty();
     }
 
     public Architecture getArchitecture() {
-        return architecture.get();
+        return projection.getArchitecture();
     }
 
     /**
@@ -1184,64 +1181,28 @@ public class ArchitectureView extends BorderPane {
      * current rearrangement. Rebuilt on each {@link #setDomainModel}.
      */
     public ReadOnlyObjectProperty<WhatIfArchitecture> whatIfArchitectureProperty() {
-        return whatIfArchitecture.getReadOnlyProperty();
+        return projection.whatIfArchitectureProperty();
     }
 
     public WhatIfArchitecture getWhatIfArchitecture() {
-        return whatIfArchitecture.get();
+        return projection.getWhatIfArchitecture();
     }
 
     public ObjectProperty<ArchitectureAnnotations> architectureAnnotationsProperty() {
-        return architectureAnnotations;
+        return projection.architectureAnnotationsProperty();
     }
 
     public ArchitectureAnnotations getArchitectureAnnotations() {
-        ArchitectureAnnotations annotations = architectureAnnotations.get();
-        return annotations == null ? ArchitectureAnnotations.empty() : annotations;
+        return projection.getArchitectureAnnotations();
     }
 
     public void setArchitectureAnnotations(ArchitectureAnnotations annotations) {
-        architectureAnnotations.set(annotations == null ? ArchitectureAnnotations.empty() : annotations);
-        rebuildArchitectureProjection();
-    }
-
-    private void rebuildArchitectureProjection() {
-        DomainModel model = domainModel.get();
-        if (model == null) {
-            architecture.set(null);
-            whatIfArchitecture.set(null);
-            return;
-        }
-        Architecture original;
-        ArchitectureContext context = new ArchitectureContext(
-                rawDependencyModel.get(),
-                model,
-                getArchitectureAnnotations());
-        if (viewStyle == ArchitectureViewStyle.COMPONENT) {
-            original = requireArchitectureStyle(ArchitectureKind.COMPONENT).build(context);
-        } else if (viewStyle == ArchitectureViewStyle.HEXAGONAL) {
-            original = requireArchitectureStyle(ArchitectureKind.HEXAGONAL).build(context);
-        } else {
-            original = requireArchitectureStyle(ArchitectureKind.LAYERED).build(context);
-        }
-        architecture.set(original);
-        whatIfArchitecture.set(original instanceof LayeredArchitecture la
-                ? la.toWhatIf(model)
-                : null);
-        updateSccRendererTangles();
-    }
-
-    private static ArchitectureStyle requireArchitectureStyle(ArchitectureKind kind) {
-        List<ArchitectureStyle> styles = Lookup.findAll(ArchitectureStyle.class);
-        return styles.stream()
-                .filter(style -> style.kind() == kind)
-                .findFirst()
-                .orElseThrow(() -> new IllegalStateException("No architecture style registered for " + kind));
+        projection.setArchitectureAnnotations(annotations);
     }
 
     private void updateSccRendererTangles() {
         if (sccRenderer == null) return;
-        Architecture arch = packageCycleArchitecture();
+        Architecture arch = projection.packageCycleArchitecture();
         if (arch instanceof WhatIfArchitecture wif) {
             Map<String, String> classPackages = wif.classPackages();
             sccRenderer.setPackageResolver(fqn -> classPackages.getOrDefault(fqn, staticPackageOf(fqn)));
@@ -1258,11 +1219,6 @@ public class ArchitectureView extends BorderPane {
         }
     }
 
-    private Architecture packageCycleArchitecture() {
-        WhatIfArchitecture wif = whatIfArchitecture.get();
-        return wif != null ? wif : architecture.get();
-    }
-
     private static String staticPackageOf(String fqn) {
         int dot = fqn == null ? -1 : fqn.lastIndexOf('.');
         return dot < 0 ? "" : fqn.substring(0, dot);
@@ -1276,20 +1232,20 @@ public class ArchitectureView extends BorderPane {
      * "what kind of dependency is this" (e.g. the Top Tangles view).
      */
     public ReadOnlyObjectProperty<DependencyModel> rawDependencyModelProperty() {
-        return rawDependencyModel.getReadOnlyProperty();
+        return projection.rawDependencyModelProperty();
     }
 
     public DependencyModel getRawDependencyModel() {
-        return rawDependencyModel.get();
+        return projection.getRawDependencyModel();
     }
 
     public void setRawDependencyModel(DependencyModel model) {
-        rawDependencyModel.set(model);
+        projection.setRawDependencyModelValue(model);
         movedFqns.clear();
         if ((viewStyle == ArchitectureViewStyle.COMPONENT
                 || viewStyle == ArchitectureViewStyle.HEXAGONAL)
-                && domainModel.get() != null) {
-            rebuildArchitectureProjection();
+                && projection.getDomainModel() != null) {
+            projection.rebuildArchitectureProjection();
         }
         ensureWhatIfDropListenerRegistered();
         arrowsCoalescer.markDirty();
@@ -1324,7 +1280,7 @@ public class ArchitectureView extends BorderPane {
         if (destinationContainerFqcn == null) {
             return;
         }
-        WhatIfArchitecture wif = whatIfArchitecture.get();
+        WhatIfArchitecture wif = projection.getWhatIfArchitecture();
         if (wif == null) {
             return;
         }
@@ -1451,7 +1407,7 @@ public class ArchitectureView extends BorderPane {
 
     public void setViewStyle(ArchitectureViewStyle style) {
         viewStyle = style == null ? ArchitectureViewStyle.LAYERED : style;
-        rebuildArchitectureProjection();
+        projection.rebuildArchitectureProjection();
     }
 
     /**
@@ -1620,9 +1576,10 @@ public class ArchitectureView extends BorderPane {
     private Architecture violationOverlayArchitecture() {
         if (viewStyle == ArchitectureViewStyle.COMPONENT
                 || viewStyle == ArchitectureViewStyle.HEXAGONAL) {
-            return architecture.get();
+            return projection.getArchitecture();
         }
-        return whatIfArchitecture.get() != null ? whatIfArchitecture.get() : architecture.get();
+        return projection.getWhatIfArchitecture() != null
+                ? projection.getWhatIfArchitecture() : projection.getArchitecture();
     }
 
     private Set<ViolationKind> violationOverlayKinds() {
@@ -1732,7 +1689,7 @@ public class ArchitectureView extends BorderPane {
         boolean pkgSccSave2 = showPackageScc.get();
         boolean wifSave     = showWhatIfViolations.get();
 
-        WhatIfArchitecture wif = whatIfArchitecture.get();
+        WhatIfArchitecture wif = projection.getWhatIfArchitecture();
         if (wif != null) {
             wif.reset();
         }
@@ -1746,7 +1703,7 @@ public class ArchitectureView extends BorderPane {
     }
 
     public void undoWhatIf() {
-        if (whatIfArchitecture.get() == null) return;
+        if (projection.getWhatIfArchitecture() == null) return;
         List<WhatIfUndoManager.Move> remaining = undoManager.decrement();
         if (remaining == null) return;
         boolean violations = showWhatIfViolations.get();
@@ -1757,7 +1714,7 @@ public class ArchitectureView extends BorderPane {
     }
 
     public void redoWhatIf() {
-        if (whatIfArchitecture.get() == null) return;
+        if (projection.getWhatIfArchitecture() == null) return;
         WhatIfUndoManager.Move m = undoManager.increment();
         if (m == null) return;
         applyMoveToScene(m);
@@ -1780,7 +1737,7 @@ public class ArchitectureView extends BorderPane {
         if (node == null) return;
         VBox stack = findRowStack(move.containerFqn());
         if (stack == null) return;
-        WhatIfArchitecture wif = whatIfArchitecture.get();
+        WhatIfArchitecture wif = projection.getWhatIfArchitecture();
         if (wif == null) return;
 
         if (node.getParent() instanceof HBox srcRow) {
@@ -2105,6 +2062,24 @@ public class ArchitectureView extends BorderPane {
         return dot < 0 ? fqn : fqn.substring(dot + 1);
     }
 
+    /* ----- Bounds-Export (3D-Ansicht, Report-Screenshots) ------------------- */
+
+    public java.util.Map<String, javafx.geometry.Bounds> getElementBoundsInScene() {
+        return boundsExporter.elementBoundsInScene();
+    }
+
+    public java.util.Map<String, javafx.geometry.Bounds> getElementFootprintBoundsInScene() {
+        return boundsExporter.elementFootprintBoundsInScene();
+    }
+
+    public java.util.Map<String, javafx.geometry.Bounds> getElementFootprintBoundsInLayout() {
+        return boundsExporter.elementFootprintBoundsInLayout();
+    }
+
+    public java.util.Map<String, String> getVisibleElementParentFqns() {
+        return boundsExporter.visibleElementParentFqns();
+    }
+
     /* ----- Status sink ----------------------------------------------------- */
 
     /**
@@ -2178,129 +2153,5 @@ public class ArchitectureView extends BorderPane {
         if (tangleRenderer != null) {
             tangleRenderer.setOnEdgeRestore(this::handleTangleEdgeRestore);
         }
-    }
-
-    /**
-     * Returns the layout bounds of every registered element in the JavaFX
-     * scene coordinate space. Forces a layout pass so bounds are valid.
-     * Must be called on the JavaFX Application Thread after the scene is shown.
-     */
-    public java.util.Map<String, javafx.geometry.Bounds> getElementBoundsInScene() {
-        if (getScene() != null && getScene().getRoot() != null) {
-            getScene().getRoot().layout();
-        }
-        var result = new java.util.LinkedHashMap<String, javafx.geometry.Bounds>();
-        for (var entry : elementRegistry.entrySet()) {
-            var node = entry.getValue();
-            if (node.getScene() == null || !node.isVisible()) continue;
-            result.put(entry.getKey(), node.localToScene(node.getBoundsInLocal()));
-        }
-        return result;
-    }
-
-    /**
-     * Returns 3D footprint bounds for registered package/class boxes. Helper
-     * registry entries for transparent parent containers are filtered out.
-     */
-    public java.util.Map<String, javafx.geometry.Bounds> getElementFootprintBoundsInScene() {
-        if (getScene() != null && getScene().getRoot() != null) {
-            getScene().getRoot().layout();
-        }
-        var result = new java.util.LinkedHashMap<String, javafx.geometry.Bounds>();
-        for (var entry : elementRegistry.entrySet()) {
-            var node = entry.getValue();
-            if (node.getScene() == null || !node.isVisible()) continue;
-            javafx.geometry.Bounds bounds = footprintBoundsInScene(node);
-            if (bounds != null) {
-                result.put(entry.getKey(), bounds);
-            }
-        }
-        return result;
-    }
-
-    /**
-     * Returns 3D footprint bounds in this view's unscaled layout coordinate
-     * space. Unlike scene coordinates, these stay stable when the 2D
-     * ScrollPane moves or the application window changes focus.
-     */
-    public java.util.Map<String, javafx.geometry.Bounds> getElementFootprintBoundsInLayout() {
-        if (getScene() != null && getScene().getRoot() != null) {
-            getScene().getRoot().layout();
-        }
-        var result = new java.util.LinkedHashMap<String, javafx.geometry.Bounds>();
-        for (var entry : elementRegistry.entrySet()) {
-            var node = entry.getValue();
-            if (node.getScene() == null || !node.isVisible()) continue;
-            javafx.geometry.Bounds bounds = footprintBoundsInLayout(node);
-            if (bounds != null) {
-                result.put(entry.getKey(), bounds);
-            }
-        }
-        return result;
-    }
-
-    /**
-     * Returns the closest visible package parent per currently registered
-     * package/class box. Used by projections such as the 3D view that need to
-     * roll hidden class-level edges up to the same visible endpoint as the 2D
-     * scene, including after What-If drag-and-drop moves.
-     */
-    public java.util.Map<String, String> getVisibleElementParentFqns() {
-        if (getScene() != null && getScene().getRoot() != null) {
-            getScene().getRoot().layout();
-        }
-        var result = new java.util.LinkedHashMap<String, String>();
-        for (var entry : elementRegistry.entrySet()) {
-            javafx.scene.Node node = entry.getValue();
-            if (!(node instanceof LevelPackageBox || node instanceof LevelClassBox)) continue;
-            if (node.getScene() == null) continue;
-            String parent = nearestVisiblePackageParent(node.getParent());
-            if (parent != null) {
-                result.put(entry.getKey(), parent);
-            }
-        }
-        return result;
-    }
-
-    private static javafx.geometry.Bounds footprintBoundsInScene(javafx.scene.Node node) {
-        if (node instanceof LevelPackageBox || node instanceof LevelClassBox) {
-            return node.localToScene(node.getBoundsInLocal());
-        }
-        return null;
-    }
-
-    private javafx.geometry.Bounds footprintBoundsInLayout(javafx.scene.Node node) {
-        if (!(node instanceof LevelPackageBox || node instanceof LevelClassBox)) {
-            return null;
-        }
-        if (zoomableContent == null || zoomableContent.getScene() == null) {
-            return footprintBoundsInScene(node);
-        }
-        return zoomableContent.sceneToLocal(node.localToScene(node.getBoundsInLocal()));
-    }
-
-    private static String nearestVisiblePackageParent(javafx.scene.Node node) {
-        javafx.scene.Node current = node;
-        while (current != null) {
-            if (current instanceof LevelPackageBox pkg && isActuallyVisible(current)) {
-                return pkg.getFullName();
-            }
-            current = current.getParent();
-        }
-        return null;
-    }
-
-    private static boolean isActuallyVisible(javafx.scene.Node node) {
-        if (node == null || !node.isVisible()) {
-            return false;
-        }
-        javafx.scene.Parent parent = node.getParent();
-        while (parent != null) {
-            if (!parent.isVisible()) {
-                return false;
-            }
-            parent = parent.getParent();
-        }
-        return true;
     }
 }
