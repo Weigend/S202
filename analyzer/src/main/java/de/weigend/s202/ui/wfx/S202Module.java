@@ -56,8 +56,7 @@ import de.weigend.s202.ui.wfx.events.MenuRequestEvent;
 import de.weigend.s202.ui.wfx.events.OpenScopeEvent;
 import de.weigend.s202.ui.wfx.events.OpenTangleEvent;
 import de.weigend.s202.ui.wfx.events.RestoreTangleEdgeEvent;
-import de.weigend.s202.ui.wfx.report.QualityReportView;
-import de.weigend.s202.ui.wfx.report.impl.JavaFxQualityReportImageRenderer;
+import de.weigend.s202.ui.wfx.report.QualityReportController;
 import de.weigend.s202.ui.wfx.tangles.TangleTabController;
 import io.softwareecg.wfx.lookup.api.Lookup;
 import io.softwareecg.wfx.platform.api.EventBus;
@@ -139,11 +138,6 @@ public class S202Module implements Module {
     private static final String GO_ANALYZER = "Go";
     private static final String MAVEN_SCANNER = "Maven";
     private static final String GRADLE_SCANNER = "Gradle";
-    private static final double REPORT_PROGRESS_PREPARED = 0.05;
-    private static final double REPORT_PROGRESS_MODEL = 0.20;
-    private static final double REPORT_PROGRESS_IMAGES_START = 0.20;
-    private static final double REPORT_PROGRESS_IMAGES_END = 0.86;
-    private static final double REPORT_PROGRESS_HTML = 0.94;
 
     private final ApplicationWindow applicationWindow;
     private final ArchitectureNodeBuilder architectureNodeBuilder = new ArchitectureNodeBuilder();
@@ -151,11 +145,7 @@ public class S202Module implements Module {
     private final ProjectStore projectStore = Lookup.lookup(ProjectStore.class);
     private final ProjectMapper projectMapper = Lookup.lookup(ProjectMapper.class);
 
-    private int reportCounter;
 
-    /** Sentinel source for selection events injected from the browser (to skip echoing them back). */
-    private static final Object BROWSER_SELECTION_SOURCE = new Object();
-    private boolean city3dSyncWired;
     private final RecentDirectories recentDirs = new RecentDirectories();
     private final ProgressPublisher progressPublisher = new ProgressPublisher(this);
 
@@ -194,9 +184,14 @@ public class S202Module implements Module {
             new ArchitectureViewManager(progressPublisher, previewState);
     private final TangleTabController tangleTabs =
             new TangleTabController(viewManager, previewState, progressPublisher);
+    private final City3DController city3d = new City3DController(viewManager);
+    private final QualityReportController qualityReport;
 
     public S202Module(ApplicationWindow applicationWindow) {
         this.applicationWindow = applicationWindow;
+        this.qualityReport = new QualityReportController(
+                viewManager, previewState, progressPublisher, recentDirs,
+                () -> applicationWindow.getStage(), this::appVersion);
     }
 
     @Override
@@ -294,8 +289,8 @@ public class S202Module implements Module {
         bus.subscribe(MenuRequestEvent.OpenMavenProject.class, ev -> { openMavenProject(); return true; });
         bus.subscribe(MenuRequestEvent.OpenGradleProject.class, ev -> { openGradleProject(); return true; });
         bus.subscribe(MenuRequestEvent.SaveProject.class, ev -> { saveProject(); return true; });
-        bus.subscribe(MenuRequestEvent.ExportQualityReport.class, ev -> { exportQualityReport(); return true; });
-        bus.subscribe(MenuRequestEvent.OpenCity3DView.class, ev -> { openCity3DView(); return true; });
+        bus.subscribe(MenuRequestEvent.ExportQualityReport.class, ev -> { qualityReport.exportQualityReport(); return true; });
+        bus.subscribe(MenuRequestEvent.OpenCity3DView.class, ev -> { city3d.openCity3DView(); return true; });
         bus.subscribe(MenuRequestEvent.LoadProject.class, ev -> { loadProject(); return true; });
         bus.subscribe(MenuRequestEvent.CloseProject.class, ev -> { closeProject(); return true; });
         bus.subscribe(MenuRequestEvent.Exit.class, ev -> { Platform.exit(); return true; });
@@ -1186,358 +1181,6 @@ public class S202Module implements Module {
             LOGGER.error("Could not save project {}", target, ex);
             showError("Save Project", "Could not save project:\n" + ex.getMessage());
         }
-    }
-
-    /**
-     * Serialises the currently analysed architecture to a {@link de.weigend.s202.ui.city3d.CityModel},
-     * hands it to the loopback {@link CityView3DServer}, and opens the City3D web
-     * view in the system browser so the same analysis can be explored as a 3D city.
-     */
-    /** City3D in the system browser (loopback bundle). */
-    private void openCity3DView() {
-        CityView3DServer server = prepareCity3DServer();
-        if (server != null) {
-            openUrlInBrowser(server.url());
-        }
-    }
-
-    /**
-     * Serialise the focused analysis into the loopback City3D server and return it, or {@code null}
-     * (after showing an error) when there is nothing to show or the web bundle is missing.
-     */
-    private CityView3DServer prepareCity3DServer() {
-        ArchitectureWfxView focused = viewManager.focusedSourceArchitectureView();
-        ArchitectureView view = focused == null ? null : focused.getArchitectureView();
-        if (view == null || view.getArchitectureRoot() == null
-                || view.getDomainModel() == null || view.getRawDependencyModel() == null) {
-            showError("City3D View", "There is no loaded analysis to show.");
-            return null;
-        }
-        Path distDir = resolveCity3DDist();
-        if (distDir == null) {
-            showError("City3D View",
-                    "Could not find the City3D web bundle (city3d/dist).\n"
-                    + "Build it once with:  cd city3d && npm install && npm run build");
-            return null;
-        }
-        try {
-            CityModelSerializer serializer = new CityModelSerializer();
-            CityModelSerializer.Metrics metrics =
-                    CityModelSerializer.metricsFrom(view.getRawDependencyModel(), view.getDomainModel());
-            String json = serializer.toJson(view.getArchitectureRoot(), null, metrics);
-
-            CityView3DServer server = CityView3DServer.getOrStart(distDir);
-            server.setCityJson(json);
-            wireCity3DSelectionSync(server, view);
-            return server;
-        } catch (IOException ex) {
-            LOGGER.error("Could not start the City3D view", ex);
-            showError("City3D View", "Could not start the City3D view:\n" + ex.getMessage());
-            return null;
-        }
-    }
-
-    /**
-     * Bidirectional selection sync with the browser City3D view over the loopback server:
-     * <ul>
-     *   <li>browser → app: a pick in the city is republished as a normal {@link NodeSelectionEvent}
-     *       (so the 2D chart and the outline both follow it);</li>
-     *   <li>app → browser: every selection on the bus (chart or outline) is pushed to the city,
-     *       except our own browser-originated injections (avoids a feedback loop).</li>
-     * </ul>
-     */
-    @SuppressWarnings("unchecked")
-    private void wireCity3DSelectionSync(CityView3DServer server, ArchitectureView view) {
-        EventBus<EventObject> bus = Lookup.lookup(EventBus.class);
-        server.setSelectionListener(fqn -> Platform.runLater(() ->
-                bus.publish(new NodeSelectionEvent(fqn, BROWSER_SELECTION_SOURCE))));
-        if (!city3dSyncWired) {
-            city3dSyncWired = true;
-            bus.subscribe(NodeSelectionEvent.class, ev -> {
-                if (ev.getSource() != BROWSER_SELECTION_SOURCE) {
-                    server.pushSelection(ev.getFullName());
-                }
-                return true;
-            });
-        }
-        server.pushSelection(view.getSelectedFullName());   // reflect the current 2D selection
-    }
-
-    /** Locates the built City3D bundle (city3d/dist) relative to the working directory. */
-    private static Path resolveCity3DDist() {
-        List<Path> candidates = new ArrayList<>();
-        String override = System.getProperty("s202.city3d.dist");
-        if (override != null && !override.isBlank()) {
-            candidates.add(Path.of(override));
-        }
-        candidates.add(Path.of("city3d", "dist"));
-        candidates.add(Path.of("..", "city3d", "dist"));
-        candidates.add(Path.of("..", "..", "city3d", "dist"));
-        for (Path p : candidates) {
-            if (Files.isRegularFile(p.resolve("index.html"))) {
-                return p.toAbsolutePath().normalize();
-            }
-        }
-        return null;
-    }
-
-    /**
-     * Opens {@code url} in the system browser on a daemon thread (native command
-     * first; {@code Desktop.browse} would risk deadlocking the JavaFX toolkit on
-     * Linux). Mirrors {@code S202MenuBar#openUrl}.
-     */
-    private void openUrlInBrowser(String url) {
-        Thread opener = new Thread(() -> {
-            try {
-                String os = System.getProperty("os.name", "").toLowerCase(Locale.ROOT);
-                String[] cmd;
-                if (os.contains("linux")) {
-                    cmd = new String[] { "xdg-open", url };
-                } else if (os.contains("mac") || os.contains("darwin")) {
-                    cmd = new String[] { "open", url };
-                } else if (os.contains("win")) {
-                    cmd = new String[] { "rundll32", "url.dll,FileProtocolHandler", url };
-                } else {
-                    if (Desktop.isDesktopSupported()
-                            && Desktop.getDesktop().isSupported(Desktop.Action.BROWSE)) {
-                        Desktop.getDesktop().browse(URI.create(url));
-                    }
-                    return;
-                }
-                new ProcessBuilder(cmd).inheritIO().start();
-            } catch (Exception ex) {
-                LOGGER.warn("Could not open URL {}", url, ex);
-            }
-        }, "city3d-url-opener");
-        opener.setDaemon(true);
-        opener.start();
-    }
-
-    private void exportQualityReport() {
-        ArchitectureWfxView focused = viewManager.focusedSourceArchitectureView();
-        if (focused == null || focused.getArchitectureView().getDomainModel() == null
-                || focused.getArchitectureView().getRawDependencyModel() == null
-                || focused.getArchitectureView().getArchitectureRoot() == null) {
-            showError("Quality Report", "There is no loaded analysis to report.");
-            return;
-        }
-
-        Path outputDirectory;
-        try {
-            outputDirectory = Files.createTempDirectory("s202-quality-report-");
-        } catch (IOException ex) {
-            LOGGER.error("Could not create temporary quality report directory", ex);
-            showError("Quality Report", "Could not create a temporary report directory:\n" + ex.getMessage());
-            return;
-        }
-
-        ArchitectureView view = focused.getArchitectureView();
-        S202Project.Source source = viewManager.sourceOf(view,
-                new S202Project.Source("UNKNOWN", List.of(), null));
-        QualityReportInput input = new QualityReportInput(
-                "S202 Quality Report",
-                appVersion(),
-                source,
-                view.getRawDependencyModel(),
-                view.getDomainModel(),
-                view.getArchitectureAnnotations(),
-                view.getQualityMetrics(),
-                viewManager.invariantsOf(view));
-        ArchitectureNode reportRoot = ArchitectureNodeCloner.cloneTree(view.getArchitectureRoot());
-        Set<DependencyEdge> reportCycleBreakEdges = Set.copyOf(view.getCycleBreakEdges());
-        Set<DependencyEdge> reportPreviewCuts = Set.copyOf(previewState.cuts());
-        int scopeImageLimit = qualityReportScopeImageLimit(input);
-
-        publishProgress(scopeImageLimit < 5
-                ? "Preparing quality report (large codebase: limiting JavaFX screenshots)..."
-                : "Preparing quality report...", REPORT_PROGRESS_PREPARED);
-        QualityReportExporter qualityReportExporter = Lookup.lookup(QualityReportExporter.class);
-        if (qualityReportExporter == null) {
-            showError("Quality Report", "No quality report exporter is registered.");
-            return;
-        }
-        QualityReportOptions reportOptions = new QualityReportOptions("png", scopeImageLimit);
-
-        Task<QualityReportModel> task = new Task<>() {
-            @Override
-            protected QualityReportModel call() {
-                publishProgress("Building quality report model...", REPORT_PROGRESS_MODEL * 0.5);
-                return qualityReportExporter.build(input, reportOptions);
-            }
-        };
-        task.setOnSucceeded(e -> {
-            publishProgress("Quality report model built", REPORT_PROGRESS_MODEL);
-            QualityReportModel model = task.getValue();
-            JavaFxQualityReportImageRenderer renderer = new JavaFxQualityReportImageRenderer(
-                    reportRoot,
-                    reportCycleBreakEdges,
-                    reportPreviewCuts);
-            renderer.renderImagesAsync(
-                    model,
-                    input,
-                    outputDirectory,
-                    (message, imageProgress) -> publishProgress(
-                            message,
-                            REPORT_PROGRESS_IMAGES_START
-                                    + (REPORT_PROGRESS_IMAGES_END - REPORT_PROGRESS_IMAGES_START) * imageProgress),
-                    () -> writeQualityReportHtml(qualityReportExporter, model, outputDirectory),
-                    failure -> {
-                        LOGGER.error("Could not render quality report screenshots to {}", outputDirectory, failure);
-                        String msg = failure.getMessage() == null ? failure.toString() : failure.getMessage();
-                        publishProgress("Error generating quality report: " + msg, 1);
-                        showError("Quality Report", "Could not generate quality report:\n" + msg);
-                    });
-        });
-        task.setOnFailed(e -> {
-            Throwable t = task.getException();
-            LOGGER.error("Could not build quality report for {}", outputDirectory, t);
-            String msg = t == null || t.getMessage() == null ? "unknown error" : t.getMessage();
-            publishProgress("Error generating quality report: " + msg, 1);
-            showError("Quality Report", "Could not generate quality report:\n" + msg);
-        });
-
-        Thread exporter = new Thread(task, "s202-quality-report-exporter");
-        exporter.setDaemon(true);
-        exporter.start();
-    }
-
-    private void writeQualityReportHtml(QualityReportExporter exporter,
-                                        QualityReportModel model,
-                                        Path outputDirectory) {
-        Task<Path> writer = new Task<>() {
-            @Override
-            protected Path call() throws IOException {
-                publishProgress("Writing quality report HTML...", REPORT_PROGRESS_HTML);
-                return exporter.write(model, outputDirectory);
-            }
-        };
-        writer.setOnSucceeded(e -> {
-            Path html = writer.getValue();
-            openQualityReportView(outputDirectory, html);
-            publishProgress("Opened quality report: " + html.toAbsolutePath(), 1);
-        });
-        writer.setOnFailed(e -> {
-            Throwable t = writer.getException();
-            LOGGER.error("Could not write quality report to {}", outputDirectory, t);
-            String msg = t == null || t.getMessage() == null ? "unknown error" : t.getMessage();
-            publishProgress("Error generating quality report: " + msg, 1);
-            showError("Quality Report", "Could not generate quality report:\n" + msg);
-        });
-        Thread htmlWriter = new Thread(writer, "s202-quality-report-writer");
-        htmlWriter.setDaemon(true);
-        htmlWriter.start();
-    }
-
-    private void openQualityReportView(Path reportDirectory, Path htmlPath) {
-        WindowManager wm = Lookup.lookup(WindowManager.class);
-        reportCounter++;
-        QualityReportView view = new QualityReportView(
-                QualityReportView.VIEW_ID_PREFIX + reportCounter,
-                "Quality Report " + reportCounter,
-                reportDirectory,
-                htmlPath,
-                this::exportGeneratedQualityReport);
-        wm.register(view);
-        wm.showView(view);
-    }
-
-    private void exportGeneratedQualityReport(Path sourceDirectory) {
-        DirectoryChooser chooser = new DirectoryChooser();
-        chooser.setTitle("Export Quality Report");
-        File initial = recentDirs.initialReportDirectory();
-        if (initial != null) {
-            chooser.setInitialDirectory(initial);
-        }
-        File targetDirectory = chooser.showDialog(applicationWindow.getStage());
-        if (targetDirectory == null) {
-            return;
-        }
-        recentDirs.setLastReportDirectory(targetDirectory);
-
-        Path target = targetDirectory.toPath();
-        if (isInside(sourceDirectory, target)) {
-            showError("Export Quality Report", "The target directory cannot be the temporary report directory.");
-            return;
-        }
-
-        Task<Integer> copyTask = new Task<>() {
-            @Override
-            protected Integer call() throws IOException {
-                return copyQualityReportDirectory(sourceDirectory, target);
-            }
-        };
-        copyTask.setOnSucceeded(e -> {
-            int files = copyTask.getValue();
-            publishProgress("Exported quality report to " + target.toAbsolutePath() + " (" + files + " files)", 1);
-        });
-        copyTask.setOnFailed(e -> {
-            Throwable t = copyTask.getException();
-            LOGGER.error("Could not export quality report from {} to {}", sourceDirectory, target, t);
-            String msg = t == null || t.getMessage() == null ? "unknown error" : t.getMessage();
-            publishProgress("Error exporting quality report: " + msg, 1);
-            showError("Export Quality Report", "Could not export quality report:\n" + msg);
-        });
-
-        publishProgress("Exporting quality report...", 0);
-        Thread exporter = new Thread(copyTask, "s202-quality-report-copy");
-        exporter.setDaemon(true);
-        exporter.start();
-    }
-
-    private int copyQualityReportDirectory(Path sourceDirectory, Path targetDirectory) throws IOException {
-        List<Path> entries;
-        try (var stream = Files.walk(sourceDirectory)) {
-            entries = stream
-                    .sorted(Comparator.comparingInt(Path::getNameCount))
-                    .toList();
-        }
-
-        int fileCount = (int) entries.stream().filter(Files::isRegularFile).count();
-        int copied = 0;
-        for (Path source : entries) {
-            Path relative = sourceDirectory.relativize(source);
-            if (relative.toString().isEmpty()) {
-                continue;
-            }
-            Path target = targetDirectory.resolve(relative);
-            if (Files.isDirectory(source)) {
-                Files.createDirectories(target);
-                continue;
-            }
-            if (!Files.isRegularFile(source)) {
-                continue;
-            }
-
-            Files.createDirectories(target.getParent());
-            Files.copy(source, target, StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.COPY_ATTRIBUTES);
-            copied++;
-            double progress = fileCount == 0 ? 1.0 : (double) copied / fileCount;
-            publishProgress("Exporting quality report: " + relative, progress);
-        }
-        return copied;
-    }
-
-    private boolean isInside(Path sourceDirectory, Path targetDirectory) {
-        try {
-            Path source = sourceDirectory.toRealPath();
-            Path target = targetDirectory.toRealPath();
-            return target.startsWith(source);
-        } catch (IOException ex) {
-            Path source = sourceDirectory.toAbsolutePath().normalize();
-            Path target = targetDirectory.toAbsolutePath().normalize();
-            return target.startsWith(source);
-        }
-    }
-
-    private int qualityReportScopeImageLimit(QualityReportInput input) {
-        int classes = input.rawModel().getAllClasses().size();
-        if (classes >= 4_000) {
-            return 1;
-        }
-        if (classes >= 1_500) {
-            return 2;
-        }
-        return 5;
     }
 
 
