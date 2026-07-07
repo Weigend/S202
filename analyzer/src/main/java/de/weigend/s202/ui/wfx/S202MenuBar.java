@@ -127,6 +127,10 @@ public class S202MenuBar {
                 "file.exportQualityReport", "Analyze Quality",
                 e -> publish(new MenuRequestEvent.ExportQualityReport(this)));
 
+        MenuItem openCity3DItem = MenuUtil.createMenuItem(
+                "file.city3d", "Show City3D View",
+                e -> publish(new MenuRequestEvent.OpenCity3DView(this)));
+
         MenuItem closeProjectItem = MenuUtil.createMenuItem(
                 "file.closeProject", "Close Project",
                 e -> publish(new MenuRequestEvent.CloseProject(this)));
@@ -171,7 +175,7 @@ public class S202MenuBar {
                 new SeparatorMenuItem(),
                 openSourceMenu,
                 new SeparatorMenuItem(),
-                exportQualityReportItem,
+                exportQualityReportItem, openCity3DItem,
                 new SeparatorMenuItem(),
                 saveProjectItem, loadProjectItem, closeProjectItem,
                 new SeparatorMenuItem(),

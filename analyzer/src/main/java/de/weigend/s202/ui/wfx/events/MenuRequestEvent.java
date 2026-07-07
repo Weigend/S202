@@ -61,6 +61,10 @@ public abstract class MenuRequestEvent extends EventObject {
         public ExportQualityReport(Object source) { super(source); }
     }
 
+    public static final class OpenCity3DView extends MenuRequestEvent {
+        public OpenCity3DView(Object source) { super(source); }
+    }
+
     public static final class LoadProject extends MenuRequestEvent {
         public LoadProject(Object source) { super(source); }
     }

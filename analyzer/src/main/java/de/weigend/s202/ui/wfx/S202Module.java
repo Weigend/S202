@@ -33,6 +33,8 @@ import de.weigend.s202.reader.DependencyModel;
 import de.weigend.s202.reader.LanguageAnalyzer;
 import de.weigend.s202.reader.ProjectScanner;
 import de.weigend.s202.ui.ArchitectureView;
+import de.weigend.s202.ui.city3d.CityModelSerializer;
+import de.weigend.s202.ui.city3d.CityView3DServer;
 import de.weigend.s202.ui.ArchitectureViewStyle;
 import de.weigend.s202.ui.layout.horizontal.HorizontalRowLayoutOptimizer;
 import de.weigend.s202.ui.model.ArchitectureNode;
@@ -95,6 +97,8 @@ import org.slf4j.LoggerFactory;
 
 import java.io.File;
 import java.io.IOException;
+import java.awt.Desktop;
+import java.net.URI;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
@@ -142,6 +146,10 @@ public class S202Module implements Module {
 
     private int viewCounter;
     private int reportCounter;
+
+    /** Sentinel source for selection events injected from the browser (to skip echoing them back). */
+    private static final Object BROWSER_SELECTION_SOURCE = new Object();
+    private boolean city3dSyncWired;
     private File lastDirectory;
     private File lastProjectDirectory;
     private File lastProjectFileDirectory;
@@ -342,6 +350,7 @@ public class S202Module implements Module {
         bus.subscribe(MenuRequestEvent.OpenGradleProject.class, ev -> { openGradleProject(); return true; });
         bus.subscribe(MenuRequestEvent.SaveProject.class, ev -> { saveProject(); return true; });
         bus.subscribe(MenuRequestEvent.ExportQualityReport.class, ev -> { exportQualityReport(); return true; });
+        bus.subscribe(MenuRequestEvent.OpenCity3DView.class, ev -> { openCity3DView(); return true; });
         bus.subscribe(MenuRequestEvent.LoadProject.class, ev -> { loadProject(); return true; });
         bus.subscribe(MenuRequestEvent.CloseProject.class, ev -> { closeProject(); return true; });
         bus.subscribe(MenuRequestEvent.Exit.class, ev -> { Platform.exit(); return true; });
@@ -1497,6 +1506,131 @@ public class S202Module implements Module {
             LOGGER.error("Could not save project {}", target, ex);
             showError("Save Project", "Could not save project:\n" + ex.getMessage());
         }
+    }
+
+    /**
+     * Serialises the currently analysed architecture to a {@link de.weigend.s202.ui.city3d.CityModel},
+     * hands it to the loopback {@link CityView3DServer}, and opens the City3D web
+     * view in the system browser so the same analysis can be explored as a 3D city.
+     */
+    /** City3D in the system browser (loopback bundle). */
+    private void openCity3DView() {
+        CityView3DServer server = prepareCity3DServer();
+        if (server != null) {
+            openUrlInBrowser(server.url());
+        }
+    }
+
+    /**
+     * Serialise the focused analysis into the loopback City3D server and return it, or {@code null}
+     * (after showing an error) when there is nothing to show or the web bundle is missing.
+     */
+    private CityView3DServer prepareCity3DServer() {
+        ArchitectureWfxView focused = focusedSourceArchitectureView();
+        ArchitectureView view = focused == null ? null : focused.getArchitectureView();
+        if (view == null || view.getArchitectureRoot() == null
+                || view.getDomainModel() == null || view.getRawDependencyModel() == null) {
+            showError("City3D View", "There is no loaded analysis to show.");
+            return null;
+        }
+        Path distDir = resolveCity3DDist();
+        if (distDir == null) {
+            showError("City3D View",
+                    "Could not find the City3D web bundle (city3d/dist).\n"
+                    + "Build it once with:  cd city3d && npm install && npm run build");
+            return null;
+        }
+        try {
+            CityModelSerializer serializer = new CityModelSerializer();
+            CityModelSerializer.Metrics metrics =
+                    CityModelSerializer.metricsFrom(view.getRawDependencyModel(), view.getDomainModel());
+            String json = serializer.toJson(view.getArchitectureRoot(), null, metrics);
+
+            CityView3DServer server = CityView3DServer.getOrStart(distDir);
+            server.setCityJson(json);
+            wireCity3DSelectionSync(server, view);
+            return server;
+        } catch (IOException ex) {
+            LOGGER.error("Could not start the City3D view", ex);
+            showError("City3D View", "Could not start the City3D view:\n" + ex.getMessage());
+            return null;
+        }
+    }
+
+    /**
+     * Bidirectional selection sync with the browser City3D view over the loopback server:
+     * <ul>
+     *   <li>browser → app: a pick in the city is republished as a normal {@link NodeSelectionEvent}
+     *       (so the 2D chart and the outline both follow it);</li>
+     *   <li>app → browser: every selection on the bus (chart or outline) is pushed to the city,
+     *       except our own browser-originated injections (avoids a feedback loop).</li>
+     * </ul>
+     */
+    @SuppressWarnings("unchecked")
+    private void wireCity3DSelectionSync(CityView3DServer server, ArchitectureView view) {
+        EventBus<EventObject> bus = Lookup.lookup(EventBus.class);
+        server.setSelectionListener(fqn -> Platform.runLater(() ->
+                bus.publish(new NodeSelectionEvent(fqn, BROWSER_SELECTION_SOURCE))));
+        if (!city3dSyncWired) {
+            city3dSyncWired = true;
+            bus.subscribe(NodeSelectionEvent.class, ev -> {
+                if (ev.getSource() != BROWSER_SELECTION_SOURCE) {
+                    server.pushSelection(ev.getFullName());
+                }
+                return true;
+            });
+        }
+        server.pushSelection(view.getSelectedFullName());   // reflect the current 2D selection
+    }
+
+    /** Locates the built City3D bundle (city3d/dist) relative to the working directory. */
+    private static Path resolveCity3DDist() {
+        List<Path> candidates = new ArrayList<>();
+        String override = System.getProperty("s202.city3d.dist");
+        if (override != null && !override.isBlank()) {
+            candidates.add(Path.of(override));
+        }
+        candidates.add(Path.of("city3d", "dist"));
+        candidates.add(Path.of("..", "city3d", "dist"));
+        candidates.add(Path.of("..", "..", "city3d", "dist"));
+        for (Path p : candidates) {
+            if (Files.isRegularFile(p.resolve("index.html"))) {
+                return p.toAbsolutePath().normalize();
+            }
+        }
+        return null;
+    }
+
+    /**
+     * Opens {@code url} in the system browser on a daemon thread (native command
+     * first; {@code Desktop.browse} would risk deadlocking the JavaFX toolkit on
+     * Linux). Mirrors {@code S202MenuBar#openUrl}.
+     */
+    private void openUrlInBrowser(String url) {
+        Thread opener = new Thread(() -> {
+            try {
+                String os = System.getProperty("os.name", "").toLowerCase(Locale.ROOT);
+                String[] cmd;
+                if (os.contains("linux")) {
+                    cmd = new String[] { "xdg-open", url };
+                } else if (os.contains("mac") || os.contains("darwin")) {
+                    cmd = new String[] { "open", url };
+                } else if (os.contains("win")) {
+                    cmd = new String[] { "rundll32", "url.dll,FileProtocolHandler", url };
+                } else {
+                    if (Desktop.isDesktopSupported()
+                            && Desktop.getDesktop().isSupported(Desktop.Action.BROWSE)) {
+                        Desktop.getDesktop().browse(URI.create(url));
+                    }
+                    return;
+                }
+                new ProcessBuilder(cmd).inheritIO().start();
+            } catch (Exception ex) {
+                LOGGER.warn("Could not open URL {}", url, ex);
+            }
+        }, "city3d-url-opener");
+        opener.setDaemon(true);
+        opener.start();
     }
 
     private void exportQualityReport() {
