@@ -145,6 +145,8 @@ public class ArchitectureView extends BorderPane {
     private VBox whatIfRootContainer;
 
     // Feature-Controller (nach setupUI initialisiert, s. Konstruktor).
+    private final SelectionController selection;
+    private final StyleProjectionStateKeeper stateKeeper;
     private final TangleOverlayController tangleOverlay;
     private final WhatIfEditController whatIfEdit;
     private final ScopeAndReportController scopeReport;
@@ -156,9 +158,7 @@ public class ArchitectureView extends BorderPane {
 
     private javafx.scene.layout.Pane zoomableContent;
     private Consumer<String> statusSink = msg -> { /* no-op default */ };
-    private Consumer<String> nodeSelectionSink = fqn -> { /* no-op default */ };
-    private final Consumer<String> graphSelectionSink = this::handleGraphSelectionChanged;
-    private boolean suppressSelectionSink = false;
+    private final Consumer<String> graphSelectionSink;
 
     // Externally bindable settings.
     private final IntegerProperty packageDepth = new SimpleIntegerProperty(3);
@@ -174,7 +174,6 @@ public class ArchitectureView extends BorderPane {
             new ArchitectureProjectionModel(this::getViewStyle, this::updateSccRendererTangles);
     private final ElementBoundsExporter boundsExporter =
             new ElementBoundsExporter(elementRegistry, () -> zoomableContent, this::getScene);
-    private final ReadOnlyStringWrapper selectedFullName = new ReadOnlyStringWrapper(null);
     private String preferredTopTanglesScope;
     private boolean topTanglesScopeOwner = true;
     private boolean skipTransparentTopLevelPackages = true;
@@ -194,6 +193,10 @@ public class ArchitectureView extends BorderPane {
 
     public ArchitectureView() {
         setupUI();
+        selection = new SelectionController(elementRegistry, scrollPane, arrowsCoalescer, this::invalidateLines);
+        graphSelectionSink = selection::handleGraphSelectionChanged;
+        stateKeeper = new StyleProjectionStateKeeper(
+                scrollPane, () -> zoomController, () -> whatIfRootContainer, zoomFactor::get, arrowsCoalescer);
         tangleOverlay = new TangleOverlayController(tanglePane, this::setStatus);
         whatIfEdit = new WhatIfEditController(
                 this,
@@ -489,18 +492,6 @@ public class ArchitectureView extends BorderPane {
         GraphSelection.setOnDoubleClick(fqn -> {});
     }
 
-    private void handleGraphSelectionChanged(String fqn) {
-        selectedFullName.set(fqn);
-        invalidateLines();
-        // Defer arrow redraw via the coalescer so the CSS layout pass
-        // (border-width change on the selected box) finishes first —
-        // direct drawDependencyArrows() here uses stale bounds.
-        arrowsCoalescer.markDirty();
-        if (!suppressSelectionSink && fqn != null) {
-            nodeSelectionSink.accept(fqn);
-        }
-    }
-
     private void handleComponentApiChanged(ArchitectureAnnotations nextAnnotations, String message) {
         setArchitectureAnnotations(nextAnnotations);
         refreshStyleProjection(message);
@@ -515,8 +506,8 @@ public class ArchitectureView extends BorderPane {
         if (currentRootNode == null) {
             return;
         }
-        StyleProjectionViewState viewState = captureStyleProjectionViewState();
-        String selected = selectedFullName.get();
+        StyleProjectionStateKeeper.ViewState viewState = stateKeeper.capture();
+        String selected = selection.getSelectedFullName();
         boolean depsSave = showDependencies.get();
         boolean sccSave = showScc.get();
         boolean pkgSccSave = showPackageScc.get();
@@ -527,7 +518,7 @@ public class ArchitectureView extends BorderPane {
         showPackageScc.set(pkgSccSave);
         showWhatIfViolations.set(wifSave);
         if (selected != null) {
-            restoreSelectionWithoutScrolling(selected);
+            selection.restoreSelectionWithoutScrolling(selected);
         }
         if (statusMessage != null && !statusMessage.isBlank()) {
             setStatus(statusMessage);
@@ -543,156 +534,8 @@ public class ArchitectureView extends BorderPane {
         refreshStyleProjection(null);
     }
 
-    private StyleProjectionViewState captureStyleProjectionViewState() {
-        Map<String, Boolean> packageExpansion = new HashMap<>();
-        Map<String, Boolean> packageExpansionByFqn = new HashMap<>();
-        Map<String, ComponentExpansionState> componentExpansion = new HashMap<>();
-        collectExpansionState(
-                whatIfRootContainer,
-                packageExpansion,
-                packageExpansionByFqn,
-                componentExpansion);
-        return new StyleProjectionViewState(
-                zoomFactor.get(),
-                scrollPane == null ? 0.0 : scrollPane.getHvalue(),
-                scrollPane == null ? 0.0 : scrollPane.getVvalue(),
-                packageExpansion,
-                packageExpansionByFqn,
-                componentExpansion);
-    }
 
-    private static void collectExpansionState(javafx.scene.Node node,
-                                              Map<String, Boolean> packageExpansion,
-                                              Map<String, Boolean> packageExpansionByFqn,
-                                              Map<String, ComponentExpansionState> componentExpansion) {
-        if (node == null) {
-            return;
-        }
-        if (node instanceof ComponentBox component) {
-            componentExpansion.put(
-                    component.getFullName(),
-                    new ComponentExpansionState(component.isExpanded(), component.isApiExpanded()));
-            packageExpansionByFqn.putIfAbsent(component.getFullName(), component.isExpanded());
-        } else if (node instanceof LevelPackageBox pkg && pkg.getFullName() != null) {
-            packageExpansion.put(packageExpansionKey(pkg), pkg.isExpanded());
-            packageExpansionByFqn.putIfAbsent(pkg.getFullName(), pkg.isExpanded());
-        }
-        if (node instanceof javafx.scene.Parent parent) {
-            for (javafx.scene.Node child : parent.getChildrenUnmodifiable()) {
-                collectExpansionState(child, packageExpansion, packageExpansionByFqn, componentExpansion);
-            }
-        }
-    }
-
-    private void scheduleDeferredViewportRestore(StyleProjectionViewState state) {
-        ZoomController restoredZoomController = zoomController;
-        javafx.scene.Node restoredScrollContent = scrollPane == null ? null : scrollPane.getContent();
-        scheduleDeferredViewportRestore(state, restoredZoomController, restoredScrollContent, 2);
-    }
-
-    private void scheduleDeferredViewportRestore(StyleProjectionViewState state,
-                                                 ZoomController restoredZoomController,
-                                                 javafx.scene.Node restoredScrollContent,
-                                                 int remainingPulses) {
-        javafx.application.Platform.runLater(() -> {
-            if (zoomController != restoredZoomController
-                    || scrollPane == null
-                    || scrollPane.getContent() != restoredScrollContent) {
-                return;
-            }
-            restoreViewportState(state);
-            if (remainingPulses > 1) {
-                scheduleDeferredViewportRestore(
-                        state,
-                        restoredZoomController,
-                        restoredScrollContent,
-                        remainingPulses - 1);
-                return;
-            }
-            arrowsCoalescer.markDirty();
-        });
-    }
-
-    private static void restoreExpansionState(javafx.scene.Node node, StyleProjectionViewState state) {
-        if (node == null) {
-            return;
-        }
-        if (node instanceof ComponentBox component) {
-            ComponentExpansionState expansion = state.componentExpansion().get(component.getFullName());
-            if (expansion != null) {
-                component.setExpanded(expansion.expanded());
-                component.setApiExpanded(expansion.apiExpanded());
-            } else {
-                Boolean expanded = state.packageExpansionByFqn().get(component.getFullName());
-                if (expanded != null) {
-                    component.setExpanded(expanded);
-                }
-            }
-        } else if (node instanceof LevelPackageBox pkg && pkg.getFullName() != null) {
-            Boolean expanded = state.packageExpansion().get(packageExpansionKey(pkg));
-            if (expanded == null) {
-                // A package moved between implementation and API during this
-                // refresh. Its FQN fallback keeps the state across that role change.
-                expanded = state.packageExpansionByFqn().get(pkg.getFullName());
-            }
-            if (expanded != null) {
-                pkg.setExpanded(expanded);
-            }
-        }
-        if (node instanceof javafx.scene.Parent parent) {
-            for (javafx.scene.Node child : parent.getChildrenUnmodifiable()) {
-                restoreExpansionState(child, state);
-            }
-        }
-    }
-
-    private void restoreViewportState(StyleProjectionViewState state) {
-        if (zoomController != null) {
-            zoomController.setZoom(state.zoomFactor());
-        }
-        if (scrollPane != null) {
-            scrollPane.setHvalue(state.horizontalScroll());
-            scrollPane.setVvalue(state.verticalScroll());
-        }
-    }
-
-    private void restoreSelectionWithoutScrolling(String fullName) {
-        javafx.scene.Node node = elementRegistry.get(fullName);
-        if (node instanceof GraphSelection.Selectable target) {
-            runWithoutSelectionSink(() -> GraphSelection.ensureSelected(target));
-            return;
-        }
-        if (node != null) {
-            runWithoutSelectionSink(GraphSelection::clear);
-            selectedFullName.set(fullName);
-            invalidateLines();
-            arrowsCoalescer.markDirty();
-        }
-    }
-
-    private static String packageExpansionKey(LevelPackageBox pkg) {
-        String role = ComponentBox.isApiElement(pkg) ? "api:" : "regular:";
-        return role + pkg.getFullName();
-    }
-
-    private record ComponentExpansionState(boolean expanded, boolean apiExpanded) {}
-
-    private record StyleProjectionViewState(
-            double zoomFactor,
-            double horizontalScroll,
-            double verticalScroll,
-            Map<String, Boolean> packageExpansion,
-            Map<String, Boolean> packageExpansionByFqn,
-            Map<String, ComponentExpansionState> componentExpansion) {
-
-        private StyleProjectionViewState {
-            packageExpansion = Map.copyOf(packageExpansion);
-            packageExpansionByFqn = Map.copyOf(packageExpansionByFqn);
-            componentExpansion = Map.copyOf(componentExpansion);
-        }
-    }
-
-    private void setArchitectureRoot(ArchitectureNode rootNode, StyleProjectionViewState preservedState) {
+    private void setArchitectureRoot(ArchitectureNode rootNode, StyleProjectionStateKeeper.ViewState preservedState) {
         Objects.requireNonNull(rootNode, "rootNode cannot be null");
         beginArchitectureRootBuild(rootNode);
 
@@ -708,10 +551,10 @@ public class ArchitectureView extends BorderPane {
 
     private void finishArchitectureRootBuild(ArchitectureNode rootNode,
                                              javafx.scene.layout.VBox topLevelContainer,
-                                             StyleProjectionViewState preservedState) {
+                                             StyleProjectionStateKeeper.ViewState preservedState) {
         this.whatIfRootContainer = topLevelContainer;
         if (preservedState != null) {
-            restoreExpansionState(topLevelContainer, preservedState);
+            StyleProjectionStateKeeper.restoreExpansionState(topLevelContainer, preservedState);
         }
         if (viewStyle == ArchitectureViewStyle.COMPONENT && scopeReport.hasPlannedPackages()) {
             scopeReport.injectPlannedPackagesIntoScene(topLevelContainer);
@@ -792,8 +635,8 @@ public class ArchitectureView extends BorderPane {
         showPackageScc.set(false);
 
         if (preservedState != null) {
-            restoreViewportState(preservedState);
-            scheduleDeferredViewportRestore(preservedState);
+            stateKeeper.restoreViewportState(preservedState);
+            stateKeeper.scheduleDeferredViewportRestore(preservedState);
         }
         showWhatIfViolations.set(false);
 
@@ -1024,11 +867,11 @@ public class ArchitectureView extends BorderPane {
      * package), or null when nothing is selected.
      */
     public ReadOnlyStringProperty selectedFullNameProperty() {
-        return selectedFullName.getReadOnlyProperty();
+        return selection.selectedFullNameProperty();
     }
 
     public String getSelectedFullName() {
-        return selectedFullName.get();
+        return selection.getSelectedFullName();
     }
 
     /**
@@ -1038,102 +881,13 @@ public class ArchitectureView extends BorderPane {
      * node does not toggle it off.
      */
     public void selectByFullName(String fullName) {
-        if (fullName == null) {
-            return;
-        }
-        javafx.scene.Node node = elementRegistry.get(fullName);
-        if (node instanceof GraphSelection.Selectable target) {
-            runWithoutSelectionSink(() -> GraphSelection.ensureSelected(target));
-            // Defer scrolling until layout has settled; the box may have just
-            // been created during a refresh and have unresolved bounds.
-            javafx.application.Platform.runLater(() -> scrollToNodeIfNeeded(node));
-            return;
-        }
-        // Tree-only node (e.g. a package skipped as a transparent passthrough
-        // — "com", "de", … — that has no visible box in the chart). No visual
-        // highlight to apply, but external observers (quality view, etc.) still
-        // need the announcement. Clear any visible chart selection and update
-        // the property directly.
-        runWithoutSelectionSink(GraphSelection::clear);
-        selectedFullName.set(fullName);
-    }
-
-    private void runWithoutSelectionSink(Runnable action) {
-        boolean wasSuppressing = suppressSelectionSink;
-        suppressSelectionSink = true;
-        try {
-            action.run();
-        } finally {
-            suppressSelectionSink = wasSuppressing;
-        }
+        selection.selectByFullName(fullName);
     }
 
     /** @deprecated use {@link #selectByFullName(String)}. */
     @Deprecated
     public void selectClass(String fullClassName) {
         selectByFullName(fullClassName);
-    }
-
-    private void scrollToNodeIfNeeded(javafx.scene.Node target) {
-        if (scrollPane == null || scrollPane.getContent() == null) {
-            return;
-        }
-        javafx.scene.Node content = scrollPane.getContent();
-        javafx.geometry.Bounds contentBounds = content.getBoundsInLocal();
-        javafx.geometry.Bounds targetInContent = content.sceneToLocal(target.localToScene(target.getBoundsInLocal()));
-
-        double contentWidth = contentBounds.getWidth();
-        double contentHeight = contentBounds.getHeight();
-        javafx.geometry.Bounds viewport = scrollPane.getViewportBounds();
-        if (viewport == null || contentWidth <= 0 || contentHeight <= 0) {
-            return;
-        }
-
-        double overflowX = Math.max(0, contentWidth - viewport.getWidth());
-        double overflowY = Math.max(0, contentHeight - viewport.getHeight());
-        double viewMinX = contentBounds.getMinX() + scrollPane.getHvalue() * overflowX;
-        double viewMinY = contentBounds.getMinY() + scrollPane.getVvalue() * overflowY;
-        double viewMaxX = viewMinX + viewport.getWidth();
-        double viewMaxY = viewMinY + viewport.getHeight();
-        double margin = 24.0;
-
-        if (overflowX > 0) {
-            double targetMinX = targetInContent.getMinX();
-            double targetMaxX = targetInContent.getMaxX();
-            if (targetMinX < viewMinX + margin || targetMaxX > viewMaxX - margin) {
-                double newViewMinX = nextVisibleStart(
-                        targetMinX, targetMaxX, viewport.getWidth(), margin, viewMinX);
-                scrollPane.setHvalue(clamp01((newViewMinX - contentBounds.getMinX()) / overflowX));
-            }
-        }
-        if (overflowY > 0) {
-            double targetMinY = targetInContent.getMinY();
-            double targetMaxY = targetInContent.getMaxY();
-            if (targetMinY < viewMinY + margin || targetMaxY > viewMaxY - margin) {
-                double newViewMinY = nextVisibleStart(
-                        targetMinY, targetMaxY, viewport.getHeight(), margin, viewMinY);
-                scrollPane.setVvalue(clamp01((newViewMinY - contentBounds.getMinY()) / overflowY));
-            }
-        }
-    }
-
-    private static double nextVisibleStart(double targetMin,
-                                           double targetMax,
-                                           double viewportSize,
-                                           double margin,
-                                           double currentStart) {
-        double targetSize = targetMax - targetMin;
-        if (targetSize + margin * 2.0 >= viewportSize) {
-            return targetMin - margin;
-        }
-        if (targetMin < currentStart + margin) {
-            return targetMin - margin;
-        }
-        return targetMax - viewportSize + margin;
-    }
-
-    private static double clamp01(double value) {
-        return Math.max(0, Math.min(1, value));
     }
 
     private void redrawVisibleArrows() {
@@ -1233,7 +987,7 @@ public class ArchitectureView extends BorderPane {
     }
 
     private void drawDependencyArrows() {
-        dependencyRenderer.setSelectedFullName(selectedFullName.get());
+        dependencyRenderer.setSelectedFullName(selection.getSelectedFullName());
         dependencyRenderer.drawDependencyArrows(currentRootNode);
     }
 
@@ -1496,7 +1250,7 @@ public class ArchitectureView extends BorderPane {
      * (class or package) in the graph. Pass null to detach.
      */
     public void setOnNodeSelected(Consumer<String> sink) {
-        this.nodeSelectionSink = sink != null ? sink : (fqn -> {});
+        selection.setOnNodeSelected(sink);
     }
 
     /**
