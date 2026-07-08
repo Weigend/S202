@@ -13,7 +13,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package de.weigend.s202.ui.wfx.shell;
+package de.weigend.s202.ui.core.platform;
 
 import de.weigend.s202.analysis.invariants.LayoutInvariantReport;
 import de.weigend.s202.domain.architecture.ArchitectureAnnotations;
@@ -43,6 +43,7 @@ import java.util.Map;
  * Projektions-Views (Component/Hexagonal/Scope). Aus S202Module extrahiert;
  * S202Module bleibt Composition-Root und verdrahtet nur noch.
  */
+@jakarta.inject.Singleton
 public final class ArchitectureViewManager {
 
     private final ProgressPublisher progress;
@@ -57,6 +58,7 @@ public final class ArchitectureViewManager {
     private final Map<ArchitectureView, S202Project.Source> viewSources = new HashMap<>();
     private final Map<ArchitectureView, LayoutInvariantReport> viewInvariantReports = new HashMap<>();
 
+    @jakarta.inject.Inject
     public ArchitectureViewManager(ProgressPublisher progress, RefactoringPreviewState previewCuts) {
         this.progress = progress;
         this.previewCuts = previewCuts;
@@ -114,8 +116,10 @@ public final class ArchitectureViewManager {
         ArchitectureView view = wrapper.getArchitectureView();
         view.architectureAnnotationsProperty().addListener((obs, oldValue, newValue) ->
                 propagateArchitectureAnnotations(view, newValue));
-        Lookup.lookup(de.weigend.s202.ui.wfx.whatif.WhatIfDependenciesModule.class)
-                .dockUnder(wrapper);
+        // Interessierte Module (z. B. What-If-Dependencies-Panel) docken sich
+        // selbst an — der Manager kennt keine Komponenten.
+        Lookup.lookup(io.softwareecg.wfx.platform.api.EventBus.class)
+                .publish(new de.weigend.s202.ui.core.events.ArchitectureViewRegisteredEvent(wrapper, this));
     }
 
     private void propagateArchitectureAnnotations(ArchitectureView source,

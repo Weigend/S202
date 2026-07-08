@@ -17,8 +17,8 @@ package de.weigend.s202.ui.wfx;
 
 import de.weigend.s202.project.S202Project;
 import de.weigend.s202.reader.ProjectScanner;
-import de.weigend.s202.ui.wfx.shell.Dialogs;
-import de.weigend.s202.ui.wfx.shell.ProgressPublisher;
+import de.weigend.s202.ui.core.platform.Dialogs;
+import de.weigend.s202.ui.core.platform.ProgressPublisher;
 import de.weigend.s202.ui.wfx.shell.RecentDirectories;
 import io.softwareecg.wfx.lookup.api.Lookup;
 import javafx.concurrent.Task;

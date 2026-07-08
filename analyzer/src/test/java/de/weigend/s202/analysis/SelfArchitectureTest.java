@@ -154,6 +154,9 @@ public class SelfArchitectureTest {
                 if (from.startsWith(FEATURES) && to.startsWith(VIEWS)) {
                     violations.add("features -> views: " + from + " -> " + to);
                 }
+                if (from.startsWith(FEATURES) && to.startsWith(APP)) {
+                    violations.add("features -> app: " + from + " -> " + to);
+                }
             }
         }
         assertTrue(violations.isEmpty(),

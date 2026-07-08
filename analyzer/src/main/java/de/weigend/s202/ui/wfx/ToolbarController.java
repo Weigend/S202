@@ -17,7 +17,7 @@ package de.weigend.s202.ui.wfx;
 
 import de.weigend.s202.ui.core.canvas.ArchitectureView;
 import de.weigend.s202.ui.core.graph.ArchitectureViewSettings;
-import de.weigend.s202.ui.wfx.shell.ArchitectureViewManager;
+import de.weigend.s202.ui.core.platform.ArchitectureViewManager;
 import de.weigend.s202.ui.core.platform.ArchitectureWfxView;
 import io.softwareecg.wfx.lookup.api.Lookup;
 import io.softwareecg.wfx.windowmanager.api.ApplicationWindow;

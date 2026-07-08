@@ -41,12 +41,11 @@ import de.weigend.s202.ui.core.layout.horizontal.HorizontalRowLayoutOptimizer;
 import de.weigend.s202.ui.core.model.ArchitectureNode;
 import de.weigend.s202.ui.core.model.ArchitectureNodeBuilder;
 import de.weigend.s202.ui.core.model.ArchitectureNodeCloner;
-import de.weigend.s202.ui.views.tangle.TangleEdgeRenderer;
-import de.weigend.s202.ui.wfx.shell.ArchitectureViewManager;
-import de.weigend.s202.ui.wfx.shell.Dialogs;
-import de.weigend.s202.ui.wfx.shell.ProgressPublisher;
+import de.weigend.s202.ui.core.platform.ArchitectureViewManager;
+import de.weigend.s202.ui.core.platform.Dialogs;
+import de.weigend.s202.ui.core.platform.ProgressPublisher;
 import de.weigend.s202.ui.wfx.shell.RecentDirectories;
-import de.weigend.s202.ui.wfx.shell.RefactoringPreviewState;
+import de.weigend.s202.ui.core.platform.RefactoringPreviewState;
 import de.weigend.s202.ui.core.platform.ArchitectureWfxView;
 import de.weigend.s202.ui.core.events.CutTangleEdgeEvent;
 import de.weigend.s202.ui.core.events.CutTangleEdgesEvent;
@@ -57,7 +56,6 @@ import de.weigend.s202.ui.core.events.OpenScopeEvent;
 import de.weigend.s202.ui.core.events.OpenTangleEvent;
 import de.weigend.s202.ui.core.events.RestoreTangleEdgeEvent;
 import de.weigend.s202.ui.wfx.report.QualityReportController;
-import de.weigend.s202.ui.wfx.tangles.TangleTabController;
 import io.softwareecg.wfx.lookup.api.Lookup;
 import io.softwareecg.wfx.platform.api.EventBus;
 import io.softwareecg.wfx.platform.api.Module;
@@ -143,18 +141,14 @@ public class S202Module implements Module {
 
 
     private final RecentDirectories recentDirs = new RecentDirectories();
-    private final ProgressPublisher progressPublisher = new ProgressPublisher(this);
+    private final ProgressPublisher progressPublisher = Lookup.lookup(ProgressPublisher.class);
 
     private S202StatusBar statusBar;
 
     private ToolbarController toolbar;
 
-    private final RefactoringPreviewState previewState = new RefactoringPreviewState();
-    private final ArchitectureViewManager viewManager =
-            new ArchitectureViewManager(progressPublisher, previewState);
-    private final TangleTabController tangleTabs =
-            new TangleTabController(viewManager, previewState, progressPublisher);
-    private final City3DController city3d = new City3DController(viewManager);
+    private final RefactoringPreviewState previewState = Lookup.lookup(RefactoringPreviewState.class);
+    private final ArchitectureViewManager viewManager = Lookup.lookup(ArchitectureViewManager.class);
     private final QualityReportController qualityReport;
     private final AnalysisPipeline pipeline;
     private final SourceOpenController sourceOpen;
@@ -227,39 +221,15 @@ public class S202Module implements Module {
         subscribeToMenuRequests(bus);
         subscribeToNodeSelection(bus);
         subscribeToOpenScope(bus);
-        subscribeToOpenTangle(bus);
-        subscribeToTanglePreviewEvents(bus);
 
         toolbar.install();
 
         statusBar.setMessage("Ready to analyze code. Open JARs or Python source roots to begin.");
     }
 
-    private void subscribeToOpenTangle(EventBus<EventObject> bus) {
-        bus.subscribe(OpenTangleEvent.class, ev -> {
-            tangleTabs.openTangleView(ev.getMembers(), ev.getTangleKey(), ev.getTitle());
-            return true;
-        });
-    }
-
     private void subscribeToOpenScope(EventBus<EventObject> bus) {
         bus.subscribe(OpenScopeEvent.class, ev -> {
             viewManager.openScopeView(ev.getScope(), ev.getArchitectureView());
-            return true;
-        });
-    }
-
-    private void subscribeToTanglePreviewEvents(EventBus<EventObject> bus) {
-        bus.subscribe(CutTangleEdgeEvent.class, ev -> {
-            tangleTabs.applyPreviewCutToViews(ev.getFrom(), ev.getTo());
-            return true;
-        });
-        bus.subscribe(CutTangleEdgesEvent.class, ev -> {
-            tangleTabs.applyPreviewCutsToViews(ev.getEdges());
-            return true;
-        });
-        bus.subscribe(RestoreTangleEdgeEvent.class, ev -> {
-            tangleTabs.restorePreviewCutInViews(ev.getFrom(), ev.getTo());
             return true;
         });
     }
@@ -273,7 +243,6 @@ public class S202Module implements Module {
         bus.subscribe(MenuRequestEvent.OpenGradleProject.class, ev -> { sourceOpen.openGradleProject(); return true; });
         bus.subscribe(MenuRequestEvent.SaveProject.class, ev -> { persistence.saveProject(); return true; });
         bus.subscribe(MenuRequestEvent.ExportQualityReport.class, ev -> { qualityReport.exportQualityReport(); return true; });
-        bus.subscribe(MenuRequestEvent.OpenCity3DView.class, ev -> { city3d.openCity3DView(); return true; });
         bus.subscribe(MenuRequestEvent.LoadProject.class, ev -> { persistence.loadProject(); return true; });
         bus.subscribe(MenuRequestEvent.CloseProject.class, ev -> { persistence.closeProject(); return true; });
         bus.subscribe(MenuRequestEvent.Exit.class, ev -> { Platform.exit(); return true; });

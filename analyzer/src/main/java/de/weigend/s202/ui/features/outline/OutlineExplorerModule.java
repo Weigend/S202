@@ -13,7 +13,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package de.weigend.s202.ui.wfx.outline;
+package de.weigend.s202.ui.features.outline;
 
 import de.weigend.s202.reader.DependencyModel;
 import de.weigend.s202.ui.core.canvas.ArchitectureView;

@@ -13,7 +13,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package de.weigend.s202.ui.wfx.tangles;
+package de.weigend.s202.ui.views.tangle;
 
 import de.weigend.s202.reader.EdgeKind;
 import io.softwareecg.wfx.windowmanager.api.Position;

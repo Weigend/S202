@@ -43,7 +43,6 @@ import de.weigend.s202.ui.core.model.ScopeExtensionModel;
 import de.weigend.s202.ui.core.arrows.DependencyRenderer;
 import de.weigend.s202.ui.core.arrows.DependencyRendererStrategy;
 import de.weigend.s202.ui.core.arrows.SCCRenderer;
-import de.weigend.s202.ui.views.tangle.TangleEdgeRenderer;
 import de.weigend.s202.ui.core.arrows.WhatIfUpwardEdgeRenderer;
 import de.weigend.s202.ui.core.canvas.ArchitectureTreeBuilder;
 import de.weigend.s202.ui.views.component.ComponentArchitectureTreeBuilder;

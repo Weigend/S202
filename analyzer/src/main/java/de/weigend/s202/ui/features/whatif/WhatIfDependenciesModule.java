@@ -13,7 +13,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package de.weigend.s202.ui.wfx.whatif;
+package de.weigend.s202.ui.features.whatif;
 
 import de.weigend.s202.domain.architecture.Architecture;
 import de.weigend.s202.ui.core.canvas.ArchitectureView;
@@ -70,7 +70,14 @@ public class WhatIfDependenciesModule implements Module {
     }
 
     @Override
+    @SuppressWarnings("unchecked")
     public void start() {
+        io.softwareecg.wfx.platform.api.EventBus<java.util.EventObject> bus =
+                Lookup.lookup(io.softwareecg.wfx.platform.api.EventBus.class);
+        bus.subscribe(de.weigend.s202.ui.core.events.ArchitectureViewRegisteredEvent.class, ev -> {
+            dockUnder(ev.getWrapper());
+            return true;
+        });
         // Don't auto-register. The view is docked manually by S202Module
         // after the first architecture view is opened, via dockUnder(...)
         // — that's the only point where we know which CENTER editor area

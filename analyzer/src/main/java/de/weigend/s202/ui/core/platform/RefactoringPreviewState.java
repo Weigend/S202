@@ -13,7 +13,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package de.weigend.s202.ui.wfx.shell;
+package de.weigend.s202.ui.core.platform;
 
 import de.weigend.s202.domain.DependencyEdge;
 
@@ -27,9 +27,14 @@ import java.util.Set;
  * Quality-Report (lesen beide) — vorher ein implizit geteiltes Feld in
  * S202Module.
  */
+@jakarta.inject.Singleton
 public final class RefactoringPreviewState {
 
     private final Set<DependencyEdge> cuts = new HashSet<>();
+
+    @jakarta.inject.Inject
+    RefactoringPreviewState() {
+    }
 
     public Set<DependencyEdge> cuts() {
         return Collections.unmodifiableSet(cuts);

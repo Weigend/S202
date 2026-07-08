@@ -19,8 +19,8 @@ import de.weigend.s202.ui.core.canvas.ArchitectureView;
 import de.weigend.s202.ui.views.city3d.CityModelSerializer;
 import de.weigend.s202.ui.views.city3d.CityView3DServer;
 import de.weigend.s202.ui.core.events.NodeSelectionEvent;
-import de.weigend.s202.ui.wfx.shell.ArchitectureViewManager;
-import de.weigend.s202.ui.wfx.shell.Dialogs;
+import de.weigend.s202.ui.core.platform.ArchitectureViewManager;
+import de.weigend.s202.ui.core.platform.Dialogs;
 import de.weigend.s202.ui.core.platform.ArchitectureWfxView;
 import io.softwareecg.wfx.lookup.api.Lookup;
 import io.softwareecg.wfx.platform.api.EventBus;
@@ -44,9 +44,10 @@ import java.util.Locale;
  * verdrahtet die bidirektionale Selektions-Synchronisation. Aus S202Module
  * extrahiert.
  */
-public final class City3DController {
+@jakarta.inject.Singleton
+public final class City3DModule implements io.softwareecg.wfx.platform.api.Module {
 
-    private static final Logger LOGGER = LoggerFactory.getLogger(City3DController.class);
+    private static final Logger LOGGER = LoggerFactory.getLogger(City3DModule.class);
 
     /** Sentinel source for selection events injected from the browser (to skip echoing them back). */
     private static final Object BROWSER_SELECTION_SOURCE = new Object();
@@ -54,8 +55,35 @@ public final class City3DController {
     private final ArchitectureViewManager viewManager;
     private boolean city3dSyncWired;
 
-    public City3DController(ArchitectureViewManager viewManager) {
+    @jakarta.inject.Inject
+    City3DModule(ArchitectureViewManager viewManager) {
         this.viewManager = viewManager;
+    }
+
+    @Override
+    public String getName() {
+        return "City3D View";
+    }
+
+    @Override
+    public void preload() {
+        // nichts vorzubereiten
+    }
+
+    @Override
+    @SuppressWarnings("unchecked")
+    public void start() {
+        io.softwareecg.wfx.platform.api.EventBus<java.util.EventObject> bus =
+                Lookup.lookup(io.softwareecg.wfx.platform.api.EventBus.class);
+        bus.subscribe(de.weigend.s202.ui.core.events.MenuRequestEvent.OpenCity3DView.class, ev -> {
+            openCity3DView();
+            return true;
+        });
+    }
+
+    @Override
+    public void stop() {
+        // nichts freizugeben
     }
 
     /** City3D in the system browser (loopback bundle). */

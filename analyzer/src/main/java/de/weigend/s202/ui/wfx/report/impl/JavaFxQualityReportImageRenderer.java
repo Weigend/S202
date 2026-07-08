@@ -23,7 +23,7 @@ import de.weigend.s202.ui.core.canvas.ArchitectureView;
 import de.weigend.s202.domain.architecture.ArchitectureKind;
 import de.weigend.s202.ui.core.model.ArchitectureNode;
 import de.weigend.s202.ui.core.model.ArchitectureNodeCloner;
-import de.weigend.s202.ui.views.tangle.TangleFilter;
+import de.weigend.s202.ui.core.model.TangleFilter;
 import javafx.application.Platform;
 import javafx.geometry.Bounds;
 import javafx.geometry.Rectangle2D;

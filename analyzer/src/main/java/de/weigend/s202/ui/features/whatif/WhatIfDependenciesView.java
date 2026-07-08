@@ -13,7 +13,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package de.weigend.s202.ui.wfx.whatif;
+package de.weigend.s202.ui.features.whatif;
 
 import de.weigend.s202.domain.architecture.Architecture;
 import de.weigend.s202.domain.architecture.ComponentArchitecture;

@@ -13,7 +13,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package de.weigend.s202.ui.wfx.tangles;
+package de.weigend.s202.ui.views.tangle;
 
 import de.weigend.s202.domain.DependencyEdge;
 import de.weigend.s202.domain.StronglyConnectedComponent;
@@ -28,7 +28,7 @@ import de.weigend.s202.ui.core.events.CutTangleEdgeEvent;
 import de.weigend.s202.ui.core.events.CutTangleEdgesEvent;
 import de.weigend.s202.ui.core.events.OpenTangleEvent;
 import de.weigend.s202.ui.core.events.RestoreTangleEdgeEvent;
-import de.weigend.s202.ui.wfx.outline.OutlineExplorerView;
+import de.weigend.s202.ui.features.outline.OutlineExplorerView;
 import io.softwareecg.wfx.lookup.api.Lookup;
 import io.softwareecg.wfx.platform.api.EventBus;
 import io.softwareecg.wfx.platform.api.Module;
@@ -109,6 +109,7 @@ public class TopTanglesModule implements Module {
     @Override
     @SuppressWarnings("unchecked")
     public void start() {
+        installTangleTabWiring();
         WindowManager wm = Lookup.lookup(WindowManager.class);
 
         // Stack into the LEFT split alongside the outline; OutlineExplorerModule
@@ -164,6 +165,38 @@ public class TopTanglesModule implements Module {
 
         wm.focusedViewProperty().addListener((obs, was, isNow) -> rebindToFocusedView());
         rebindToFocusedView();
+    }
+
+    /**
+     * Verdrahtet die Tangle-Tabs dieser Komponente: Öffnen per
+     * OpenTangleEvent und die Verteilung der Preview-Cuts — vorher lag
+     * dieses Wiring in S202Module.
+     */
+    @SuppressWarnings("unchecked")
+    private void installTangleTabWiring() {
+        de.weigend.s202.ui.views.tangle.TangleTabController tangleTabs =
+                new de.weigend.s202.ui.views.tangle.TangleTabController(
+                        Lookup.lookup(de.weigend.s202.ui.core.platform.ArchitectureViewManager.class),
+                        Lookup.lookup(de.weigend.s202.ui.core.platform.RefactoringPreviewState.class),
+                        Lookup.lookup(de.weigend.s202.ui.core.platform.ProgressPublisher.class));
+        io.softwareecg.wfx.platform.api.EventBus<java.util.EventObject> bus =
+                Lookup.lookup(io.softwareecg.wfx.platform.api.EventBus.class);
+        bus.subscribe(de.weigend.s202.ui.core.events.OpenTangleEvent.class, ev -> {
+            tangleTabs.openTangleView(ev.getMembers(), ev.getTangleKey(), ev.getTitle());
+            return true;
+        });
+        bus.subscribe(de.weigend.s202.ui.core.events.CutTangleEdgeEvent.class, ev -> {
+            tangleTabs.applyPreviewCutToViews(ev.getFrom(), ev.getTo());
+            return true;
+        });
+        bus.subscribe(de.weigend.s202.ui.core.events.CutTangleEdgesEvent.class, ev -> {
+            tangleTabs.applyPreviewCutsToViews(ev.getEdges());
+            return true;
+        });
+        bus.subscribe(de.weigend.s202.ui.core.events.RestoreTangleEdgeEvent.class, ev -> {
+            tangleTabs.restorePreviewCutInViews(ev.getFrom(), ev.getTo());
+            return true;
+        });
     }
 
     @Override

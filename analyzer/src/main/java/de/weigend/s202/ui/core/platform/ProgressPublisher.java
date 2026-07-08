@@ -13,7 +13,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package de.weigend.s202.ui.wfx.shell;
+package de.weigend.s202.ui.core.platform;
 
 import de.weigend.s202.ui.core.canvas.ArchitectureView;
 import io.softwareecg.wfx.lookup.api.Lookup;
@@ -28,9 +28,15 @@ import java.util.EventObject;
  * (picked up by the status bar), FX-thread-safe. Shared by all S202
  * controllers so progress reporting has exactly one shape.
  */
+@jakarta.inject.Singleton
 public final class ProgressPublisher {
 
     private final Object source;
+
+    @jakarta.inject.Inject
+    ProgressPublisher() {
+        this.source = this;
+    }
 
     public ProgressPublisher(Object source) {
         this.source = source;

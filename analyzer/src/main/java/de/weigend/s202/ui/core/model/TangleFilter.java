@@ -13,7 +13,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package de.weigend.s202.ui.views.tangle;
+package de.weigend.s202.ui.core.model;
 
 import de.weigend.s202.ui.core.model.ArchitectureNode;
 

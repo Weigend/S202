@@ -13,18 +13,18 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package de.weigend.s202.ui.wfx.tangles;
+package de.weigend.s202.ui.views.tangle;
 
 import de.weigend.s202.ui.views.tangle.TangleEdgeMethodResolver;
-import de.weigend.s202.ui.views.tangle.TangleFilter;
+import de.weigend.s202.ui.core.model.TangleFilter;
 import de.weigend.s202.domain.DependencyEdge;
 import de.weigend.s202.reader.DependencyModel;
 import de.weigend.s202.ui.core.canvas.ArchitectureView;
 import de.weigend.s202.ui.core.model.ArchitectureNode;
-import de.weigend.s202.ui.wfx.shell.ArchitectureViewManager;
-import de.weigend.s202.ui.wfx.shell.Dialogs;
-import de.weigend.s202.ui.wfx.shell.ProgressPublisher;
-import de.weigend.s202.ui.wfx.shell.RefactoringPreviewState;
+import de.weigend.s202.ui.core.platform.ArchitectureViewManager;
+import de.weigend.s202.ui.core.platform.Dialogs;
+import de.weigend.s202.ui.core.platform.ProgressPublisher;
+import de.weigend.s202.ui.core.platform.RefactoringPreviewState;
 import de.weigend.s202.ui.core.events.CutTangleEdgeEvent;
 import de.weigend.s202.ui.core.events.MethodSelectionEvent;
 import de.weigend.s202.ui.core.events.NodeSelectionEvent;
