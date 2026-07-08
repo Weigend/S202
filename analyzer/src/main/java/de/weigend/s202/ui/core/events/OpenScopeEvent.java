@@ -15,7 +15,7 @@
  */
 package de.weigend.s202.ui.core.events;
 
-import de.weigend.s202.ui.core.canvas.ArchitectureView;
+import de.weigend.s202.ui.core.canvas.ArchitectureCanvas;
 
 import java.util.EventObject;
 
@@ -26,9 +26,9 @@ import java.util.EventObject;
 public class OpenScopeEvent extends EventObject {
 
     private final String scope;
-    private final ArchitectureView architectureView;
+    private final ArchitectureCanvas architectureView;
 
-    public OpenScopeEvent(String scope, ArchitectureView architectureView, Object source) {
+    public OpenScopeEvent(String scope, ArchitectureCanvas architectureView, Object source) {
         super(source);
         this.scope = scope;
         this.architectureView = architectureView;
@@ -38,7 +38,7 @@ public class OpenScopeEvent extends EventObject {
         return scope;
     }
 
-    public ArchitectureView getArchitectureView() {
+    public ArchitectureCanvas getArchitectureView() {
         return architectureView;
     }
 }

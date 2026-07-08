@@ -33,7 +33,7 @@ import java.util.function.Supplier;
  * Erhält Viewport (Zoom + Scroll) und Expand-Zustände über einen
  * Stil-Projektion-Rebuild hinweg: Zustand vor dem Rebuild einfangen, nach
  * dem Rebuild (über mehrere FX-Pulse verteilt) wiederherstellen. Aus
- * ArchitectureView extrahiert.
+ * ArchitectureCanvas extrahiert.
  */
 final class StyleProjectionStateKeeper {
 

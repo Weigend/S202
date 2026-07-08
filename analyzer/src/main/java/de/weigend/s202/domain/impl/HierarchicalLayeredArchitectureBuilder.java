@@ -159,7 +159,7 @@ public final class HierarchicalLayeredArchitectureBuilder implements Architectur
         // Within each parent's box, sort siblings by their local-level
         // position (set by LocalLevelCalculator) — purely a sibling-graph
         // decision, NOT the global architectureLevel. This is the change
-        // that fixes the "ArchitectureView sits below ui.rendering" bug.
+        // that fixes the "ArchitectureCanvas sits below ui.rendering" bug.
         List<CalculatedElementInfo> sorted = new ArrayList<>(children);
         sorted.sort(Comparator
                 .comparingInt((CalculatedElementInfo c) -> c.localLevel).reversed()

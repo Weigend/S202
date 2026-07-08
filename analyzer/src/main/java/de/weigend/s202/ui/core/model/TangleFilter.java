@@ -35,7 +35,7 @@ public final class TangleFilter {
 
     /**
      * @param root          the full architecture root from a focused
-     *                      {@code ArchitectureView}
+     *                      {@code ArchitectureCanvas}
      * @param keepClasses   class full-names to retain (typically a tangle's
      *                      members)
      * @return a synthetic root whose subtree only includes the kept classes

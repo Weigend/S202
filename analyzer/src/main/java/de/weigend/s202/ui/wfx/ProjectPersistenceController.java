@@ -24,7 +24,7 @@ import de.weigend.s202.project.ProjectMapper;
 import de.weigend.s202.project.ProjectStore;
 import de.weigend.s202.project.S202Project;
 import de.weigend.s202.reader.DependencyModel;
-import de.weigend.s202.ui.core.canvas.ArchitectureView;
+import de.weigend.s202.ui.core.canvas.ArchitectureCanvas;
 import de.weigend.s202.ui.core.layout.horizontal.HorizontalRowLayoutOptimizer;
 import de.weigend.s202.ui.core.model.ArchitectureNode;
 import de.weigend.s202.ui.core.model.ArchitectureNodeBuilder;
@@ -109,7 +109,7 @@ public final class ProjectPersistenceController {
         target = withDefaultProjectExtension(target);
         recentDirs.setLastProjectFileDirectory(target.getParentFile());
 
-        ArchitectureView view = focused.getArchitectureView();
+        ArchitectureCanvas view = focused.getArchitectureView();
         S202Project.Source source = viewManager.sourceOf(view,
                 new S202Project.Source("UNKNOWN", List.of(), null));
         S202Project project = projectMapper.toProject(
@@ -177,7 +177,7 @@ public final class ProjectPersistenceController {
 
         ArchitectureWfxView target = viewManager.createArchitectureView();
         viewManager.registerArchitectureView(target);
-        ArchitectureView view = target.getArchitectureView();
+        ArchitectureCanvas view = target.getArchitectureView();
         view.setArchitectureAnnotations(loaded.annotations());
         view.setDomainModel(loaded.domainModel());
         view.setRawDependencyModel(loaded.rawModel());

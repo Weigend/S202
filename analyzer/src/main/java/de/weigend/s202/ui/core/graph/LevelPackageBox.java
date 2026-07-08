@@ -74,7 +74,7 @@ public class LevelPackageBox extends VBox implements GraphSelection.Selectable, 
 
     /**
      * Sets a global callback that is called whenever any LevelPackageBox is expanded/collapsed.
-     * Used to refresh dependency arrows in ArchitectureView.
+     * Used to refresh dependency arrows in ArchitectureCanvas.
      */
     public static void setOnExpandChangeCallback(Runnable callback) {
         onExpandChangeCallback = callback;

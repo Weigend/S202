@@ -16,7 +16,7 @@
 package de.weigend.s202.ui.features.whatif;
 
 import de.weigend.s202.domain.architecture.Architecture;
-import de.weigend.s202.ui.core.canvas.ArchitectureView;
+import de.weigend.s202.ui.core.canvas.ArchitectureCanvas;
 import de.weigend.s202.ui.core.platform.ArchitectureWfxView;
 import io.softwareecg.wfx.lookup.api.Lookup;
 import io.softwareecg.wfx.platform.api.Module;
@@ -32,7 +32,7 @@ import javafx.beans.value.ChangeListener;
  * Loosely coupled to the chart: observes
  * {@link WindowManager#focusedViewProperty()}, rebinds the view to
  * whichever architecture is focused, and listens to that view's
- * {@link ArchitectureView#redrawTickProperty()} so the panel refreshes
+ * {@link ArchitectureCanvas#redrawTickProperty()} so the panel refreshes
  * after every layout pulse — same trigger the orange-edge renderer uses.
  */
 @Singleton
@@ -41,7 +41,7 @@ public class WhatIfDependenciesModule implements Module {
 
     private WhatIfDependenciesView view;
 
-    private ArchitectureView boundView;
+    private ArchitectureCanvas boundView;
     private ChangeListener<Object> rootListener;
     private ChangeListener<Object> rawModelListener;
     private ChangeListener<Object> architectureListener;
@@ -113,7 +113,7 @@ public class WhatIfDependenciesModule implements Module {
 
     private void rebindToFocusedView() {
         ArchitectureWfxView focused = focusedArchitectureView();
-        ArchitectureView newBound = focused == null ? null : focused.getArchitectureView();
+        ArchitectureCanvas newBound = focused == null ? null : focused.getArchitectureView();
         if (newBound == boundView) {
             return;
         }
@@ -206,7 +206,7 @@ public class WhatIfDependenciesModule implements Module {
                 .orElse(null);
     }
 
-    private ArchitectureWfxView wrapperFor(ArchitectureView view) {
+    private ArchitectureWfxView wrapperFor(ArchitectureCanvas view) {
         if (view == null) {
             return null;
         }

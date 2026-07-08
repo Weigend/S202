@@ -17,7 +17,7 @@ package de.weigend.s202.ui.views.threed;
 
 import de.weigend.s202.ui.views.threed.ArchitectureView3D;
 import de.weigend.s202.domain.architecture.Architecture;
-import de.weigend.s202.ui.core.canvas.ArchitectureView;
+import de.weigend.s202.ui.core.canvas.ArchitectureCanvas;
 import de.weigend.s202.ui.core.model.ArchitectureNode;
 import de.weigend.s202.ui.core.platform.ArchitectureWfxView;
 import de.weigend.s202.ui.core.events.NodeSelectionEvent;
@@ -44,14 +44,14 @@ import java.util.Map;
  * <p>Tracks the focused {@link ArchitectureWfxView}. When the architecture
  * root changes, waits two JavaFX pulses (so the 2D layout is settled) and
  * then reads element footprints directly from the 2D view via
- * {@link ArchitectureView#getElementFootprintBoundsInLayout()}.
+ * {@link ArchitectureCanvas#getElementFootprintBoundsInLayout()}.
  */
 @Singleton
 @Priority(35)
 public class Architecture3DModule implements Module {
 
     private ArchitectureView3D view;
-    private ArchitectureView   boundView;
+    private ArchitectureCanvas   boundView;
     private ChangeListener<ArchitectureNode> rootListener;
     private ChangeListener<Boolean> showDependenciesListener;
     private ChangeListener<Boolean> showSccListener;
@@ -101,7 +101,7 @@ public class Architecture3DModule implements Module {
 
     private void rebindToFocusedView() {
         ArchitectureWfxView focused = focusedArchitectureView();
-        ArchitectureView newBound = focused == null ? null : focused.getArchitectureView();
+        ArchitectureCanvas newBound = focused == null ? null : focused.getArchitectureView();
         if (newBound == boundView) return;
 
         unbind();
@@ -156,7 +156,7 @@ public class Architecture3DModule implements Module {
 
     /**
      * Waits two JavaFX layout pulses before reading the 2D bounds, so the
-     * ArchitectureView's scene graph is fully laid out.
+     * ArchitectureCanvas's scene graph is fully laid out.
      *
      * @param resetCamera true when the architecture root changed or the bound view switched;
      *                    false for pure redraw ticks (selection, violations toggle) where the
@@ -168,7 +168,7 @@ public class Architecture3DModule implements Module {
             return;
         }
         // Capture reference; boundView may change before the lambdas execute
-        ArchitectureView captured = boundView;
+        ArchitectureCanvas captured = boundView;
         Platform.runLater(() -> Platform.runLater(() -> {
             if (captured != boundView) return; // stale — a newer rebind won
             Map<String, Bounds> bounds = captured.getElementFootprintBoundsInLayout();

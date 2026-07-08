@@ -21,7 +21,7 @@ import de.weigend.s202.domain.SCCFinder;
 import de.weigend.s202.domain.DomainModel;
 import de.weigend.s202.reader.DependencyModel;
 import de.weigend.s202.reader.EdgeKind;
-import de.weigend.s202.ui.core.canvas.ArchitectureView;
+import de.weigend.s202.ui.core.canvas.ArchitectureCanvas;
 import de.weigend.s202.ui.core.model.ArchitectureNode;
 import de.weigend.s202.ui.core.platform.ArchitectureWfxView;
 import de.weigend.s202.ui.core.events.CutTangleEdgeEvent;
@@ -71,7 +71,7 @@ public class TopTanglesModule implements Module {
 
     private TopTanglesView tanglesView;
 
-    private ArchitectureView boundView;
+    private ArchitectureCanvas boundView;
     private ChangeListener<ArchitectureNode> rootListener;
 
     // Last data we pushed into the view. Used to short-circuit repeated
@@ -206,7 +206,7 @@ public class TopTanglesModule implements Module {
 
     private void rebindToFocusedView() {
         ArchitectureWfxView focused = focusedArchitectureView();
-        ArchitectureView newBound = focused == null ? null : focused.getArchitectureView();
+        ArchitectureCanvas newBound = focused == null ? null : focused.getArchitectureView();
 
         // Focus moving onto a side panel should not retrigger work for the
         // same chart — the tangle list and selection are still current.
@@ -339,7 +339,7 @@ public class TopTanglesModule implements Module {
         return selected;
     }
 
-    private static String scopeFor(ArchitectureView view, DomainModel model) {
+    private static String scopeFor(ArchitectureCanvas view, DomainModel model) {
         if (view == null) {
             return null;
         }
@@ -636,7 +636,7 @@ public class TopTanglesModule implements Module {
                 .orElse(null);
     }
 
-    private ArchitectureWfxView wrapperFor(ArchitectureView view) {
+    private ArchitectureWfxView wrapperFor(ArchitectureCanvas view) {
         if (view == null) {
             return null;
         }

@@ -54,7 +54,7 @@ public class DependencyRenderer implements DependencyRendererStrategy {
     private boolean dependencyLinesDrawn = false;
     private String selectedFullName;
 
-    // Dynamic references set by ArchitectureView
+    // Dynamic references set by ArchitectureCanvas
     private Pane zoomableContent;
     private Pane overlayPane;
     private ScrollPane scrollPane;

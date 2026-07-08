@@ -16,7 +16,7 @@
 package de.weigend.s202.ui.features.outline;
 
 import de.weigend.s202.reader.DependencyModel;
-import de.weigend.s202.ui.core.canvas.ArchitectureView;
+import de.weigend.s202.ui.core.canvas.ArchitectureCanvas;
 import de.weigend.s202.ui.core.model.ArchitectureNode;
 import de.weigend.s202.ui.core.platform.ArchitectureWfxView;
 import de.weigend.s202.ui.core.events.MethodSelectionEvent;
@@ -40,7 +40,7 @@ import java.util.EventObject;
  * Tracks {@link WindowManager#focusedViewProperty()}: when an
  * {@link ArchitectureWfxView} gains focus, the outline mirrors its
  * architecture root and stays in sync via the focused view's
- * {@link ArchitectureView#architectureRootProperty()}. When focus moves
+ * {@link ArchitectureCanvas#architectureRootProperty()}. When focus moves
  * elsewhere or all views close, the outline clears.
  * <p>
  * Node selection (class or package) is exchanged with the chart purely through
@@ -54,7 +54,7 @@ public class OutlineExplorerModule implements Module {
     private OutlineExplorerView outlineView;
 
     /** Currently mirrored architecture view, or null. */
-    private ArchitectureView boundView;
+    private ArchitectureCanvas boundView;
     /** Listener attached to {@link #boundView}'s root property. */
     private ChangeListener<ArchitectureNode> rootListener;
     /** Listener attached to {@link #boundView}'s raw dependency model property. */
@@ -123,7 +123,7 @@ public class OutlineExplorerModule implements Module {
 
     private void rebindToFocusedView() {
         ArchitectureWfxView focused = focusedArchitectureView();
-        ArchitectureView newBound = focused == null ? null : focused.getArchitectureView();
+        ArchitectureCanvas newBound = focused == null ? null : focused.getArchitectureView();
 
         // Idempotent: every focus change (including focus moving onto the
         // outline panel itself or onto the quality view) lands here, but if
@@ -196,7 +196,7 @@ public class OutlineExplorerModule implements Module {
                 .orElse(null);
     }
 
-    private ArchitectureWfxView wrapperFor(ArchitectureView view) {
+    private ArchitectureWfxView wrapperFor(ArchitectureCanvas view) {
         if (view == null) {
             return null;
         }

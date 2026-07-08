@@ -21,7 +21,7 @@ import de.weigend.s202.domain.architecture.ComponentArchitecture;
 import de.weigend.s202.domain.impl.ComponentArchitectureModel;
 import de.weigend.s202.domain.architecture.Element;
 import io.softwareecg.wfx.lookup.api.Lookup;
-import de.weigend.s202.ui.core.canvas.ArchitectureView;
+import de.weigend.s202.ui.core.canvas.ArchitectureCanvas;
 import de.weigend.s202.domain.architecture.ArchitectureKind;
 import de.weigend.s202.ui.core.graph.LevelClassBox;
 import de.weigend.s202.ui.core.graph.LevelPackageBox;
@@ -356,7 +356,7 @@ public class ArchitectureTreeBuilderTest {
     public void testComponentProjectionRefreshPreservesViewportAndExpansionState() {
         runOnFxThread(() -> {
             ArchitectureNode root = componentSourceRoot();
-            ArchitectureView view = new ArchitectureView();
+            ArchitectureCanvas view = new ArchitectureCanvas();
             view.setViewStyle(ArchitectureKind.COMPONENT);
             view.setArchitectureRoot(root);
 

@@ -30,7 +30,7 @@ import java.util.function.Supplier;
 /**
  * Exportiert die Layout-/Szenen-Bounds aller registrierten Elemente — die
  * Datenquelle für die 3D-Ansicht und die Report-Screenshots. Reiner Leser
- * von elementRegistry und zoomableContent; aus ArchitectureView extrahiert.
+ * von elementRegistry und zoomableContent; aus ArchitectureCanvas extrahiert.
  */
 final class ElementBoundsExporter {
 

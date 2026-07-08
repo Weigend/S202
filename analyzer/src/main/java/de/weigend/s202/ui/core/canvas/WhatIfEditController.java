@@ -39,7 +39,7 @@ import java.util.function.Supplier;
 /**
  * Das What-If-Editieren einer Architektur-View: DnD-Drop-Verarbeitung
  * (inkl. Component-API-Zuordnung), Undo/Redo der Moves, das Nachziehen der
- * Szene und die orange „moved“-Dekoration. Aus ArchitectureView extrahiert;
+ * Szene und die orange „moved“-Dekoration. Aus ArchitectureCanvas extrahiert;
  * alle Rückgriffe laufen über Callbacks — keine Abhängigkeit auf die View.
  */
 public final class WhatIfEditController {

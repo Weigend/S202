@@ -35,10 +35,10 @@ import java.util.function.Consumer;
  * Die Property- und Konfigurations-Fläche der Architektur-Ansicht: alle
  * extern bindbaren Settings, die Read-Only-Handles auf Root/Metriken, die
  * Status-Senke und die View-Konfiguration. Bewusst von der Orchestrierung
- * in {@link ArchitectureView} getrennt — hier stehen ausschließlich
+ * in {@link ArchitectureCanvas} getrennt — hier stehen ausschließlich
  * selbsttragende Zustands-Accessors, dort die Verdrahtung der Controller.
  */
-public abstract class AbstractArchitectureView extends BorderPane {
+public abstract class AbstractArchitectureCanvas extends BorderPane {
 
     // Externally bindable settings.
     final IntegerProperty packageDepth = new SimpleIntegerProperty(3);
@@ -91,7 +91,7 @@ public abstract class AbstractArchitectureView extends BorderPane {
 
     /**
      * Read-only handle to the currently displayed architecture root. Fires when
-     * a new JAR is loaded or {@link ArchitectureView#refreshLayout()} runs.
+     * a new JAR is loaded or {@link ArchitectureCanvas#refreshLayout()} runs.
      */
     public ReadOnlyObjectProperty<ArchitectureNode> architectureRootProperty() {
         return architectureRoot.getReadOnlyProperty();

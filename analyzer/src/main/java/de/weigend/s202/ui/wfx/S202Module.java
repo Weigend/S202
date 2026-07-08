@@ -32,7 +32,7 @@ import de.weigend.s202.report.quality.QualityReportOptions;
 import de.weigend.s202.reader.DependencyModel;
 import de.weigend.s202.reader.LanguageAnalyzer;
 import de.weigend.s202.reader.ProjectScanner;
-import de.weigend.s202.ui.core.canvas.ArchitectureView;
+import de.weigend.s202.ui.core.canvas.ArchitectureCanvas;
 import de.weigend.s202.ui.core.graph.ArchitectureViewSettings;
 import de.weigend.s202.ui.views.city3d.CityModelSerializer;
 import de.weigend.s202.ui.views.city3d.CityView3DServer;
@@ -275,7 +275,7 @@ public class S202Module implements Module {
             if (focused == null) {
                 return true;
             }
-            ArchitectureView view = focused.getArchitectureView();
+            ArchitectureCanvas view = focused.getArchitectureView();
             // The graph already selected the node inline; skip our own echo.
             if (ev.getSource() == view) {
                 return true;

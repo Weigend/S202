@@ -36,7 +36,7 @@ import java.util.function.Supplier;
  * Hält die Analyse-Modelle einer Architektur-View (DomainModel, rohes
  * Dependency-Modell, Annotations) und leitet daraus die Architektur-Projektion
  * ({@link Architecture} + What-If-Kopie) für den aktiven View-Stil ab.
- * UI-frei; aus ArchitectureView extrahiert. Die Property-Instanzen leben
+ * UI-frei; aus ArchitectureCanvas extrahiert. Die Property-Instanzen leben
  * hier, die View reicht sie unverändert nach außen — externe Bindings
  * behalten ihre Identität.
  */

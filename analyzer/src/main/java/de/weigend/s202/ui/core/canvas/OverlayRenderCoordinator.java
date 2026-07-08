@@ -41,7 +41,7 @@ import java.util.function.Supplier;
 /**
  * Koordiniert die Overlay-Renderer (Abhängigkeitspfeile, SCC-Linien,
  * What-If-Verstöße, Tangle-Kanten): Erzeugung pro Root-Build, Sichtbarkeits-
- * Toggles und das gesammelte Neuzeichnen. Aus ArchitectureView extrahiert.
+ * Toggles und das gesammelte Neuzeichnen. Aus ArchitectureCanvas extrahiert.
  */
 final class OverlayRenderCoordinator {
 

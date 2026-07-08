@@ -42,7 +42,7 @@ import java.util.function.Consumer;
 
 /**
  * WFX side-panel view that shows the entire package/class hierarchy of the
- * currently focused {@link de.weigend.s202.ui.core.canvas.ArchitectureView ArchitectureView}
+ * currently focused {@link de.weigend.s202.ui.core.canvas.ArchitectureCanvas ArchitectureCanvas}
  * as a {@link TreeView}. Single-clicking any node — class or package —
  * forwards a selection request through the
  * {@link #setOnNodeClick(Consumer) configured handler}.

@@ -19,7 +19,7 @@ import de.weigend.s202.domain.DependencyEdge;
 import de.weigend.s202.report.quality.QualityReportImageRenderer;
 import de.weigend.s202.report.quality.QualityReportInput;
 import de.weigend.s202.report.quality.QualityReportModel;
-import de.weigend.s202.ui.core.canvas.ArchitectureView;
+import de.weigend.s202.ui.core.canvas.ArchitectureCanvas;
 import de.weigend.s202.domain.architecture.ArchitectureKind;
 import de.weigend.s202.ui.core.model.ArchitectureNode;
 import de.weigend.s202.ui.core.model.ArchitectureNodeCloner;
@@ -49,7 +49,7 @@ import java.util.function.BiConsumer;
 import java.util.function.Consumer;
 
 /**
- * Creates report evidence images by rendering real {@link ArchitectureView}
+ * Creates report evidence images by rendering real {@link ArchitectureCanvas}
  * instances off-screen and snapshotting them as PNG files.
  */
 public final class JavaFxQualityReportImageRenderer implements QualityReportImageRenderer {
@@ -196,7 +196,7 @@ public final class JavaFxQualityReportImageRenderer implements QualityReportImag
             root = ArchitectureNodeCloner.cloneTree(sourceRoot);
         }
 
-        ArchitectureView view = configuredView(input, style, root);
+        ArchitectureCanvas view = configuredView(input, style, root);
         view.setShowWhatIfViolations(true);
         if (!keepClasses.isEmpty()) {
             view.selectByFullName(keepClasses.iterator().next());
@@ -214,7 +214,7 @@ public final class JavaFxQualityReportImageRenderer implements QualityReportImag
         if (root == null) {
             root = ArchitectureNodeCloner.cloneTree(sourceRoot);
         }
-        ArchitectureView view = configuredView(input, ArchitectureKind.LAYERED, root);
+        ArchitectureCanvas view = configuredView(input, ArchitectureKind.LAYERED, root);
         view.setShowPackageScc(true);
         if (!finding.members().isEmpty()) {
             view.selectByFullName(finding.members().getFirst());
@@ -236,7 +236,7 @@ public final class JavaFxQualityReportImageRenderer implements QualityReportImag
         if (root == null) {
             root = ArchitectureNodeCloner.cloneTree(sourceRoot);
         }
-        ArchitectureView view = configuredView(input, ArchitectureKind.LAYERED, root);
+        ArchitectureCanvas view = configuredView(input, ArchitectureKind.LAYERED, root);
         List<DependencyEdge> edges = finding.samples().stream()
                 .map(sample -> new DependencyEdge(sample.source(), sample.target()))
                 .filter(edge -> members.contains(edge.from()) && members.contains(edge.to()))
@@ -250,10 +250,10 @@ public final class JavaFxQualityReportImageRenderer implements QualityReportImag
         snapshot(view, outputDirectory.resolve(finding.imagePath()));
     }
 
-    private ArchitectureView configuredView(QualityReportInput input,
+    private ArchitectureCanvas configuredView(QualityReportInput input,
                                             ArchitectureKind style,
                                             ArchitectureNode root) {
-        ArchitectureView view = new ArchitectureView();
+        ArchitectureCanvas view = new ArchitectureCanvas();
         view.setViewStyle(style);
         view.setPackageDepth(12);
         view.setSkipTransparentTopLevelPackages(false);
@@ -267,7 +267,7 @@ public final class JavaFxQualityReportImageRenderer implements QualityReportImag
         return view;
     }
 
-    private void snapshot(ArchitectureView view, Path path) throws IOException {
+    private void snapshot(ArchitectureCanvas view, Path path) throws IOException {
         Files.createDirectories(path.getParent());
         view.setMinSize(WIDTH, HEIGHT);
         view.setPrefSize(WIDTH, HEIGHT);

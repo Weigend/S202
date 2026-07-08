@@ -30,7 +30,7 @@ import java.util.function.Consumer;
 /**
  * Selektion einer Architektur-View: das selectedFullName-Property, die
  * programmatische Auswahl (inkl. Scroll-into-View) und die Weitergabe von
- * Graph-Selektionen an die Host-Shell. Aus ArchitectureView extrahiert.
+ * Graph-Selektionen an die Host-Shell. Aus ArchitectureCanvas extrahiert.
  */
 final class SelectionController {
 

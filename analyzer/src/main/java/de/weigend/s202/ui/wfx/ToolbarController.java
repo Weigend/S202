@@ -15,7 +15,7 @@
  */
 package de.weigend.s202.ui.wfx;
 
-import de.weigend.s202.ui.core.canvas.ArchitectureView;
+import de.weigend.s202.ui.core.canvas.ArchitectureCanvas;
 import de.weigend.s202.ui.core.graph.ArchitectureViewSettings;
 import de.weigend.s202.ui.core.platform.ArchitectureViewManager;
 import de.weigend.s202.ui.core.platform.ArchitectureWfxView;
@@ -81,7 +81,7 @@ public final class ToolbarController {
     private final SimpleBooleanProperty canRedo = new SimpleBooleanProperty(false);
 
     // Tracks which view we currently mirror so we can unbind on focus change.
-    private ArchitectureView boundView;
+    private ArchitectureCanvas boundView;
     // Reusable listener so we can detach it cleanly (no-op when boundView is null).
     private ChangeListener<Number> zoomLabelListener;
 
@@ -103,7 +103,7 @@ public final class ToolbarController {
     }
 
     /** Die aktuell gespiegelte View (oder {@code null}) — für Menü-Undo/Redo. */
-    public ArchitectureView boundView() {
+    public ArchitectureCanvas boundView() {
         return boundView;
     }
 
@@ -283,7 +283,7 @@ public final class ToolbarController {
             return;
         }
 
-        ArchitectureView view = focused.getArchitectureView();
+        ArchitectureCanvas view = focused.getArchitectureView();
         boundView = view;
         undoButton.disableProperty().bind(view.canUndoWhatIfProperty().not());
         redoButton.disableProperty().bind(view.canRedoWhatIfProperty().not());

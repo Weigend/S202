@@ -103,7 +103,7 @@ import java.util.function.Consumer;
  * circuit-board mode, zoom) via JavaFX properties so the host shell can
  * provide a single shared toolbar that operates on the focused view.
  */
-public class ArchitectureView extends AbstractArchitectureView {
+public class ArchitectureCanvas extends AbstractArchitectureCanvas {
 
     public record BuildProgress(int processedNodes, int totalNodes, String currentElement) {}
 
@@ -154,7 +154,7 @@ public class ArchitectureView extends AbstractArchitectureView {
     private final ElementBoundsExporter boundsExporter =
             new ElementBoundsExporter(elementRegistry, () -> zoomableContent, this::getScene);
 
-    public ArchitectureView() {
+    public ArchitectureCanvas() {
         setupUI();
         selection = new SelectionController(elementRegistry, scrollPane, arrowsCoalescer, this::invalidateLines);
         graphSelectionSink = selection::handleGraphSelectionChanged;

@@ -60,7 +60,7 @@ public class DebugPackageLevels {
             Set<String> deps = entry.getValue().dependencies;
             System.out.println("  " + className + " -> L" + level);
             // Show dependencies for key classes
-            if (className.contains("S202Main") || className.contains("ArchitectureView")) {
+            if (className.contains("S202Main") || className.contains("ArchitectureCanvas")) {
                 System.out.println("      dependencies: " + deps);
             }
         }
@@ -91,9 +91,9 @@ public class DebugPackageLevels {
             }
         }
         
-        // Debug: Show dependencies of ArchitectureView in detail
+        // Debug: Show dependencies of ArchitectureCanvas in detail
         System.out.println("\n=== DEPENDENCY CHAIN ANALYSIS ===");
-        String[] keyClasses = {"de.weigend.s202.ui.wfx.S202Main", "de.weigend.s202.ui.core.canvas.ArchitectureView"};
+        String[] keyClasses = {"de.weigend.s202.ui.wfx.S202Main", "de.weigend.s202.ui.core.canvas.ArchitectureCanvas"};
         for (String className : keyClasses) {
             DomainModel.CalculatedElementInfo info = model.getClass(className);
             if (info != null) {

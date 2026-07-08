@@ -15,7 +15,7 @@
  */
 package de.weigend.s202.ui.core.platform;
 
-import de.weigend.s202.ui.core.canvas.ArchitectureView;
+import de.weigend.s202.ui.core.canvas.ArchitectureCanvas;
 import io.softwareecg.wfx.lookup.api.Lookup;
 import io.softwareecg.wfx.platform.api.EventBus;
 import io.softwareecg.wfx.platform.api.events.ProgressEvent;
@@ -54,7 +54,7 @@ public final class ProgressPublisher {
      * Maps the incremental JavaFX tree-build progress into the tail end
      * (97%–99.5%) of the overall analysis progress bar.
      */
-    public void javaFxBuildProgress(String label, ArchitectureView.BuildProgress buildProgress) {
+    public void javaFxBuildProgress(String label, ArchitectureCanvas.BuildProgress buildProgress) {
         int total = Math.max(1, buildProgress.totalNodes());
         int processed = Math.min(buildProgress.processedNodes(), total);
         double fraction = Math.max(0.0, Math.min(1.0, (double) processed / total));

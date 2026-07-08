@@ -27,7 +27,7 @@ import org.junit.jupiter.api.Test;
 import static org.junit.jupiter.api.Assertions.*;
 
 /**
- * Test that verifies ArchitectureView.setArchitectureRoot() correctly displays packages with their calculated levels.
+ * Test that verifies ArchitectureCanvas.setArchitectureRoot() correctly displays packages with their calculated levels.
  */
 public class ArchitectureViewLevelTest {
     
@@ -75,7 +75,7 @@ public class ArchitectureViewLevelTest {
         
         System.err.println("[TEST] Found com.example2 in ArchitectureNode at level " + com2Node.getLevel());
         System.err.println("[TEST] ✓ All ArchitectureNode verifications passed");
-        System.err.println("[TEST] When ArchitectureView.setArchitectureRoot() is called, it will use this tree");
+        System.err.println("[TEST] When ArchitectureCanvas.setArchitectureRoot() is called, it will use this tree");
     }
     
     private ArchitectureNode findNodeByName(ArchitectureNode node, String fullName) {

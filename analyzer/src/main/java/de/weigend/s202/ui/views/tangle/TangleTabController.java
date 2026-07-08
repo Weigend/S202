@@ -19,7 +19,7 @@ import de.weigend.s202.ui.views.tangle.TangleEdgeMethodResolver;
 import de.weigend.s202.ui.core.model.TangleFilter;
 import de.weigend.s202.domain.DependencyEdge;
 import de.weigend.s202.reader.DependencyModel;
-import de.weigend.s202.ui.core.canvas.ArchitectureView;
+import de.weigend.s202.ui.core.canvas.ArchitectureCanvas;
 import de.weigend.s202.ui.core.model.ArchitectureNode;
 import de.weigend.s202.ui.core.platform.ArchitectureViewManager;
 import de.weigend.s202.ui.core.platform.Dialogs;
@@ -79,7 +79,7 @@ public final class TangleTabController {
         if (source == null) {
             return;
         }
-        ArchitectureView sourceView = source.getArchitectureView();
+        ArchitectureCanvas sourceView = source.getArchitectureView();
         ArchitectureNode sourceRoot = sourceView.getArchitectureRoot();
         if (sourceRoot == null) {
             return;
@@ -98,7 +98,7 @@ public final class TangleTabController {
                 ? members.stream().sorted().collect(Collectors.joining("|"))
                 : tangleKey;
         ArchitectureWfxView wrapper = reusableTangleWrapper(wm, key, title);
-        ArchitectureView tangleView = wrapper.getArchitectureView();
+        ArchitectureCanvas tangleView = wrapper.getArchitectureView();
 
         // Snapshot the current zoom before setArchitectureRoot wipes it via
         // resetZoom — the user typically tunes the zoom once for a tangle
@@ -145,7 +145,7 @@ public final class TangleTabController {
             return existing;
         }
         String viewId = viewManager.nextViewId();
-        ArchitectureView tangleView = new ArchitectureView();
+        ArchitectureCanvas tangleView = new ArchitectureCanvas();
         tangleView.setTopTanglesScopeOwner(false);
         tangleView.setStatusSink(progress::status);
         EventBus<EventObject> bus = Lookup.lookup(EventBus.class);
@@ -193,7 +193,7 @@ public final class TangleTabController {
     /* ----- Kanten-Selektion & Kanten-Sammlung -------------------------------- */
 
     private void publishTangleEdgeSelection(EventBus<EventObject> bus,
-                                            ArchitectureView tangleView,
+                                            ArchitectureCanvas tangleView,
                                             String from,
                                             String to) {
         if (from == null) {

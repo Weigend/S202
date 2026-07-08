@@ -24,7 +24,7 @@ import de.weigend.s202.domain.DomainModel;
 import de.weigend.s202.project.S202Project;
 import de.weigend.s202.reader.DependencyModel;
 import de.weigend.s202.reader.LanguageAnalyzer;
-import de.weigend.s202.ui.core.canvas.ArchitectureView;
+import de.weigend.s202.ui.core.canvas.ArchitectureCanvas;
 import de.weigend.s202.ui.core.layout.horizontal.HorizontalRowLayoutOptimizer;
 import de.weigend.s202.ui.core.model.ArchitectureNode;
 import de.weigend.s202.ui.core.model.ArchitectureNodeBuilder;
@@ -128,7 +128,7 @@ public final class AnalysisPipeline {
         }
         ArchitectureWfxView target = viewManager.createArchitectureView();
         viewManager.registerArchitectureView(target);
-        final ArchitectureView view = target.getArchitectureView();
+        final ArchitectureCanvas view = target.getArchitectureView();
         final String fileNames = jarFiles.stream().map(File::getName).collect(Collectors.joining(", "));
         final List<String> jarPaths = jarFiles.stream().map(File::getAbsolutePath).toList();
         final List<Path> jarInputPaths = jarFiles.stream().map(File::toPath).toList();
@@ -180,7 +180,7 @@ public final class AnalysisPipeline {
         File rootFile = root.toFile();
         ArchitectureWfxView target = viewManager.createArchitectureView(titlePrefix + ": " + rootFile.getName());
         viewManager.registerArchitectureView(target);
-        final ArchitectureView view = target.getArchitectureView();
+        final ArchitectureCanvas view = target.getArchitectureView();
         final String rootPath = rootFile.getAbsolutePath();
         final S202Project.Source source = new S202Project.Source(sourceKind, List.of(rootPath), rootPath);
 
@@ -249,7 +249,7 @@ public final class AnalysisPipeline {
         return new AnalysisResult(rawModel, root, metrics, calculated, invariants, cycleBreakEdges);
     }
 
-    private void applyAnalysisResult(AnalysisInputSummary summary, ArchitectureView view,
+    private void applyAnalysisResult(AnalysisInputSummary summary, ArchitectureCanvas view,
                                      S202Project.Source source, AnalysisResult result) {
         previewState.clear();
         // Domain model first so listeners on architectureRoot/metrics can
@@ -263,7 +263,7 @@ public final class AnalysisPipeline {
                 () -> finishAppliedAnalysisResult(summary, view, source, result));
     }
 
-    private void finishAppliedAnalysisResult(AnalysisInputSummary summary, ArchitectureView view,
+    private void finishAppliedAnalysisResult(AnalysisInputSummary summary, ArchitectureCanvas view,
                                              S202Project.Source source, AnalysisResult result) {
         view.setQualityMetrics(result.metrics());
         viewManager.putSource(view, source);

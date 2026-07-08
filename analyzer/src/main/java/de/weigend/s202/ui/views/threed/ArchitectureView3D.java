@@ -54,7 +54,7 @@ import java.util.function.Consumer;
  * WFX {@link View} that renders the architecture as an interactive 3D landscape.
  *
  * <p>The 3D layout is built directly from the 2D element bounds read out of
- * {@link de.weigend.s202.ui.core.canvas.ArchitectureView#getElementFootprintBoundsInLayout()}
+ * {@link de.weigend.s202.ui.core.canvas.ArchitectureCanvas#getElementFootprintBoundsInLayout()}
  * after each layout pulse:
  * <pre>
  *   2D layout X →  3D world X
@@ -169,7 +169,7 @@ public class ArchitectureView3D implements View {
      * Rebuilds the 3D scene from pre-read 2D layout bounds.
      * Pass {@code null} maps to clear the view.
      *
-     * @param elementBounds      bounds per FQN read from the 2D ArchitectureView
+     * @param elementBounds      bounds per FQN read from the 2D ArchitectureCanvas
      * @param root               root of the ArchitectureNode tree
      * @param architecture       domain model (for tangle/SCC detection)
      * @param visibleParentByFqn closest visible 2D package parent per FQN
@@ -262,7 +262,7 @@ public class ArchitectureView3D implements View {
      * Rebuilds the 3D scene from pre-read 2D layout bounds.
      * Pass {@code null} maps to clear the view.
      *
-     * @param elementBounds bounds per FQN read from the 2D ArchitectureView
+     * @param elementBounds bounds per FQN read from the 2D ArchitectureCanvas
      * @param root          root of the ArchitectureNode tree
      * @param architecture  domain model (for tangle/SCC detection)
      * @param stage         owning stage (needed for mouse-grab centering)

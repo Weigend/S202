@@ -15,7 +15,7 @@
  */
 package de.weigend.s202.ui.wfx;
 
-import de.weigend.s202.ui.core.canvas.ArchitectureView;
+import de.weigend.s202.ui.core.canvas.ArchitectureCanvas;
 import de.weigend.s202.ui.views.city3d.CityModelSerializer;
 import de.weigend.s202.ui.views.city3d.CityView3DServer;
 import de.weigend.s202.ui.core.events.NodeSelectionEvent;
@@ -100,7 +100,7 @@ public final class City3DModule implements io.softwareecg.wfx.platform.api.Modul
      */
     private CityView3DServer prepareCity3DServer() {
         ArchitectureWfxView focused = viewManager.focusedSourceArchitectureView();
-        ArchitectureView view = focused == null ? null : focused.getArchitectureView();
+        ArchitectureCanvas view = focused == null ? null : focused.getArchitectureView();
         if (view == null || view.getArchitectureRoot() == null
                 || view.getDomainModel() == null || view.getRawDependencyModel() == null) {
             Dialogs.showError("City3D View", "There is no loaded analysis to show.");
@@ -140,7 +140,7 @@ public final class City3DModule implements io.softwareecg.wfx.platform.api.Modul
      * </ul>
      */
     @SuppressWarnings("unchecked")
-    private void wireCity3DSelectionSync(CityView3DServer server, ArchitectureView view) {
+    private void wireCity3DSelectionSync(CityView3DServer server, ArchitectureCanvas view) {
         EventBus<EventObject> bus = Lookup.lookup(EventBus.class);
         server.setSelectionListener(fqn -> Platform.runLater(() ->
                 bus.publish(new NodeSelectionEvent(fqn, BROWSER_SELECTION_SOURCE))));

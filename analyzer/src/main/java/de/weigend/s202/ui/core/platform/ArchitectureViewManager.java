@@ -18,7 +18,7 @@ package de.weigend.s202.ui.core.platform;
 import de.weigend.s202.analysis.invariants.LayoutInvariantReport;
 import de.weigend.s202.domain.architecture.ArchitectureAnnotations;
 import de.weigend.s202.project.S202Project;
-import de.weigend.s202.ui.core.canvas.ArchitectureView;
+import de.weigend.s202.ui.core.canvas.ArchitectureCanvas;
 import de.weigend.s202.domain.architecture.ArchitectureKind;
 import de.weigend.s202.ui.core.model.ArchitectureNode;
 import de.weigend.s202.ui.core.model.ArchitectureNodeCloner;
@@ -55,8 +55,8 @@ public final class ArchitectureViewManager {
     // Dedicated tangle tabs keyed by the tangle's member set. Each tangle row
     // gets one view instance and reopens/focuses that view on later requests.
     private final Map<String, ArchitectureWfxView> tangleViews = new HashMap<>();
-    private final Map<ArchitectureView, S202Project.Source> viewSources = new HashMap<>();
-    private final Map<ArchitectureView, LayoutInvariantReport> viewInvariantReports = new HashMap<>();
+    private final Map<ArchitectureCanvas, S202Project.Source> viewSources = new HashMap<>();
+    private final Map<ArchitectureCanvas, LayoutInvariantReport> viewInvariantReports = new HashMap<>();
 
     @jakarta.inject.Inject
     public ArchitectureViewManager(ProgressPublisher progress, RefactoringPreviewState previewCuts) {
@@ -73,7 +73,7 @@ public final class ArchitectureViewManager {
     @SuppressWarnings("unchecked")
     public ArchitectureWfxView createArchitectureView(String title) {
         viewCounter++;
-        ArchitectureView view = new ArchitectureView();
+        ArchitectureCanvas view = new ArchitectureCanvas();
         view.setStatusSink(progress::status);
 
         // Bridge graph node selections (class or package) onto the bus so
@@ -96,7 +96,7 @@ public final class ArchitectureViewManager {
         return ArchitectureWfxView.VIEW_ID_PREFIX + viewCounter;
     }
 
-    public void applyStylesheet(ArchitectureView view) {
+    public void applyStylesheet(ArchitectureCanvas view) {
         var css = getClass().getResource("/de/weigend/s202/ui/styles.css");
         if (css != null) {
             view.getStylesheets().add(css.toExternalForm());
@@ -113,7 +113,7 @@ public final class ArchitectureViewManager {
      */
     public void registerArchitectureView(ArchitectureWfxView wrapper) {
         Lookup.lookup(WindowManager.class).register(wrapper);
-        ArchitectureView view = wrapper.getArchitectureView();
+        ArchitectureCanvas view = wrapper.getArchitectureView();
         view.architectureAnnotationsProperty().addListener((obs, oldValue, newValue) ->
                 propagateArchitectureAnnotations(view, newValue));
         // Interessierte Module (z. B. What-If-Dependencies-Panel) docken sich
@@ -122,7 +122,7 @@ public final class ArchitectureViewManager {
                 .publish(new de.weigend.s202.ui.core.events.ArchitectureViewRegisteredEvent(wrapper, this));
     }
 
-    private void propagateArchitectureAnnotations(ArchitectureView source,
+    private void propagateArchitectureAnnotations(ArchitectureCanvas source,
                                                   ArchitectureAnnotations annotations) {
         if (propagatingArchitectureAnnotations || source == null || source.getDomainModel() == null) {
             return;
@@ -136,7 +136,7 @@ public final class ArchitectureViewManager {
                 if (!(registered instanceof ArchitectureWfxView wrapper)) {
                     continue;
                 }
-                ArchitectureView target = wrapper.getArchitectureView();
+                ArchitectureCanvas target = wrapper.getArchitectureView();
                 if (target == source || target.getDomainModel() != source.getDomainModel()) {
                     continue;
                 }
@@ -200,19 +200,19 @@ public final class ArchitectureViewManager {
 
     /* ----- View-Kontext (Quelle, Invarianten) ------------------------------- */
 
-    public S202Project.Source sourceOf(ArchitectureView view, S202Project.Source fallback) {
+    public S202Project.Source sourceOf(ArchitectureCanvas view, S202Project.Source fallback) {
         return viewSources.getOrDefault(view, fallback);
     }
 
-    public void putSource(ArchitectureView view, S202Project.Source source) {
+    public void putSource(ArchitectureCanvas view, S202Project.Source source) {
         viewSources.put(view, source);
     }
 
-    public LayoutInvariantReport invariantsOf(ArchitectureView view) {
+    public LayoutInvariantReport invariantsOf(ArchitectureCanvas view) {
         return viewInvariantReports.get(view);
     }
 
-    public void putInvariants(ArchitectureView view, LayoutInvariantReport report) {
+    public void putInvariants(ArchitectureCanvas view, LayoutInvariantReport report) {
         viewInvariantReports.put(view, report);
     }
 
@@ -278,7 +278,7 @@ public final class ArchitectureViewManager {
         if (wrapper == null) {
             return;
         }
-        ArchitectureView view = wrapper.getArchitectureView();
+        ArchitectureCanvas view = wrapper.getArchitectureView();
         viewSources.remove(view);
         viewInvariantReports.remove(view);
         tangleViews.values().removeIf(wrapper::equals);
@@ -308,7 +308,7 @@ public final class ArchitectureViewManager {
             return;
         }
 
-        ArchitectureView sourceView = sourceWrapper.getArchitectureView();
+        ArchitectureCanvas sourceView = sourceWrapper.getArchitectureView();
         ArchitectureNode sourceRoot = sourceView.getArchitectureRoot();
         if (sourceRoot == null) {
             progress.progress("No architecture loaded for " + label + " projection", 1);
@@ -317,7 +317,7 @@ public final class ArchitectureViewManager {
 
         WindowManager wm = Lookup.lookup(WindowManager.class);
         ArchitectureWfxView wrapper = createArchitectureView(title);
-        ArchitectureView projectionView = wrapper.getArchitectureView();
+        ArchitectureCanvas projectionView = wrapper.getArchitectureView();
         projectionView.setViewStyle(style);
         projectionView.setArchitectureAnnotations(sourceView.getArchitectureAnnotations());
         projectionView.setRawDependencyModel(sourceView.getRawDependencyModel());
@@ -339,11 +339,11 @@ public final class ArchitectureViewManager {
                 });
     }
 
-    public void openScopeView(String scope, ArchitectureView requestedSourceView) {
+    public void openScopeView(String scope, ArchitectureCanvas requestedSourceView) {
         if (scope == null || scope.isBlank()) {
             return;
         }
-        ArchitectureView sourceView = requestedSourceView;
+        ArchitectureCanvas sourceView = requestedSourceView;
         if (sourceView == null) {
             ArchitectureWfxView source = focusedSourceArchitectureView();
             sourceView = source == null ? null : source.getArchitectureView();
@@ -351,7 +351,7 @@ public final class ArchitectureViewManager {
         if (sourceView == null) {
             return;
         }
-        ArchitectureView finalSourceView = sourceView;
+        ArchitectureCanvas finalSourceView = sourceView;
         ArchitectureNode sourceRoot = sourceView.getScopeExtensionSourceRoot();
         if (sourceRoot == null) {
             sourceRoot = sourceView.getArchitectureRoot();
@@ -367,7 +367,7 @@ public final class ArchitectureViewManager {
 
         WindowManager wm = Lookup.lookup(WindowManager.class);
         ArchitectureWfxView wrapper = createArchitectureView("Scope " + simple(scope));
-        ArchitectureView scopeView = wrapper.getArchitectureView();
+        ArchitectureCanvas scopeView = wrapper.getArchitectureView();
         scopeView.setPreferredTopTanglesScope(scope);
         scopeView.enableScopeExtensionFrom(sourceRoot);
         scopeView.setArchitectureAnnotations(sourceView.getArchitectureAnnotations());

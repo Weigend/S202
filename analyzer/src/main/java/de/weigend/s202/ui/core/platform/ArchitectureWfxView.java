@@ -15,7 +15,7 @@
  */
 package de.weigend.s202.ui.core.platform;
 
-import de.weigend.s202.ui.core.canvas.ArchitectureView;
+import de.weigend.s202.ui.core.canvas.ArchitectureCanvas;
 import io.softwareecg.wfx.windowmanager.api.Position;
 import io.softwareecg.wfx.windowmanager.api.View;
 import io.softwareecg.wfx.windowmanager.api.ViewKind;
@@ -24,7 +24,7 @@ import javafx.scene.Parent;
 import java.net.URL;
 
 /**
- * WFX {@link View} wrapper around the programmatic {@link ArchitectureView}.
+ * WFX {@link View} wrapper around the programmatic {@link ArchitectureCanvas}.
  * Lets WFX dock the existing UI without forcing it into an FXML round-trip.
  */
 public class ArchitectureWfxView implements View {
@@ -33,15 +33,15 @@ public class ArchitectureWfxView implements View {
 
     private final String viewId;
     private final String title;
-    private final ArchitectureView architectureView;
+    private final ArchitectureCanvas architectureView;
 
-    public ArchitectureWfxView(String viewId, String title, ArchitectureView architectureView) {
+    public ArchitectureWfxView(String viewId, String title, ArchitectureCanvas architectureView) {
         this.viewId = viewId;
         this.title = title;
         this.architectureView = architectureView;
     }
 
-    public ArchitectureView getArchitectureView() {
+    public ArchitectureCanvas getArchitectureView() {
         return architectureView;
     }
 

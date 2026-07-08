@@ -54,7 +54,7 @@ import java.util.function.Supplier;
 /**
  * Scope-Erweiterung (Kontextmenü + Dialog), geplante Pakete der
  * Component-View und der Refactoring-Report (JSON aller Session-Änderungen).
- * Aus ArchitectureView extrahiert; Rückgriffe laufen über Callbacks.
+ * Aus ArchitectureCanvas extrahiert; Rückgriffe laufen über Callbacks.
  */
 final class ScopeExtensionController {
 

@@ -21,7 +21,7 @@ import de.weigend.s202.report.quality.QualityReportExporter;
 import de.weigend.s202.report.quality.QualityReportInput;
 import de.weigend.s202.report.quality.QualityReportModel;
 import de.weigend.s202.report.quality.QualityReportOptions;
-import de.weigend.s202.ui.core.canvas.ArchitectureView;
+import de.weigend.s202.ui.core.canvas.ArchitectureCanvas;
 import de.weigend.s202.ui.core.model.ArchitectureNode;
 import de.weigend.s202.ui.core.model.ArchitectureNodeCloner;
 import de.weigend.s202.ui.wfx.report.impl.JavaFxQualityReportImageRenderer;
@@ -106,7 +106,7 @@ public final class QualityReportController {
             return;
         }
 
-        ArchitectureView view = focused.getArchitectureView();
+        ArchitectureCanvas view = focused.getArchitectureView();
         S202Project.Source source = viewManager.sourceOf(view,
                 new S202Project.Source("UNKNOWN", List.of(), null));
         QualityReportInput input = new QualityReportInput(

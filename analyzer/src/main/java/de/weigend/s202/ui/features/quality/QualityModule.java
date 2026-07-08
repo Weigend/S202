@@ -17,7 +17,7 @@ package de.weigend.s202.ui.features.quality;
 
 import de.weigend.s202.analysis.quality.QualityMetrics;
 import de.weigend.s202.domain.DomainModel;
-import de.weigend.s202.ui.core.canvas.ArchitectureView;
+import de.weigend.s202.ui.core.canvas.ArchitectureCanvas;
 import de.weigend.s202.ui.core.model.ArchitectureNode;
 import de.weigend.s202.ui.core.platform.ArchitectureWfxView;
 import de.weigend.s202.ui.features.outline.OutlineExplorerView;
@@ -50,7 +50,7 @@ public class QualityModule implements Module {
 
     private QualityView qualityView;
 
-    private ArchitectureView boundView;
+    private ArchitectureCanvas boundView;
     private ChangeListener<QualityMetrics> metricsListener;
     private ChangeListener<String> selectionListener;
     private ChangeListener<ArchitectureNode> rootListener;
@@ -99,7 +99,7 @@ public class QualityModule implements Module {
 
     private void rebindToFocusedView() {
         ArchitectureWfxView focused = focusedArchitectureView();
-        ArchitectureView newBound = focused == null ? null : focused.getArchitectureView();
+        ArchitectureCanvas newBound = focused == null ? null : focused.getArchitectureView();
 
         // Same fix as OutlineExplorerModule: focus moving onto a side panel
         // shouldn't trigger a re-bind to the same chart.
@@ -211,7 +211,7 @@ public class QualityModule implements Module {
                 .orElse(null);
     }
 
-    private ArchitectureWfxView wrapperFor(ArchitectureView view) {
+    private ArchitectureWfxView wrapperFor(ArchitectureCanvas view) {
         if (view == null) {
             return null;
         }

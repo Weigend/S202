@@ -30,7 +30,7 @@ import java.util.function.Consumer;
  * angehefteten Kanten-Satz (überlebt refreshLayout), Auswahl, Cut/Restore
  * der Preview-Kanten und die zugehörigen Sinks zur Host-Shell. Der
  * {@link de.weigend.s202.ui.core.spi.EdgeOverlayRenderer} wird bei jedem Root-Build neu erzeugt und per
- * {@link #attachRenderer} wieder angeschlossen. Aus ArchitectureView
+ * {@link #attachRenderer} wieder angeschlossen. Aus ArchitectureCanvas
  * extrahiert.
  */
 public final class TangleOverlayController {

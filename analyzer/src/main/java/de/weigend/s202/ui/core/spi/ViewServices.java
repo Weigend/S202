@@ -32,7 +32,7 @@ import java.util.function.Consumer;
 import java.util.function.Supplier;
 
 /**
- * Die Dienste, die der {@code ArchitectureView}-Canvas jeder Stil-Ansicht
+ * Die Dienste, die der {@code ArchitectureCanvas}-Canvas jeder Stil-Ansicht
  * beim Erzeugen mitgibt — ein Parameterobjekt statt des früheren
  * Supplier-Geflechts durch die Builder-Konstruktoren.
  *
