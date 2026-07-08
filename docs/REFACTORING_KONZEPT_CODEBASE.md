@@ -346,3 +346,27 @@ Grundregeln für jeden Schritt:
   Zuständigkeit; die Logik liegt in benannten, einzeln testbaren Einheiten.
 - Der Selbsttest hält die Codebase dauerhaft zyklenfrei — das eigene Tool
   prüft ab dann jede Änderung an sich selbst.
+
+---
+
+## 11. Umsetzungsstand (Juli 2026, Branch `refactor/cycles-and-god-classes`)
+
+| Phase | Status | Ergebnis |
+|---|---|---|
+| 0 | ✅ | `SelfArchitectureTest` aktiv, Budgets auf **0 / 0 / 0** |
+| 1 (A1–A3) | ✅ | 0 Paket-Tangles, 0 Klassen-Zyklen, 0 Back-Edges; neue Basis-Pakete `ui.graph` und `ui.wfx.view` |
+| 2 | ✅ | S202Module **2361 → 374** Zeilen; 8 Controller + Basis-Paket `ui.wfx.shell` (der Selbsttest fing dabei einen neuen Tangle im ersten Wurf ab — Infrastruktur musste unter die Feature-Pakete) |
+| 3 | ✅* | ArchitectureView **2343 → 868** Zeilen; 12 Einheiten (ProjectionModel, BoundsExporter, TangleOverlay-, WhatIfEdit-, ScopeAndReport-, Selection-, StateKeeper-, OverlayRenderCoordinator, TreeBuilderFactory, AbstractArchitectureView) |
+| 4 | 🔄 | TangleEdgeRenderer-Split, TreeBuilderSupport, DependencyRenderer-Dedup |
+
+**\*Dokumentierte Abweichung (Phase 3):** ArchitectureView liegt bei 868
+statt ≤500 Zeilen. Der Rest besteht aus (a) dem Szenen-Aufbau
+(`finishArchitectureRootBuild` — der Kern einer JavaFX-View), (b) der
+Controller-Verdrahtung im Konstruktor und (c) ~400 Zeilen
+Einzeiler-Delegation der breiten öffentlichen API (~70 Methoden, von allen
+wfx-Modulen konsumiert). Alle *Logik*-Einheiten liegen unter 500; weitere
+Zerlegung würde nur API-Fläche zwischen Dateien umschichten. Falls die
+500er-Grenze auch für die Fassade gelten soll, ist der designierte nächste
+Schritt ein `RootBuildCoordinator` (Szenen-Aufbau, ~230 Zeilen) — bewusst
+zurückgestellt, weil er die riskanteste Umverdrahtung bei geringstem
+Klarheitsgewinn ist.
