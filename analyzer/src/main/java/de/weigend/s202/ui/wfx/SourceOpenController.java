@@ -46,6 +46,7 @@ public final class SourceOpenController {
     private static final String PYTHON_ANALYZER = "Python";
     private static final String C_ANALYZER = "C";
     private static final String GO_ANALYZER = "Go";
+    private static final String JAVASCRIPT_ANALYZER = "JavaScript";
     private static final String MAVEN_SCANNER = "Maven";
     private static final String GRADLE_SCANNER = "Gradle";
 
@@ -103,6 +104,18 @@ public final class SourceOpenController {
                     inputs.getFirst(), "GO", "Go",
                     "Scanning Go packages...", "No Go Sources Found",
                     "The selected directory does not contain a go.mod file or analyzable .go files.");
+        }
+    }
+
+    public void openJavaScriptSourceRoot() {
+        List<Path> inputs = new GenericDirectoryLoader(
+                "Open JavaScript Source", "Select JavaScript source root (e.g. a project or its src/ directory)")
+                .chooseInput(dialogOwner.get());
+        if (!inputs.isEmpty()) {
+            pipeline.loadSourceRoot(AnalysisPipeline.requireLanguageAnalyzer(JAVASCRIPT_ANALYZER),
+                    inputs.getFirst(), "JAVASCRIPT", "JavaScript",
+                    "Parsing ES modules...", "No JavaScript Modules Found",
+                    "The selected source root does not contain analyzable .js/.mjs files.");
         }
     }
 

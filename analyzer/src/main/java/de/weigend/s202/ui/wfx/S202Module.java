@@ -249,6 +249,7 @@ public class S202Module implements Module {
         bus.subscribe(MenuRequestEvent.OpenPythonSource.class, ev -> { sourceOpen.openPythonSourceRoot(); return true; });
         bus.subscribe(MenuRequestEvent.OpenCSource.class, ev -> { sourceOpen.openCSourceRoot(); return true; });
         bus.subscribe(MenuRequestEvent.OpenGoSource.class, ev -> { sourceOpen.openGoModuleRoot(); return true; });
+        bus.subscribe(MenuRequestEvent.OpenJavaScriptSource.class, ev -> { sourceOpen.openJavaScriptSourceRoot(); return true; });
         bus.subscribe(MenuRequestEvent.OpenMavenProject.class, ev -> { sourceOpen.openMavenProject(); return true; });
         bus.subscribe(MenuRequestEvent.OpenGradleProject.class, ev -> { sourceOpen.openGradleProject(); return true; });
         bus.subscribe(MenuRequestEvent.SaveProject.class, ev -> { persistence.saveProject(); return true; });
