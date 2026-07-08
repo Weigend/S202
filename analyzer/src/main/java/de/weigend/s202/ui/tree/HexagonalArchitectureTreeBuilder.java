@@ -17,7 +17,6 @@ package de.weigend.s202.ui.tree;
 
 import de.weigend.s202.domain.architecture.ArchitectureAnnotations;
 import de.weigend.s202.domain.architecture.HexagonalArchitecture;
-import de.weigend.s202.ui.graph.GraphSelection;
 import de.weigend.s202.ui.graph.LevelClassBox;
 import de.weigend.s202.ui.graph.LevelPackageBox;
 import de.weigend.s202.ui.model.ArchitectureNode;
@@ -27,21 +26,15 @@ import javafx.geometry.Pos;
 import javafx.scene.Cursor;
 import javafx.scene.Group;
 import javafx.scene.Node;
-import javafx.scene.control.ContextMenu;
 import javafx.scene.control.Label;
-import javafx.scene.control.MenuItem;
 import javafx.scene.input.MouseButton;
 import javafx.scene.layout.HBox;
 import javafx.scene.layout.Pane;
-import javafx.scene.layout.Priority;
 import javafx.scene.layout.Region;
 import javafx.scene.layout.StackPane;
 import javafx.scene.layout.VBox;
 import javafx.scene.paint.Color;
-import javafx.scene.shape.Circle;
 import javafx.scene.shape.Line;
-import org.kordamp.ikonli.javafx.FontIcon;
-import org.kordamp.ikonli.materialdesign2.MaterialDesignP;
 
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -67,21 +60,13 @@ import java.util.function.Consumer;
  */
 public final class HexagonalArchitectureTreeBuilder {
 
-    private static final double WIDTH = 1160;
-    private static final double HEIGHT = 980;
-    private static final double CENTER_X = WIDTH / 2.0;
-    private static final double CENTER_Y = 490;
-    private static final double CORE_RADIUS = 145;
-    private static final double APPLICATION_RADIUS = 285;
-    private static final double ADAPTER_RADIUS = 420;
-    private static final double CARD_RADIAL_OFFSET = 72;
     private static final String SEGMENT_REGISTRY_PREFIX = "s202.hex.segment#";
 
     private final Map<String, Node> elementRegistry;
     private final Consumer<String> selectionChangeSink;
     private final ArchitectureAnnotations annotations;
     private final HexagonalArchitecture architecture;
-    private final BiConsumer<ArchitectureAnnotations, String> annotationChangeSink;
+    private final HexagonalRoleMenus roleMenus;
     private final Runnable layoutChangeCallback;
     private final Map<String, Boolean> packageExpansionState;
 
@@ -96,7 +81,8 @@ public final class HexagonalArchitectureTreeBuilder {
         this.selectionChangeSink = selectionChangeSink;
         this.annotations = annotations == null ? ArchitectureAnnotations.empty() : annotations;
         this.architecture = architecture;
-        this.annotationChangeSink = annotationChangeSink != null ? annotationChangeSink : (next, message) -> {};
+        this.roleMenus = new HexagonalRoleMenus(this.annotations,
+                annotationChangeSink != null ? annotationChangeSink : (next, message) -> {});
         this.layoutChangeCallback = layoutChangeCallback != null ? layoutChangeCallback : () -> {};
         this.packageExpansionState = packageExpansionState != null ? packageExpansionState : new HashMap<>();
     }
@@ -108,10 +94,10 @@ public final class HexagonalArchitectureTreeBuilder {
         topLevel.setPadding(new Insets(28, 42, 32, 42));
         topLevel.setStyle("-fx-background-color: #eef2f6;");
 
-        HBox legend = buildLegend();
+        HBox legend = HexBackdropRenderer.buildLegend();
         Pane radialPane = new Pane();
-        radialPane.setMinSize(WIDTH, HEIGHT);
-        radialPane.setPrefSize(WIDTH, HEIGHT);
+        radialPane.setMinSize(HexLayoutGeometry.WIDTH, HexLayoutGeometry.HEIGHT);
+        radialPane.setPrefSize(HexLayoutGeometry.WIDTH, HexLayoutGeometry.HEIGHT);
         radialPane.setMaxSize(Region.USE_PREF_SIZE, Region.USE_PREF_SIZE);
         radialPane.setStyle("-fx-background-color: #eef2f6;");
 
@@ -120,7 +106,7 @@ public final class HexagonalArchitectureTreeBuilder {
         if (architecture == null || architecture.segments().isEmpty()) {
             Label empty = new Label("No hexagonal projection available");
             empty.setStyle("-fx-font-size: 14px; -fx-text-fill: #425466;");
-            empty.relocate(CENTER_X - 120, CENTER_Y - 16);
+            empty.relocate(HexLayoutGeometry.CENTER_X - 120, HexLayoutGeometry.CENTER_Y - 16);
             radialPane.getChildren().add(empty);
             return topLevel;
         }
@@ -131,8 +117,8 @@ public final class HexagonalArchitectureTreeBuilder {
         Group detailLayer = new Group();
         detailLayer.setPickOnBounds(false);
 
-        drawRings(radialPane);
-        drawSegmentBoundaries(radialPane);
+        HexBackdropRenderer.drawRings(radialPane);
+        HexBackdropRenderer.drawSegmentBoundaries(radialPane, architecture.segments().size());
         drawSegments(radialPane, detailLayer);
         radialPane.getChildren().add(detailLayer);
         return topLevel;
@@ -158,66 +144,6 @@ public final class HexagonalArchitectureTreeBuilder {
         }
     }
 
-    private HBox buildLegend() {
-        HBox legend = new HBox(12);
-        legend.setAlignment(Pos.CENTER_LEFT);
-        legend.setPadding(new Insets(0, 0, 8, 0));
-        legend.getChildren().addAll(
-                legendItem("#f8f1cf", "Core"),
-                legendItem("#d9eee5", "Application"),
-                legendItem("#e4e9f0", "Adapters"),
-                legendItem("#ffd28a", "API / SPI sockets"),
-                legendItem("#ffffff", "Group (click + to expand)"));
-        return legend;
-    }
-
-    private HBox legendItem(String color, String text) {
-        HBox item = new HBox(5);
-        item.setAlignment(Pos.CENTER_LEFT);
-        Region swatch = new Region();
-        swatch.setMinSize(14, 9);
-        swatch.setPrefSize(14, 9);
-        swatch.setStyle("-fx-background-color: " + color + "; -fx-border-color: #6b7280; -fx-border-width: 1;");
-        Label label = new Label(text);
-        label.setStyle("-fx-font-size: 11px; -fx-text-fill: #253040;");
-        item.getChildren().addAll(swatch, label);
-        return item;
-    }
-
-    private void drawRings(Pane pane) {
-        Circle adapter = circle(ADAPTER_RADIUS, "#e4e9f0", "#8a98a8", 1.4);
-        Circle application = circle(APPLICATION_RADIUS, "#d9eee5", "#4a9b82", 1.6);
-        Circle core = circle(CORE_RADIUS, "#f8f1cf", "#b7932e", 1.8);
-        pane.getChildren().addAll(adapter, application, core);
-    }
-
-    private Circle circle(double radius, String fill, String stroke, double width) {
-        Circle circle = new Circle(CENTER_X, CENTER_Y, radius);
-        circle.setFill(Color.web(fill));
-        circle.setStroke(Color.web(stroke));
-        circle.setStrokeWidth(width);
-        circle.setMouseTransparent(true);
-        return circle;
-    }
-
-    private void drawSegmentBoundaries(Pane pane) {
-        int count = architecture.segments().size();
-        for (int i = 0; i < count; i++) {
-            double angle = angleForSegmentBoundary(i, count);
-            double radians = Math.toRadians(angle);
-            Line line = new Line(
-                    CENTER_X,
-                    CENTER_Y,
-                    CENTER_X + Math.cos(radians) * ADAPTER_RADIUS,
-                    CENTER_Y + Math.sin(radians) * ADAPTER_RADIUS);
-            line.setStroke(Color.web("#b0bac8"));
-            line.setStrokeWidth(1);
-            line.getStrokeDashArray().setAll(5.0, 7.0);
-            line.setMouseTransparent(true);
-            pane.getChildren().add(line);
-        }
-    }
-
     private void drawSegments(Pane pane, Group detailLayer) {
         Map<String, List<HexagonalArchitecture.HexElement>> classesBySegment = new HashMap<>();
         Map<String, HexagonalArchitecture.HexElement> packagesByFqn = new HashMap<>();
@@ -232,9 +158,9 @@ public final class HexagonalArchitectureTreeBuilder {
         int count = architecture.segments().size();
         for (int i = 0; i < count; i++) {
             HexagonalArchitecture.HexSegment segment = architecture.segments().get(i);
-            double start = angleForSegmentBoundary(i, count);
-            double end = angleForSegmentBoundary(i + 1, count);
-            double mid = normalizeAngle((start + end) / 2.0);
+            double start = HexLayoutGeometry.angleForSegmentBoundary(i, count);
+            double end = HexLayoutGeometry.angleForSegmentBoundary(i + 1, count);
+            double mid = HexLayoutGeometry.normalizeAngle((start + end) / 2.0);
             List<HexagonalArchitecture.HexElement> segmentClasses =
                     classesBySegment.getOrDefault(segment.id(), List.of());
 
@@ -260,7 +186,7 @@ public final class HexagonalArchitectureTreeBuilder {
                                               HexagonalArchitecture.HexSegment segment,
                                               double midAngle) {
         HexagonalSegmentHeader header = new HexagonalSegmentHeader(segment.label(), segment.rootFqn(), selectionChangeSink);
-        installPackageRoleContextMenu(header, segment.rootFqn(), "segment");
+        roleMenus.installPackageRoleContextMenu(header, segment.rootFqn(), "segment");
         // The header is reachable for arrow rollup under a synthetic key so the
         // plain package FQN stays free for the theme's core group box.
         elementRegistry.put(SEGMENT_REGISTRY_PREFIX + segment.id(), header);
@@ -280,7 +206,7 @@ public final class HexagonalArchitectureTreeBuilder {
         };
         header.setToggleAction(toggle);
 
-        placeNode(header, ADAPTER_RADIUS + 58, midAngle, 90, 14);
+        HexLayoutGeometry.placeNode(header, HexLayoutGeometry.ADAPTER_RADIUS + 58, midAngle, 90, 14);
         pane.getChildren().add(header);
         return new SegmentVisual(header, details, cardVisibilityUpdaters);
     }
@@ -307,7 +233,7 @@ public final class HexagonalArchitectureTreeBuilder {
                 spiSocket.add(element);
             } else {
                 ringGroups.computeIfAbsent(element.ringRole(), k -> new TreeMap<>())
-                        .computeIfAbsent(parentOf(element.fqn()), k -> new ArrayList<>())
+                        .computeIfAbsent(TreeBuilderSupport.parentOf(element.fqn()), k -> new ArrayList<>())
                         .add(element);
             }
         }
@@ -333,13 +259,12 @@ public final class HexagonalArchitectureTreeBuilder {
                 double levelT = maxLevel == minLevel
                         ? 0.5
                         : (level - minLevel) / (double) (maxLevel - minLevel);
-                double radius = bandRadius(ring, levelT);
-                double angle = spreadAngle(startAngle, endAngle, i, ordered.size());
-                String simpleName = group.getKey().substring(group.getKey().lastIndexOf('.') + 1);
+                double radius = HexLayoutGeometry.bandRadius(ring, levelT);
+                double angle = HexLayoutGeometry.spreadAngle(startAngle, endAngle, i, ordered.size());
                 addGroup(boxGroup, segmentCardGroup, segment, visual,
                         new GroupSpec(
                                 group.getKey() + "#" + segment.id(),
-                                simpleName,
+                                TreeBuilderSupport.simpleName(group.getKey()),
                                 group.getKey(),
                                 group.getValue(),
                                 false),
@@ -351,16 +276,20 @@ public final class HexagonalArchitectureTreeBuilder {
         // and SPI (outbound) as separately expandable sockets.
         double socketSpread = Math.abs(endAngle - startAngle) * 0.16;
         if (!apiSocket.isEmpty()) {
-            double angle = spiSocket.isEmpty() ? midAngle : normalizeAngle(midAngle - socketSpread);
+            double angle = spiSocket.isEmpty()
+                    ? midAngle
+                    : HexLayoutGeometry.normalizeAngle(midAngle - socketSpread);
             addGroup(boxGroup, segmentCardGroup, segment, visual,
                     new GroupSpec(segment.id() + "#api", "API", null, apiSocket, true),
-                    APPLICATION_RADIUS, angle);
+                    HexLayoutGeometry.APPLICATION_RADIUS, angle);
         }
         if (!spiSocket.isEmpty()) {
-            double angle = apiSocket.isEmpty() ? midAngle : normalizeAngle(midAngle + socketSpread);
+            double angle = apiSocket.isEmpty()
+                    ? midAngle
+                    : HexLayoutGeometry.normalizeAngle(midAngle + socketSpread);
             addGroup(boxGroup, segmentCardGroup, segment, visual,
                     new GroupSpec(segment.id() + "#spi", "SPI", null, spiSocket, true),
-                    APPLICATION_RADIUS, angle);
+                    HexLayoutGeometry.APPLICATION_RADIUS, angle);
         }
     }
 
@@ -378,8 +307,7 @@ public final class HexagonalArchitectureTreeBuilder {
                     ? PortSide.SPI
                     : PortSide.API;
         }
-        String parent = parentOf(element.fqn());
-        String packageName = parent.substring(parent.lastIndexOf('.') + 1);
+        String packageName = TreeBuilderSupport.simpleName(TreeBuilderSupport.parentOf(element.fqn()));
         if ("spi".equalsIgnoreCase(packageName)) {
             return PortSide.SPI;
         }
@@ -405,7 +333,7 @@ public final class HexagonalArchitectureTreeBuilder {
         HexGroupBox box = new HexGroupBox(spec.label(), selectionFqnFor(spec), spec.classes().size(),
                 initiallyExpanded, spec.socket(), selectionChangeSink);
         if (spec.packageFqn() != null) {
-            installPackageRoleContextMenu(box, spec.packageFqn(), "package");
+            roleMenus.installPackageRoleContextMenu(box, spec.packageFqn(), "package");
         }
         elementRegistry.put(spec.key(), box);
         if (spec.packageFqn() != null) {
@@ -422,19 +350,19 @@ public final class HexagonalArchitectureTreeBuilder {
                     }
                 });
         double radians = Math.toRadians(angle);
-        double cardRadius = radius + CARD_RADIAL_OFFSET;
+        double cardRadius = radius + HexLayoutGeometry.CARD_RADIAL_OFFSET;
         Line leader = new Line(
-                CENTER_X + Math.cos(radians) * radius,
-                CENTER_Y + Math.sin(radians) * radius,
-                CENTER_X + Math.cos(radians) * cardRadius,
-                CENTER_Y + Math.sin(radians) * cardRadius);
+                HexLayoutGeometry.CENTER_X + Math.cos(radians) * radius,
+                HexLayoutGeometry.CENTER_Y + Math.sin(radians) * radius,
+                HexLayoutGeometry.CENTER_X + Math.cos(radians) * cardRadius,
+                HexLayoutGeometry.CENTER_Y + Math.sin(radians) * cardRadius);
         leader.setStroke(Color.web("#64748b"));
         leader.setStrokeWidth(1.2);
         leader.getStrokeDashArray().setAll(3.0, 4.0);
         leader.setMouseTransparent(true);
 
-        placeNode(box, radius, angle, 58, 12);
-        placeNode(card, cardRadius, angle, 110, 0);
+        HexLayoutGeometry.placeNode(box, radius, angle, 58, 12);
+        HexLayoutGeometry.placeNode(card, cardRadius, angle, 110, 0);
         boxGroup.getChildren().add(box);
         segmentCardGroup.getChildren().addAll(leader, card);
 
@@ -494,7 +422,7 @@ public final class HexagonalArchitectureTreeBuilder {
                         box.setStyle("-fx-background-color: #fff7d6; -fx-border-color: #ca8a04;"
                                 + " -fx-border-width: 1.5;");
                     }
-                    installClassContextMenu(box, element, segment.id());
+                    roleMenus.installClassContextMenu(box, element, segment.id());
                     elementRegistry.put(element.fqn(), box);
                     packageBox.addToLevel(element.architectureLevel(), box);
                 });
@@ -532,145 +460,6 @@ public final class HexagonalArchitectureTreeBuilder {
         return box;
     }
 
-    private void installClassContextMenu(Node target,
-                                         HexagonalArchitecture.HexElement element,
-                                         String segmentId) {
-        target.setOnContextMenuRequested(event -> {
-            MenuItem inbound = new MenuItem("Mark as Inbound Port");
-            inbound.setOnAction(action -> annotationChangeSink.accept(
-                    annotations.withPort(element.fqn(), ArchitectureAnnotations.PortDirection.INBOUND, segmentId)
-                            .withElementRole(element.fqn(), ArchitectureAnnotations.ElementRole.INBOUND_PORT),
-                    "Marked inbound port: " + element.fqn()));
-
-            MenuItem outbound = new MenuItem("Mark as Outbound Port");
-            outbound.setOnAction(action -> annotationChangeSink.accept(
-                    annotations.withPort(element.fqn(), ArchitectureAnnotations.PortDirection.OUTBOUND, segmentId)
-                            .withElementRole(element.fqn(), ArchitectureAnnotations.ElementRole.OUTBOUND_PORT),
-                    "Marked outbound port: " + element.fqn()));
-
-            MenuItem generic = new MenuItem("Mark as Generic Port");
-            generic.setOnAction(action -> annotationChangeSink.accept(
-                    annotations.withPort(element.fqn(), ArchitectureAnnotations.PortDirection.GENERIC, segmentId)
-                            .withoutElementRole(element.fqn()),
-                    "Marked generic port: " + element.fqn()));
-
-            MenuItem removePort = new MenuItem("Remove Port");
-            removePort.setOnAction(action -> annotationChangeSink.accept(
-                    annotations.withoutPort(element.fqn()).withoutElementRole(element.fqn()),
-                    "Removed port: " + element.fqn()));
-
-            MenuItem core = new MenuItem("Mark as Core");
-            core.setOnAction(action -> annotationChangeSink.accept(
-                    annotations.withElementRole(element.fqn(), ArchitectureAnnotations.ElementRole.CORE),
-                    "Marked core: " + element.fqn()));
-
-            MenuItem adapter = new MenuItem("Mark as Adapter");
-            adapter.setOnAction(action -> annotationChangeSink.accept(
-                    annotations.withElementRole(element.fqn(), ArchitectureAnnotations.ElementRole.ADAPTER),
-                    "Marked adapter: " + element.fqn()));
-
-            MenuItem clearRole = new MenuItem("Clear Hexagonal Role");
-            clearRole.setOnAction(action -> annotationChangeSink.accept(
-                    annotations.withoutElementRole(element.fqn()),
-                    "Cleared hexagonal role: " + element.fqn()));
-
-            ContextMenu menu = new ContextMenu(inbound, outbound, generic, removePort, core, adapter, clearRole);
-            menu.show(target, event.getScreenX(), event.getScreenY());
-            event.consume();
-        });
-    }
-
-    private void installPackageRoleContextMenu(Node target, String fqn, String noun) {
-        target.setOnContextMenuRequested(event -> {
-            MenuItem core = new MenuItem("Mark " + capitalize(noun) + " as Core");
-            core.setOnAction(action -> annotationChangeSink.accept(
-                    annotations.withElementRole(fqn, ArchitectureAnnotations.ElementRole.CORE),
-                    "Marked " + noun + " core: " + fqn));
-
-            MenuItem adapter = new MenuItem("Mark " + capitalize(noun) + " as Adapter");
-            adapter.setOnAction(action -> annotationChangeSink.accept(
-                    annotations.withElementRole(fqn, ArchitectureAnnotations.ElementRole.ADAPTER),
-                    "Marked " + noun + " adapter: " + fqn));
-
-            MenuItem clear = new MenuItem("Clear " + capitalize(noun) + " Role");
-            clear.setOnAction(action -> annotationChangeSink.accept(
-                    annotations.withoutElementRole(fqn),
-                    "Cleared " + noun + " role: " + fqn));
-
-            ContextMenu menu = new ContextMenu(core, adapter, clear);
-            menu.show(target, event.getScreenX(), event.getScreenY());
-            event.consume();
-        });
-    }
-
-    private static String capitalize(String value) {
-        return value.isEmpty() ? value : Character.toUpperCase(value.charAt(0)) + value.substring(1);
-    }
-
-    private void placeNode(Node node, double radius, double angleDegrees, double halfWidth, double halfHeight) {
-        double radians = Math.toRadians(angleDegrees);
-        double x = CENTER_X + Math.cos(radians) * radius - halfWidth;
-        double y = CENTER_Y + Math.sin(radians) * radius - halfHeight;
-        node.relocate(x, y);
-    }
-
-    /**
-     * Radius inside the ring band for a group whose normalized level position
-     * is {@code levelT} (0 = lowest level in the ring). In the inner rings the
-     * shell presents its contact surface outward: low-level packages are the
-     * ring's API and sit towards the band's OUTER edge. The ADAPTER ring
-     * inverts this — its outward-facing surface is the entry point to the
-     * world, so the HIGHEST level (bootstrap, main) sits outermost (see
-     * HEXAGONAL_PACKAGE_LEVEL_CONCEPT).
-     */
-    private double bandRadius(HexagonalArchitecture.RingRole ring, double levelT) {
-        double inner;
-        double outer;
-        switch (ring) {
-            case CORE -> {
-                inner = CORE_RADIUS * 0.32;
-                outer = CORE_RADIUS - 32;
-            }
-            case APPLICATION -> {
-                inner = CORE_RADIUS + 30;
-                outer = APPLICATION_RADIUS - 36;
-            }
-            default -> {
-                inner = APPLICATION_RADIUS + 30;
-                outer = ADAPTER_RADIUS - 30;
-                return inner + levelT * (outer - inner);
-            }
-        }
-        return outer - levelT * (outer - inner);
-    }
-
-    private double angleForSegmentBoundary(int index, int segmentCount) {
-        return -90.0 + (360.0 / Math.max(1, segmentCount)) * index;
-    }
-
-    private double spreadAngle(double startAngle, double endAngle, int index, int count) {
-        if (count <= 1) {
-            return normalizeAngle((startAngle + endAngle) / 2.0);
-        }
-        double span = endAngle - startAngle;
-        double padding = Math.min(14.0, Math.abs(span) * 0.18);
-        double usableStart = startAngle + padding;
-        double usableSpan = span - padding * 2.0;
-        return normalizeAngle(usableStart + usableSpan * (index + 0.5) / count);
-    }
-
-    private double normalizeAngle(double angle) {
-        double normalized = angle % 360.0;
-        return normalized < -180.0 ? normalized + 360.0 : normalized;
-    }
-
-    private static String parentOf(String fqn) {
-        if (fqn == null || !fqn.contains(".")) {
-            return "";
-        }
-        return fqn.substring(0, fqn.lastIndexOf('.'));
-    }
-
     private enum PortSide {
         API,
         SPI,
@@ -691,190 +480,4 @@ public final class HexagonalArchitectureTreeBuilder {
     private record SegmentVisual(HexagonalSegmentHeader header,
                                  List<Node> details,
                                  List<Runnable> cardVisibilityUpdaters) {}
-
-    private static final class HexGroupBox extends HBox implements GraphSelection.Selectable {
-        private final String fullName;
-        private final Label toggle = new Label();
-        private final boolean socket;
-        private Consumer<String> selectionChangeSink;
-        private Runnable toggleAction = () -> {};
-
-        HexGroupBox(String label,
-                    String fullName,
-                    int classCount,
-                    boolean expanded,
-                    boolean socket,
-                    Consumer<String> selectionChangeSink) {
-            super(5);
-            this.fullName = fullName;
-            this.socket = socket;
-            this.selectionChangeSink = selectionChangeSink;
-            setAlignment(Pos.CENTER_LEFT);
-            setCursor(Cursor.HAND);
-            setMaxWidth(150);
-            getStyleClass().add(socket ? "hexagonal-socket-box" : "hexagonal-package-box");
-            getProperties().put("s202.aggregateEndpoint", Boolean.TRUE);
-
-            toggle.setMinWidth(12);
-            toggle.setAlignment(Pos.CENTER);
-            toggle.setStyle("-fx-font-weight: bold; -fx-text-fill: #172033;");
-            toggle.setOnMouseClicked(event -> {
-                if (event.getButton() == MouseButton.PRIMARY) {
-                    toggleAction.run();
-                    event.consume();
-                }
-            });
-
-            Label nameLabel = new Label(label);
-            nameLabel.setStyle("-fx-font-size: 10px; -fx-font-weight: bold; -fx-text-fill: #172033;");
-            HBox.setHgrow(nameLabel, Priority.ALWAYS);
-
-            Label count = new Label("(" + classCount + ")");
-            count.setStyle("-fx-font-size: 9px; -fx-text-fill: #475569;");
-
-            if (socket) {
-                // API/SPI contracts ARE the ports of the hexagon — say so.
-                FontIcon portIcon = new FontIcon(MaterialDesignP.POWER_PLUG);
-                portIcon.setIconColor(Color.web("#7c2d12"));
-                portIcon.setIconSize(11);
-                getChildren().addAll(toggle, portIcon, nameLabel, count);
-            } else {
-                getChildren().addAll(toggle, nameLabel, count);
-            }
-            setExpandedVisual(expanded);
-            applyUnselectedStyle();
-            setOnMouseClicked(event -> {
-                if (event.getButton() != MouseButton.PRIMARY) {
-                    return;
-                }
-                GraphSelection.select(this);
-                event.consume();
-            });
-        }
-
-        void setToggleAction(Runnable action) {
-            toggleAction = action == null ? () -> {} : action;
-        }
-
-        void setExpandedVisual(boolean expanded) {
-            toggle.setText(expanded ? "−" : "+");
-            getProperties().put("s202.collapsed", !expanded);
-        }
-
-        @Override
-        public String getFullName() {
-            return fullName;
-        }
-
-        @Override
-        public void applySelectedStyle() {
-            setStyle("-fx-background-color: #fff3a0; -fx-border-color: #ff6600;"
-                    + " -fx-border-width: 2; -fx-padding: 3 6;"
-                    + " -fx-background-radius: 4; -fx-border-radius: 4;");
-        }
-
-        @Override
-        public void applyUnselectedStyle() {
-            if (socket) {
-                setStyle("-fx-background-color: #ffd28a; -fx-border-color: #b45309;"
-                        + " -fx-border-width: 1.6; -fx-padding: 3 6;"
-                        + " -fx-background-radius: 4; -fx-border-radius: 4;");
-            } else {
-                setStyle("-fx-background-color: rgba(255,255,255,0.94); -fx-border-color: #3b5371;"
-                        + " -fx-border-width: 1.2; -fx-padding: 3 6;"
-                        + " -fx-background-radius: 4; -fx-border-radius: 4;");
-            }
-        }
-
-        @Override
-        public Consumer<String> selectionChangeSink() {
-            return selectionChangeSink;
-        }
-    }
-
-    private static final class HexagonalSegmentHeader extends HBox implements GraphSelection.Selectable {
-        private final String fullName;
-        private final Label toggle = new Label("−");
-        private final Label nameLabel;
-        private Consumer<String> selectionChangeSink;
-        private Runnable toggleAction = () -> {};
-        private boolean expanded = true;
-
-        HexagonalSegmentHeader(String label, String fullName, Consumer<String> selectionChangeSink) {
-            super(6);
-            this.fullName = fullName;
-            this.selectionChangeSink = selectionChangeSink;
-            setAlignment(Pos.CENTER_LEFT);
-            setCursor(Cursor.HAND);
-            setMaxWidth(180);
-            setMinWidth(150);
-            getStyleClass().add("hexagonal-segment-header");
-            getProperties().put("s202.aggregateEndpoint", Boolean.TRUE);
-            getProperties().put("s202.collapsed", Boolean.FALSE);
-
-            toggle.setMinWidth(12);
-            toggle.setAlignment(Pos.CENTER);
-            toggle.setStyle("-fx-font-weight: bold; -fx-text-fill: #172033;");
-            toggle.setOnMouseClicked(event -> {
-                if (event.getButton() == MouseButton.PRIMARY) {
-                    toggleAction.run();
-                    event.consume();
-                }
-            });
-
-            nameLabel = new Label(label);
-            nameLabel.setWrapText(true);
-            nameLabel.setStyle("-fx-font-size: 11px; -fx-font-weight: bold; -fx-text-fill: #172033;");
-            HBox.setHgrow(nameLabel, Priority.ALWAYS);
-
-            getChildren().addAll(toggle, nameLabel);
-            applyUnselectedStyle();
-            setOnMouseClicked(event -> {
-                if (event.getButton() != MouseButton.PRIMARY) {
-                    return;
-                }
-                GraphSelection.select(this);
-                event.consume();
-            });
-        }
-
-        void setToggleAction(Runnable action) {
-            toggleAction = action == null ? () -> {} : action;
-        }
-
-        boolean toggleExpanded() {
-            expanded = !expanded;
-            toggle.setText(expanded ? "−" : "+");
-            getProperties().put("s202.collapsed", !expanded);
-            return expanded;
-        }
-
-        boolean isExpanded() {
-            return expanded;
-        }
-
-        @Override
-        public String getFullName() {
-            return fullName;
-        }
-
-        @Override
-        public void applySelectedStyle() {
-            setStyle("-fx-background-color: #fff3a0; -fx-border-color: #ff6600;"
-                    + " -fx-border-width: 2; -fx-padding: 4 7;"
-                    + " -fx-background-radius: 4; -fx-border-radius: 4;");
-        }
-
-        @Override
-        public void applyUnselectedStyle() {
-            setStyle("-fx-background-color: rgba(255,255,255,0.9); -fx-border-color: #607086;"
-                    + " -fx-border-width: 1; -fx-padding: 4 7;"
-                    + " -fx-background-radius: 4; -fx-border-radius: 4;");
-        }
-
-        @Override
-        public Consumer<String> selectionChangeSink() {
-            return selectionChangeSink;
-        }
-    }
 }

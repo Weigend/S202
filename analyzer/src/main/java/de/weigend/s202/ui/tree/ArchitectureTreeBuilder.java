@@ -21,8 +21,6 @@ import de.weigend.s202.ui.graph.LevelPackageBox;
 import de.weigend.s202.ui.layout.horizontal.HorizontalLayoutOrdering;
 import de.weigend.s202.ui.model.ArchitectureNode;
 import de.weigend.s202.ui.model.ArchitectureNode.NodeType;
-import javafx.geometry.Insets;
-import javafx.geometry.Pos;
 import javafx.application.Platform;
 import javafx.scene.Node;
 import javafx.scene.layout.HBox;
@@ -54,11 +52,6 @@ import java.util.function.Consumer;
  */
 public class ArchitectureTreeBuilder {
 
-    // 60px gives enough room for up to 6 bypass lanes (24 base + 5×6px) before
-    // they leave the visible content area.
-    private static final double TOP_LEVEL_HORIZONTAL_PADDING = 60.0;
-    // Seven 6px-spaced tangle lanes need 36px span plus arrow-head clearance.
-    private static final double TOP_LEVEL_VERTICAL_PADDING = 52.0;
     private static final int ASYNC_BATCH_SIZE = 120;
 
     private final Map<String, Node> elementRegistry;
@@ -123,31 +116,12 @@ public class ArchitectureTreeBuilder {
         Set<String> elementsAddedToParent = new HashSet<>();
 
         // Container for top-level packages (children of root)
-        VBox topLevelContainer = new VBox(8);
-        topLevelContainer.setPadding(new Insets(
-                TOP_LEVEL_VERTICAL_PADDING,
-                TOP_LEVEL_HORIZONTAL_PADDING,
-                TOP_LEVEL_VERTICAL_PADDING,
-                TOP_LEVEL_HORIZONTAL_PADDING));
-        topLevelContainer.setStyle("-fx-background-color: #f5f5f0;");
-        ArchitectureDragController.markAsRowStack(topLevelContainer);
-
-        // Skip transparent top-level packages (de, weigend, s202, etc.)
-        // Follow the chain of single-child packages until we reach the first "real" package
-        ArchitectureNode effectiveRoot = rootNode;
-        while (skipTransparentTopLevelPackages && shouldChildrenBeTransparent(effectiveRoot)) {
-            ArchitectureNode singleChild = effectiveRoot.getChildren().stream()
-                    .filter(c -> c.getType() == NodeType.PACKAGE)
-                    .findFirst().orElse(null);
-            if (singleChild == null) break;
-            // Register the skipped package so dependency lookups still work
-            elementRegistry.put(singleChild.getFullName(), topLevelContainer);
-            effectiveRoot = singleChild;
-        }
-        // Tag the top-level stack with the effective root's fqcn so the
-        // What-If drop handler can resolve a "dropped at top level" event.
-        topLevelContainer.getProperties().put("s202.whatif.rootFqcn",
-                effectiveRoot.getFullName() == null ? "" : effectiveRoot.getFullName());
+        VBox topLevelContainer = createTopLevelContainer();
+        // Register the skipped packages so dependency lookups still work
+        ArchitectureNode effectiveRoot = TreeBuilderSupport.effectiveRoot(rootNode,
+                skipTransparentTopLevelPackages,
+                skipped -> elementRegistry.put(skipped.getFullName(), topLevelContainer));
+        TreeBuilderSupport.tagWhatIfRoot(topLevelContainer, effectiveRoot);
 
         // Process children from a sorted layout view: level desc, then horizontal row order.
         List<ArchitectureNode> sortedChildren = HorizontalLayoutOrdering.childrenInLayoutOrder(effectiveRoot);
@@ -155,16 +129,8 @@ public class ArchitectureTreeBuilder {
         // Group top-level children by level into HBox rows (same level = side by side)
         Map<Integer, HBox> topLevelRows = new HashMap<>();
         for (ArchitectureNode child : sortedChildren) {
-            int level = child.getLevel();
-            HBox levelRow = topLevelRows.computeIfAbsent(level, l -> {
-                HBox hbox = new HBox(8);
-                hbox.setMaxWidth(Double.MAX_VALUE);
-                hbox.setAlignment(Pos.CENTER);
-                VBox.setVgrow(hbox, Priority.ALWAYS);
-                ArchitectureDragController.markAsRow(hbox);
-                topLevelContainer.getChildren().add(hbox);
-                return hbox;
-            });
+            HBox levelRow = topLevelRows.computeIfAbsent(child.getLevel(),
+                    l -> TreeBuilderSupport.createTopLevelRow(topLevelContainer, 8));
 
             if (child.getType() == NodeType.PACKAGE) {
                 LevelPackageBox packageBox = createPackageBox(child);
@@ -218,7 +184,10 @@ public class ArchitectureTreeBuilder {
             BuildProgressCounter counter = new BuildProgressCounter(Math.max(1, rootNode.getTotalNodeCount()));
 
             VBox topLevelContainer = createTopLevelContainer();
-            ArchitectureNode effectiveRoot = effectiveRoot(rootNode, topLevelContainer, skipTransparentTopLevelPackages);
+            ArchitectureNode effectiveRoot = TreeBuilderSupport.effectiveRoot(rootNode,
+                    skipTransparentTopLevelPackages,
+                    skipped -> elementRegistry.put(skipped.getFullName(), topLevelContainer));
+            TreeBuilderSupport.tagWhatIfRoot(topLevelContainer, effectiveRoot);
 
             List<ArchitectureNode> sortedChildren = HorizontalLayoutOrdering.childrenInLayoutOrder(effectiveRoot);
 
@@ -267,15 +236,8 @@ public class ArchitectureTreeBuilder {
                                       Queue<Runnable> queue,
                                       BuildProgressCounter counter,
                                       ProgressSink progressSink) {
-        int level = child.getLevel();
-        HBox levelRow = topLevelRows.computeIfAbsent(level, l -> {
-            HBox hbox = new HBox(8);
-            hbox.setMaxWidth(Double.MAX_VALUE);
-            hbox.setAlignment(Pos.CENTER);
-            VBox.setVgrow(hbox, Priority.ALWAYS);
-            topLevelContainer.getChildren().add(hbox);
-            return hbox;
-        });
+        HBox levelRow = topLevelRows.computeIfAbsent(child.getLevel(),
+                l -> TreeBuilderSupport.createTopLevelRow(topLevelContainer, 8));
 
         if (child.getType() == NodeType.PACKAGE) {
             LevelPackageBox packageBox = createPackageBox(child);
@@ -332,10 +294,7 @@ public class ArchitectureTreeBuilder {
             return;
         }
 
-        String parentPackage = getParentPackage(child.getFullName());
-        if (parentPackage == null) {
-            parentPackage = "";
-        }
+        String parentPackage = TreeBuilderSupport.parentOf(child.getFullName());
 
         ensurePackageHierarchy(parentPackage, packageContainers, rootLevel, archRoot);
 
@@ -385,47 +344,8 @@ public class ArchitectureTreeBuilder {
         }
     }
 
-    /**
-     * Checks if a package should be displayed as transparent.
-     * A package is transparent if it is the ONLY sub-package of its parent.
-     * This visually de-emphasizes "pass-through" packages like de.weigend.s202.
-     */
-    private boolean shouldChildrenBeTransparent(ArchitectureNode parentNode) {
-        // Count how many sub-packages the parent has
-        long packageCount = parentNode.getChildren().stream()
-                .filter(c -> c.getType() == NodeType.PACKAGE)
-                .count();
-        // Children are transparent only if there's exactly one sub-package
-        return packageCount == 1;
-    }
-
     private VBox createTopLevelContainer() {
-        VBox topLevelContainer = new VBox(8);
-        topLevelContainer.setPadding(new Insets(
-                TOP_LEVEL_VERTICAL_PADDING,
-                TOP_LEVEL_HORIZONTAL_PADDING,
-                TOP_LEVEL_VERTICAL_PADDING,
-                TOP_LEVEL_HORIZONTAL_PADDING));
-        topLevelContainer.setStyle("-fx-background-color: #f5f5f0;");
-        ArchitectureDragController.markAsRowStack(topLevelContainer);
-        return topLevelContainer;
-    }
-
-    private ArchitectureNode effectiveRoot(ArchitectureNode rootNode,
-                                           VBox topLevelContainer,
-                                           boolean skipTransparentTopLevelPackages) {
-        ArchitectureNode effectiveRoot = rootNode;
-        while (skipTransparentTopLevelPackages && shouldChildrenBeTransparent(effectiveRoot)) {
-            ArchitectureNode singleChild = effectiveRoot.getChildren().stream()
-                    .filter(c -> c.getType() == NodeType.PACKAGE)
-                    .findFirst().orElse(null);
-            if (singleChild == null) break;
-            elementRegistry.put(singleChild.getFullName(), topLevelContainer);
-            effectiveRoot = singleChild;
-        }
-        topLevelContainer.getProperties().put("s202.whatif.rootFqcn",
-                effectiveRoot.getFullName() == null ? "" : effectiveRoot.getFullName());
-        return effectiveRoot;
+        return TreeBuilderSupport.createTopLevelContainer(8, "#f5f5f0");
     }
 
     /**
@@ -452,10 +372,7 @@ public class ArchitectureTreeBuilder {
             }
 
             // Determine parent package
-            String parentPackage = getParentPackage(child.getFullName());
-            if (parentPackage == null) {
-                parentPackage = "";
-            }
+            String parentPackage = TreeBuilderSupport.parentOf(child.getFullName());
 
             // Ensure parent hierarchy exists
             ensurePackageHierarchy(parentPackage, packageContainers, rootLevel, archRoot);
@@ -575,15 +492,5 @@ public class ArchitectureTreeBuilder {
             }
         }
         return null;
-    }
-
-    /**
-     * Extract parent package name from a fully qualified name.
-     */
-    private String getParentPackage(String fullName) {
-        if (!fullName.contains(".")) return "";
-
-        int lastDot = fullName.lastIndexOf('.');
-        return fullName.substring(0, lastDot);
     }
 }
