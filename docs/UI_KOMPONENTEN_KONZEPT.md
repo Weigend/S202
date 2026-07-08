@@ -221,3 +221,29 @@ M2 ist die eigentliche Architekturänderung und braucht die meiste Sorgfalt
 - Die Komponenten-Regeln laufen in derselben Selbstanalyse wie die
   Zyklen-Budgets: Das Tool bewacht nicht nur *ob* die UI geschichtet ist,
   sondern *entlang welcher fachlichen Linien*.
+
+---
+
+## 7. Umsetzungsstand (Juli 2026, Branch `refactor/cycles-and-god-classes`)
+
+| Etappe | Status | Ergebnis |
+|---|---|---|
+| M0 | ✅ | Komponenten-Regeln als 4. Selbsttest-Regel (`uiComponentRulesRespected`) |
+| M1 | ✅ | `ui.core.{model,graph,canvas,arrows,layout,events,platform,spi,…}` + `ui.views.{layered,component,hexagonal,tangle,threed,city3d}`; `circuit` gelöscht; `ContainerBox`/`BoxTags` entkoppeln die Kern-Renderer von Fachboxen |
+| M2 | ✅ | `StyleView`-SPI (+Factory, `ViewServices`): Ansichten sind Plugins; `ArchitectureViewStyle`-Enum und alle Stil-Switches (TreeBuilder, ViolationKinds, Expansion) gelöscht |
+| M3 | ✅ | Planned Packages + Refactoring-Report → `ComponentRefactoringPlanner` (Component-Ansicht, via StyleView-Hooks `afterContentBuilt`/`contextMenuItems`); Scope boxfrei im Canvas; What-If in `core.canvas`, API-Drop tag-basiert |
+| M4 | ✅* | `EdgeOverlayRenderer(+Factory)`-SPI invertiert die Tangle-Renderer-Erzeugung; `ArchitectureViewManager.openStyleView(kind)` statt Stil-Methoden. **Alle 4 Regeln gelten ohne Ausnahmen.** Removability-Check bestanden: `views/threed` + App-Adapter entfernt → Rest kompiliert |
+| M5 | ⏳ | Maven-Multi-Module (optional, erst wenn Regeln länger stabil) |
+
+**\*Bewusst offene M4-Reste:**
+- *Menü-/Toolbar-Beiträge pro Komponente* (statt zentralem `S202MenuBar`-
+  Katalog): braucht einen wfx-Erweiterungspunkt → **wfx-Feature-Request**,
+  kein lokaler Umbau.
+- *What-If als abdockbares `ViewFeature`*: liegt regelkonform in
+  `core.canvas`; die Feature-SPI lohnt erst mit einem zweiten Querschnitts-
+  Feature.
+- *Rename `ArchitectureView` → `ArchitectureCanvas`*: rein kosmetisch,
+  ~30 Dateien Churn; die Rolle (stil-freier Canvas) ist umgesetzt.
+- Die Canvas-API trägt noch tangle-benannte Methoden
+  (`setTangleVisualization` …) — Typ-Kanten sind sauber (SPI), nur die
+  Begriffe erinnern an die Herkunft.
