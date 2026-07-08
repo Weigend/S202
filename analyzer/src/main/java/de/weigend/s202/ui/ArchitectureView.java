@@ -122,18 +122,8 @@ public class ArchitectureView extends BorderPane {
      */
     private final Map<String, Boolean> hexagonalPackageExpansionState = new HashMap<>();
 
-    // Renderers and builders
-    private DependencyRendererStrategy dependencyRenderer;
-    private DependencyRenderer classicRenderer;
-    private SCCRenderer sccRenderer;
-    private WhatIfUpwardEdgeRenderer whatIfRenderer;
-    private TangleEdgeRenderer tangleRenderer;
-    private ArchitectureTreeBuilder treeBuilder;
     private ZoomController zoomController;
 
-
-    // Lines need redraw after zoom/scroll changes (perf optimization).
-    private boolean linesNeedUpdate = false;
 
     // Coalesces redraw triggers (expand/collapse, bounds changes, future DnD
     // drops) into one flush per JavaFX pulse. See §2.2 of the
@@ -146,6 +136,8 @@ public class ArchitectureView extends BorderPane {
 
     // Feature-Controller (nach setupUI initialisiert, s. Konstruktor).
     private final SelectionController selection;
+    private final OverlayRenderCoordinator overlay;
+    private final TreeBuilderFactory treeBuilders;
     private final StyleProjectionStateKeeper stateKeeper;
     private final TangleOverlayController tangleOverlay;
     private final WhatIfEditController whatIfEdit;
@@ -179,17 +171,6 @@ public class ArchitectureView extends BorderPane {
     private boolean skipTransparentTopLevelPackages = true;
     private ArchitectureNode scopeExtensionSourceRoot;
     private ArchitectureViewStyle viewStyle = ArchitectureViewStyle.LAYERED;
-    private static final Set<ViolationKind> LAYERED_VIOLATION_OVERLAY_KINDS =
-            Set.of(ViolationKind.UPWARD);
-    private static final Set<ViolationKind> COMPONENT_VIOLATION_OVERLAY_KINDS =
-            Set.of(
-                    ViolationKind.COMPONENT_API_BYPASS,
-                    ViolationKind.COMPONENT_API_LEAKS_IMPLEMENTATION,
-                    ViolationKind.COMPONENT_INTERNAL_LAYER_BREAK);
-    private static final Set<ViolationKind> HEXAGONAL_VIOLATION_OVERLAY_KINDS =
-            Set.of(
-                    ViolationKind.HEXAGON_OUTWARD_DEPENDENCY,
-                    ViolationKind.HEXAGON_PORT_BYPASS);
 
     public ArchitectureView() {
         setupUI();
@@ -221,6 +202,29 @@ public class ArchitectureView extends BorderPane {
                 },
                 this::resetVisualLayout,
                 showWhatIfViolations);
+        overlay = new OverlayRenderCoordinator(
+                dependencyPane, sccPane, whatIfPane, tanglePane,
+                elementRegistry,
+                showDependencies, showScc, showPackageScc, showWhatIfViolations, showTangleDebugLines,
+                arrowsCoalescer,
+                tangleOverlay,
+                projection,
+                () -> currentRootNode,
+                this::getViewStyle,
+                selection::getSelectedFullName,
+                this::setStatus,
+                whatIfEdit::applyVirtuallyMovedDecorations);
+        treeBuilders = new TreeBuilderFactory(
+                elementRegistry,
+                graphSelectionSink,
+                this::getViewStyle,
+                this::getArchitectureAnnotations,
+                projection::getRawDependencyModel,
+                projection::getArchitecture,
+                this::handleProjectionAnnotationsChanged,
+                arrowsCoalescer::markDirty,
+                hexagonalPackageExpansionState,
+                () -> skipTransparentTopLevelPackages);
         scopeReport = new ScopeAndReportController(
                 elementRegistry,
                 this::setStatus,
@@ -301,85 +305,26 @@ public class ArchitectureView extends BorderPane {
         setCenter(contentPane);
     }
 
-    private void wirePropertyListeners() {
-        showDependencies.addListener((obs, was, isNow) -> applyShowDependencies(isNow));
-        showScc.addListener((obs, was, isNow) -> applyShowScc(isNow));
-        showPackageScc.addListener((obs, was, isNow) -> applyShowPackageScc(isNow));
-        showWhatIfViolations.addListener((obs, was, isNow) -> applyShowWhatIfViolations(isNow));
-        showTangleDebugLines.addListener((obs, was, isNow) -> applyShowTangleDebugLines(isNow));
-    }
-
-    private void applyShowDependencies(boolean visible) {
-        if (dependencyRenderer == null || dependencyPane == null) {
-            return;
-        }
-        if (visible) {
-            dependencyPane.setVisible(true);
-            if (currentRootNode != null && (!dependencyRenderer.isDependencyLinesDrawn() || linesNeedUpdate)) {
-                arrowsCoalescer.markDirty();
-            }
-        } else {
-            dependencyPane.setVisible(false);
-        }
-    }
-
-    private void applyShowScc(boolean visible) {
-        if (sccRenderer == null || sccPane == null) return;
-        sccRenderer.setShowClassScc(visible);
-        refreshSccPane();
-    }
-
-    private void applyShowPackageScc(boolean visible) {
-        if (sccRenderer == null || sccPane == null) return;
-        sccRenderer.setShowPackageCycles(visible);
-        refreshSccPane();
-    }
-
-    private void refreshSccPane() {
-        boolean anyEnabled = showScc.get() || showPackageScc.get();
-        if (anyEnabled) {
-            updateSccRendererTangles();
-            sccRenderer.clearSccLines();
-            if (currentRootNode != null) {
-                sccRenderer.drawSccLines(currentRootNode);
-                linesNeedUpdate = false;
-            }
-            sccPane.setVisible(true);
-        } else {
-            sccPane.setVisible(false);
-        }
-    }
-
-    private void applyShowWhatIfViolations(boolean visible) {
-        if (whatIfPane == null) {
-            return;
-        }
-        whatIfPane.setVisible(visible);
-        if (visible) {
-            arrowsCoalescer.markDirty();
-        } else if (whatIfRenderer != null) {
-            whatIfRenderer.clear();
-        }
-    }
-
-    private void applyShowTangleDebugLines(boolean visible) {
-        if (tangleRenderer != null) {
-            tangleRenderer.setShowDebugLines(visible);
-        }
-    }
-
-    private void handleZoomChanged() {
-        invalidateLines();
-        if (showDependencies.get() && dependencyPane != null && dependencyPane.isVisible()) {
-            drawDependencyArrows();
-        }
-        if ((showScc.get() || showPackageScc.get()) && sccPane != null && sccPane.isVisible()) {
-            sccRenderer.drawSccLines(currentRootNode);
-        }
+    /** Gemeinsamer Handler für Annotations-Änderungen aus den Stil-Buildern. */
+    private void handleProjectionAnnotationsChanged(ArchitectureAnnotations nextAnnotations, String message) {
+        setArchitectureAnnotations(nextAnnotations);
+        refreshStyleProjection(message);
     }
 
     private void invalidateLines() {
-        linesNeedUpdate = true;
+        overlay.invalidateLines();
+    }
+
+    private void updateSccRendererTangles() {
+        overlay.updateSccRendererTangles();
+    }
+
+    private void wirePropertyListeners() {
+        showDependencies.addListener((obs, was, isNow) -> overlay.applyShowDependencies(isNow));
+        showScc.addListener((obs, was, isNow) -> overlay.applyShowScc(isNow));
+        showPackageScc.addListener((obs, was, isNow) -> overlay.applyShowPackageScc(isNow));
+        showWhatIfViolations.addListener((obs, was, isNow) -> overlay.applyShowWhatIfViolations(isNow));
+        showTangleDebugLines.addListener((obs, was, isNow) -> overlay.applyShowTangleDebugLines(isNow));
     }
 
     /**
@@ -399,7 +344,7 @@ public class ArchitectureView extends BorderPane {
         beginArchitectureRootBuild(rootNode);
 
         int maxDepth = packageDepth.get();
-        buildTreeAsync(rootNode, maxDepth,
+        treeBuilders.buildTreeAsync(rootNode, maxDepth,
                 (processed, total, current) -> {
                     if (progressSink != null) {
                         progressSink.accept(new BuildProgress(processed, total, current));
@@ -413,72 +358,6 @@ public class ArchitectureView extends BorderPane {
                 });
     }
 
-    private javafx.scene.layout.VBox buildTree(ArchitectureNode rootNode, int maxDepth) {
-        if (viewStyle == ArchitectureViewStyle.COMPONENT) {
-            ComponentArchitectureTreeBuilder componentBuilder =
-                    new ComponentArchitectureTreeBuilder(
-                            elementRegistry,
-                            graphSelectionSink,
-                            getArchitectureAnnotations(),
-                            projection.getRawDependencyModel(),
-                            projection.getArchitecture() instanceof ComponentArchitecture component ? component : null,
-                            this::handleComponentApiChanged);
-            return componentBuilder.buildTree(rootNode, maxDepth);
-        }
-        if (viewStyle == ArchitectureViewStyle.HEXAGONAL) {
-            HexagonalArchitectureTreeBuilder hexagonalBuilder =
-                    new HexagonalArchitectureTreeBuilder(
-                            elementRegistry,
-                            graphSelectionSink,
-                            getArchitectureAnnotations(),
-                            projection.getArchitecture() instanceof HexagonalArchitecture hex ? hex : null,
-                            this::handleHexagonalAnnotationsChanged,
-                            arrowsCoalescer::markDirty,
-                            hexagonalPackageExpansionState);
-            return hexagonalBuilder.buildTree(rootNode, maxDepth);
-        }
-
-        treeBuilder = new ArchitectureTreeBuilder(elementRegistry, graphSelectionSink);
-        return treeBuilder.buildTree(rootNode, maxDepth, skipTransparentTopLevelPackages);
-    }
-
-    private void buildTreeAsync(ArchitectureNode rootNode,
-                                int maxDepth,
-                                ArchitectureTreeBuilder.ProgressSink progressSink,
-                                Consumer<javafx.scene.layout.VBox> onComplete) {
-        if (viewStyle == ArchitectureViewStyle.COMPONENT) {
-            ComponentArchitectureTreeBuilder componentBuilder =
-                    new ComponentArchitectureTreeBuilder(
-                            elementRegistry,
-                            graphSelectionSink,
-                            getArchitectureAnnotations(),
-                            projection.getRawDependencyModel(),
-                            projection.getArchitecture() instanceof ComponentArchitecture component ? component : null,
-                            this::handleComponentApiChanged);
-            componentBuilder.buildTreeAsync(rootNode, maxDepth, progressSink, onComplete);
-            return;
-        }
-        if (viewStyle == ArchitectureViewStyle.HEXAGONAL) {
-            HexagonalArchitectureTreeBuilder hexagonalBuilder =
-                    new HexagonalArchitectureTreeBuilder(
-                            elementRegistry,
-                            graphSelectionSink,
-                            getArchitectureAnnotations(),
-                            projection.getArchitecture() instanceof HexagonalArchitecture hex ? hex : null,
-                            this::handleHexagonalAnnotationsChanged,
-                            arrowsCoalescer::markDirty,
-                            hexagonalPackageExpansionState);
-            hexagonalBuilder.buildTreeAsync(rootNode, maxDepth, progressSink, onComplete);
-            return;
-        }
-
-        treeBuilder = new ArchitectureTreeBuilder(elementRegistry, graphSelectionSink);
-        treeBuilder.buildTreeAsync(rootNode, maxDepth,
-                skipTransparentTopLevelPackages,
-                progressSink,
-                onComplete);
-    }
-
     private void beginArchitectureRootBuild(ArchitectureNode rootNode) {
         this.currentRootNode = rootNode;
         this.elementRegistry.clear();
@@ -490,16 +369,6 @@ public class ArchitectureView extends BorderPane {
         // double-click callback disconnected to avoid duplicate selection
         // events when users double-click out of habit.
         GraphSelection.setOnDoubleClick(fqn -> {});
-    }
-
-    private void handleComponentApiChanged(ArchitectureAnnotations nextAnnotations, String message) {
-        setArchitectureAnnotations(nextAnnotations);
-        refreshStyleProjection(message);
-    }
-
-    private void handleHexagonalAnnotationsChanged(ArchitectureAnnotations nextAnnotations, String message) {
-        setArchitectureAnnotations(nextAnnotations);
-        refreshStyleProjection(message);
     }
 
     private void refreshStyleProjection(String statusMessage) {
@@ -540,7 +409,7 @@ public class ArchitectureView extends BorderPane {
         beginArchitectureRootBuild(rootNode);
 
         int maxDepth = packageDepth.get();
-        javafx.scene.layout.VBox topLevelContainer = buildTree(rootNode, maxDepth);
+        javafx.scene.layout.VBox topLevelContainer = treeBuilders.buildTree(rootNode, maxDepth);
         finishArchitectureRootBuild(rootNode, topLevelContainer, preservedState);
     }
 
@@ -599,7 +468,7 @@ public class ArchitectureView extends BorderPane {
             centeringWrapper.setMinHeight(viewportBounds.getHeight());
         }
 
-        zoomController = new ZoomController(zoomableContent, this::handleZoomChanged);
+        zoomController = new ZoomController(zoomableContent, overlay::handleZoomChanged);
         zoomController.zoomFactorProperty().addListener(
                 (obs, was, isNow) -> zoomFactor.set(isNow.doubleValue()));
         if (preservedState != null) {
@@ -608,26 +477,7 @@ public class ArchitectureView extends BorderPane {
             zoomController.resetZoom();
         }
 
-        classicRenderer = new DependencyRenderer(dependencyPane, elementRegistry, zoomController, this::setStatus);
-        classicRenderer.setCoordinateContext(zoomableContent, overlayPane, scrollPane);
-        dependencyRenderer = classicRenderer;
-
-        sccRenderer = new SCCRenderer(sccPane, elementRegistry, this::setStatus);
-        sccRenderer.setCoordinateContext(zoomableContent, overlayPane, scrollPane);
-        updateSccRendererTangles();
-
-        whatIfRenderer = new WhatIfUpwardEdgeRenderer(whatIfPane, elementRegistry);
-        whatIfRenderer.setCoordinateContext(zoomableContent, overlayPane);
-
-        tangleRenderer = new TangleEdgeRenderer(tanglePane, elementRegistry, this::setStatus);
-        tangleRenderer.setCoordinateContext(zoomableContent, overlayPane);
-        tangleOverlay.attachRenderer(tangleRenderer);
-        tangleRenderer.setShowDebugLines(showTangleDebugLines.get());
-
-        dependencyRenderer.clearDependencyArrows();
-        sccRenderer.clearSccLines();
-        dependencyPane.setVisible(false);
-        sccPane.setVisible(false);
+        overlay.rebuildRenderers(zoomableContent, overlayPane, scrollPane, zoomController);
 
         // Reset overlay toggles for the new architecture so the global toolbar resyncs.
         showDependencies.set(false);
@@ -744,30 +594,6 @@ public class ArchitectureView extends BorderPane {
         projection.setArchitectureAnnotations(annotations);
     }
 
-    private void updateSccRendererTangles() {
-        if (sccRenderer == null) return;
-        Architecture arch = projection.packageCycleArchitecture();
-        if (arch instanceof WhatIfArchitecture wif) {
-            Map<String, String> classPackages = wif.classPackages();
-            sccRenderer.setPackageResolver(fqn -> classPackages.getOrDefault(fqn, staticPackageOf(fqn)));
-        } else {
-            sccRenderer.setPackageResolver(ArchitectureView::staticPackageOf);
-        }
-        if (arch != null) {
-            sccRenderer.setPackageTangles(
-                    arch.tangles().stream()
-                            .map(t -> (java.util.Set<String>) t.members())
-                            .collect(java.util.stream.Collectors.toList()));
-        } else {
-            sccRenderer.setPackageTangles(java.util.List.of());
-        }
-    }
-
-    private static String staticPackageOf(String fqn) {
-        int dot = fqn == null ? -1 : fqn.lastIndexOf('.');
-        return dot < 0 ? "" : fqn.substring(0, dot);
-    }
-
     /**
      * Read-only handle to the raw bytecode-analysis result. Carries per-edge
      * relationship kinds (extends / implements / calls / instantiates) that
@@ -797,7 +623,7 @@ public class ArchitectureView extends BorderPane {
 
     /** Renderer that paints wrong-direction edges — exposed so side panels can query violations. */
     public WhatIfUpwardEdgeRenderer getWhatIfRenderer() {
-        return whatIfRenderer;
+        return overlay.whatIfRenderer();
     }
 
     /**
@@ -890,43 +716,6 @@ public class ArchitectureView extends BorderPane {
         selectByFullName(fullClassName);
     }
 
-    private void redrawVisibleArrows() {
-        if (showDependencies.get()) {
-            drawDependencyArrows();
-            linesNeedUpdate = false;
-        }
-        if (showScc.get() || showPackageScc.get()) {
-            updateSccRendererTangles();
-            sccRenderer.drawSccLines(currentRootNode);
-        }
-        if (whatIfRenderer != null) {
-            Architecture source = violationOverlayArchitecture();
-            if (showWhatIfViolations.get() && source != null) {
-                whatIfRenderer.redraw(source, violationOverlayKinds());
-            } else {
-                whatIfRenderer.clear();
-            }
-        }
-        whatIfEdit.applyVirtuallyMovedDecorations();
-    }
-
-    private Architecture violationOverlayArchitecture() {
-        if (viewStyle == ArchitectureViewStyle.COMPONENT
-                || viewStyle == ArchitectureViewStyle.HEXAGONAL) {
-            return projection.getArchitecture();
-        }
-        return projection.getWhatIfArchitecture() != null
-                ? projection.getWhatIfArchitecture() : projection.getArchitecture();
-    }
-
-    private Set<ViolationKind> violationOverlayKinds() {
-        return switch (viewStyle) {
-            case COMPONENT -> COMPONENT_VIOLATION_OVERLAY_KINDS;
-            case HEXAGONAL -> HEXAGONAL_VIOLATION_OVERLAY_KINDS;
-            case LAYERED -> LAYERED_VIOLATION_OVERLAY_KINDS;
-        };
-    }
-
     /**
      * Flush handler for {@link #arrowsCoalescer}: runs at most once per pulse
      * once any source (expand/collapse, bounds change, future DnD drop) has
@@ -943,7 +732,7 @@ public class ArchitectureView extends BorderPane {
             zoomableContent.requestLayout();
         }
         getScene().getRoot().layout();
-        redrawVisibleArrows();
+        overlay.redrawVisibleArrows();
         redrawTick.set(redrawTick.get() + 1);
     }
 
@@ -965,7 +754,7 @@ public class ArchitectureView extends BorderPane {
             getScene().getRoot().applyCss();
             getScene().getRoot().layout();
         }
-        redrawVisibleArrows();
+        overlay.redrawVisibleArrows();
     }
 
     /**
@@ -984,11 +773,6 @@ public class ArchitectureView extends BorderPane {
             bounds = node.getLayoutBounds();
         }
         return bounds;
-    }
-
-    private void drawDependencyArrows() {
-        dependencyRenderer.setSelectedFullName(selection.getSelectedFullName());
-        dependencyRenderer.drawDependencyArrows(currentRootNode);
     }
 
     /**
@@ -1161,9 +945,7 @@ public class ArchitectureView extends BorderPane {
      * renderer hasn't been initialised yet.
      */
     public void highlightSccEdge(String from, String to) {
-        if (sccRenderer != null) {
-            sccRenderer.highlightEdge(from, to);
-        }
+        overlay.highlightSccEdge(from, to);
     }
 
     public void setTangleVisualization(List<DependencyEdge> edges,
