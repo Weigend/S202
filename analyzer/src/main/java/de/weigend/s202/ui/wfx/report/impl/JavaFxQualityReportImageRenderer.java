@@ -243,7 +243,7 @@ public final class JavaFxQualityReportImageRenderer implements QualityReportImag
                 .distinct()
                 .toList();
         view.setShowScc(true);
-        view.setTangleVisualization(edges, null, null);
+        view.setEdgeOverlay(edges, null, null);
         if (!members.isEmpty()) {
             view.selectByFullName(members.iterator().next());
         }
@@ -261,7 +261,7 @@ public final class JavaFxQualityReportImageRenderer implements QualityReportImag
         view.setRawDependencyModel(input.rawModel());
         view.setDomainModel(input.domainModel());
         view.setCycleBreakEdges(cycleBreakEdges);
-        view.setAppliedTangleCutEdges(appliedCutEdges);
+        view.setAppliedCutEdges(appliedCutEdges);
         view.setArchitectureRoot(root);
         view.setZoom(1.0);
         return view;

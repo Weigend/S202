@@ -46,15 +46,15 @@ public abstract class AbstractArchitectureCanvas extends BorderPane {
     final BooleanProperty showScc = new SimpleBooleanProperty(false);
     final BooleanProperty showPackageScc = new SimpleBooleanProperty(false);
     final BooleanProperty showWhatIfViolations = new SimpleBooleanProperty(false);
-    final BooleanProperty showTangleDebugLines = new SimpleBooleanProperty(false);
+    final BooleanProperty showOverlayDebugLines = new SimpleBooleanProperty(false);
     final ReadOnlyDoubleWrapper zoomFactor = new ReadOnlyDoubleWrapper(1.0);
     final ReadOnlyObjectWrapper<ArchitectureNode> architectureRoot = new ReadOnlyObjectWrapper<>(null);
     final ReadOnlyObjectWrapper<QualityMetrics> qualityMetrics = new ReadOnlyObjectWrapper<>(null);
 
     private Consumer<String> statusSink = msg -> { /* no-op default */ };
 
-    private String preferredTopTanglesScope;
-    private boolean topTanglesScopeOwner = true;
+    private String preferredScope;
+    private boolean scopeOwner = true;
     private boolean skipTransparentTopLevelPackages = true;
     private ArchitectureNode scopeExtensionSourceRoot;
     ArchitectureKind viewStyle = ArchitectureKind.LAYERED;
@@ -189,26 +189,26 @@ public abstract class AbstractArchitectureCanvas extends BorderPane {
         showWhatIfViolations.set(show);
     }
 
-    public BooleanProperty showTangleDebugLinesProperty() {
-        return showTangleDebugLines;
+    public BooleanProperty showOverlayDebugLinesProperty() {
+        return showOverlayDebugLines;
     }
 
-    public boolean isShowTangleDebugLines() {
-        return showTangleDebugLines.get();
+    public boolean isShowOverlayDebugLines() {
+        return showOverlayDebugLines.get();
     }
 
-    public void setShowTangleDebugLines(boolean show) {
-        showTangleDebugLines.set(show);
+    public void setShowOverlayDebugLines(boolean show) {
+        showOverlayDebugLines.set(show);
     }
 
     /* ----- View-Konfiguration --------------------------------------------------- */
 
-    public String getPreferredTopTanglesScope() {
-        return preferredTopTanglesScope;
+    public String getPreferredScope() {
+        return preferredScope;
     }
 
-    public void setPreferredTopTanglesScope(String scope) {
-        preferredTopTanglesScope = scope == null || scope.isBlank() ? null : scope;
+    public void setPreferredScope(String scope) {
+        preferredScope = scope == null || scope.isBlank() ? null : scope;
     }
 
     /**
@@ -251,12 +251,12 @@ public abstract class AbstractArchitectureCanvas extends BorderPane {
      * architecture and scope views; false for tangle satellite tabs, which
      * inherit their scope from the source view and must not reset it on focus.
      */
-    public boolean isTopTanglesScopeOwner() {
-        return topTanglesScopeOwner;
+    public boolean isScopeOwner() {
+        return scopeOwner;
     }
 
-    public void setTopTanglesScopeOwner(boolean owner) {
-        topTanglesScopeOwner = owner;
+    public void setScopeOwner(boolean owner) {
+        scopeOwner = owner;
     }
 
     /* ----- Deprecated Aliase ------------------------------------------------------ */

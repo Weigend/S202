@@ -15,7 +15,7 @@
  */
 package de.weigend.s202.ui.core.canvas;
 
-import de.weigend.s202.ui.core.canvas.TangleOverlayController;
+import de.weigend.s202.ui.core.canvas.EdgeOverlayController;
 import de.weigend.s202.domain.architecture.Architecture;
 import de.weigend.s202.domain.architecture.ViolationKind;
 import de.weigend.s202.domain.architecture.WhatIfArchitecture;
@@ -40,7 +40,7 @@ import java.util.function.Supplier;
 
 /**
  * Koordiniert die Overlay-Renderer (Abhängigkeitspfeile, SCC-Linien,
- * What-If-Verstöße, Tangle-Kanten): Erzeugung pro Root-Build, Sichtbarkeits-
+ * What-If-Verstöße, angepinnte Kanten): Erzeugung pro Root-Build, Sichtbarkeits-
  * Toggles und das gesammelte Neuzeichnen. Aus ArchitectureCanvas extrahiert.
  */
 final class OverlayRenderCoordinator {
@@ -48,15 +48,15 @@ final class OverlayRenderCoordinator {
     private final Pane dependencyPane;
     private final Pane sccPane;
     private final Pane whatIfPane;
-    private final Pane tanglePane;
+    private final Pane edgeOverlayPane;
     private final Map<String, Node> elementRegistry;
     private final BooleanProperty showDependencies;
     private final BooleanProperty showScc;
     private final BooleanProperty showPackageScc;
     private final BooleanProperty showWhatIfViolations;
-    private final BooleanProperty showTangleDebugLines;
+    private final BooleanProperty showOverlayDebugLines;
     private final PulseCoalescer arrowsCoalescer;
-    private final TangleOverlayController tangleOverlay;
+    private final EdgeOverlayController edgeOverlay;
     private final ArchitectureProjectionModel projection;
     private final Supplier<ArchitectureNode> currentRoot;
     private final Supplier<de.weigend.s202.ui.core.spi.StyleView> styleView;
@@ -70,7 +70,7 @@ final class OverlayRenderCoordinator {
     private DependencyRenderer classicRenderer;
     private SCCRenderer sccRenderer;
     private WhatIfUpwardEdgeRenderer whatIfRenderer;
-    private de.weigend.s202.ui.core.spi.EdgeOverlayRenderer tangleRenderer;
+    private de.weigend.s202.ui.core.spi.EdgeOverlayRenderer overlayRenderer;
 
     // Lines need redraw after zoom/scroll changes (perf optimization).
     private boolean linesNeedUpdate = false;
@@ -78,15 +78,15 @@ final class OverlayRenderCoordinator {
     OverlayRenderCoordinator(Pane dependencyPane,
                              Pane sccPane,
                              Pane whatIfPane,
-                             Pane tanglePane,
+                             Pane edgeOverlayPane,
                              Map<String, Node> elementRegistry,
                              BooleanProperty showDependencies,
                              BooleanProperty showScc,
                              BooleanProperty showPackageScc,
                              BooleanProperty showWhatIfViolations,
-                             BooleanProperty showTangleDebugLines,
+                             BooleanProperty showOverlayDebugLines,
                              PulseCoalescer arrowsCoalescer,
-                             TangleOverlayController tangleOverlay,
+                             EdgeOverlayController edgeOverlay,
                              ArchitectureProjectionModel projection,
                              Supplier<ArchitectureNode> currentRoot,
                              Supplier<de.weigend.s202.ui.core.spi.StyleView> styleView,
@@ -96,15 +96,15 @@ final class OverlayRenderCoordinator {
         this.dependencyPane = dependencyPane;
         this.sccPane = sccPane;
         this.whatIfPane = whatIfPane;
-        this.tanglePane = tanglePane;
+        this.edgeOverlayPane = edgeOverlayPane;
         this.elementRegistry = elementRegistry;
         this.showDependencies = showDependencies;
         this.showScc = showScc;
         this.showPackageScc = showPackageScc;
         this.showWhatIfViolations = showWhatIfViolations;
-        this.showTangleDebugLines = showTangleDebugLines;
+        this.showOverlayDebugLines = showOverlayDebugLines;
         this.arrowsCoalescer = arrowsCoalescer;
-        this.tangleOverlay = tangleOverlay;
+        this.edgeOverlay = edgeOverlay;
         this.projection = projection;
         this.currentRoot = currentRoot;
         this.styleView = styleView;
@@ -129,15 +129,15 @@ final class OverlayRenderCoordinator {
 
         // Kanten-Overlay-Renderer kommt (falls die Tangle-Komponente installiert
         // ist) über das SPI — der Kern kennt die Pipeline nicht.
-        tangleRenderer = io.softwareecg.wfx.lookup.api.Lookup
+        overlayRenderer = io.softwareecg.wfx.lookup.api.Lookup
                 .findAll(de.weigend.s202.ui.core.spi.EdgeOverlayRendererFactory.class).stream()
                 .findFirst()
-                .map(factory -> factory.create(tanglePane, elementRegistry, status))
+                .map(factory -> factory.create(edgeOverlayPane, elementRegistry, status))
                 .orElse(null);
-        if (tangleRenderer != null) {
-            tangleRenderer.setCoordinateContext(zoomableContent, overlayPane);
-            tangleOverlay.attachRenderer(tangleRenderer);
-            tangleRenderer.setShowDebugLines(showTangleDebugLines.get());
+        if (overlayRenderer != null) {
+            overlayRenderer.setCoordinateContext(zoomableContent, overlayPane);
+            edgeOverlay.attachRenderer(overlayRenderer);
+            overlayRenderer.setShowDebugLines(showOverlayDebugLines.get());
         }
 
         dependencyRenderer.clearDependencyArrows();
@@ -215,9 +215,9 @@ final class OverlayRenderCoordinator {
         }
     }
 
-    void applyShowTangleDebugLines(boolean visible) {
-        if (tangleRenderer != null) {
-            tangleRenderer.setShowDebugLines(visible);
+    void applyShowOverlayDebugLines(boolean visible) {
+        if (overlayRenderer != null) {
+            overlayRenderer.setShowDebugLines(visible);
         }
     }
 

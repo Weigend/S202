@@ -115,14 +115,14 @@ public final class TangleTabController {
         tangleView.setDomainModel(sourceView.getDomainModel());
         tangleView.setRawDependencyModel(sourceView.getRawDependencyModel());
         tangleView.setCycleBreakEdges(sourceView.getCycleBreakEdges());
-        tangleView.setAppliedTangleCutEdges(previewState.cuts());
+        tangleView.setAppliedCutEdges(previewState.cuts());
         tangleView.setArchitectureRoot(filteredRoot);
         tangleView.setQualityMetrics(sourceView.getQualityMetrics());
 
         // Install the dedicated tangle edge overlay. The renderer listens to
         // layoutBounds itself so the first paint lands once the box layout
         // settles — no Platform.runLater fight with the FX pulse.
-        tangleView.setTangleVisualization(edges, null, null);
+        tangleView.setEdgeOverlay(edges, null, null);
 
         // Restore the captured zoom (if any) — defer one pulse so the new
         // ZoomController has a laid-out content node to scale against.
@@ -146,15 +146,15 @@ public final class TangleTabController {
         }
         String viewId = viewManager.nextViewId();
         ArchitectureCanvas tangleView = new ArchitectureCanvas();
-        tangleView.setTopTanglesScopeOwner(false);
+        tangleView.setScopeOwner(false);
         tangleView.setStatusSink(progress::status);
         EventBus<EventObject> bus = Lookup.lookup(EventBus.class);
         tangleView.setOnNodeSelected(fqn -> bus.publish(new NodeSelectionEvent(fqn, tangleView)));
-        tangleView.setOnTangleEdgeClicked((from, to) ->
+        tangleView.setOnOverlayEdgeClicked((from, to) ->
                 publishTangleEdgeSelection(bus, tangleView, from, to));
-        tangleView.setOnTangleEdgeCut((from, to) ->
+        tangleView.setOnOverlayEdgeCut((from, to) ->
                 bus.publish(new CutTangleEdgeEvent(from, to, tangleView)));
-        tangleView.setOnTangleEdgeRestore((from, to) ->
+        tangleView.setOnOverlayEdgeRestore((from, to) ->
                 bus.publish(new RestoreTangleEdgeEvent(from, to, tangleView)));
         viewManager.applyStylesheet(tangleView);
         String viewTitle = title == null || title.isBlank() ? "Tangle" : title;
@@ -169,7 +169,7 @@ public final class TangleTabController {
     public void applyPreviewCutToViews(String from, String to) {
         previewState.add(new DependencyEdge(from, to));
         for (ArchitectureWfxView wrapper : viewManager.registeredArchitectureViews()) {
-            wrapper.getArchitectureView().applyTangleEdgeCut(from, to);
+            wrapper.getArchitectureView().applyEdgeCut(from, to);
         }
     }
 
@@ -179,14 +179,14 @@ public final class TangleTabController {
         }
         previewState.addAll(edges);
         for (ArchitectureWfxView wrapper : viewManager.registeredArchitectureViews()) {
-            wrapper.getArchitectureView().applyTangleEdgeCuts(edges);
+            wrapper.getArchitectureView().applyEdgeCuts(edges);
         }
     }
 
     public void restorePreviewCutInViews(String from, String to) {
         previewState.remove(new DependencyEdge(from, to));
         for (ArchitectureWfxView wrapper : viewManager.registeredArchitectureViews()) {
-            wrapper.getArchitectureView().restoreTangleEdgeCut(from, to);
+            wrapper.getArchitectureView().restoreEdgeCut(from, to);
         }
     }
 

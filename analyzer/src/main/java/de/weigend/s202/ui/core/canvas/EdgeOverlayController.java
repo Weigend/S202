@@ -26,26 +26,26 @@ import java.util.function.BiConsumer;
 import java.util.function.Consumer;
 
 /**
- * Verwaltet das Tangle-Kanten-Overlay einer Architektur-View: den
+ * Verwaltet das angepinnte Kanten-Overlay des Canvas: den
  * angehefteten Kanten-Satz (überlebt refreshLayout), Auswahl, Cut/Restore
  * der Preview-Kanten und die zugehörigen Sinks zur Host-Shell. Der
  * {@link de.weigend.s202.ui.core.spi.EdgeOverlayRenderer} wird bei jedem Root-Build neu erzeugt und per
  * {@link #attachRenderer} wieder angeschlossen. Aus ArchitectureCanvas
  * extrahiert.
  */
-public final class TangleOverlayController {
+public final class EdgeOverlayController {
 
-    private final Pane tanglePane;
+    private final Pane edgeOverlayPane;
     private final Consumer<String> status;
 
     private de.weigend.s202.ui.core.spi.EdgeOverlayRenderer renderer;
 
-    // Pending tangle visualisation snapshot, applied once setArchitectureRoot
-    // (re-)builds the renderer. Set by setTangleVisualization before the root
+    // Pending overlay snapshot, applied once setArchitectureRoot
+    // (re-)builds the renderer. Set by setEdgeOverlay before the root
     // is assigned, or restored after a refreshLayout.
-    private List<DependencyEdge> pendingTangleEdges;
-    private String pendingTangleSelFrom;
-    private String pendingTangleSelTo;
+    private List<DependencyEdge> pendingEdges;
+    private String pendingSelFrom;
+    private String pendingSelTo;
     private Set<DependencyEdge> cycleBreakEdges = Set.of();
     private final Set<DependencyEdge> appliedCutEdges = new HashSet<>();
 
@@ -53,8 +53,8 @@ public final class TangleOverlayController {
     private BiConsumer<String, String> edgeCutSink = (a, b) -> { /* no-op default */ };
     private BiConsumer<String, String> edgeRestoreSink = (a, b) -> { /* no-op default */ };
 
-    public TangleOverlayController(Pane tanglePane, Consumer<String> status) {
-        this.tanglePane = tanglePane;
+    public EdgeOverlayController(Pane edgeOverlayPane, Consumer<String> status) {
+        this.edgeOverlayPane = edgeOverlayPane;
         this.status = status;
     }
 
@@ -70,10 +70,10 @@ public final class TangleOverlayController {
 
     /** Nach dem Root-Build: angepinnte Kanten wieder anzeigen (überlebt refreshLayout). */
     public void reapplyPendingEdges() {
-        if (pendingTangleEdges != null && renderer != null) {
-            renderer.setEdges(pendingTangleEdges);
-            renderer.setSelectedEdge(pendingTangleSelFrom, pendingTangleSelTo);
-            tanglePane.setVisible(true);
+        if (pendingEdges != null && renderer != null) {
+            renderer.setEdges(pendingEdges);
+            renderer.setSelectedEdge(pendingSelFrom, pendingSelTo);
+            edgeOverlayPane.setVisible(true);
         }
     }
 
@@ -83,32 +83,32 @@ public final class TangleOverlayController {
 
     public void setVisualization(List<DependencyEdge> edges, String selectedFrom, String selectedTo) {
         if (edges == null || edges.isEmpty()) {
-            pendingTangleEdges = null;
-            pendingTangleSelFrom = null;
-            pendingTangleSelTo = null;
+            pendingEdges = null;
+            pendingSelFrom = null;
+            pendingSelTo = null;
             if (renderer != null) {
                 renderer.clear();
             }
-            if (tanglePane != null) {
-                tanglePane.setVisible(false);
+            if (edgeOverlayPane != null) {
+                edgeOverlayPane.setVisible(false);
             }
             return;
         }
-        pendingTangleEdges = List.copyOf(edges);
-        pendingTangleSelFrom = selectedFrom;
-        pendingTangleSelTo = selectedTo;
+        pendingEdges = List.copyOf(edges);
+        pendingSelFrom = selectedFrom;
+        pendingSelTo = selectedTo;
         if (renderer != null) {
-            renderer.setEdges(pendingTangleEdges);
+            renderer.setEdges(pendingEdges);
             renderer.setSelectedEdge(selectedFrom, selectedTo);
         }
-        if (tanglePane != null) {
-            tanglePane.setVisible(true);
+        if (edgeOverlayPane != null) {
+            edgeOverlayPane.setVisible(true);
         }
     }
 
     public void setSelectedEdge(String from, String to) {
-        pendingTangleSelFrom = from;
-        pendingTangleSelTo = to;
+        pendingSelFrom = from;
+        pendingSelTo = to;
         if (renderer != null) {
             renderer.setSelectedEdge(from, to);
         }
@@ -143,14 +143,14 @@ public final class TangleOverlayController {
         if (!appliedCutEdges.add(cut)) {
             return;
         }
-        if (from.equals(pendingTangleSelFrom) && to.equals(pendingTangleSelTo)) {
-            pendingTangleSelFrom = null;
-            pendingTangleSelTo = null;
+        if (from.equals(pendingSelFrom) && to.equals(pendingSelTo)) {
+            pendingSelFrom = null;
+            pendingSelTo = null;
             edgeClickedSink.accept(null, null);
         }
         if (renderer != null) {
             renderer.setAppliedCutEdges(appliedCutEdges);
-            renderer.setSelectedEdge(pendingTangleSelFrom, pendingTangleSelTo);
+            renderer.setSelectedEdge(pendingSelFrom, pendingSelTo);
         }
         status.accept("Refactoring Preview: cut " + simple(from) + " -> " + simple(to));
     }
@@ -167,9 +167,9 @@ public final class TangleOverlayController {
             if (appliedCutEdges.add(cut)) {
                 added++;
             }
-            if (cut.from().equals(pendingTangleSelFrom) && cut.to().equals(pendingTangleSelTo)) {
-                pendingTangleSelFrom = null;
-                pendingTangleSelTo = null;
+            if (cut.from().equals(pendingSelFrom) && cut.to().equals(pendingSelTo)) {
+                pendingSelFrom = null;
+                pendingSelTo = null;
                 edgeClickedSink.accept(null, null);
             }
         }
@@ -178,9 +178,9 @@ public final class TangleOverlayController {
         }
         if (renderer != null) {
             renderer.setAppliedCutEdges(appliedCutEdges);
-            renderer.setSelectedEdge(pendingTangleSelFrom, pendingTangleSelTo);
+            renderer.setSelectedEdge(pendingSelFrom, pendingSelTo);
         }
-        status.accept("Refactoring Preview: cut " + added + " tangle edge" + (added == 1 ? "" : "s"));
+        status.accept("Refactoring Preview: cut " + added + " edge" + (added == 1 ? "" : "s"));
     }
 
     public void restoreEdgeCut(String from, String to) {
@@ -198,17 +198,17 @@ public final class TangleOverlayController {
     }
 
     private void handleEdgeClicked(String from, String to) {
-        pendingTangleSelFrom = from;
-        pendingTangleSelTo = to;
+        pendingSelFrom = from;
+        pendingSelTo = to;
         edgeClickedSink.accept(from, to);
     }
 
     private void handleEdgeCut(String from, String to) {
-        if (from == null || to == null || pendingTangleEdges == null) {
+        if (from == null || to == null || pendingEdges == null) {
             return;
         }
         DependencyEdge cut = new DependencyEdge(from, to);
-        if (!pendingTangleEdges.contains(cut)) {
+        if (!pendingEdges.contains(cut)) {
             return;
         }
         applyEdgeCut(from, to);

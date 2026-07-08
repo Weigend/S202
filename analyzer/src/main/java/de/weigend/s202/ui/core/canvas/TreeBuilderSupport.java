@@ -36,7 +36,7 @@ public final class TreeBuilderSupport {
     // 60px gives enough room for up to 6 bypass lanes (24 base + 5×6px) before
     // they leave the visible content area.
     public static final double TOP_LEVEL_HORIZONTAL_PADDING = 60.0;
-    // Seven 6px-spaced tangle lanes need 36px span plus arrow-head clearance.
+    // Seven 6px-spaced edge lanes need 36px span plus arrow-head clearance.
     public static final double TOP_LEVEL_VERTICAL_PADDING = 52.0;
 
     private TreeBuilderSupport() {

@@ -186,7 +186,7 @@ public final class ToolbarController {
         debugLinesCheckbox.setTooltip(new Tooltip("Toggle visible tangle routing debug lines"));
         debugLinesCheckbox.selectedProperty().addListener((obs, was, isNow) -> {
             if (boundView != null) {
-                boundView.setShowTangleDebugLines(isNow);
+                boundView.setShowOverlayDebugLines(isNow);
             }
         });
 
@@ -295,7 +295,7 @@ public final class ToolbarController {
         showSccCheckbox.setSelected(view.isShowScc());
         showPackageSccCheckbox.setSelected(view.isShowPackageScc());
         showWhatIfViolationsCheckbox.setSelected(view.isShowWhatIfViolations());
-        debugLinesCheckbox.setSelected(view.isShowTangleDebugLines());
+        debugLinesCheckbox.setSelected(view.isShowOverlayDebugLines());
         showIconsCheckbox.setSelected(ArchitectureViewSettings.isShowIcons());
         showArchLevelCheckbox.setSelected(ArchitectureViewSettings.isShowArchitectureLevel());
 

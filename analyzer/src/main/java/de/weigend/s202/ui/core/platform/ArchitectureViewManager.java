@@ -323,7 +323,7 @@ public final class ArchitectureViewManager {
         projectionView.setRawDependencyModel(sourceView.getRawDependencyModel());
         projectionView.setDomainModel(sourceView.getDomainModel());
         projectionView.setCycleBreakEdges(sourceView.getCycleBreakEdges());
-        projectionView.setAppliedTangleCutEdges(previewCuts.cuts());
+        projectionView.setAppliedCutEdges(previewCuts.cuts());
         viewSources.put(projectionView, viewSources.get(sourceView));
         viewInvariantReports.put(projectionView, viewInvariantReports.get(sourceView));
 
@@ -368,13 +368,13 @@ public final class ArchitectureViewManager {
         WindowManager wm = Lookup.lookup(WindowManager.class);
         ArchitectureWfxView wrapper = createArchitectureView("Scope " + simple(scope));
         ArchitectureCanvas scopeView = wrapper.getArchitectureView();
-        scopeView.setPreferredTopTanglesScope(scope);
+        scopeView.setPreferredScope(scope);
         scopeView.enableScopeExtensionFrom(sourceRoot);
         scopeView.setArchitectureAnnotations(sourceView.getArchitectureAnnotations());
         scopeView.setDomainModel(sourceView.getDomainModel());
         scopeView.setRawDependencyModel(sourceView.getRawDependencyModel());
         scopeView.setCycleBreakEdges(sourceView.getCycleBreakEdges());
-        scopeView.setAppliedTangleCutEdges(previewCuts.cuts());
+        scopeView.setAppliedCutEdges(previewCuts.cuts());
         viewSources.put(scopeView, viewSources.get(sourceView));
         viewInvariantReports.put(scopeView, viewInvariantReports.get(sourceView));
 

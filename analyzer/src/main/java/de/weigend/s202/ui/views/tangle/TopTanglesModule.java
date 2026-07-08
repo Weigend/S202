@@ -241,7 +241,7 @@ public class TopTanglesModule implements Module {
         }
 
         boundView = newBound;
-        if (!sameDataset || (!sameTangleScope && newBound.isTopTanglesScopeOwner())) {
+        if (!sameDataset || (!sameTangleScope && newBound.isScopeOwner())) {
             applyCurrentScope(true);
         }
 
@@ -343,7 +343,7 @@ public class TopTanglesModule implements Module {
         if (view == null) {
             return null;
         }
-        String preferred = view.getPreferredTopTanglesScope();
+        String preferred = view.getPreferredScope();
         if (preferred != null && !preferred.isBlank()) {
             return preferred;
         }
