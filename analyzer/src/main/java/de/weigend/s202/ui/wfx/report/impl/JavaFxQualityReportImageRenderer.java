@@ -19,11 +19,11 @@ import de.weigend.s202.domain.DependencyEdge;
 import de.weigend.s202.report.quality.QualityReportImageRenderer;
 import de.weigend.s202.report.quality.QualityReportInput;
 import de.weigend.s202.report.quality.QualityReportModel;
-import de.weigend.s202.ui.ArchitectureView;
-import de.weigend.s202.ui.ArchitectureViewStyle;
-import de.weigend.s202.ui.model.ArchitectureNode;
-import de.weigend.s202.ui.model.ArchitectureNodeCloner;
-import de.weigend.s202.ui.wfx.tangles.TangleFilter;
+import de.weigend.s202.ui.core.canvas.ArchitectureCanvas;
+import de.weigend.s202.domain.architecture.ArchitectureKind;
+import de.weigend.s202.ui.core.model.ArchitectureNode;
+import de.weigend.s202.ui.core.model.ArchitectureNodeCloner;
+import de.weigend.s202.ui.core.model.TangleFilter;
 import javafx.application.Platform;
 import javafx.geometry.Bounds;
 import javafx.geometry.Rectangle2D;
@@ -49,7 +49,7 @@ import java.util.function.BiConsumer;
 import java.util.function.Consumer;
 
 /**
- * Creates report evidence images by rendering real {@link ArchitectureView}
+ * Creates report evidence images by rendering real {@link ArchitectureCanvas}
  * instances off-screen and snapshotting them as PNG files.
  */
 public final class JavaFxQualityReportImageRenderer implements QualityReportImageRenderer {
@@ -149,7 +149,7 @@ public final class JavaFxQualityReportImageRenderer implements QualityReportImag
         for (QualityReportModel.ViolationFinding finding : model.layeredViolations()) {
             if (isPng(finding.imagePath())) {
                 jobs.add(new RenderJob(finding.id(),
-                        () -> renderViolation(input, finding, ArchitectureViewStyle.LAYERED, outputDirectory)));
+                        () -> renderViolation(input, finding, ArchitectureKind.LAYERED, outputDirectory)));
             }
         }
         for (QualityReportModel.CycleFinding finding : model.packageCycles()) {
@@ -167,7 +167,7 @@ public final class JavaFxQualityReportImageRenderer implements QualityReportImag
             for (QualityReportModel.ViolationFinding finding : componentFindings.violations()) {
                 if (isPng(finding.imagePath())) {
                     jobs.add(new RenderJob(finding.id(),
-                            () -> renderViolation(input, finding, ArchitectureViewStyle.COMPONENT, outputDirectory)));
+                            () -> renderViolation(input, finding, ArchitectureKind.COMPONENT, outputDirectory)));
                 }
             }
         }
@@ -176,7 +176,7 @@ public final class JavaFxQualityReportImageRenderer implements QualityReportImag
 
     private void renderViolation(QualityReportInput input,
                                  QualityReportModel.ViolationFinding finding,
-                                 ArchitectureViewStyle style,
+                                 ArchitectureKind style,
                                  Path outputDirectory) throws IOException {
         if (!isPng(finding.imagePath())) {
             return;
@@ -196,7 +196,7 @@ public final class JavaFxQualityReportImageRenderer implements QualityReportImag
             root = ArchitectureNodeCloner.cloneTree(sourceRoot);
         }
 
-        ArchitectureView view = configuredView(input, style, root);
+        ArchitectureCanvas view = configuredView(input, style, root);
         view.setShowWhatIfViolations(true);
         if (!keepClasses.isEmpty()) {
             view.selectByFullName(keepClasses.iterator().next());
@@ -214,7 +214,7 @@ public final class JavaFxQualityReportImageRenderer implements QualityReportImag
         if (root == null) {
             root = ArchitectureNodeCloner.cloneTree(sourceRoot);
         }
-        ArchitectureView view = configuredView(input, ArchitectureViewStyle.LAYERED, root);
+        ArchitectureCanvas view = configuredView(input, ArchitectureKind.LAYERED, root);
         view.setShowPackageScc(true);
         if (!finding.members().isEmpty()) {
             view.selectByFullName(finding.members().getFirst());
@@ -236,24 +236,24 @@ public final class JavaFxQualityReportImageRenderer implements QualityReportImag
         if (root == null) {
             root = ArchitectureNodeCloner.cloneTree(sourceRoot);
         }
-        ArchitectureView view = configuredView(input, ArchitectureViewStyle.LAYERED, root);
+        ArchitectureCanvas view = configuredView(input, ArchitectureKind.LAYERED, root);
         List<DependencyEdge> edges = finding.samples().stream()
                 .map(sample -> new DependencyEdge(sample.source(), sample.target()))
                 .filter(edge -> members.contains(edge.from()) && members.contains(edge.to()))
                 .distinct()
                 .toList();
         view.setShowScc(true);
-        view.setTangleVisualization(edges, null, null);
+        view.setEdgeOverlay(edges, null, null);
         if (!members.isEmpty()) {
             view.selectByFullName(members.iterator().next());
         }
         snapshot(view, outputDirectory.resolve(finding.imagePath()));
     }
 
-    private ArchitectureView configuredView(QualityReportInput input,
-                                            ArchitectureViewStyle style,
+    private ArchitectureCanvas configuredView(QualityReportInput input,
+                                            ArchitectureKind style,
                                             ArchitectureNode root) {
-        ArchitectureView view = new ArchitectureView();
+        ArchitectureCanvas view = new ArchitectureCanvas();
         view.setViewStyle(style);
         view.setPackageDepth(12);
         view.setSkipTransparentTopLevelPackages(false);
@@ -261,13 +261,13 @@ public final class JavaFxQualityReportImageRenderer implements QualityReportImag
         view.setRawDependencyModel(input.rawModel());
         view.setDomainModel(input.domainModel());
         view.setCycleBreakEdges(cycleBreakEdges);
-        view.setAppliedTangleCutEdges(appliedCutEdges);
+        view.setAppliedCutEdges(appliedCutEdges);
         view.setArchitectureRoot(root);
         view.setZoom(1.0);
         return view;
     }
 
-    private void snapshot(ArchitectureView view, Path path) throws IOException {
+    private void snapshot(ArchitectureCanvas view, Path path) throws IOException {
         Files.createDirectories(path.getParent());
         view.setMinSize(WIDTH, HEIGHT);
         view.setPrefSize(WIDTH, HEIGHT);

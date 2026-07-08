@@ -7,6 +7,11 @@ import { Navigation } from './controls.js';
 import { createComposer } from './postfx.js';
 import { createRain } from './weather.js';
 import { DependencyViz } from './deps.js';
+import { t, applyTranslations, setLang, getLang, onLangChange } from './i18n.js';
+
+// Statische UI-Texte sofort übersetzen (vor dem city.json-Load, damit schon
+// der Loader in der richtigen Sprache steht).
+applyTranslations();
 
 const app = document.getElementById('app');
 
@@ -108,7 +113,10 @@ function applyDensity() {
   traffic.setDensity(trafficDensity, atmosphere.dayFactor ?? 1);
 }
 applyDensity();
-document.title = `City3D · ${cityModel.buildings.length} classes · ${cityModel.districts.length} packages`;
+function updateTitle() {
+  document.title = `City3D · ${cityModel.buildings.length} ${t('title.classes')} · ${cityModel.districts.length} ${t('title.packages')}`;
+}
+updateTitle();
 
 // ---- Abhängigkeits-Visualisierung (Bögen + Datenpakete über der Stadt) ------
 let depMode = 'sel';     // 'off' | 'sel' | 'all' | 'viol'
@@ -282,11 +290,11 @@ function depListHtml(title, list, cls) {
   const items = list.slice(0, MAX).map((d) =>
     `<span class="dep ${d.violation ? 'viol' : cls}" data-fqn="${d.fqn}" title="${d.fqn}">${d.fqn.split('.').pop()}</span>`
   ).join('');
-  const more = list.length > MAX ? `<span class="dep-more">+${list.length - MAX} weitere</span>` : '';
+  const more = list.length > MAX ? `<span class="dep-more">${t('info.more', { n: list.length - MAX })}</span>` : '';
   return `<div class="dep-sec"><div class="dep-title">${title} (${list.length})</div><div class="dep-wrap">${items}${more}</div></div>`;
 }
 
-const flyBtnHtml = '<div class="btn-row" style="margin-top:12px"><button class="ui" data-fly>✈ Anfliegen</button></div>';
+const flyBtnHtml = () => `<div class="btn-row" style="margin-top:12px"><button class="ui" data-fly>${t('info.fly')}</button></div>`;
 
 function showClass(b) {
   const tags =
@@ -295,18 +303,18 @@ function showClass(b) {
     (b.inCycle ? ' <span class="tag cycle">⟲ cycle</span>' : '');
   const { uses, usedBy } = deps.edgesFor(b.fullName);
   infoEl.innerHTML =
-    '<span class="close" title="schließen">×</span>' +
+    `<span class="close" title="${t('info.close')}">×</span>` +
     `<div class="cls">${b.simpleName}${tags}</div>` +
     `<div class="fqn">${b.fullName}</div>` +
     rows([
-      ['package', `<span style="color:#7f97c2">${b.districtFullName || '–'}</span>`],
-      ['architecture level', b.architectureLevel],
-      ['methods', b.methodCount >= 0 ? b.methodCount : '–'],
-      ['fan-in / fan-out', `${b.fanIn} / ${b.fanOut}`],
+      [t('info.package'), `<span style="color:#7f97c2">${b.districtFullName || '–'}</span>`],
+      [t('info.archLevel'), b.architectureLevel],
+      [t('info.methods'), b.methodCount >= 0 ? b.methodCount : '–'],
+      [t('info.fanInOut'), `${b.fanIn} / ${b.fanOut}`],
     ]) +
-    depListHtml('→ verwendet', uses, 'out') +
-    depListHtml('← wird verwendet von', usedBy, 'in') +
-    flyBtnHtml;
+    depListHtml(t('info.uses'), uses, 'out') +
+    depListHtml(t('info.usedBy'), usedBy, 'in') +
+    flyBtnHtml();
 }
 
 function showPackage(d) {
@@ -316,50 +324,55 @@ function showPackage(d) {
     ' <span class="tag" style="background:rgba(214,184,90,.2);color:#d6b85a">package</span>' +
     (d.inCycle ? ' <span class="tag cycle">⟲ tangle</span>' : '');
   infoEl.innerHTML =
-    '<span class="close" title="schließen">×</span>' +
+    `<span class="close" title="${t('info.close')}">×</span>` +
     `<div class="cls">${d.simpleName}${tags}</div>` +
     `<div class="fqn">${d.fullName}</div>` +
     rows([
-      ['architecture level', d.architectureLevel],
-      ['nesting depth', d.nestingDepth],
-      ['direct classes', classes],
-      ['sub-packages', subs],
+      [t('info.archLevel'), d.architectureLevel],
+      [t('info.nesting'), d.nestingDepth],
+      [t('info.directClasses'), classes],
+      [t('info.subPackages'), subs],
     ]) +
-    flyBtnHtml;
+    flyBtnHtml();
 }
 
 // Fahrt-Info: welcher Pod fährt hier, von wo nach wo, und warum in dieser Farbe.
-function showPod(t) {
-  const kind = t.local ? '🚶 Fußgänger' : '🚕 Cab';
+function showPod(trip) {
+  const kind = trip.local ? t('pod.pedestrian') : t('pod.cab');
   const tags =
-    ` <span class="tag" style="background:rgba(120,180,255,.14);color:#9fc3ff">${t.local ? 'paketlokal' : 'paketübergreifend'}</span>` +
-    (t.violation ? ' <span class="tag cycle">⚠ Verstoß</span>' : '');
+    ` <span class="tag" style="background:rgba(120,180,255,.14);color:#9fc3ff">${trip.local ? t('pod.local') : t('pod.cross')}</span>` +
+    (trip.violation ? ` <span class="tag cycle">${t('pod.violTag')}</span>` : '');
   infoEl.innerHTML =
-    '<span class="close" title="schließen">×</span>' +
+    `<span class="close" title="${t('info.close')}">×</span>` +
     `<div class="cls">${kind}${tags}</div>` +
-    `<div class="fqn">${t.from} → ${t.to}</div>` +
+    `<div class="fqn">${trip.from} → ${trip.to}</div>` +
     rows([
-      ['Beziehung', t.violation ? 'Verstoß: Level steigt' : 'regelkonform'],
-      ['Weg', t.local ? 'Gehsteig' : 'Fahrbahn'],
-      ['Routenlänge', `${Math.round(t.len)}`],
+      [t('pod.relation'), trip.violation ? t('pod.violUp') : t('pod.ok')],
+      [t('pod.way'), trip.local ? t('pod.sidewalk') : t('pod.road')],
+      [t('pod.routeLen'), `${Math.round(trip.len)}`],
     ]) +
-    `<div class="dep-sec"><div class="dep-title">Quelle → Ziel</div><div class="dep-wrap">` +
-    `<span class="dep out" data-fqn="${t.from}" title="${t.from}">${t.from.split('.').pop()}</span>` +
+    `<div class="dep-sec"><div class="dep-title">${t('pod.srcDst')}</div><div class="dep-wrap">` +
+    `<span class="dep out" data-fqn="${trip.from}" title="${trip.from}">${trip.from.split('.').pop()}</span>` +
     `<span class="dep-more">→</span>` +
-    `<span class="dep in" data-fqn="${t.to}" title="${t.to}">${t.to.split('.').pop()}</span>` +
+    `<span class="dep in" data-fqn="${trip.to}" title="${trip.to}">${trip.to.split('.').pop()}</span>` +
     `</div></div>` +
-    '<div class="btn-row" style="margin-top:12px"><button class="ui" data-follow>📍 Verfolgen</button></div>';
+    `<div class="btn-row" style="margin-top:12px"><button class="ui" data-follow>${t('pod.follow')}</button></div>`;
+}
+
+// Info-Panel (neu) rendern — auch beim Sprachwechsel für die offene Auswahl.
+function renderInfo(sel) {
+  if (sel.kind === 'class') showClass(sel.data);
+  else if (sel.kind === 'pod') showPod(sel.data);
+  else showPackage(sel.data);
+  infoEl.style.display = 'block';
+  infoEl.querySelector('.close').onclick = hideInfo;
 }
 
 function select(sel) {
   stopFollow(); // neue Auswahl beendet eine laufende Verfolgung
   if (!sel) { hideInfo(); return; }
   currentSel = sel;
-  if (sel.kind === 'class') showClass(sel.data);
-  else if (sel.kind === 'pod') showPod(sel.data);
-  else showPackage(sel.data);
-  infoEl.style.display = 'block';
-  infoEl.querySelector('.close').onclick = hideInfo;
+  renderInfo(sel);
   highlight(sel);
   deps.setFocus(sel.kind === 'class' ? sel.fqn : null);
 }
@@ -544,12 +557,13 @@ syncCityLight();
 // ============================ UI =============================================
 const $ = (id) => document.getElementById(id);
 
-function timeLabel(t) {
-  if (t < 0.08 || t > 0.92) return 'Nacht';
-  if (t < 0.13 || t > 0.87) return 'Blaue Stunde';
-  if (t < 0.25 || t > 0.75) return 'Goldene Stunde';
-  return 'Tag';
+function timeLabel(v) {
+  if (v < 0.08 || v > 0.92) return t('time.night');
+  if (v < 0.13 || v > 0.87) return t('time.blue');
+  if (v < 0.25 || v > 0.75) return t('time.golden');
+  return t('time.day');
 }
+$('v-time').textContent = timeLabel(parseFloat($('s-time').value));
 
 $('s-time').addEventListener('input', (e) => {
   const t = parseFloat(e.target.value);
@@ -650,6 +664,23 @@ $('b-hotspots').addEventListener('click', () => {
   hotspotsOn = !hotspotsOn;
   $('b-hotspots').classList.toggle('active', hotspotsOn);
   hotspots.setVisible(hotspotsOn);
+});
+
+// ---- Sprache: DE / EN / PT ------------------------------------------------------
+// Statische Texte übernimmt applyTranslations() (läuft in setLang); hier nur
+// die dynamisch gerenderten Stellen nachziehen.
+function markActiveLang() {
+  for (const btn of document.querySelectorAll('#lang-row [data-lang]'))
+    btn.classList.toggle('active', btn.dataset.lang === getLang());
+}
+markActiveLang();
+for (const btn of document.querySelectorAll('#lang-row [data-lang]'))
+  btn.addEventListener('click', () => setLang(btn.dataset.lang));
+onLangChange(() => {
+  markActiveLang();
+  updateTitle();
+  $('v-time').textContent = timeLabel(cycleOn ? cycleT : parseFloat($('s-time').value));
+  if (currentSel) renderInfo(currentSel); // offenes Info-Panel neu rendern
 });
 
 // ---- Legende ------------------------------------------------------------------
@@ -780,7 +811,7 @@ function updatePerf(dt) {
     fps = Math.round(fpsFrames / fpsAccum);
     fpsAccum = 0; fpsFrames = 0;
     const s = city.stats;
-    perfEl.textContent = `${fps} fps · ${s.buildings} Gebäude · ${s.grid[0]}×${s.grid[1]}`;
+    perfEl.textContent = `${fps} fps · ${s.buildings} ${t('perf.buildings')} · ${s.grid[0]}×${s.grid[1]}`;
   }
 }
 

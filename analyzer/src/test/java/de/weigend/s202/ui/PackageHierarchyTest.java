@@ -23,7 +23,7 @@ import java.util.Map;
 import static org.junit.jupiter.api.Assertions.*;
 
 /**
- * Test to verify package hierarchy creation logic in ArchitectureView.
+ * Test to verify package hierarchy creation logic in ArchitectureCanvas.
  * Specifically tests that missing parent packages are automatically created.
  */
 public class PackageHierarchyTest {

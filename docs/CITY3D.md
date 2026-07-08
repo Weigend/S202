@@ -144,8 +144,19 @@ city3d/src/
   sky.js       Himmel-Dome, Sonne/Mond, Beleuchtungsmodell, Wolken, Env-Map
   greenery.js  Parks, Bäume, Büsche, Freiflächen (Sampling + Kollisionstest)
   labels.js    Paket-Namensschilder
+  i18n.js      UI-Übersetzungen (DE/EN/PT), Sprachwahl + data-i18n-Anwendung
   main.js      Orchestrierung, UI, Selektion, Kamera (Anflug/Follow), Post-FX
 ```
+
+**Mehrsprachigkeit:** Die gesamte Oberfläche (Panels, Legende, Hilfe, Suche,
+Info-Overlays, Tooltips) ist in Deutsch, Englisch und Portugiesisch verfügbar.
+Statische Texte hängen über `data-i18n`-Attribute in `index.html` am
+Wörterbuch in `i18n.js`; dynamische Texte (Info-Panel, Tageszeit-Label,
+FPS-Zeile) rufen `t()` direkt. Sprachwahl: `?lang=de|en|pt` in der URL schlägt
+die gespeicherte Wahl (`localStorage`) schlägt die Browsersprache; Umschalter
+im Einstellungs-Panel, Wechsel wirkt live ohne Reload. Klassen-, Paket- und
+Fahrzeug-Beschriftungen in der Szene sind Bezeichner aus dem Modell und
+bleiben sprachneutral.
 
 Datenfluss: `CityModelExporter` (Java) serialisiert die Analyse zu
 `city.json` (Pakete, Klassen, Metriken, **Abhängigkeitskanten**);
