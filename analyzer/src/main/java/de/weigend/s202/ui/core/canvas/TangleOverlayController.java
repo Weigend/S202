@@ -13,10 +13,9 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package de.weigend.s202.ui.views.tangle;
+package de.weigend.s202.ui.core.canvas;
 
 import de.weigend.s202.domain.DependencyEdge;
-import de.weigend.s202.ui.views.tangle.TangleEdgeRenderer;
 import javafx.scene.layout.Pane;
 
 import java.util.Collection;
@@ -30,7 +29,7 @@ import java.util.function.Consumer;
  * Verwaltet das Tangle-Kanten-Overlay einer Architektur-View: den
  * angehefteten Kanten-Satz (überlebt refreshLayout), Auswahl, Cut/Restore
  * der Preview-Kanten und die zugehörigen Sinks zur Host-Shell. Der
- * {@link TangleEdgeRenderer} wird bei jedem Root-Build neu erzeugt und per
+ * {@link de.weigend.s202.ui.core.spi.EdgeOverlayRenderer} wird bei jedem Root-Build neu erzeugt und per
  * {@link #attachRenderer} wieder angeschlossen. Aus ArchitectureView
  * extrahiert.
  */
@@ -39,7 +38,7 @@ public final class TangleOverlayController {
     private final Pane tanglePane;
     private final Consumer<String> status;
 
-    private TangleEdgeRenderer renderer;
+    private de.weigend.s202.ui.core.spi.EdgeOverlayRenderer renderer;
 
     // Pending tangle visualisation snapshot, applied once setArchitectureRoot
     // (re-)builds the renderer. Set by setTangleVisualization before the root
@@ -60,7 +59,7 @@ public final class TangleOverlayController {
     }
 
     /** Vom Root-Build gerufen: frisch erzeugten Renderer verdrahten und Overlay-Zustand reapplizieren. */
-    public void attachRenderer(TangleEdgeRenderer newRenderer) {
+    public void attachRenderer(de.weigend.s202.ui.core.spi.EdgeOverlayRenderer newRenderer) {
         this.renderer = newRenderer;
         renderer.setOnEdgeClicked(this::handleEdgeClicked);
         renderer.setOnEdgeCut(this::handleEdgeCut);

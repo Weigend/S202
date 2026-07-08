@@ -278,8 +278,8 @@ public class S202Module implements Module {
         bus.subscribe(MenuRequestEvent.CloseProject.class, ev -> { persistence.closeProject(); return true; });
         bus.subscribe(MenuRequestEvent.Exit.class, ev -> { Platform.exit(); return true; });
         bus.subscribe(MenuRequestEvent.NewView.class, ev -> { viewManager.newArchitectureWindow(); return true; });
-        bus.subscribe(MenuRequestEvent.OpenComponentView.class, ev -> { viewManager.openComponentView(); return true; });
-        bus.subscribe(MenuRequestEvent.OpenHexagonalView.class, ev -> { viewManager.openHexagonalView(); return true; });
+        bus.subscribe(MenuRequestEvent.OpenComponentView.class, ev -> { viewManager.openStyleView(ArchitectureKind.COMPONENT); return true; });
+        bus.subscribe(MenuRequestEvent.OpenHexagonalView.class, ev -> { viewManager.openStyleView(ArchitectureKind.HEXAGONAL); return true; });
         bus.subscribe(MenuRequestEvent.CloseFocusedView.class, ev -> { viewManager.closeFocusedView(); return true; });
         bus.subscribe(MenuRequestEvent.CloseAllViews.class, ev -> { viewManager.closeAllViews(); return true; });
         bus.subscribe(MenuRequestEvent.RestoreDefaultLayout.class, ev -> {

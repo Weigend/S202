@@ -15,7 +15,7 @@
  */
 package de.weigend.s202.ui.core.canvas;
 
-import de.weigend.s202.ui.views.tangle.TangleOverlayController;
+import de.weigend.s202.ui.core.canvas.TangleOverlayController;
 import de.weigend.s202.domain.architecture.Architecture;
 import de.weigend.s202.domain.architecture.ViolationKind;
 import de.weigend.s202.domain.architecture.WhatIfArchitecture;
@@ -23,7 +23,6 @@ import de.weigend.s202.ui.core.model.ArchitectureNode;
 import de.weigend.s202.ui.core.arrows.DependencyRenderer;
 import de.weigend.s202.ui.core.arrows.DependencyRendererStrategy;
 import de.weigend.s202.ui.core.arrows.SCCRenderer;
-import de.weigend.s202.ui.views.tangle.TangleEdgeRenderer;
 import de.weigend.s202.ui.core.arrows.WhatIfUpwardEdgeRenderer;
 import de.weigend.s202.ui.core.graph.PulseCoalescer;
 import de.weigend.s202.ui.core.canvas.ZoomController;
@@ -71,7 +70,7 @@ final class OverlayRenderCoordinator {
     private DependencyRenderer classicRenderer;
     private SCCRenderer sccRenderer;
     private WhatIfUpwardEdgeRenderer whatIfRenderer;
-    private TangleEdgeRenderer tangleRenderer;
+    private de.weigend.s202.ui.core.spi.EdgeOverlayRenderer tangleRenderer;
 
     // Lines need redraw after zoom/scroll changes (perf optimization).
     private boolean linesNeedUpdate = false;
@@ -128,10 +127,18 @@ final class OverlayRenderCoordinator {
         whatIfRenderer = new WhatIfUpwardEdgeRenderer(whatIfPane, elementRegistry);
         whatIfRenderer.setCoordinateContext(zoomableContent, overlayPane);
 
-        tangleRenderer = new TangleEdgeRenderer(tanglePane, elementRegistry, status);
-        tangleRenderer.setCoordinateContext(zoomableContent, overlayPane);
-        tangleOverlay.attachRenderer(tangleRenderer);
-        tangleRenderer.setShowDebugLines(showTangleDebugLines.get());
+        // Kanten-Overlay-Renderer kommt (falls die Tangle-Komponente installiert
+        // ist) über das SPI — der Kern kennt die Pipeline nicht.
+        tangleRenderer = io.softwareecg.wfx.lookup.api.Lookup
+                .findAll(de.weigend.s202.ui.core.spi.EdgeOverlayRendererFactory.class).stream()
+                .findFirst()
+                .map(factory -> factory.create(tanglePane, elementRegistry, status))
+                .orElse(null);
+        if (tangleRenderer != null) {
+            tangleRenderer.setCoordinateContext(zoomableContent, overlayPane);
+            tangleOverlay.attachRenderer(tangleRenderer);
+            tangleRenderer.setShowDebugLines(showTangleDebugLines.get());
+        }
 
         dependencyRenderer.clearDependencyArrows();
         sccRenderer.clearSccLines();

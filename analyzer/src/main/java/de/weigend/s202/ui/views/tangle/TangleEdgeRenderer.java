@@ -39,7 +39,7 @@ import java.util.function.Consumer;
  * {@link TangleRouter} (routing), {@link TangleEdgePainter} (painting and
  * interaction) and {@link TangleCycleModel} (cycle bookkeeping).
  */
-public class TangleEdgeRenderer {
+public class TangleEdgeRenderer implements de.weigend.s202.ui.core.spi.EdgeOverlayRenderer {
 
     private final Pane pane;
     private final Map<String, Node> elementRegistry;

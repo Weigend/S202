@@ -286,12 +286,15 @@ public final class ArchitectureViewManager {
         registerArchitectureView(createArchitectureView());
     }
 
-    public void openComponentView() {
-        openProjectionView("Component View", ArchitectureKind.COMPONENT, "component");
-    }
-
-    public void openHexagonalView() {
-        openProjectionView("Hexagonal View", ArchitectureKind.HEXAGONAL, "hexagonal");
+    /**
+     * Öffnet eine Stil-Projektion der fokussierten Analyse. Der Manager
+     * kennt keine konkreten Stile mehr — der Stil ist reiner Parameter,
+     * die Ansicht kommt über das StyleView-SPI des Canvas.
+     */
+    public void openStyleView(ArchitectureKind style) {
+        String label = style.name().toLowerCase(java.util.Locale.ROOT);
+        String title = Character.toUpperCase(label.charAt(0)) + label.substring(1) + " View";
+        openProjectionView(title, style, label);
     }
 
     private void openProjectionView(String title, ArchitectureKind style, String label) {

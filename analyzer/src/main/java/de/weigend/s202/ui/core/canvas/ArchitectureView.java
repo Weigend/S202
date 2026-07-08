@@ -17,7 +17,7 @@ package de.weigend.s202.ui.core.canvas;
 
 import de.weigend.s202.ui.core.canvas.WhatIfEditController;
 import de.weigend.s202.ui.core.canvas.WhatIfUndoManager;
-import de.weigend.s202.ui.views.tangle.TangleOverlayController;
+import de.weigend.s202.ui.core.canvas.TangleOverlayController;
 import de.weigend.s202.ui.core.graph.ArchitectureDragController;
 import de.weigend.s202.ui.core.graph.GraphSelection;
 import de.weigend.s202.ui.core.graph.LevelClassBox;
