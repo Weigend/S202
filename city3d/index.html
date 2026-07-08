@@ -227,7 +227,7 @@
     <div id="loader">
       <div class="title">City3D</div>
       <div class="bar"><i></i></div>
-      <div class="sub">baue software-stadt…</div>
+      <div class="sub" data-i18n="loader.sub">baue software-stadt…</div>
     </div>
 
     <div id="title-hud" class="hud">
@@ -237,118 +237,126 @@
     </div>
 
     <div id="help" class="hud">
-      <div class="head" id="help-head">Navigation <span class="chev">▾</span></div>
+      <div class="head" id="help-head"><span data-i18n="help.title">Navigation</span> <span class="chev">▾</span></div>
       <div id="help-body">
-        <div class="row"><span><b>Orbit</b> · Maus ziehen</span><span>drehen</span></div>
-        <div class="row"><span>Scroll</span><span>zoom</span></div>
-        <div class="row"><span class="k">F</span> Fly-Modus</div>
-        <div class="row"><span><b>🎥 Rundfahrt</b> · Pod-Klick → 📍</span><span>Mitfahrt</span></div>
+        <div class="row"><span data-i18n-html="help.orbit"><b>Orbit</b> · Maus ziehen</span><span data-i18n="help.rotate">drehen</span></div>
+        <div class="row"><span data-i18n="help.scroll">Scroll</span><span data-i18n="help.zoom">zoom</span></div>
+        <div class="row"><span class="k">F</span> <span data-i18n="help.flyMode">Fly-Modus</span></div>
+        <div class="row"><span data-i18n-html="help.tour"><b>🎥 Rundfahrt</b> · Pod-Klick → 📍</span><span data-i18n="help.ride">Mitfahrt</span></div>
         <div class="row" id="fly-help" style="display:none; flex-direction:column; align-items:flex-start; gap:2px;">
-          <span><span class="k">W</span><span class="k">A</span><span class="k">S</span><span class="k">D</span> bewegen</span>
-          <span><span class="k">Q</span><span class="k">E</span> hoch/runter · <span class="k">⇧</span> boost</span>
-          <span><span class="k">Esc</span> Maus freigeben</span>
+          <span><span class="k">W</span><span class="k">A</span><span class="k">S</span><span class="k">D</span> <span data-i18n="help.move">bewegen</span></span>
+          <span><span class="k">Q</span><span class="k">E</span> <span data-i18n="help.upDown">hoch/runter ·</span> <span class="k">⇧</span> <span data-i18n="help.boost">boost</span></span>
+          <span><span class="k">Esc</span> <span data-i18n="help.release">Maus freigeben</span></span>
         </div>
       </div>
     </div>
 
     <div id="panel">
-      <h2 id="panel-head">Einstellungen <span class="chev">▾</span></h2>
+      <h2 id="panel-head"><span data-i18n="panel.title">Einstellungen</span> <span class="chev">▾</span></h2>
       <div id="panel-body">
       <div class="ctl">
-        <label>Tageszeit <span id="v-time">Blaue Stunde</span></label>
+        <label><span data-i18n="panel.time">Tageszeit</span> <span id="v-time">Blaue Stunde</span></label>
         <input id="s-time" type="range" min="0" max="1" step="0.001" value="0.11" />
       </div>
       <div class="ctl">
-        <label>Bloom <span id="v-bloom">0.22</span></label>
+        <label><span data-i18n="panel.bloom">Bloom</span> <span id="v-bloom">0.22</span></label>
         <input id="s-bloom" type="range" min="0" max="1.5" step="0.01" value="0.22" />
       </div>
       <div class="ctl">
-        <label>Nebel <span id="v-fog">1.0</span></label>
+        <label><span data-i18n="panel.fog">Nebel</span> <span id="v-fog">1.0</span></label>
         <input id="s-fog" type="range" min="0" max="3" step="0.01" value="1.0" />
       </div>
       <div class="ctl">
-        <label>Nässe / Wetter <span id="v-wet">0.0</span></label>
+        <label><span data-i18n="panel.wet">Nässe / Wetter</span> <span id="v-wet">0.0</span></label>
         <input id="s-wet" type="range" min="0" max="1" step="0.01" value="0.0" />
       </div>
       <div class="ctl">
-        <label>Verkehr <span id="v-traffic">50%</span></label>
+        <label><span data-i18n="panel.traffic">Verkehr</span> <span id="v-traffic">50%</span></label>
         <input id="s-traffic" type="range" min="0" max="1" step="0.01" value="0.5" />
       </div>
       <div class="ctl">
-        <label>Tempo <span id="v-speed">×1.00</span></label>
+        <label><span data-i18n="panel.speed">Tempo</span> <span id="v-speed">×1.00</span></label>
         <input id="s-speed" type="range" min="0.15" max="2" step="0.05" value="1" />
       </div>
       <div class="ctl">
-        <label>Abhängigkeiten <span id="dep-stats"></span></label>
+        <label><span data-i18n="panel.deps">Abhängigkeiten</span> <span id="dep-stats"></span></label>
         <div class="btn-row">
-          <button class="ui sm" id="b-dep-off">Aus</button>
-          <button class="ui sm active" id="b-dep-sel">Auswahl</button>
-          <button class="ui sm" id="b-dep-all">Alle</button>
-          <button class="ui sm viol" id="b-dep-viol">Verstöße</button>
+          <button class="ui sm" id="b-dep-off" data-i18n="btn.off">Aus</button>
+          <button class="ui sm active" id="b-dep-sel" data-i18n="btn.selection">Auswahl</button>
+          <button class="ui sm" id="b-dep-all" data-i18n="btn.all">Alle</button>
+          <button class="ui sm viol" id="b-dep-viol" data-i18n="btn.violations">Verstöße</button>
         </div>
       </div>
       <div class="ctl">
-        <label>Metrik-Licht <span style="color:#7f97c2">Fenster</span></label>
+        <label><span data-i18n="panel.metric">Metrik-Licht</span> <span style="color:#7f97c2" data-i18n="panel.windows">Fenster</span></label>
         <div class="btn-row">
-          <button class="ui sm active" id="b-met-off">Aus</button>
+          <button class="ui sm active" id="b-met-off" data-i18n="btn.off">Aus</button>
           <button class="ui sm" id="b-met-fanin">Fan-In</button>
           <button class="ui sm" id="b-met-fanout">Fan-Out</button>
-          <button class="ui sm" id="b-met-methods">Meth.</button>
+          <button class="ui sm" id="b-met-methods" data-i18n="btn.methods">Meth.</button>
         </div>
       </div>
       <div class="ctl">
         <div class="btn-row">
-          <button class="ui active" id="b-ssao" title="Umgebungsverschattung — bei riesigen Architekturen abschalten für mehr FPS">SSAO</button>
-          <button class="ui" id="b-hotspots" title="Meistbefahrene Kreuzungen hervorheben">Hotspots</button>
+          <button class="ui active" id="b-ssao" data-i18n-title="tip.ssao" title="Umgebungsverschattung — bei riesigen Architekturen abschalten für mehr FPS">SSAO</button>
+          <button class="ui" id="b-hotspots" data-i18n-title="tip.hotspots" title="Meistbefahrene Kreuzungen hervorheben">Hotspots</button>
         </div>
       </div>
       <div class="ctl">
         <div class="btn-row">
-          <button class="ui" id="b-tour" title="Kamera folgt einem zufälligen Fahrzeug">🎥 Rundfahrt</button>
+          <button class="ui" id="b-tour" data-i18n="btn.tour" data-i18n-title="tip.tour" title="Kamera folgt einem zufälligen Fahrzeug">🎥 Rundfahrt</button>
         </div>
       </div>
       <div class="ctl">
         <div class="btn-row">
-          <button class="ui sm active" id="b-cinematic">Kino-Kamera</button>
-          <button class="ui sm" id="b-cycle">Zeitraffer</button>
-          <button class="ui sm" id="b-regen">Neu bauen</button>
+          <button class="ui sm active" id="b-cinematic" data-i18n="btn.cinematic">Kino-Kamera</button>
+          <button class="ui sm" id="b-cycle" data-i18n="btn.timelapse">Zeitraffer</button>
+          <button class="ui sm" id="b-regen" data-i18n="btn.rebuild">Neu bauen</button>
+        </div>
+      </div>
+      <div class="ctl">
+        <label><span data-i18n="panel.language">Sprache</span></label>
+        <div class="btn-row" id="lang-row">
+          <button class="ui sm" data-lang="de">DE</button>
+          <button class="ui sm" data-lang="en">EN</button>
+          <button class="ui sm" data-lang="pt">PT</button>
         </div>
       </div>
       </div>
     </div>
 
     <div id="search-box">
-      <input id="search" type="text" placeholder="Klasse oder Paket suchen …  ( / )" autocomplete="off" spellcheck="false" />
+      <input id="search" type="text" data-i18n-placeholder="search.placeholder" placeholder="Klasse oder Paket suchen …  ( / )" autocomplete="off" spellcheck="false" />
       <div id="search-results"></div>
     </div>
 
     <div id="legend-wrap">
       <div id="legend">
-        <h3>Gebäude</h3>
-        <div class="lg"><span class="sw" style="background:linear-gradient(120deg,#20313d,#3a4c58)"></span> Glas = hohes Level · Interface</div>
-        <div class="lg"><span class="sw" style="background:#8b8478"></span> Stein / <span class="sw" style="background:#5e3021"></span> Backstein = Mitte</div>
-        <div class="lg"><span class="sw" style="background:#6a6c68"></span> Beton = Basis-Level (unten)</div>
-        <div class="lg">Höhe = Methoden · Fläche = Fan-In/Out</div>
-        <div class="lg">Terrassen = Paket-Verschachtelung</div>
-        <h3>Abhängigkeiten</h3>
-        <div class="lg"><span class="ln" style="background:#3fa8ff"></span> regelkonform (Level fällt)</div>
-        <div class="lg"><span class="ln" style="background:#ff4040"></span> Verstoß: Level steigt (aufwärts)</div>
-        <div class="lg"><span class="ln" style="background:#ffb24d"></span> ausgehend · <span class="ln" style="background:#4de6c8"></span> eingehend</div>
-        <h3>Verkehr (klickbar)</h3>
-        <div class="lg">🚕 Cab = paketübergreifend</div>
-        <div class="lg">🚶 Figur = paketlokal (Gehsteig)</div>
-        <div class="lg"><span class="dot" style="background:#59d0ff"></span> Dachleuchte/Figur cyan = regelkonform</div>
-        <div class="lg"><span class="dot" style="background:#ff5040"></span> rot = Verstoß · Tempo = Level-Sprung</div>
-        <div class="lg"><span class="dot" style="background:#ffa028"></span> Hotspots (Schalter): Glühen = viele Routen über diese Kreuzung</div>
-        <div class="lg">Klick auf Pod: Fahrt-Info + 📍 Verfolgen · 🎥 Rundfahrt = Zufalls-Pod</div>
-        <h3>Warnsignale</h3>
-        <div class="lg"><span class="dot" style="background:#ff3020; box-shadow:0 0 6px #ff3020; animation: blink 1.6s infinite"></span> Dach-Beacon = Klasse im Zyklus</div>
-        <div class="lg"><span class="sw" style="background:#8a3b34"></span> rote Plattform = Paket-Tangle</div>
+        <h3 data-i18n="legend.buildings">Gebäude</h3>
+        <div class="lg"><span class="sw" style="background:linear-gradient(120deg,#20313d,#3a4c58)"></span> <span data-i18n="legend.glass">Glas = hohes Level · Interface</span></div>
+        <div class="lg"><span class="sw" style="background:#8b8478"></span> <span data-i18n="legend.stone">Stein /</span> <span class="sw" style="background:#5e3021"></span> <span data-i18n="legend.brick">Backstein = Mitte</span></div>
+        <div class="lg"><span class="sw" style="background:#6a6c68"></span> <span data-i18n="legend.concrete">Beton = Basis-Level (unten)</span></div>
+        <div class="lg"><span data-i18n="legend.height">Höhe = Methoden · Fläche = Fan-In/Out</span></div>
+        <div class="lg"><span data-i18n="legend.terraces">Terrassen = Paket-Verschachtelung</span></div>
+        <h3 data-i18n="legend.deps">Abhängigkeiten</h3>
+        <div class="lg"><span class="ln" style="background:#3fa8ff"></span> <span data-i18n="legend.ok">regelkonform (Level fällt)</span></div>
+        <div class="lg"><span class="ln" style="background:#ff4040"></span> <span data-i18n="legend.violUp">Verstoß: Level steigt (aufwärts)</span></div>
+        <div class="lg"><span class="ln" style="background:#ffb24d"></span> <span data-i18n="legend.outgoing">ausgehend ·</span> <span class="ln" style="background:#4de6c8"></span> <span data-i18n="legend.incoming">eingehend</span></div>
+        <h3 data-i18n="legend.traffic">Verkehr (klickbar)</h3>
+        <div class="lg"><span data-i18n="legend.cab">🚕 Cab = paketübergreifend</span></div>
+        <div class="lg"><span data-i18n="legend.ped">🚶 Figur = paketlokal (Gehsteig)</span></div>
+        <div class="lg"><span class="dot" style="background:#59d0ff"></span> <span data-i18n="legend.roofCyan">Dachleuchte/Figur cyan = regelkonform</span></div>
+        <div class="lg"><span class="dot" style="background:#ff5040"></span> <span data-i18n="legend.redViol">rot = Verstoß · Tempo = Level-Sprung</span></div>
+        <div class="lg"><span class="dot" style="background:#ffa028"></span> <span data-i18n="legend.hotspots">Hotspots (Schalter): Glühen = viele Routen über diese Kreuzung</span></div>
+        <div class="lg"><span data-i18n="legend.podClick">Klick auf Pod: Fahrt-Info + 📍 Verfolgen · 🎥 Rundfahrt = Zufalls-Pod</span></div>
+        <h3 data-i18n="legend.warnings">Warnsignale</h3>
+        <div class="lg"><span class="dot" style="background:#ff3020; box-shadow:0 0 6px #ff3020; animation: blink 1.6s infinite"></span> <span data-i18n="legend.beacon">Dach-Beacon = Klasse im Zyklus</span></div>
+        <div class="lg"><span class="sw" style="background:#8a3b34"></span> <span data-i18n="legend.tangle">rote Plattform = Paket-Tangle</span></div>
       </div>
-      <button class="ui" id="b-legend">Legende</button>
+      <button class="ui" id="b-legend" data-i18n="btn.legend">Legende</button>
     </div>
 
-    <div id="follow-hint">🎥 Verfolgungsfahrt — <b>Esc</b> oder Klick beendet</div>
+    <div id="follow-hint" data-i18n-html="follow.hint">🎥 Verfolgungsfahrt — <b>Esc</b> oder Klick beendet</div>
 
     <div class="credit">WEBGL · THREE.JS</div>
 

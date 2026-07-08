@@ -19,15 +19,15 @@ import de.weigend.s202.reader.impl.java.InputAnalyzer;
 import de.weigend.s202.reader.DependencyModel;
 import de.weigend.s202.domain.DomainModel;
 import de.weigend.s202.domain.impl.LevelCalculator;
-import de.weigend.s202.ui.model.ArchitectureNode;
-import de.weigend.s202.ui.model.ArchitectureNode.NodeType;
-import de.weigend.s202.ui.model.ArchitectureNodeBuilder;
+import de.weigend.s202.ui.core.model.ArchitectureNode;
+import de.weigend.s202.ui.core.model.ArchitectureNode.NodeType;
+import de.weigend.s202.ui.core.model.ArchitectureNodeBuilder;
 import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.*;
 
 /**
- * Test that verifies ArchitectureView.setArchitectureRoot() correctly displays packages with their calculated levels.
+ * Test that verifies ArchitectureCanvas.setArchitectureRoot() correctly displays packages with their calculated levels.
  */
 public class ArchitectureViewLevelTest {
     
@@ -75,7 +75,7 @@ public class ArchitectureViewLevelTest {
         
         System.err.println("[TEST] Found com.example2 in ArchitectureNode at level " + com2Node.getLevel());
         System.err.println("[TEST] ✓ All ArchitectureNode verifications passed");
-        System.err.println("[TEST] When ArchitectureView.setArchitectureRoot() is called, it will use this tree");
+        System.err.println("[TEST] When ArchitectureCanvas.setArchitectureRoot() is called, it will use this tree");
     }
     
     private ArchitectureNode findNodeByName(ArchitectureNode node, String fullName) {

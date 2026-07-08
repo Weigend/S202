@@ -46,7 +46,7 @@ cd city3d && npm install && npm run build   # produces city3d/dist
 
 In Structure202, load/analyse a project and pick **File → Show City3D View**. The
 app serialises the current analysis to a `CityModel`, serves the bundle on a
-loopback port (`de.weigend.s202.ui.city3d.CityView3DServer`) and opens the city
+loopback port (`de.weigend.s202.ui.views.city3d.CityView3DServer`) and opens the city
 in your browser. Re-run the menu after analysing another jar to update it.
 
 ## How to run (standalone dev)
@@ -57,7 +57,7 @@ in your browser. Re-run the menu after analysing another jar to update it.
 ```bash
 cd analyzer
 mvn -q org.codehaus.mojo:exec-maven-plugin:3.1.0:java \
-  -Dexec.mainClass=de.weigend.s202.ui.city3d.CityModelExporter \
+  -Dexec.mainClass=de.weigend.s202.ui.views.city3d.CityModelExporter \
   -Dexec.args="../test-example/target/test-example-1.0.0.jar ../city3d/public/city.json"
 ```
 
@@ -77,4 +77,4 @@ re-reads `city.json` (so re-export + click to update). "Fly" mode with `F`.
 - `src/adapter.js` — the only real change: `CityModel` JSON → City3JS building/roof/facade/street arrays.
 - `src/city.js` — City3JS generator; its procedural block loop is replaced by a call to the adapter, everything downstream unchanged.
 - `src/main.js` — City3JS orchestration; fetches `city.json` and passes the model to `buildCity`.
-- `de.weigend.s202.ui.city3d.*` (Java) — `CityModel`, `CityModelSerializer`, `CityModelExporter`.
+- `de.weigend.s202.ui.views.city3d.*` (Java) — `CityModel`, `CityModelSerializer`, `CityModelExporter`.
