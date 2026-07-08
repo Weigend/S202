@@ -102,7 +102,7 @@ import java.util.function.Consumer;
  * circuit-board mode, zoom) via JavaFX properties so the host shell can
  * provide a single shared toolbar that operates on the focused view.
  */
-public class ArchitectureView extends BorderPane {
+public class ArchitectureView extends AbstractArchitectureView {
 
     public record BuildProgress(int processedNodes, int totalNodes, String currentElement) {}
 
@@ -149,28 +149,12 @@ public class ArchitectureView extends BorderPane {
             new javafx.beans.property.SimpleLongProperty(0);
 
     private javafx.scene.layout.Pane zoomableContent;
-    private Consumer<String> statusSink = msg -> { /* no-op default */ };
     private final Consumer<String> graphSelectionSink;
 
-    // Externally bindable settings.
-    private final IntegerProperty packageDepth = new SimpleIntegerProperty(3);
-    private final BooleanProperty showDependencies = new SimpleBooleanProperty(false);
-    private final BooleanProperty showScc = new SimpleBooleanProperty(false);
-    private final BooleanProperty showPackageScc = new SimpleBooleanProperty(false);
-    private final BooleanProperty showWhatIfViolations = new SimpleBooleanProperty(false);
-    private final BooleanProperty showTangleDebugLines = new SimpleBooleanProperty(false);
-    private final ReadOnlyDoubleWrapper zoomFactor = new ReadOnlyDoubleWrapper(1.0);
-    private final ReadOnlyObjectWrapper<ArchitectureNode> architectureRoot = new ReadOnlyObjectWrapper<>(null);
-    private final ReadOnlyObjectWrapper<QualityMetrics> qualityMetrics = new ReadOnlyObjectWrapper<>(null);
     private final ArchitectureProjectionModel projection =
             new ArchitectureProjectionModel(this::getViewStyle, this::updateSccRendererTangles);
     private final ElementBoundsExporter boundsExporter =
             new ElementBoundsExporter(elementRegistry, () -> zoomableContent, this::getScene);
-    private String preferredTopTanglesScope;
-    private boolean topTanglesScopeOwner = true;
-    private boolean skipTransparentTopLevelPackages = true;
-    private ArchitectureNode scopeExtensionSourceRoot;
-    private ArchitectureViewStyle viewStyle = ArchitectureViewStyle.LAYERED;
 
     public ArchitectureView() {
         setupUI();
@@ -224,12 +208,12 @@ public class ArchitectureView extends BorderPane {
                 this::handleProjectionAnnotationsChanged,
                 arrowsCoalescer::markDirty,
                 hexagonalPackageExpansionState,
-                () -> skipTransparentTopLevelPackages);
+                this::isSkipTransparentTopLevelPackages);
         scopeReport = new ScopeAndReportController(
                 elementRegistry,
                 this::setStatus,
                 () -> currentRootNode,
-                () -> scopeExtensionSourceRoot,
+                this::getScopeExtensionSourceRoot,
                 this::getViewStyle,
                 () -> getScene() == null ? null : getScene().getWindow(),
                 this::getArchitectureAnnotations,
@@ -303,6 +287,11 @@ public class ArchitectureView extends BorderPane {
         });
 
         setCenter(contentPane);
+    }
+
+    @Override
+    void onViewStyleChanged() {
+        projection.rebuildArchitectureProjection();
     }
 
     /** Gemeinsamer Handler für Annotations-Änderungen aus den Stil-Buildern. */
@@ -506,35 +495,6 @@ public class ArchitectureView extends BorderPane {
     }
 
     /**
-     * Read-only handle to the currently displayed architecture root. Fires when
-     * a new JAR is loaded or {@link #refreshLayout()} runs.
-     */
-    public ReadOnlyObjectProperty<ArchitectureNode> architectureRootProperty() {
-        return architectureRoot.getReadOnlyProperty();
-    }
-
-    public ArchitectureNode getArchitectureRoot() {
-        return architectureRoot.get();
-    }
-
-    /**
-     * Read-only handle to the current quality metrics for this view, or null
-     * if the analysis hasn't computed them yet. Pushed in by the host shell
-     * after each successful analysis.
-     */
-    public ReadOnlyObjectProperty<QualityMetrics> qualityMetricsProperty() {
-        return qualityMetrics.getReadOnlyProperty();
-    }
-
-    public QualityMetrics getQualityMetrics() {
-        return qualityMetrics.get();
-    }
-
-    public void setQualityMetrics(QualityMetrics metrics) {
-        qualityMetrics.set(metrics);
-    }
-
-    /**
      * Read-only handle to the analyzed domain model. Pushed in by the host
      * shell after each successful analysis; needed by panels that compute
      * scoped metrics (e.g. quality view for a selected package).
@@ -636,58 +596,6 @@ public class ArchitectureView extends BorderPane {
         return redrawTick;
     }
 
-    public String getPreferredTopTanglesScope() {
-        return preferredTopTanglesScope;
-    }
-
-    public void setPreferredTopTanglesScope(String scope) {
-        preferredTopTanglesScope = scope == null || scope.isBlank() ? null : scope;
-    }
-
-    /**
-     * Regular full-project views hide top-level namespace wrapper packages
-     * such as {@code de -> weigend -> s202}. Scoped views disable that skip so
-     * the package the user opened from the outline remains visible.
-     */
-    public void setSkipTransparentTopLevelPackages(boolean skip) {
-        skipTransparentTopLevelPackages = skip;
-    }
-
-    public ArchitectureViewStyle getViewStyle() {
-        return viewStyle;
-    }
-
-    public void setViewStyle(ArchitectureViewStyle style) {
-        viewStyle = style == null ? ArchitectureViewStyle.LAYERED : style;
-        projection.rebuildArchitectureProjection();
-    }
-
-    /**
-     * Enables right-click scope extension for this view. The current root stays
-     * filtered, while {@code sourceRoot} remains the complete candidate source.
-     */
-    public void enableScopeExtensionFrom(ArchitectureNode sourceRoot) {
-        scopeExtensionSourceRoot = Objects.requireNonNull(sourceRoot, "sourceRoot cannot be null");
-        setSkipTransparentTopLevelPackages(false);
-    }
-
-    public ArchitectureNode getScopeExtensionSourceRoot() {
-        return scopeExtensionSourceRoot;
-    }
-
-    /**
-     * Whether this view drives TopTangles scope tracking. True for all regular
-     * architecture and scope views; false for tangle satellite tabs, which
-     * inherit their scope from the source view and must not reset it on focus.
-     */
-    public boolean isTopTanglesScopeOwner() {
-        return topTanglesScopeOwner;
-    }
-
-    public void setTopTanglesScopeOwner(boolean owner) {
-        topTanglesScopeOwner = owner;
-    }
-
     /**
      * Read-only handle to the currently selected node's full name (class or
      * package), or null when nothing is selected.
@@ -706,14 +614,9 @@ public class ArchitectureView extends BorderPane {
      * architecture is not yet loaded. Idempotent — re-selecting the current
      * node does not toggle it off.
      */
+    @Override
     public void selectByFullName(String fullName) {
         selection.selectByFullName(fullName);
-    }
-
-    /** @deprecated use {@link #selectByFullName(String)}. */
-    @Deprecated
-    public void selectClass(String fullClassName) {
-        selectByFullName(fullClassName);
     }
 
     /**
@@ -855,88 +758,7 @@ public class ArchitectureView extends BorderPane {
         }
     }
 
-    /**
-     * Stable read-only zoom factor (1.0 = 100%). The underlying
-     * {@link ZoomController} is rebuilt with the view content, but callers keep
-     * observing this ArchitectureView-level property.
-     */
-    public ReadOnlyDoubleProperty zoomFactorProperty() {
-        return zoomFactor.getReadOnlyProperty();
-    }
-
     /* ----- Settings properties --------------------------------------------- */
-
-    public IntegerProperty packageDepthProperty() {
-        return packageDepth;
-    }
-
-    public int getPackageDepth() {
-        return packageDepth.get();
-    }
-
-    public void setPackageDepth(int depth) {
-        packageDepth.set(depth);
-    }
-
-    public BooleanProperty showDependenciesProperty() {
-        return showDependencies;
-    }
-
-    public boolean isShowDependencies() {
-        return showDependencies.get();
-    }
-
-    public void setShowDependencies(boolean show) {
-        showDependencies.set(show);
-    }
-
-    public BooleanProperty showSccProperty() {
-        return showScc;
-    }
-
-    public boolean isShowScc() {
-        return showScc.get();
-    }
-
-    public void setShowScc(boolean show) {
-        showScc.set(show);
-    }
-
-    public BooleanProperty showPackageSccProperty() {
-        return showPackageScc;
-    }
-
-    public boolean isShowPackageScc() {
-        return showPackageScc.get();
-    }
-
-    public void setShowPackageScc(boolean show) {
-        showPackageScc.set(show);
-    }
-
-    public BooleanProperty showWhatIfViolationsProperty() {
-        return showWhatIfViolations;
-    }
-
-    public boolean isShowWhatIfViolations() {
-        return showWhatIfViolations.get();
-    }
-
-    public void setShowWhatIfViolations(boolean show) {
-        showWhatIfViolations.set(show);
-    }
-
-    public BooleanProperty showTangleDebugLinesProperty() {
-        return showTangleDebugLines;
-    }
-
-    public boolean isShowTangleDebugLines() {
-        return showTangleDebugLines.get();
-    }
-
-    public void setShowTangleDebugLines(boolean show) {
-        showTangleDebugLines.set(show);
-    }
 
     /**
      * Highlight a specific SCC edge ({@code from} → {@code to}). Pass
@@ -1011,42 +833,12 @@ public class ArchitectureView extends BorderPane {
     /* ----- Status sink ----------------------------------------------------- */
 
     /**
-     * Updates the status bar message. Routes through the configured sink so the
-     * host shell (e.g. the WFX statusbar) can pick up status changes.
-     */
-    public void setStatus(String message) {
-        Objects.requireNonNull(message, "message cannot be null");
-        statusSink.accept(message);
-    }
-
-    /**
-     * Set a sink that receives every status message produced by this view.
-     * Pass null to detach.
-     */
-    public void setStatusSink(Consumer<String> sink) {
-        this.statusSink = sink != null ? sink : (m -> {});
-    }
-
-    /**
      * Set a sink that receives the full name whenever the user selects a node
      * (class or package) in the graph. Pass null to detach.
      */
+    @Override
     public void setOnNodeSelected(Consumer<String> sink) {
         selection.setOnNodeSelected(sink);
-    }
-
-    /**
-     * @deprecated use {@link #setOnNodeSelected(Consumer)}.
-     */
-    @Deprecated
-    public void setOnNodeDoubleClicked(Consumer<String> sink) {
-        setOnNodeSelected(sink);
-    }
-
-    /** @deprecated use {@link #setOnNodeSelected(Consumer)}. */
-    @Deprecated
-    public void setOnClassDoubleClicked(Consumer<String> sink) {
-        setOnNodeSelected(sink);
     }
 
     /**
