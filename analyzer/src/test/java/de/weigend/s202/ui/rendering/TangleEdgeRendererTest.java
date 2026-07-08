@@ -29,14 +29,14 @@ class TangleEdgeRendererTest {
 
     @Test
     void narrowLaneChannelOnlyUsesTracksInsideGap() {
-        List<Double> lanes = TangleEdgeRenderer.lanePositions(0.0, 10.0, 7);
+        List<Double> lanes = TangleLaneLayout.lanePositions(0.0, 10.0, 7);
 
         assertTrue(lanes.isEmpty());
     }
 
     @Test
     void regularLaneChannelDropsTracksOutsideGap() {
-        List<Double> lanes = TangleEdgeRenderer.lanePositions(10.0, 30.0, 7);
+        List<Double> lanes = TangleLaneLayout.lanePositions(10.0, 30.0, 7);
 
         assertEquals(1, lanes.size());
         assertEquals(List.of(20.0), lanes);
@@ -44,7 +44,7 @@ class TangleEdgeRendererTest {
 
     @Test
     void wideLaneChannelKeepsVisibleFiveTracksWhenOnlyFiveFit() {
-        List<Double> lanes = TangleEdgeRenderer.lanePositions(0.0, 40.0, 7);
+        List<Double> lanes = TangleLaneLayout.lanePositions(0.0, 40.0, 7);
 
         assertEquals(5, lanes.size());
         assertEquals(List.of(8.0, 14.0, 20.0, 26.0, 32.0), lanes);
@@ -52,7 +52,7 @@ class TangleEdgeRendererTest {
 
     @Test
     void outerLaneChannelKeepsAllSevenTracks() {
-        List<Double> lanes = TangleEdgeRenderer.lanePositions(0.0, 52.0, 7);
+        List<Double> lanes = TangleLaneLayout.lanePositions(0.0, 52.0, 7);
 
         assertEquals(7, lanes.size());
         assertEquals(List.of(8.0, 14.0, 20.0, 26.0, 32.0, 38.0, 44.0), lanes);
@@ -60,8 +60,8 @@ class TangleEdgeRendererTest {
 
     @Test
     void dynamicLaneCountScalesWithEdgeDensity() {
-        List<Double> sparse = TangleEdgeRenderer.lanePositions(0.0, 100.0, 3);
-        List<Double> dense  = TangleEdgeRenderer.lanePositions(0.0, 100.0, 10);
+        List<Double> sparse = TangleLaneLayout.lanePositions(0.0, 100.0, 3);
+        List<Double> dense  = TangleLaneLayout.lanePositions(0.0, 100.0, 10);
 
         assertEquals(3, sparse.size());
         assertEquals(10, dense.size());
@@ -72,8 +72,8 @@ class TangleEdgeRendererTest {
 
     @Test
     void horizontalAndVerticalLanePositionsUseSamePitch() {
-        List<Double> horizontalYs = TangleEdgeRenderer.lanePositions(0.0, 52.0, 7);
-        List<Double> verticalXs = TangleEdgeRenderer.lanePositions(40.0, 92.0, 7);
+        List<Double> horizontalYs = TangleLaneLayout.lanePositions(0.0, 52.0, 7);
+        List<Double> verticalXs = TangleLaneLayout.lanePositions(40.0, 92.0, 7);
 
         for (int i = 1; i < horizontalYs.size(); i++) {
             assertEquals(6.0, horizontalYs.get(i) - horizontalYs.get(i - 1), 0.0001);
@@ -83,9 +83,9 @@ class TangleEdgeRendererTest {
 
     @Test
     void emptyLaneChannelProducesNoLines() {
-        assertTrue(TangleEdgeRenderer.lanePositions(10.0, 10.0, 7).isEmpty());
-        assertTrue(TangleEdgeRenderer.lanePositions(10.0, 9.0, 7).isEmpty());
-        assertTrue(TangleEdgeRenderer.lanePositions(10.0, 13.0, 7).isEmpty());
+        assertTrue(TangleLaneLayout.lanePositions(10.0, 10.0, 7).isEmpty());
+        assertTrue(TangleLaneLayout.lanePositions(10.0, 9.0, 7).isEmpty());
+        assertTrue(TangleLaneLayout.lanePositions(10.0, 13.0, 7).isEmpty());
     }
 
     @Test
@@ -95,7 +95,7 @@ class TangleEdgeRendererTest {
         Bounds farAbove = new BoundingBox(40.0, 20.0, 20.0, 20.0);
         Bounds sideClass = new BoundingBox(80.0, 80.0, 20.0, 20.0);
 
-        double end = TangleEdgeRenderer.verticalLaneEnd(
+        double end = TangleLaneLayout.verticalLaneEnd(
                 50.0, source.getCenterY(), List.of(source, nearAbove, farAbove, sideClass),
                 source, 0.0, true);
 
@@ -109,7 +109,7 @@ class TangleEdgeRendererTest {
         Bounds farBelow = new BoundingBox(40.0, 200.0, 20.0, 20.0);
         Bounds sideClass = new BoundingBox(80.0, 130.0, 20.0, 20.0);
 
-        double end = TangleEdgeRenderer.verticalLaneEnd(
+        double end = TangleLaneLayout.verticalLaneEnd(
                 50.0, source.getCenterY(), List.of(source, nearBelow, farBelow, sideClass),
                 source, 240.0, false);
 
@@ -121,7 +121,7 @@ class TangleEdgeRendererTest {
         Bounds source = new BoundingBox(40.0, 100.0, 20.0, 20.0);
         Bounds sideClass = new BoundingBox(80.0, 60.0, 20.0, 20.0);
 
-        double end = TangleEdgeRenderer.verticalLaneEnd(
+        double end = TangleLaneLayout.verticalLaneEnd(
                 50.0, source.getCenterY(), List.of(source, sideClass), source, 0.0, true);
 
         assertEquals(0.0, end, 0.0001);
@@ -131,8 +131,8 @@ class TangleEdgeRendererTest {
     void dockPointUsesTopOrBottomEdgeForVerticalApproach() {
         Bounds box = new BoundingBox(40.0, 100.0, 20.0, 20.0);
 
-        TangleEdgeRenderer.Point top = TangleEdgeRenderer.dockPoint(box, 52.0, 80.0);
-        TangleEdgeRenderer.Point bottom = TangleEdgeRenderer.dockPoint(box, 52.0, 140.0);
+        TangleGeometry.Point top = TangleGeometry.dockPoint(box, 52.0, 80.0);
+        TangleGeometry.Point bottom = TangleGeometry.dockPoint(box, 52.0, 140.0);
 
         assertEquals(52.0, top.x(), 0.0001);
         assertEquals(box.getMinY(), top.y(), 0.0001);
@@ -144,8 +144,8 @@ class TangleEdgeRendererTest {
     void dockPointUsesSideEdgeForSameRowApproach() {
         Bounds box = new BoundingBox(40.0, 100.0, 20.0, 20.0);
 
-        TangleEdgeRenderer.Point left = TangleEdgeRenderer.dockPoint(box, 45.0, box.getCenterY());
-        TangleEdgeRenderer.Point right = TangleEdgeRenderer.dockPoint(box, 55.0, box.getCenterY());
+        TangleGeometry.Point left = TangleGeometry.dockPoint(box, 45.0, box.getCenterY());
+        TangleGeometry.Point right = TangleGeometry.dockPoint(box, 55.0, box.getCenterY());
 
         assertEquals(box.getMinX(), left.x(), 0.0001);
         assertEquals(box.getCenterY(), left.y(), 0.0001);
@@ -157,8 +157,8 @@ class TangleEdgeRendererTest {
     void edgePointClipsFallbackLineToBoxPerimeter() {
         Bounds box = new BoundingBox(40.0, 100.0, 20.0, 20.0);
 
-        TangleEdgeRenderer.Point right = TangleEdgeRenderer.edgePoint(box, 100.0, 110.0);
-        TangleEdgeRenderer.Point top = TangleEdgeRenderer.edgePoint(box, 50.0, 20.0);
+        TangleGeometry.Point right = TangleGeometry.edgePoint(box, 100.0, 110.0);
+        TangleGeometry.Point top = TangleGeometry.edgePoint(box, 50.0, 20.0);
 
         assertEquals(box.getMaxX(), right.x(), 0.0001);
         assertEquals(box.getCenterY(), right.y(), 0.0001);
@@ -170,7 +170,7 @@ class TangleEdgeRendererTest {
     void edgePointClipsDiagonalFallbackLineToNearestSide() {
         Bounds box = new BoundingBox(40.0, 100.0, 20.0, 20.0);
 
-        TangleEdgeRenderer.Point point = TangleEdgeRenderer.edgePoint(box, 90.0, 140.0);
+        TangleGeometry.Point point = TangleGeometry.edgePoint(box, 90.0, 140.0);
 
         assertEquals(box.getMaxX(), point.x(), 0.0001);
         assertEquals(117.5, point.y(), 0.0001);
@@ -178,9 +178,9 @@ class TangleEdgeRendererTest {
 
     @Test
     void horizontalRangesOnlyConflictWhenTheyOverlap() {
-        TangleEdgeRenderer.Range left = TangleEdgeRenderer.Range.of(10.0, 30.0);
-        TangleEdgeRenderer.Range right = TangleEdgeRenderer.Range.of(40.0, 60.0);
-        TangleEdgeRenderer.Range overlapping = TangleEdgeRenderer.Range.of(25.0, 45.0);
+        TangleGeometry.Range left = TangleGeometry.Range.of(10.0, 30.0);
+        TangleGeometry.Range right = TangleGeometry.Range.of(40.0, 60.0);
+        TangleGeometry.Range overlapping = TangleGeometry.Range.of(25.0, 45.0);
 
         assertFalse(left.overlaps(right));
         assertTrue(left.overlaps(overlapping));
@@ -191,11 +191,11 @@ class TangleEdgeRendererTest {
     void horizontalSegmentRejectsClassIntersections() {
         Bounds classBox = new BoundingBox(40.0, 100.0, 20.0, 20.0);
 
-        assertTrue(TangleEdgeRenderer.horizontalSegmentHitsClass(
+        assertTrue(TangleRouter.horizontalSegmentHitsClass(
                 110.0, 10.0, 80.0, List.of(classBox)));
-        assertFalse(TangleEdgeRenderer.horizontalSegmentHitsClass(
+        assertFalse(TangleRouter.horizontalSegmentHitsClass(
                 80.0, 10.0, 80.0, List.of(classBox)));
-        assertFalse(TangleEdgeRenderer.horizontalSegmentHitsClass(
+        assertFalse(TangleRouter.horizontalSegmentHitsClass(
                 110.0, 10.0, 30.0, List.of(classBox)));
     }
 
@@ -203,18 +203,18 @@ class TangleEdgeRendererTest {
     void verticalSegmentRejectsClassIntersections() {
         Bounds classBox = new BoundingBox(40.0, 100.0, 20.0, 20.0);
 
-        assertTrue(TangleEdgeRenderer.verticalSegmentHitsClass(
+        assertTrue(TangleRouter.verticalSegmentHitsClass(
                 50.0, 80.0, 140.0, List.of(classBox), null, null));
-        assertFalse(TangleEdgeRenderer.verticalSegmentHitsClass(
+        assertFalse(TangleRouter.verticalSegmentHitsClass(
                 30.0, 80.0, 140.0, List.of(classBox), null, null));
-        assertFalse(TangleEdgeRenderer.verticalSegmentHitsClass(
+        assertFalse(TangleRouter.verticalSegmentHitsClass(
                 50.0, 80.0, 90.0, List.of(classBox), null, null));
     }
 
     @Test
     void verticalTrackOccupationIsSegmentBased() {
         Bounds owner = new BoundingBox(40.0, 100.0, 20.0, 20.0);
-        TangleEdgeRenderer.VerticalTrack track = new TangleEdgeRenderer.VerticalTrack(
+        TangleGeometry.VerticalTrack track = new TangleGeometry.VerticalTrack(
                 owner, 50.0, owner.getCenterY(), 0.0, 240.0);
 
         track.occupy(80.0);
