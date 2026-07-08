@@ -15,6 +15,8 @@
  */
 package de.weigend.s202.ui.wfx.tangles;
 
+import de.weigend.s202.ui.views.tangle.TangleEdgeMethodResolver;
+import de.weigend.s202.ui.views.tangle.TangleFilter;
 import de.weigend.s202.domain.DependencyEdge;
 import de.weigend.s202.reader.DependencyModel;
 import de.weigend.s202.ui.ArchitectureView;
@@ -23,10 +25,10 @@ import de.weigend.s202.ui.wfx.shell.ArchitectureViewManager;
 import de.weigend.s202.ui.wfx.shell.Dialogs;
 import de.weigend.s202.ui.wfx.shell.ProgressPublisher;
 import de.weigend.s202.ui.wfx.shell.RefactoringPreviewState;
-import de.weigend.s202.ui.wfx.events.CutTangleEdgeEvent;
-import de.weigend.s202.ui.wfx.events.MethodSelectionEvent;
-import de.weigend.s202.ui.wfx.events.NodeSelectionEvent;
-import de.weigend.s202.ui.wfx.events.RestoreTangleEdgeEvent;
+import de.weigend.s202.ui.core.events.CutTangleEdgeEvent;
+import de.weigend.s202.ui.core.events.MethodSelectionEvent;
+import de.weigend.s202.ui.core.events.NodeSelectionEvent;
+import de.weigend.s202.ui.core.events.RestoreTangleEdgeEvent;
 import de.weigend.s202.ui.core.platform.ArchitectureWfxView;
 import io.softwareecg.wfx.lookup.api.Lookup;
 import io.softwareecg.wfx.platform.api.EventBus;

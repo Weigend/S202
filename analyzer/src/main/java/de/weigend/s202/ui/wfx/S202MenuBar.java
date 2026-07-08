@@ -15,7 +15,7 @@
  */
 package de.weigend.s202.ui.wfx;
 
-import de.weigend.s202.ui.wfx.events.MenuRequestEvent;
+import de.weigend.s202.ui.core.events.MenuRequestEvent;
 import io.softwareecg.wfx.extension.uiutils.MenuUtil;
 import io.softwareecg.wfx.lookup.api.Lookup;
 import io.softwareecg.wfx.platform.api.EventBus;

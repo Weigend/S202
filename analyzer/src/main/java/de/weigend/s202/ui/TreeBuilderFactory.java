@@ -22,8 +22,8 @@ import de.weigend.s202.domain.architecture.HexagonalArchitecture;
 import de.weigend.s202.reader.DependencyModel;
 import de.weigend.s202.ui.core.model.ArchitectureNode;
 import de.weigend.s202.ui.core.canvas.ArchitectureTreeBuilder;
-import de.weigend.s202.ui.tree.ComponentArchitectureTreeBuilder;
-import de.weigend.s202.ui.tree.HexagonalArchitectureTreeBuilder;
+import de.weigend.s202.ui.views.component.ComponentArchitectureTreeBuilder;
+import de.weigend.s202.ui.views.hexagonal.HexagonalArchitectureTreeBuilder;
 import javafx.scene.Node;
 import javafx.scene.layout.VBox;
 

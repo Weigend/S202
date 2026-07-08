@@ -16,9 +16,9 @@
 package de.weigend.s202.ui.wfx;
 
 import de.weigend.s202.ui.ArchitectureView;
-import de.weigend.s202.ui.city3d.CityModelSerializer;
-import de.weigend.s202.ui.city3d.CityView3DServer;
-import de.weigend.s202.ui.wfx.events.NodeSelectionEvent;
+import de.weigend.s202.ui.views.city3d.CityModelSerializer;
+import de.weigend.s202.ui.views.city3d.CityView3DServer;
+import de.weigend.s202.ui.core.events.NodeSelectionEvent;
 import de.weigend.s202.ui.wfx.shell.ArchitectureViewManager;
 import de.weigend.s202.ui.wfx.shell.Dialogs;
 import de.weigend.s202.ui.core.platform.ArchitectureWfxView;

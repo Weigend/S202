@@ -15,7 +15,7 @@
  */
 package de.weigend.s202.ui;
 
-import de.weigend.s202.ui.component.ComponentBox;
+import de.weigend.s202.ui.views.component.ComponentBox;
 import de.weigend.s202.ui.core.canvas.ZoomController;
 import de.weigend.s202.ui.core.graph.LevelPackageBox;
 import de.weigend.s202.ui.core.graph.PulseCoalescer;

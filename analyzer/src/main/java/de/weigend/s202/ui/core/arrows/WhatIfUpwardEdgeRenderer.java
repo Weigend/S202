@@ -19,8 +19,8 @@ import de.weigend.s202.domain.architecture.Architecture;
 import de.weigend.s202.domain.architecture.EndpointPair;
 import de.weigend.s202.domain.architecture.ViolationKind;
 import de.weigend.s202.ui.core.graph.LevelClassBox;
-import de.weigend.s202.ui.component.ComponentBox;
-import de.weigend.s202.ui.whatif.ClassEdge;
+import de.weigend.s202.ui.core.graph.ContainerBox;
+import de.weigend.s202.ui.core.arrows.ClassEdge;
 import javafx.geometry.Bounds;
 import javafx.scene.Node;
 import javafx.scene.Parent;
@@ -154,7 +154,7 @@ public final class WhatIfUpwardEdgeRenderer {
 
     /**
      * Class FQN → FQN of the closest currently-visible
-     * {@link de.weigend.s202.ui.core.graph.LevelPackageBox}, {@link ComponentBox}
+     * {@link ContainerBox}-Container (Paket- oder Komponenten-Box)
      * (or the class itself if visible). Returns {@code null} when the
      * class isn't reachable through a visible ancestor — the architecture drops those
      * violations from the aggregation.
@@ -176,11 +176,8 @@ public final class WhatIfUpwardEdgeRenderer {
                     return endpointFqn;
                 }
             }
-            if (n instanceof de.weigend.s202.ui.core.graph.LevelPackageBox lpb && isActuallyVisible(n)) {
-                return lpb.getFullName();
-            }
-            if (n instanceof ComponentBox component && isActuallyVisible(n)) {
-                return component.getFullName();
+            if (n instanceof ContainerBox cb && isActuallyVisible(n)) {
+                return cb.getFullName();
             }
             n = n.getParent();
         }

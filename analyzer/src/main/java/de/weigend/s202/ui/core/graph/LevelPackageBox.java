@@ -39,7 +39,7 @@ import java.util.function.Consumer;
  * Row 2 can contain a nested ArchitectureLevel at position 2 (Element 2.2).
  * Can be nested inside other ArchitectureLevel instances.
  */
-public class LevelPackageBox extends VBox implements GraphSelection.Selectable {
+public class LevelPackageBox extends VBox implements GraphSelection.Selectable, ContainerBox {
 
     private static final String STYLE_NORMAL =
             "-fx-background-color: #fffacd; -fx-border-color: #999999; -fx-border-width: 1;";

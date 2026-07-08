@@ -15,6 +15,7 @@
  */
 package de.weigend.s202.ui;
 
+import de.weigend.s202.ui.views.tangle.TangleOverlayController;
 import de.weigend.s202.ui.core.graph.ArchitectureDragController;
 import de.weigend.s202.ui.core.graph.GraphSelection;
 import de.weigend.s202.ui.core.graph.LevelClassBox;
@@ -34,18 +35,18 @@ import de.weigend.s202.domain.architecture.LayeredArchitecture;
 import de.weigend.s202.domain.architecture.ViolationKind;
 import de.weigend.s202.domain.architecture.WhatIfArchitecture;
 import de.weigend.s202.reader.DependencyModel;
-import de.weigend.s202.ui.component.ComponentBox;
+import de.weigend.s202.ui.views.component.ComponentBox;
 import de.weigend.s202.ui.core.model.ArchitectureNode;
 import de.weigend.s202.ui.core.model.ArchitectureNodeCloner;
 import de.weigend.s202.ui.core.model.ScopeExtensionModel;
 import de.weigend.s202.ui.core.arrows.DependencyRenderer;
 import de.weigend.s202.ui.core.arrows.DependencyRendererStrategy;
 import de.weigend.s202.ui.core.arrows.SCCRenderer;
-import de.weigend.s202.ui.rendering.TangleEdgeRenderer;
+import de.weigend.s202.ui.views.tangle.TangleEdgeRenderer;
 import de.weigend.s202.ui.core.arrows.WhatIfUpwardEdgeRenderer;
 import de.weigend.s202.ui.core.canvas.ArchitectureTreeBuilder;
-import de.weigend.s202.ui.tree.ComponentArchitectureTreeBuilder;
-import de.weigend.s202.ui.tree.HexagonalArchitectureTreeBuilder;
+import de.weigend.s202.ui.views.component.ComponentArchitectureTreeBuilder;
+import de.weigend.s202.ui.views.hexagonal.HexagonalArchitectureTreeBuilder;
 import de.weigend.s202.ui.core.canvas.ZoomController;
 import io.softwareecg.wfx.lookup.api.Lookup;
 import javafx.collections.FXCollections;

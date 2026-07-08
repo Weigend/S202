@@ -15,6 +15,7 @@
  */
 package de.weigend.s202.ui;
 
+import de.weigend.s202.ui.views.tangle.TangleOverlayController;
 import de.weigend.s202.domain.architecture.Architecture;
 import de.weigend.s202.domain.architecture.ViolationKind;
 import de.weigend.s202.domain.architecture.WhatIfArchitecture;
@@ -22,7 +23,7 @@ import de.weigend.s202.ui.core.model.ArchitectureNode;
 import de.weigend.s202.ui.core.arrows.DependencyRenderer;
 import de.weigend.s202.ui.core.arrows.DependencyRendererStrategy;
 import de.weigend.s202.ui.core.arrows.SCCRenderer;
-import de.weigend.s202.ui.rendering.TangleEdgeRenderer;
+import de.weigend.s202.ui.views.tangle.TangleEdgeRenderer;
 import de.weigend.s202.ui.core.arrows.WhatIfUpwardEdgeRenderer;
 import de.weigend.s202.ui.core.graph.PulseCoalescer;
 import de.weigend.s202.ui.core.canvas.ZoomController;

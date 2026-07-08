@@ -16,7 +16,7 @@
 package de.weigend.s202.ui;
 
 import de.weigend.s202.domain.architecture.WhatIfArchitecture;
-import de.weigend.s202.ui.component.ComponentBox;
+import de.weigend.s202.ui.views.component.ComponentBox;
 import de.weigend.s202.ui.core.graph.ArchitectureDragController;
 import de.weigend.s202.ui.core.graph.GraphSelection;
 import de.weigend.s202.ui.core.graph.LevelClassBox;

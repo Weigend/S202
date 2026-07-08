@@ -15,7 +15,7 @@
  */
 package de.weigend.s202.ui.core.canvas;
 
-import de.weigend.s202.ui.tree.ComponentArchitectureTreeBuilder;
+import de.weigend.s202.ui.views.component.ComponentArchitectureTreeBuilder;
 import de.weigend.s202.domain.architecture.ArchitectureAnnotations;
 import de.weigend.s202.domain.architecture.ComponentArchitecture;
 import de.weigend.s202.domain.impl.ComponentArchitectureModel;
@@ -25,7 +25,7 @@ import de.weigend.s202.ui.ArchitectureView;
 import de.weigend.s202.ui.ArchitectureViewStyle;
 import de.weigend.s202.ui.core.graph.LevelClassBox;
 import de.weigend.s202.ui.core.graph.LevelPackageBox;
-import de.weigend.s202.ui.component.ComponentBox;
+import de.weigend.s202.ui.views.component.ComponentBox;
 import de.weigend.s202.ui.core.model.ArchitectureNode;
 import de.weigend.s202.ui.core.model.ArchitectureNode.NodeType;
 import javafx.application.Platform;

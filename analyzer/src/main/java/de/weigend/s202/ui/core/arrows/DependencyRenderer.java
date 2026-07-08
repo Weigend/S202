@@ -18,7 +18,7 @@ package de.weigend.s202.ui.core.arrows;
 import de.weigend.s202.ui.core.graph.GraphSelection;
 import de.weigend.s202.ui.core.graph.LevelClassBox;
 import de.weigend.s202.ui.core.graph.LevelPackageBox;
-import de.weigend.s202.ui.component.ComponentBox;
+import de.weigend.s202.ui.core.graph.ContainerBox;
 import de.weigend.s202.ui.core.model.ArchitectureNode;
 import de.weigend.s202.ui.core.canvas.ZoomController;
 import javafx.scene.Node;
@@ -200,7 +200,7 @@ public class DependencyRenderer implements DependencyRendererStrategy {
 
             } else if (child.getType() == ArchitectureNode.NodeType.PACKAGE) {
                 Node uiElement = elementRegistry.get(child.getFullName());
-                if ((uiElement instanceof LevelPackageBox || uiElement instanceof ComponentBox)
+                if (uiElement instanceof ContainerBox
                         && isNodeActuallyVisible(uiElement)
                         && isPackageCollapsed(child)) {
                     // Closed source: draw aggregated or class-level arrows from the package
@@ -221,7 +221,7 @@ public class DependencyRenderer implements DependencyRendererStrategy {
      *   <li>If the element itself is visible → return it directly.</li>
      *   <li>If it is hidden (inside a collapsed package/component) → walk up
      *       the JavaFX parent chain and return the nearest visible
-     *       {@link LevelPackageBox} or {@link ComponentBox}.</li>
+     *       {@link ContainerBox} (package or component box).</li>
      * </ul>
      */
     private Node findVisibleTarget(String targetFqn) {
@@ -239,11 +239,8 @@ public class DependencyRenderer implements DependencyRendererStrategy {
                     return endpoint;
                 }
             }
-            if (parent instanceof LevelPackageBox lpb && isNodeActuallyVisible(lpb)) {
-                return lpb;
-            }
-            if (parent instanceof ComponentBox component && isNodeActuallyVisible(component)) {
-                return component;
+            if (parent instanceof ContainerBox && isNodeActuallyVisible(parent)) {
+                return parent;
             }
             parent = parent.getParent();
         }
@@ -311,8 +308,7 @@ public class DependencyRenderer implements DependencyRendererStrategy {
 
             boolean isIncoming = isTargetSelected && !isSourceSelected;
             // Always show count badge; for class-level targets only when > 1.
-            int badge = (targetElement instanceof LevelPackageBox
-                    || targetElement instanceof ComponentBox
+            int badge = (targetElement instanceof ContainerBox
                     || Boolean.TRUE.equals(targetElement.getProperties().get("s202.aggregateEndpoint"))
                     || count > 1) ? count : 0;
             painter.drawArrow(sourceElement, targetElement, srcFqn, targetFqn, isIncoming,
@@ -351,8 +347,7 @@ public class DependencyRenderer implements DependencyRendererStrategy {
 
     /** Returns the FQN of a visible architecture box. */
     private static String fqnOf(Node node) {
-        if (node instanceof LevelPackageBox lpb) return lpb.getFullName();
-        if (node instanceof ComponentBox component) return component.getFullName();
+        if (node instanceof ContainerBox cb) return cb.getFullName();
         if (node instanceof LevelClassBox  lcb) return lcb.getFullName();
         if (node instanceof GraphSelection.Selectable selectable) return selectable.getFullName();
         return "";

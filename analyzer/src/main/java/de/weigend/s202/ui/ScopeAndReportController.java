@@ -17,7 +17,7 @@ package de.weigend.s202.ui;
 
 import de.weigend.s202.domain.DependencyEdge;
 import de.weigend.s202.domain.architecture.ArchitectureAnnotations;
-import de.weigend.s202.ui.component.ComponentBox;
+import de.weigend.s202.ui.views.component.ComponentBox;
 import de.weigend.s202.ui.core.graph.ArchitectureDragController;
 import de.weigend.s202.ui.core.model.ArchitectureNode;
 import de.weigend.s202.ui.core.model.ArchitectureNodeCloner;

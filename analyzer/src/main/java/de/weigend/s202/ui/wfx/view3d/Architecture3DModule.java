@@ -15,11 +15,12 @@
  */
 package de.weigend.s202.ui.wfx.view3d;
 
+import de.weigend.s202.ui.views.threed.ArchitectureView3D;
 import de.weigend.s202.domain.architecture.Architecture;
 import de.weigend.s202.ui.ArchitectureView;
 import de.weigend.s202.ui.core.model.ArchitectureNode;
 import de.weigend.s202.ui.core.platform.ArchitectureWfxView;
-import de.weigend.s202.ui.wfx.events.NodeSelectionEvent;
+import de.weigend.s202.ui.core.events.NodeSelectionEvent;
 import io.softwareecg.wfx.lookup.api.Lookup;
 import io.softwareecg.wfx.platform.api.EventBus;
 import io.softwareecg.wfx.platform.api.Module;
