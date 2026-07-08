@@ -19,8 +19,8 @@ import de.weigend.s202.domain.DependencyEdge;
 import de.weigend.s202.report.quality.QualityReportImageRenderer;
 import de.weigend.s202.report.quality.QualityReportInput;
 import de.weigend.s202.report.quality.QualityReportModel;
-import de.weigend.s202.ui.ArchitectureView;
-import de.weigend.s202.ui.ArchitectureViewStyle;
+import de.weigend.s202.ui.core.canvas.ArchitectureView;
+import de.weigend.s202.domain.architecture.ArchitectureKind;
 import de.weigend.s202.ui.core.model.ArchitectureNode;
 import de.weigend.s202.ui.core.model.ArchitectureNodeCloner;
 import de.weigend.s202.ui.views.tangle.TangleFilter;
@@ -149,7 +149,7 @@ public final class JavaFxQualityReportImageRenderer implements QualityReportImag
         for (QualityReportModel.ViolationFinding finding : model.layeredViolations()) {
             if (isPng(finding.imagePath())) {
                 jobs.add(new RenderJob(finding.id(),
-                        () -> renderViolation(input, finding, ArchitectureViewStyle.LAYERED, outputDirectory)));
+                        () -> renderViolation(input, finding, ArchitectureKind.LAYERED, outputDirectory)));
             }
         }
         for (QualityReportModel.CycleFinding finding : model.packageCycles()) {
@@ -167,7 +167,7 @@ public final class JavaFxQualityReportImageRenderer implements QualityReportImag
             for (QualityReportModel.ViolationFinding finding : componentFindings.violations()) {
                 if (isPng(finding.imagePath())) {
                     jobs.add(new RenderJob(finding.id(),
-                            () -> renderViolation(input, finding, ArchitectureViewStyle.COMPONENT, outputDirectory)));
+                            () -> renderViolation(input, finding, ArchitectureKind.COMPONENT, outputDirectory)));
                 }
             }
         }
@@ -176,7 +176,7 @@ public final class JavaFxQualityReportImageRenderer implements QualityReportImag
 
     private void renderViolation(QualityReportInput input,
                                  QualityReportModel.ViolationFinding finding,
-                                 ArchitectureViewStyle style,
+                                 ArchitectureKind style,
                                  Path outputDirectory) throws IOException {
         if (!isPng(finding.imagePath())) {
             return;
@@ -214,7 +214,7 @@ public final class JavaFxQualityReportImageRenderer implements QualityReportImag
         if (root == null) {
             root = ArchitectureNodeCloner.cloneTree(sourceRoot);
         }
-        ArchitectureView view = configuredView(input, ArchitectureViewStyle.LAYERED, root);
+        ArchitectureView view = configuredView(input, ArchitectureKind.LAYERED, root);
         view.setShowPackageScc(true);
         if (!finding.members().isEmpty()) {
             view.selectByFullName(finding.members().getFirst());
@@ -236,7 +236,7 @@ public final class JavaFxQualityReportImageRenderer implements QualityReportImag
         if (root == null) {
             root = ArchitectureNodeCloner.cloneTree(sourceRoot);
         }
-        ArchitectureView view = configuredView(input, ArchitectureViewStyle.LAYERED, root);
+        ArchitectureView view = configuredView(input, ArchitectureKind.LAYERED, root);
         List<DependencyEdge> edges = finding.samples().stream()
                 .map(sample -> new DependencyEdge(sample.source(), sample.target()))
                 .filter(edge -> members.contains(edge.from()) && members.contains(edge.to()))
@@ -251,7 +251,7 @@ public final class JavaFxQualityReportImageRenderer implements QualityReportImag
     }
 
     private ArchitectureView configuredView(QualityReportInput input,
-                                            ArchitectureViewStyle style,
+                                            ArchitectureKind style,
                                             ArchitectureNode root) {
         ArchitectureView view = new ArchitectureView();
         view.setViewStyle(style);

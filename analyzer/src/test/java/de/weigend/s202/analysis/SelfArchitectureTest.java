@@ -120,6 +120,16 @@ public class SelfArchitectureTest {
     }
 
     /**
+     * Übergangs-Allowlist (Etappe M4 des UI-Komponenten-Konzepts): Das
+     * Tangle-Overlay hängt noch direkt am Canvas; M4 dockt es über ein
+     * Canvas-Overlay-SPI an. Diese Liste darf nur SCHRUMPFEN.
+     */
+    private static final Set<String> M4_TRANSITIONAL_CORE_EDGES = Set.of(
+            "de.weigend.s202.ui.core.canvas.ArchitectureView -> de.weigend.s202.ui.views.tangle.TangleOverlayController",
+            "de.weigend.s202.ui.core.canvas.OverlayRenderCoordinator -> de.weigend.s202.ui.views.tangle.TangleEdgeRenderer",
+            "de.weigend.s202.ui.core.canvas.OverlayRenderCoordinator -> de.weigend.s202.ui.views.tangle.TangleOverlayController");
+
+    /**
      * Komponenten-Regeln aus docs/UI_KOMPONENTEN_KONZEPT.md §4: Die
      * UI-Fachkomponenten unter {@code ui.views.*} sind geschlossen —
      * sie kennen einander nicht, kennen die Shell nicht, und der Kern
@@ -148,7 +158,8 @@ public class SelfArchitectureTest {
                     violations.add("views." + fromView + " -> app: " + from + " -> " + to);
                 }
                 if (from.startsWith(CORE)
-                        && (to.startsWith(VIEWS) || to.startsWith(FEATURES) || to.startsWith(APP))) {
+                        && (to.startsWith(VIEWS) || to.startsWith(FEATURES) || to.startsWith(APP))
+                        && !M4_TRANSITIONAL_CORE_EDGES.contains(from + " -> " + to)) {
                     violations.add("core -> oben: " + from + " -> " + to);
                 }
                 if (from.startsWith(FEATURES) && to.startsWith(VIEWS)) {

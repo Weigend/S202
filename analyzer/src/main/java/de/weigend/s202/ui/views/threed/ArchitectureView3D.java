@@ -54,7 +54,7 @@ import java.util.function.Consumer;
  * WFX {@link View} that renders the architecture as an interactive 3D landscape.
  *
  * <p>The 3D layout is built directly from the 2D element bounds read out of
- * {@link de.weigend.s202.ui.ArchitectureView#getElementFootprintBoundsInLayout()}
+ * {@link de.weigend.s202.ui.core.canvas.ArchitectureView#getElementFootprintBoundsInLayout()}
  * after each layout pulse:
  * <pre>
  *   2D layout X →  3D world X

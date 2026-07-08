@@ -13,8 +13,10 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package de.weigend.s202.ui;
+package de.weigend.s202.ui.core.canvas;
 
+import de.weigend.s202.ui.core.canvas.WhatIfEditController;
+import de.weigend.s202.ui.core.canvas.WhatIfUndoManager;
 import de.weigend.s202.ui.views.tangle.TangleOverlayController;
 import de.weigend.s202.ui.core.graph.ArchitectureDragController;
 import de.weigend.s202.ui.core.graph.GraphSelection;
@@ -35,7 +37,6 @@ import de.weigend.s202.domain.architecture.LayeredArchitecture;
 import de.weigend.s202.domain.architecture.ViolationKind;
 import de.weigend.s202.domain.architecture.WhatIfArchitecture;
 import de.weigend.s202.reader.DependencyModel;
-import de.weigend.s202.ui.views.component.ComponentBox;
 import de.weigend.s202.ui.core.model.ArchitectureNode;
 import de.weigend.s202.ui.core.model.ArchitectureNodeCloner;
 import de.weigend.s202.ui.core.model.ScopeExtensionModel;
@@ -116,12 +117,6 @@ public class ArchitectureView extends AbstractArchitectureView {
     private StackPane contentPane;
     private ArchitectureNode currentRootNode;
     private final Map<String, javafx.scene.Node> elementRegistry = new HashMap<>();
-    /**
-     * Expand/collapse state of the hexagonal package overlay, keyed by package
-     * FQN. Held here (not in the UI nodes) because the hexagonal view is fully
-     * rebuilt on every annotation change.
-     */
-    private final Map<String, Boolean> hexagonalPackageExpansionState = new HashMap<>();
 
     private ZoomController zoomController;
 
@@ -138,11 +133,14 @@ public class ArchitectureView extends AbstractArchitectureView {
     // Feature-Controller (nach setupUI initialisiert, s. Konstruktor).
     private final SelectionController selection;
     private final OverlayRenderCoordinator overlay;
-    private final TreeBuilderFactory treeBuilders;
+    private final de.weigend.s202.ui.core.spi.ViewServices viewServices;
+    /** Eine zustandsbehaftete StyleView-Instanz pro Stil, lazy erzeugt und gecacht. */
+    private final Map<ArchitectureKind, de.weigend.s202.ui.core.spi.StyleView> styleViews =
+            new java.util.EnumMap<>(ArchitectureKind.class);
     private final StyleProjectionStateKeeper stateKeeper;
     private final TangleOverlayController tangleOverlay;
     private final WhatIfEditController whatIfEdit;
-    private final ScopeAndReportController scopeReport;
+    private final ScopeExtensionController scopeExtension;
 
     // Pulses every time the arrow overlay finishes a redraw. WFX side panels
     // (e.g. the Dependencies module) can subscribe to refresh themselves.
@@ -162,7 +160,8 @@ public class ArchitectureView extends AbstractArchitectureView {
         selection = new SelectionController(elementRegistry, scrollPane, arrowsCoalescer, this::invalidateLines);
         graphSelectionSink = selection::handleGraphSelectionChanged;
         stateKeeper = new StyleProjectionStateKeeper(
-                scrollPane, () -> zoomController, () -> whatIfRootContainer, zoomFactor::get, arrowsCoalescer);
+                scrollPane, () -> zoomController, () -> whatIfRootContainer, zoomFactor::get, arrowsCoalescer,
+                this::styleView);
         tangleOverlay = new TangleOverlayController(tanglePane, this::setStatus);
         whatIfEdit = new WhatIfEditController(
                 this,
@@ -195,35 +194,31 @@ public class ArchitectureView extends AbstractArchitectureView {
                 tangleOverlay,
                 projection,
                 () -> currentRootNode,
-                this::getViewStyle,
+                this::styleView,
                 selection::getSelectedFullName,
                 this::setStatus,
                 whatIfEdit::applyVirtuallyMovedDecorations);
-        treeBuilders = new TreeBuilderFactory(
+        viewServices = new de.weigend.s202.ui.core.spi.ViewServices(
                 elementRegistry,
                 graphSelectionSink,
-                this::getViewStyle,
                 this::getArchitectureAnnotations,
+                this::handleProjectionAnnotationsChanged,
                 projection::getRawDependencyModel,
                 projection::getArchitecture,
-                this::handleProjectionAnnotationsChanged,
                 arrowsCoalescer::markDirty,
-                hexagonalPackageExpansionState,
-                this::isSkipTransparentTopLevelPackages);
-        scopeReport = new ScopeAndReportController(
-                elementRegistry,
+                this::isSkipTransparentTopLevelPackages,
+                () -> getScene() == null ? null : getScene().getWindow(),
+                this::setStatus,
+                this::refreshStyleProjection,
+                () -> whatIfEdit.undoManager().effectiveMoves(),
+                tangleOverlay::appliedCutEdges);
+        scopeExtension = new ScopeExtensionController(
                 this::setStatus,
                 () -> currentRootNode,
                 this::getScopeExtensionSourceRoot,
-                this::getViewStyle,
                 () -> getScene() == null ? null : getScene().getWindow(),
-                this::getArchitectureAnnotations,
-                () -> whatIfEdit.undoManager().effectiveMoves(),
-                tangleOverlay::appliedCutEdges,
-                graphSelectionSink,
                 this::setArchitectureRoot,
-                this::selectByFullName,
-                this::refreshStyleProjection);
+                this::selectByFullName);
         wirePropertyListeners();
     }
 
@@ -295,6 +290,39 @@ public class ArchitectureView extends AbstractArchitectureView {
         projection.rebuildArchitectureProjection();
     }
 
+    /**
+     * Kontextmenü des Canvas: stil-spezifische Einträge der aktiven StyleView
+     * plus „Add to Scope…“, wenn diese View eine Scope-Erweiterung hat.
+     */
+    private void installContextMenu(javafx.scene.Node target) {
+        boolean hasStyleItems = !styleView().contextMenuItems().isEmpty();
+        if (!hasStyleItems && getScopeExtensionSourceRoot() == null) {
+            target.setOnContextMenuRequested(null);
+            return;
+        }
+        target.setOnContextMenuRequested(event -> {
+            ContextMenu menu = new ContextMenu();
+            menu.getItems().addAll(styleView().contextMenuItems());
+            if (getScopeExtensionSourceRoot() != null) {
+                menu.getItems().add(scopeExtension.addToScopeMenuItem());
+            }
+            if (!menu.getItems().isEmpty()) {
+                menu.show(target, event.getScreenX(), event.getScreenY());
+                event.consume();
+            }
+        });
+    }
+
+    /** Die StyleView des aktiven Stils — pro Stil einmal erzeugt (SPI-Lookup). */
+    private de.weigend.s202.ui.core.spi.StyleView styleView() {
+        return styleViews.computeIfAbsent(getViewStyle(), kind ->
+                Lookup.findAll(de.weigend.s202.ui.core.spi.StyleViewFactory.class).stream()
+                        .filter(factory -> factory.kind() == kind)
+                        .findFirst()
+                        .orElseThrow(() -> new IllegalStateException("No style view registered for " + kind))
+                        .create(viewServices));
+    }
+
     /** Gemeinsamer Handler für Annotations-Änderungen aus den Stil-Buildern. */
     private void handleProjectionAnnotationsChanged(ArchitectureAnnotations nextAnnotations, String message) {
         setArchitectureAnnotations(nextAnnotations);
@@ -334,7 +362,7 @@ public class ArchitectureView extends AbstractArchitectureView {
         beginArchitectureRootBuild(rootNode);
 
         int maxDepth = packageDepth.get();
-        treeBuilders.buildTreeAsync(rootNode, maxDepth,
+        styleView().buildTreeAsync(rootNode, maxDepth,
                 (processed, total, current) -> {
                     if (progressSink != null) {
                         progressSink.accept(new BuildProgress(processed, total, current));
@@ -353,7 +381,6 @@ public class ArchitectureView extends AbstractArchitectureView {
         this.elementRegistry.clear();
 
         LevelPackageBox.setOnExpandChangeCallback(arrowsCoalescer::markDirty);
-        ComponentBox.setOnExpandChangeCallback(arrowsCoalescer::markDirty);
 
         // Node selection is now a single-click action. Keep the legacy
         // double-click callback disconnected to avoid duplicate selection
@@ -399,7 +426,7 @@ public class ArchitectureView extends AbstractArchitectureView {
         beginArchitectureRootBuild(rootNode);
 
         int maxDepth = packageDepth.get();
-        javafx.scene.layout.VBox topLevelContainer = treeBuilders.buildTree(rootNode, maxDepth);
+        javafx.scene.layout.VBox topLevelContainer = styleView().buildTree(rootNode, maxDepth);
         finishArchitectureRootBuild(rootNode, topLevelContainer, preservedState);
     }
 
@@ -413,11 +440,9 @@ public class ArchitectureView extends AbstractArchitectureView {
                                              StyleProjectionStateKeeper.ViewState preservedState) {
         this.whatIfRootContainer = topLevelContainer;
         if (preservedState != null) {
-            StyleProjectionStateKeeper.restoreExpansionState(topLevelContainer, preservedState);
+            stateKeeper.restoreExpansionState(topLevelContainer, preservedState);
         }
-        if (viewStyle == ArchitectureViewStyle.COMPONENT && scopeReport.hasPlannedPackages()) {
-            scopeReport.injectPlannedPackagesIntoScene(topLevelContainer);
-        }
+        styleView().afterContentBuilt(topLevelContainer);
         dependencyPane.getChildren().clear();
         dependencyPane.setVisible(false);
         sccPane.getChildren().clear();
@@ -433,7 +458,7 @@ public class ArchitectureView extends AbstractArchitectureView {
 
         StackPane contentWithOverlay = new StackPane();
         contentWithOverlay.getChildren().addAll(topLevelContainer, overlayPane);
-        scopeReport.installScopeExtensionContextMenu(contentWithOverlay);
+        installContextMenu(contentWithOverlay);
 
         this.zoomableContent = contentWithOverlay;
 
@@ -489,10 +514,6 @@ public class ArchitectureView extends AbstractArchitectureView {
         // Notify external observers (e.g. Outline Explorer) last, so the registry
         // is fully populated before listeners run lookups.
         architectureRoot.set(rootNode);
-    }
-
-    public void showRefactoringReport() {
-        scopeReport.showRefactoringReport();
     }
 
     /**
@@ -573,8 +594,8 @@ public class ArchitectureView extends AbstractArchitectureView {
     public void setRawDependencyModel(DependencyModel model) {
         projection.setRawDependencyModelValue(model);
         whatIfEdit.clearMovedFqns();
-        if ((viewStyle == ArchitectureViewStyle.COMPONENT
-                || viewStyle == ArchitectureViewStyle.HEXAGONAL)
+        if ((viewStyle == ArchitectureKind.COMPONENT
+                || viewStyle == ArchitectureKind.HEXAGONAL)
                 && projection.getDomainModel() != null) {
             projection.rebuildArchitectureProjection();
         }

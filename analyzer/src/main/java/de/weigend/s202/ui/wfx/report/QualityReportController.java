@@ -21,7 +21,7 @@ import de.weigend.s202.report.quality.QualityReportExporter;
 import de.weigend.s202.report.quality.QualityReportInput;
 import de.weigend.s202.report.quality.QualityReportModel;
 import de.weigend.s202.report.quality.QualityReportOptions;
-import de.weigend.s202.ui.ArchitectureView;
+import de.weigend.s202.ui.core.canvas.ArchitectureView;
 import de.weigend.s202.ui.core.model.ArchitectureNode;
 import de.weigend.s202.ui.core.model.ArchitectureNodeCloner;
 import de.weigend.s202.ui.wfx.report.impl.JavaFxQualityReportImageRenderer;

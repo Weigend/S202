@@ -17,7 +17,7 @@ package de.weigend.s202.ui.wfx.quality;
 
 import de.weigend.s202.analysis.quality.QualityMetrics;
 import de.weigend.s202.domain.DomainModel;
-import de.weigend.s202.ui.ArchitectureView;
+import de.weigend.s202.ui.core.canvas.ArchitectureView;
 import de.weigend.s202.ui.core.model.ArchitectureNode;
 import de.weigend.s202.ui.core.platform.ArchitectureWfxView;
 import de.weigend.s202.ui.wfx.outline.OutlineExplorerView;

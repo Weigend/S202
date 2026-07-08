@@ -13,8 +13,9 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package de.weigend.s202.ui;
+package de.weigend.s202.ui.core.canvas;
 
+import de.weigend.s202.domain.architecture.ArchitectureKind;
 import de.weigend.s202.analysis.quality.QualityMetrics;
 import de.weigend.s202.ui.core.model.ArchitectureNode;
 import javafx.beans.property.BooleanProperty;
@@ -56,11 +57,11 @@ public abstract class AbstractArchitectureView extends BorderPane {
     private boolean topTanglesScopeOwner = true;
     private boolean skipTransparentTopLevelPackages = true;
     private ArchitectureNode scopeExtensionSourceRoot;
-    ArchitectureViewStyle viewStyle = ArchitectureViewStyle.LAYERED;
+    ArchitectureKind viewStyle = ArchitectureKind.LAYERED;
 
     /* ----- Hooks in die Orchestrierung -------------------------------------- */
 
-    /** Läuft nach jedem {@link #setViewStyle(ArchitectureViewStyle)}. */
+    /** Läuft nach jedem {@link #setViewStyle(ArchitectureKind)}. */
     abstract void onViewStyleChanged();
 
     public abstract void selectByFullName(String fullName);
@@ -223,12 +224,12 @@ public abstract class AbstractArchitectureView extends BorderPane {
         return skipTransparentTopLevelPackages;
     }
 
-    public ArchitectureViewStyle getViewStyle() {
+    public ArchitectureKind getViewStyle() {
         return viewStyle;
     }
 
-    public void setViewStyle(ArchitectureViewStyle style) {
-        viewStyle = style == null ? ArchitectureViewStyle.LAYERED : style;
+    public void setViewStyle(ArchitectureKind style) {
+        viewStyle = style == null ? ArchitectureKind.LAYERED : style;
         onViewStyleChanged();
     }
 

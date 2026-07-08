@@ -13,9 +13,9 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package de.weigend.s202.ui;
+package de.weigend.s202.ui.core.canvas;
 
-import de.weigend.s202.ui.views.component.ComponentBox;
+import de.weigend.s202.ui.core.spi.StyleView;
 import de.weigend.s202.ui.core.canvas.ZoomController;
 import de.weigend.s202.ui.core.graph.LevelPackageBox;
 import de.weigend.s202.ui.core.graph.PulseCoalescer;
@@ -37,20 +37,18 @@ import java.util.function.Supplier;
  */
 final class StyleProjectionStateKeeper {
 
-    record ComponentExpansionState(boolean expanded, boolean apiExpanded) {}
-
     record ViewState(
             double zoomFactor,
             double horizontalScroll,
             double verticalScroll,
             Map<String, Boolean> packageExpansion,
             Map<String, Boolean> packageExpansionByFqn,
-            Map<String, ComponentExpansionState> componentExpansion) {
+            Map<String, Object> styleState) {
 
         ViewState {
             packageExpansion = Map.copyOf(packageExpansion);
             packageExpansionByFqn = Map.copyOf(packageExpansionByFqn);
-            componentExpansion = Map.copyOf(componentExpansion);
+            styleState = Map.copyOf(styleState);
         }
     }
 
@@ -60,76 +58,66 @@ final class StyleProjectionStateKeeper {
     private final Supplier<VBox> rootContainer;
     private final Supplier<Double> zoomFactor;
     private final PulseCoalescer arrowsCoalescer;
+    private final Supplier<StyleView> styleView;
 
     StyleProjectionStateKeeper(ScrollPane scrollPane,
                                Supplier<ZoomController> zoomController,
                                Supplier<VBox> rootContainer,
                                Supplier<Double> zoomFactor,
-                               PulseCoalescer arrowsCoalescer) {
+                               PulseCoalescer arrowsCoalescer,
+                               Supplier<StyleView> styleView) {
         this.scrollPane = scrollPane;
         this.zoomController = zoomController;
         this.rootContainer = rootContainer;
         this.zoomFactor = zoomFactor;
         this.arrowsCoalescer = arrowsCoalescer;
+        this.styleView = styleView;
     }
 
     ViewState capture() {
         Map<String, Boolean> packageExpansion = new HashMap<>();
         Map<String, Boolean> packageExpansionByFqn = new HashMap<>();
-        Map<String, ComponentExpansionState> componentExpansion = new HashMap<>();
+        Map<String, Object> styleState = new HashMap<>();
         collectExpansionState(
                 rootContainer.get(),
                 packageExpansion,
                 packageExpansionByFqn,
-                componentExpansion);
+                styleState);
         return new ViewState(
                 zoomFactor.get(),
                 scrollPane == null ? 0.0 : scrollPane.getHvalue(),
                 scrollPane == null ? 0.0 : scrollPane.getVvalue(),
                 packageExpansion,
                 packageExpansionByFqn,
-                componentExpansion);
+                styleState);
     }
 
-    private static void collectExpansionState(Node node,
-                                              Map<String, Boolean> packageExpansion,
-                                              Map<String, Boolean> packageExpansionByFqn,
-                                              Map<String, ComponentExpansionState> componentExpansion) {
+    private void collectExpansionState(Node node,
+                                       Map<String, Boolean> packageExpansion,
+                                       Map<String, Boolean> packageExpansionByFqn,
+                                       Map<String, Object> styleState) {
         if (node == null) {
             return;
         }
-        if (node instanceof ComponentBox component) {
-            componentExpansion.put(
-                    component.getFullName(),
-                    new ComponentExpansionState(component.isExpanded(), component.isApiExpanded()));
-            packageExpansionByFqn.putIfAbsent(component.getFullName(), component.isExpanded());
-        } else if (node instanceof LevelPackageBox pkg && pkg.getFullName() != null) {
+        styleView.get().collectStyleExpansion(node, packageExpansionByFqn, styleState);
+        if (node instanceof LevelPackageBox pkg && pkg.getFullName() != null) {
             packageExpansion.put(packageExpansionKey(pkg), pkg.isExpanded());
             packageExpansionByFqn.putIfAbsent(pkg.getFullName(), pkg.isExpanded());
         }
         if (node instanceof Parent parent) {
             for (Node child : parent.getChildrenUnmodifiable()) {
-                collectExpansionState(child, packageExpansion, packageExpansionByFqn, componentExpansion);
+                collectExpansionState(child, packageExpansion, packageExpansionByFqn, styleState);
             }
         }
     }
 
-    static void restoreExpansionState(Node node, ViewState state) {
+    void restoreExpansionState(Node node, ViewState state) {
         if (node == null) {
             return;
         }
-        if (node instanceof ComponentBox component) {
-            ComponentExpansionState expansion = state.componentExpansion().get(component.getFullName());
-            if (expansion != null) {
-                component.setExpanded(expansion.expanded());
-                component.setApiExpanded(expansion.apiExpanded());
-            } else {
-                Boolean expanded = state.packageExpansionByFqn().get(component.getFullName());
-                if (expanded != null) {
-                    component.setExpanded(expanded);
-                }
-            }
-        } else if (node instanceof LevelPackageBox pkg && pkg.getFullName() != null) {
+        styleView.get().restoreStyleExpansion(
+                node, state.packageExpansionByFqn(), state.styleState());
+        if (node instanceof LevelPackageBox pkg && pkg.getFullName() != null) {
             Boolean expanded = state.packageExpansion().get(packageExpansionKey(pkg));
             if (expanded == null) {
                 // A package moved between implementation and API during this
@@ -188,7 +176,7 @@ final class StyleProjectionStateKeeper {
     }
 
     private static String packageExpansionKey(LevelPackageBox pkg) {
-        String role = ComponentBox.isApiElement(pkg) ? "api:" : "regular:";
+        String role = de.weigend.s202.ui.core.graph.BoxTags.isApiElement(pkg) ? "api:" : "regular:";
         return role + pkg.getFullName();
     }
 }

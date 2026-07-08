@@ -15,7 +15,7 @@
  */
 package de.weigend.s202.ui.core.events;
 
-import de.weigend.s202.ui.ArchitectureView;
+import de.weigend.s202.ui.core.canvas.ArchitectureView;
 
 import java.util.EventObject;
 

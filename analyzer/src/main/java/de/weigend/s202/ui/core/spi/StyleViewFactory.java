@@ -13,13 +13,19 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package de.weigend.s202.ui;
+package de.weigend.s202.ui.core.spi;
+
+import de.weigend.s202.domain.architecture.ArchitectureKind;
 
 /**
- * Visual projection used by {@link ArchitectureView}.
+ * Registrierungspunkt einer Stil-Ansicht: Fachkomponenten unter
+ * {@code ui.views.*} stellen eine {@code @Singleton}-Factory bereit
+ * (Lookup/DI, wie beim Domain-SPI {@code ArchitectureStyle}); der Canvas
+ * erzeugt daraus pro View eine zustandsbehaftete {@link StyleView}.
  */
-public enum ArchitectureViewStyle {
-    LAYERED,
-    COMPONENT,
-    HEXAGONAL
+public interface StyleViewFactory {
+
+    ArchitectureKind kind();
+
+    StyleView create(ViewServices services);
 }

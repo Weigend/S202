@@ -15,7 +15,7 @@
  */
 package de.weigend.s202.ui.wfx.shell;
 
-import de.weigend.s202.ui.ArchitectureView;
+import de.weigend.s202.ui.core.canvas.ArchitectureView;
 import io.softwareecg.wfx.lookup.api.Lookup;
 import io.softwareecg.wfx.platform.api.EventBus;
 import io.softwareecg.wfx.platform.api.events.ProgressEvent;

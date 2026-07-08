@@ -13,7 +13,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package de.weigend.s202.ui;
+package de.weigend.s202.ui.core.canvas;
 
 import de.weigend.s202.ui.views.tangle.TangleOverlayController;
 import de.weigend.s202.domain.architecture.Architecture;
@@ -46,18 +46,6 @@ import java.util.function.Supplier;
  */
 final class OverlayRenderCoordinator {
 
-    private static final Set<ViolationKind> LAYERED_VIOLATION_OVERLAY_KINDS =
-            Set.of(ViolationKind.UPWARD);
-    private static final Set<ViolationKind> COMPONENT_VIOLATION_OVERLAY_KINDS =
-            Set.of(
-                    ViolationKind.COMPONENT_API_BYPASS,
-                    ViolationKind.COMPONENT_API_LEAKS_IMPLEMENTATION,
-                    ViolationKind.COMPONENT_INTERNAL_LAYER_BREAK);
-    private static final Set<ViolationKind> HEXAGONAL_VIOLATION_OVERLAY_KINDS =
-            Set.of(
-                    ViolationKind.HEXAGON_OUTWARD_DEPENDENCY,
-                    ViolationKind.HEXAGON_PORT_BYPASS);
-
     private final Pane dependencyPane;
     private final Pane sccPane;
     private final Pane whatIfPane;
@@ -72,7 +60,7 @@ final class OverlayRenderCoordinator {
     private final TangleOverlayController tangleOverlay;
     private final ArchitectureProjectionModel projection;
     private final Supplier<ArchitectureNode> currentRoot;
-    private final Supplier<ArchitectureViewStyle> viewStyle;
+    private final Supplier<de.weigend.s202.ui.core.spi.StyleView> styleView;
     private final Supplier<String> selectedFullName;
     private final Consumer<String> status;
     /** Zieht die orange „moved“-Dekoration nach jedem Redraw nach. */
@@ -102,7 +90,7 @@ final class OverlayRenderCoordinator {
                              TangleOverlayController tangleOverlay,
                              ArchitectureProjectionModel projection,
                              Supplier<ArchitectureNode> currentRoot,
-                             Supplier<ArchitectureViewStyle> viewStyle,
+                             Supplier<de.weigend.s202.ui.core.spi.StyleView> styleView,
                              Supplier<String> selectedFullName,
                              Consumer<String> status,
                              Runnable applyMovedDecorations) {
@@ -120,7 +108,7 @@ final class OverlayRenderCoordinator {
         this.tangleOverlay = tangleOverlay;
         this.projection = projection;
         this.currentRoot = currentRoot;
-        this.viewStyle = viewStyle;
+        this.styleView = styleView;
         this.selectedFullName = selectedFullName;
         this.status = status;
         this.applyMovedDecorations = applyMovedDecorations;
@@ -264,21 +252,14 @@ final class OverlayRenderCoordinator {
     }
 
     private Architecture violationOverlayArchitecture() {
-        ArchitectureViewStyle style = viewStyle.get();
-        if (style == ArchitectureViewStyle.COMPONENT
-                || style == ArchitectureViewStyle.HEXAGONAL) {
-            return projection.getArchitecture();
+        if (styleView.get().usesWhatIfViolationSource() && projection.getWhatIfArchitecture() != null) {
+            return projection.getWhatIfArchitecture();
         }
-        return projection.getWhatIfArchitecture() != null
-                ? projection.getWhatIfArchitecture() : projection.getArchitecture();
+        return projection.getArchitecture();
     }
 
     private Set<ViolationKind> violationOverlayKinds() {
-        return switch (viewStyle.get()) {
-            case COMPONENT -> COMPONENT_VIOLATION_OVERLAY_KINDS;
-            case HEXAGONAL -> HEXAGONAL_VIOLATION_OVERLAY_KINDS;
-            case LAYERED -> LAYERED_VIOLATION_OVERLAY_KINDS;
-        };
+        return styleView.get().violationOverlayKinds();
     }
 
     void updateSccRendererTangles() {

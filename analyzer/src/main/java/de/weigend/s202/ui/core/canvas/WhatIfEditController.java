@@ -13,10 +13,10 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package de.weigend.s202.ui;
+package de.weigend.s202.ui.core.canvas;
 
+import de.weigend.s202.domain.architecture.ArchitectureKind;
 import de.weigend.s202.domain.architecture.WhatIfArchitecture;
-import de.weigend.s202.ui.views.component.ComponentBox;
 import de.weigend.s202.ui.core.graph.ArchitectureDragController;
 import de.weigend.s202.ui.core.graph.GraphSelection;
 import de.weigend.s202.ui.core.graph.LevelClassBox;
@@ -42,7 +42,7 @@ import java.util.function.Supplier;
  * Szene und die orange „moved“-Dekoration. Aus ArchitectureView extrahiert;
  * alle Rückgriffe laufen über Callbacks — keine Abhängigkeit auf die View.
  */
-final class WhatIfEditController {
+public final class WhatIfEditController {
 
     /** Szene-Wurzel dieser View — nur für den „gehört der Drop zu uns?“-Check. */
     private final Node viewRoot;
@@ -50,7 +50,7 @@ final class WhatIfEditController {
     private final PulseCoalescer arrowsCoalescer;
     private final Consumer<String> status;
     private final Supplier<WhatIfArchitecture> whatIf;
-    private final Supplier<ArchitectureViewStyle> viewStyle;
+    private final Supplier<ArchitectureKind> viewStyle;
     private final Supplier<VBox> rootContainer;
     private final ComponentApiAnnotator apiAnnotator;
     /** Baut das Layout neu auf (Undo spielt danach die verbliebenen Moves ein). */
@@ -58,7 +58,7 @@ final class WhatIfEditController {
     private final BooleanProperty showWhatIfViolations;
 
     /** Sinnvoll benannte Teilmenge der API-Drop-Callbacks in die View. */
-    interface ComponentApiAnnotator {
+    public interface ComponentApiAnnotator {
         void addToApi(String fqn);
 
         void removeFromApi(String fqn);
@@ -73,12 +73,12 @@ final class WhatIfEditController {
 
     private final WhatIfUndoManager undoManager = new WhatIfUndoManager();
 
-    WhatIfEditController(Node viewRoot,
+    public WhatIfEditController(Node viewRoot,
                          Map<String, Node> elementRegistry,
                          PulseCoalescer arrowsCoalescer,
                          Consumer<String> status,
                          Supplier<WhatIfArchitecture> whatIf,
-                         Supplier<ArchitectureViewStyle> viewStyle,
+                         Supplier<ArchitectureKind> viewStyle,
                          Supplier<VBox> rootContainer,
                          ComponentApiAnnotator apiAnnotator,
                          Runnable resetVisualLayout,
@@ -95,15 +95,15 @@ final class WhatIfEditController {
         this.showWhatIfViolations = showWhatIfViolations;
     }
 
-    WhatIfUndoManager undoManager() {
+    public WhatIfUndoManager undoManager() {
         return undoManager;
     }
 
-    void clearMovedFqns() {
+    public void clearMovedFqns() {
         movedFqns.clear();
     }
 
-    void ensureDropListenerRegistered() {
+    public void ensureDropListenerRegistered() {
         if (dropListener != null) {
             return;
         }
@@ -122,7 +122,7 @@ final class WhatIfEditController {
         if (movedFqcn == null || movedFqcn.isEmpty()) {
             return;
         }
-        if (viewStyle.get() == ArchitectureViewStyle.COMPONENT
+        if (viewStyle.get() == ArchitectureKind.COMPONENT
                 && handleComponentApiDrop(movedSource, movedFqcn, destinationRow)) {
             return;
         }
@@ -158,8 +158,8 @@ final class WhatIfEditController {
     }
 
     private boolean handleComponentApiDrop(Node movedSource, String movedFqcn, HBox destinationRow) {
-        boolean apiDestination = ComponentBox.isApiDropTarget(destinationRow);
-        boolean apiSource = ComponentBox.isApiElement(movedSource);
+        boolean apiDestination = de.weigend.s202.ui.core.graph.BoxTags.isApiDropTarget(destinationRow);
+        boolean apiSource = de.weigend.s202.ui.core.graph.BoxTags.isApiElement(movedSource);
         if (!apiDestination && !apiSource) {
             return false;
         }
@@ -217,7 +217,7 @@ final class WhatIfEditController {
 
     /* ----- Undo / Redo ------------------------------------------------------ */
 
-    void undo() {
+    public void undo() {
         if (whatIf.get() == null) return;
         List<WhatIfUndoManager.Move> remaining = undoManager.decrement();
         if (remaining == null) return;
@@ -228,7 +228,7 @@ final class WhatIfEditController {
         arrowsCoalescer.markDirty();
     }
 
-    void redo() {
+    public void redo() {
         if (whatIf.get() == null) return;
         WhatIfUndoManager.Move m = undoManager.increment();
         if (m == null) return;
@@ -287,7 +287,7 @@ final class WhatIfEditController {
     }
 
     /** Orange „moved“-Dekoration mit dem aktuellen movedFqns-Stand abgleichen. */
-    void applyVirtuallyMovedDecorations() {
+    public void applyVirtuallyMovedDecorations() {
         for (Map.Entry<String, Node> entry : elementRegistry.entrySet()) {
             String fqcn = entry.getKey();
             boolean moved = movedFqns.contains(fqcn);

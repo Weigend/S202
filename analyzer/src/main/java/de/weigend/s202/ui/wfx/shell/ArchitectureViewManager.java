@@ -18,8 +18,8 @@ package de.weigend.s202.ui.wfx.shell;
 import de.weigend.s202.analysis.invariants.LayoutInvariantReport;
 import de.weigend.s202.domain.architecture.ArchitectureAnnotations;
 import de.weigend.s202.project.S202Project;
-import de.weigend.s202.ui.ArchitectureView;
-import de.weigend.s202.ui.ArchitectureViewStyle;
+import de.weigend.s202.ui.core.canvas.ArchitectureView;
+import de.weigend.s202.domain.architecture.ArchitectureKind;
 import de.weigend.s202.ui.core.model.ArchitectureNode;
 import de.weigend.s202.ui.core.model.ArchitectureNodeCloner;
 import de.weigend.s202.ui.core.events.NodeSelectionEvent;
@@ -137,8 +137,8 @@ public final class ArchitectureViewManager {
                     continue;
                 }
                 target.setArchitectureAnnotations(effective);
-                if ((target.getViewStyle() == ArchitectureViewStyle.COMPONENT
-                        || target.getViewStyle() == ArchitectureViewStyle.HEXAGONAL)
+                if ((target.getViewStyle() == ArchitectureKind.COMPONENT
+                        || target.getViewStyle() == ArchitectureKind.HEXAGONAL)
                         && target.hasRoot()) {
                     target.refreshStyleProjection();
                 }
@@ -287,14 +287,14 @@ public final class ArchitectureViewManager {
     }
 
     public void openComponentView() {
-        openProjectionView("Component View", ArchitectureViewStyle.COMPONENT, "component");
+        openProjectionView("Component View", ArchitectureKind.COMPONENT, "component");
     }
 
     public void openHexagonalView() {
-        openProjectionView("Hexagonal View", ArchitectureViewStyle.HEXAGONAL, "hexagonal");
+        openProjectionView("Hexagonal View", ArchitectureKind.HEXAGONAL, "hexagonal");
     }
 
-    private void openProjectionView(String title, ArchitectureViewStyle style, String label) {
+    private void openProjectionView(String title, ArchitectureKind style, String label) {
         ArchitectureWfxView sourceWrapper = focusedSourceArchitectureView();
         if (sourceWrapper == null) {
             progress.progress("No architecture view available for " + label + " projection", 1);

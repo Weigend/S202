@@ -24,7 +24,7 @@ import java.util.Set;
 
 /**
  * Computes and applies additive package/class scopes for a scoped
- * {@link de.weigend.s202.ui.ArchitectureView}.
+ * {@link de.weigend.s202.ui.core.canvas.ArchitectureView}.
  */
 public final class ScopeExtensionModel {
 

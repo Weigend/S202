@@ -41,8 +41,8 @@ import java.util.function.Consumer;
  */
 public class ComponentBox extends VBox implements GraphSelection.Selectable, de.weigend.s202.ui.core.graph.ContainerBox {
 
-    private static final String API_DROP_TARGET_TAG = "s202.component.api.dropTarget";
-    private static final String API_ELEMENT_TAG = "s202.component.api.element";
+    private static final String API_DROP_TARGET_TAG = de.weigend.s202.ui.core.graph.BoxTags.API_DROP_TARGET_TAG;
+    private static final String API_ELEMENT_TAG = de.weigend.s202.ui.core.graph.BoxTags.API_ELEMENT_TAG;
     private static final String EXPANDED_MARK = "\u2212";
     private static final String COLLAPSED_MARK = "+";
 
@@ -159,18 +159,11 @@ public class ComponentBox extends VBox implements GraphSelection.Selectable, de.
     }
 
     public static boolean isApiElement(Node node) {
-        return node != null && Boolean.TRUE.equals(node.getProperties().get(API_ELEMENT_TAG));
+        return de.weigend.s202.ui.core.graph.BoxTags.isApiElement(node);
     }
 
     public static boolean isApiDropTarget(Node node) {
-        Node current = node;
-        while (current != null) {
-            if (Boolean.TRUE.equals(current.getProperties().get(API_DROP_TARGET_TAG))) {
-                return true;
-            }
-            current = current.getParent();
-        }
-        return false;
+        return de.weigend.s202.ui.core.graph.BoxTags.isApiDropTarget(node);
     }
 
     public void setImplementationContent(Node node) {

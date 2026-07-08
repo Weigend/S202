@@ -25,7 +25,7 @@ import java.util.function.Consumer;
  *
  * <p>Selection changes are routed to the selected node's owner sink when
  * present. The static callback remains as a fallback for direct test/demo boxes
- * that are not built through an {@link de.weigend.s202.ui.ArchitectureView ArchitectureView}.
+ * that are not built through an {@link de.weigend.s202.ui.core.canvas.ArchitectureView ArchitectureView}.
  *
  * <p>Two callback slots:
  * <ul>

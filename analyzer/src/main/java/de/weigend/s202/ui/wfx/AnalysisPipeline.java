@@ -24,7 +24,7 @@ import de.weigend.s202.domain.DomainModel;
 import de.weigend.s202.project.S202Project;
 import de.weigend.s202.reader.DependencyModel;
 import de.weigend.s202.reader.LanguageAnalyzer;
-import de.weigend.s202.ui.ArchitectureView;
+import de.weigend.s202.ui.core.canvas.ArchitectureView;
 import de.weigend.s202.ui.core.layout.horizontal.HorizontalRowLayoutOptimizer;
 import de.weigend.s202.ui.core.model.ArchitectureNode;
 import de.weigend.s202.ui.core.model.ArchitectureNodeBuilder;

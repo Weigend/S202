@@ -19,7 +19,7 @@ import de.weigend.s202.ui.views.tangle.TangleEdgeMethodResolver;
 import de.weigend.s202.ui.views.tangle.TangleFilter;
 import de.weigend.s202.domain.DependencyEdge;
 import de.weigend.s202.reader.DependencyModel;
-import de.weigend.s202.ui.ArchitectureView;
+import de.weigend.s202.ui.core.canvas.ArchitectureView;
 import de.weigend.s202.ui.core.model.ArchitectureNode;
 import de.weigend.s202.ui.wfx.shell.ArchitectureViewManager;
 import de.weigend.s202.ui.wfx.shell.Dialogs;

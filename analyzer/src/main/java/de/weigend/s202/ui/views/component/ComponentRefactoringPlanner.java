@@ -13,215 +13,49 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package de.weigend.s202.ui;
+package de.weigend.s202.ui.views.component;
 
 import de.weigend.s202.domain.DependencyEdge;
 import de.weigend.s202.domain.architecture.ArchitectureAnnotations;
-import de.weigend.s202.ui.views.component.ComponentBox;
+import de.weigend.s202.ui.core.canvas.WhatIfUndoManager;
 import de.weigend.s202.ui.core.graph.ArchitectureDragController;
-import de.weigend.s202.ui.core.model.ArchitectureNode;
-import de.weigend.s202.ui.core.model.ArchitectureNodeCloner;
-import de.weigend.s202.ui.core.model.ScopeExtensionModel;
-import javafx.collections.FXCollections;
-import javafx.collections.ObservableList;
-import javafx.collections.transformation.FilteredList;
-import javafx.scene.control.ButtonBar;
-import javafx.scene.control.ButtonType;
+import de.weigend.s202.ui.core.spi.ViewServices;
 import javafx.scene.control.ContextMenu;
-import javafx.scene.control.Dialog;
-import javafx.scene.control.DialogPane;
-import javafx.scene.control.ListCell;
-import javafx.scene.control.ListView;
 import javafx.scene.control.MenuItem;
-import javafx.scene.control.TextField;
-import javafx.scene.input.MouseButton;
 import javafx.scene.layout.HBox;
 import javafx.scene.layout.Priority;
 import javafx.scene.layout.VBox;
-import javafx.stage.Window;
 
 import java.util.LinkedHashMap;
 import java.util.List;
-import java.util.Locale;
 import java.util.Map;
-import java.util.Optional;
 import java.util.Set;
-import java.util.function.Consumer;
-import java.util.function.Supplier;
 
 /**
- * Scope-Erweiterung (Kontextmenü + Dialog), geplante Pakete der
- * Component-View und der Refactoring-Report (JSON aller Session-Änderungen).
- * Aus ArchitectureView extrahiert; Rückgriffe laufen über Callbacks.
+ * Die Refactoring-Planung der Component-Ansicht: geplante (virtuelle)
+ * Pakete samt Dialogen und Szene-Injektion sowie der Refactoring-Report
+ * (JSON aller Session-Änderungen). Vorher als Teil des Canvas-Controllers
+ * ScopeAndReport — jetzt vollständig Component-fachlich.
  */
-final class ScopeAndReportController {
+final class ComponentRefactoringPlanner {
 
-    private final Map<String, javafx.scene.Node> elementRegistry;
-    private final Consumer<String> status;
-    private final Supplier<ArchitectureNode> currentRoot;
-    private final Supplier<ArchitectureNode> scopeSource;
-    private final Supplier<ArchitectureViewStyle> viewStyle;
-    private final Supplier<Window> dialogOwner;
-    private final Supplier<ArchitectureAnnotations> annotations;
-    private final Supplier<List<WhatIfUndoManager.Move>> effectiveMoves;
-    private final Supplier<Set<DependencyEdge>> appliedCutEdges;
-    private final Consumer<String> graphSelectionSink;
-    private final Consumer<ArchitectureNode> setArchitectureRoot;
-    private final Consumer<String> selectByFullName;
-    private final Consumer<String> refreshStyleProjection;
-
+    private final ViewServices services;
     private final LinkedHashMap<String, String> plannedPackageNames = new LinkedHashMap<>();
 
-    ScopeAndReportController(Map<String, javafx.scene.Node> elementRegistry,
-                             Consumer<String> status,
-                             Supplier<ArchitectureNode> currentRoot,
-                             Supplier<ArchitectureNode> scopeSource,
-                             Supplier<ArchitectureViewStyle> viewStyle,
-                             Supplier<Window> dialogOwner,
-                             Supplier<ArchitectureAnnotations> annotations,
-                             Supplier<List<WhatIfUndoManager.Move>> effectiveMoves,
-                             Supplier<Set<DependencyEdge>> appliedCutEdges,
-                             Consumer<String> graphSelectionSink,
-                             Consumer<ArchitectureNode> setArchitectureRoot,
-                             Consumer<String> selectByFullName,
-                             Consumer<String> refreshStyleProjection) {
-        this.elementRegistry = elementRegistry;
-        this.status = status;
-        this.currentRoot = currentRoot;
-        this.scopeSource = scopeSource;
-        this.viewStyle = viewStyle;
-        this.dialogOwner = dialogOwner;
-        this.annotations = annotations;
-        this.effectiveMoves = effectiveMoves;
-        this.appliedCutEdges = appliedCutEdges;
-        this.graphSelectionSink = graphSelectionSink;
-        this.setArchitectureRoot = setArchitectureRoot;
-        this.selectByFullName = selectByFullName;
-        this.refreshStyleProjection = refreshStyleProjection;
+    ComponentRefactoringPlanner(ViewServices services) {
+        this.services = services;
     }
 
     boolean hasPlannedPackages() {
         return !plannedPackageNames.isEmpty();
     }
 
-    /* ----- Kontextmenü ------------------------------------------------------- */
-
-    void installScopeExtensionContextMenu(javafx.scene.Node target) {
-        boolean componentMode = viewStyle.get() == ArchitectureViewStyle.COMPONENT;
-        if (scopeSource.get() == null && !componentMode) {
-            target.setOnContextMenuRequested(null);
-            return;
-        }
-
-        target.setOnContextMenuRequested(event -> {
-            ContextMenu menu = new ContextMenu();
-            if (componentMode) {
-                MenuItem addPkg = new MenuItem("Add Planned Package...");
-                addPkg.setOnAction(action -> showAddPlannedPackageDialog());
-                menu.getItems().add(addPkg);
-                MenuItem reportItem = new MenuItem("Refactoring Report...");
-                reportItem.setOnAction(action -> showRefactoringReport());
-                menu.getItems().add(reportItem);
-            }
-            if (scopeSource.get() != null) {
-                MenuItem addToScope = new MenuItem("Add to Scope...");
-                addToScope.setOnAction(action -> showScopeExtensionDialog());
-                menu.getItems().add(addToScope);
-            }
-            if (!menu.getItems().isEmpty()) {
-                menu.show(target, event.getScreenX(), event.getScreenY());
-                event.consume();
-            }
-        });
-    }
-
-    /* ----- Scope-Erweiterung -------------------------------------------------- */
-
-    private void showScopeExtensionDialog() {
-        if (scopeSource.get() == null || currentRoot.get() == null) {
-            return;
-        }
-
-        List<ScopeExtensionModel.Candidate> candidates =
-                ScopeExtensionModel.candidates(scopeSource.get(), currentRoot.get());
-        if (candidates.isEmpty()) {
-            status.accept("Scope already contains all packages and classes");
-            return;
-        }
-
-        Dialog<ScopeExtensionModel.Candidate> dialog = new Dialog<>();
-        dialog.setTitle("Add to Scope");
-        dialog.setHeaderText("Select a package or class");
-        if (dialogOwner.get() != null) {
-            dialog.initOwner(dialogOwner.get());
-        }
-
-        ButtonType addButtonType = new ButtonType("Add", ButtonBar.ButtonData.OK_DONE);
-        DialogPane dialogPane = dialog.getDialogPane();
-        dialogPane.getButtonTypes().addAll(addButtonType, ButtonType.CANCEL);
-
-        TextField filterField = new TextField();
-        filterField.setPromptText("Filter packages/classes");
-
-        ObservableList<ScopeExtensionModel.Candidate> items = FXCollections.observableArrayList(candidates);
-        FilteredList<ScopeExtensionModel.Candidate> filteredItems = new FilteredList<>(items, item -> true);
-        filterField.textProperty().addListener((obs, oldValue, newValue) -> {
-            String query = newValue == null ? "" : newValue.trim().toLowerCase(Locale.ROOT);
-            filteredItems.setPredicate(item -> query.isEmpty()
-                    || item.fullName().toLowerCase(Locale.ROOT).contains(query)
-                    || item.kind().toLowerCase(Locale.ROOT).contains(query));
-        });
-
-        ListView<ScopeExtensionModel.Candidate> candidateList = new ListView<>(filteredItems);
-        candidateList.setPrefWidth(620);
-        candidateList.setPrefHeight(420);
-        candidateList.setCellFactory(view -> new ListCell<>() {
-            @Override
-            protected void updateItem(ScopeExtensionModel.Candidate item, boolean empty) {
-                super.updateItem(item, empty);
-                setText(empty || item == null ? null : item.label());
-            }
-        });
-        candidateList.setOnMouseClicked(event -> {
-            if (event.getButton() == MouseButton.PRIMARY
-                    && event.getClickCount() == 2
-                    && candidateList.getSelectionModel().getSelectedItem() != null) {
-                dialog.setResult(candidateList.getSelectionModel().getSelectedItem());
-                dialog.close();
-            }
-        });
-
-        javafx.scene.Node addButton = dialogPane.lookupButton(addButtonType);
-        addButton.disableProperty().bind(candidateList.getSelectionModel().selectedItemProperty().isNull());
-
-        VBox content = new VBox(8, filterField, candidateList);
-        dialogPane.setContent(content);
-        dialog.setResultConverter(button -> button == addButtonType
-                ? candidateList.getSelectionModel().getSelectedItem()
-                : null);
-
-        Optional<ScopeExtensionModel.Candidate> selected = dialog.showAndWait();
-        selected.ifPresent(this::addScopeCandidate);
-    }
-
-    private void addScopeCandidate(ScopeExtensionModel.Candidate candidate) {
-        if (candidate == null || currentRoot.get() == null || scopeSource.get() == null) {
-            return;
-        }
-
-        ArchitectureNode extendedRoot = ArchitectureNodeCloner.cloneTree(currentRoot.get());
-        boolean added = ScopeExtensionModel.addToScope(
-                extendedRoot,
-                scopeSource.get(),
-                candidate.fullName());
-        if (!added) {
-            status.accept("Scope already contains " + candidate.fullName());
-            return;
-        }
-
-        setArchitectureRoot.accept(extendedRoot);
-        selectByFullName.accept(candidate.fullName());
-        status.accept("Scope extended: " + candidate.fullName());
+    List<MenuItem> contextMenuItems() {
+        MenuItem addPkg = new MenuItem("Add Planned Package...");
+        addPkg.setOnAction(action -> showAddPlannedPackageDialog());
+        MenuItem reportItem = new MenuItem("Refactoring Report...");
+        reportItem.setOnAction(action -> showRefactoringReport());
+        return List.of(addPkg, reportItem);
     }
 
     /* ----- Geplante Pakete ----------------------------------------------------- */
@@ -231,8 +65,8 @@ final class ScopeAndReportController {
         dialog.setTitle("Add Planned Package");
         dialog.setHeaderText("Enter a name for the new planned package");
         dialog.setContentText("Package name:");
-        if (dialogOwner.get() != null) {
-            dialog.initOwner(dialogOwner.get());
+        if (services.dialogOwner().get() != null) {
+            dialog.initOwner(services.dialogOwner().get());
         }
         dialog.showAndWait()
                 .map(String::trim)
@@ -240,7 +74,7 @@ final class ScopeAndReportController {
                 .ifPresent(name -> {
                     String fqn = "virtual-pkg-" + java.util.UUID.randomUUID().toString().replace("-", "");
                     plannedPackageNames.put(fqn, name);
-                    refreshStyleProjection.accept("Added planned package: " + name);
+                    services.refreshView().accept("Added planned package: " + name);
                 });
     }
 
@@ -250,22 +84,22 @@ final class ScopeAndReportController {
         dialog.setTitle("Rename Package");
         dialog.setHeaderText("Enter a new name for the planned package");
         dialog.setContentText("Package name:");
-        if (dialogOwner.get() != null) {
-            dialog.initOwner(dialogOwner.get());
+        if (services.dialogOwner().get() != null) {
+            dialog.initOwner(services.dialogOwner().get());
         }
         dialog.showAndWait()
                 .map(String::trim)
                 .filter(name -> !name.isEmpty() && !name.equals(currentName))
                 .ifPresent(name -> {
                     plannedPackageNames.put(fqn, name);
-                    refreshStyleProjection.accept("Renamed planned package to: " + name);
+                    services.refreshView().accept("Renamed planned package to: " + name);
                 });
     }
 
     private void deletePlannedPackage(String fqn) {
         String name = plannedPackageNames.remove(fqn);
         if (name != null) {
-            refreshStyleProjection.accept("Deleted planned package: " + name);
+            services.refreshView().accept("Deleted planned package: " + name);
         }
     }
 
@@ -280,14 +114,14 @@ final class ScopeAndReportController {
             String fqn = entry.getKey();
             String displayName = entry.getValue();
             ComponentBox box = new ComponentBox(displayName, fqn, 0);
-            box.setSelectionChangeSink(graphSelectionSink);
+            box.setSelectionChangeSink(services.selectionSink());
             box.setCustomStyles(
                     "-fx-background-color: #f0f7e8; -fx-border-color: #4a8a3a; -fx-border-width: 2;"
                   + " -fx-border-style: dashed; -fx-background-radius: 7; -fx-border-radius: 7;",
                     "-fx-background-color: #f0f7e8; -fx-border-color: #ff8a00; -fx-border-width: 3;"
                   + " -fx-border-style: dashed; -fx-background-radius: 7; -fx-border-radius: 7;");
             attachPlannedPackageContextMenu(box, fqn);
-            elementRegistry.put(fqn, box);
+            services.elementRegistry().put(fqn, box);
             HBox.setHgrow(box, Priority.ALWAYS);
             plannedRow.getChildren().add(box);
         }
@@ -308,7 +142,7 @@ final class ScopeAndReportController {
 
     /* ----- Refactoring-Report ---------------------------------------------------- */
 
-    void showRefactoringReport() {
+    private void showRefactoringReport() {
         String json = buildRefactoringReportJson();
 
         javafx.scene.control.TextArea area = new javafx.scene.control.TextArea(json);
@@ -325,8 +159,8 @@ final class ScopeAndReportController {
         javafx.scene.control.Dialog<Void> dialog = new javafx.scene.control.Dialog<>();
         dialog.setTitle("Refactoring Report");
         dialog.setHeaderText("All architecture changes made in this session — paste into an AI prompt.");
-        if (dialogOwner.get() != null) {
-            dialog.initOwner(dialogOwner.get());
+        if (services.dialogOwner().get() != null) {
+            dialog.initOwner(services.dialogOwner().get());
         }
         dialog.getDialogPane().getButtonTypes().addAll(copyButton, closeButton);
         dialog.getDialogPane().setContent(area);
@@ -346,14 +180,14 @@ final class ScopeAndReportController {
     private String buildRefactoringReportJson() {
         // Deduplicate moves: keep only the last move per FQN (latest destination wins).
         LinkedHashMap<String, WhatIfUndoManager.Move> lastMove = new LinkedHashMap<>();
-        for (WhatIfUndoManager.Move m : effectiveMoves.get()) {
+        for (WhatIfUndoManager.Move m : services.whatIfMoves().get()) {
             lastMove.put(m.fqn(), m);
         }
 
-        ArchitectureAnnotations ann = annotations.get();
+        ArchitectureAnnotations ann = services.annotations().get();
         List<String> apiAdded = new java.util.ArrayList<>(ann.componentApiIncludes());
         List<String> apiRemoved = new java.util.ArrayList<>(ann.componentApiExcludes());
-        Set<DependencyEdge> cuts = appliedCutEdges.get();
+        Set<DependencyEdge> cuts = services.appliedCutEdges().get();
 
         StringBuilder sb = new StringBuilder();
         sb.append("{\n");

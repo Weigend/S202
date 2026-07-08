@@ -13,7 +13,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package de.weigend.s202.ui;
+package de.weigend.s202.ui.core.canvas;
 
 import de.weigend.s202.domain.DomainModel;
 import de.weigend.s202.domain.architecture.Architecture;
@@ -49,11 +49,11 @@ final class ArchitectureProjectionModel {
     private final ReadOnlyObjectWrapper<Architecture> architecture = new ReadOnlyObjectWrapper<>(null);
     private final ReadOnlyObjectWrapper<WhatIfArchitecture> whatIfArchitecture = new ReadOnlyObjectWrapper<>(null);
 
-    private final Supplier<ArchitectureViewStyle> viewStyle;
+    private final Supplier<ArchitectureKind> viewStyle;
     /** Läuft nach jedem Projektion-Rebuild (SCC-Renderer-Tangles nachziehen). */
     private final Runnable afterRebuild;
 
-    ArchitectureProjectionModel(Supplier<ArchitectureViewStyle> viewStyle, Runnable afterRebuild) {
+    ArchitectureProjectionModel(Supplier<ArchitectureKind> viewStyle, Runnable afterRebuild) {
         this.viewStyle = viewStyle;
         this.afterRebuild = afterRebuild;
     }
@@ -130,10 +130,10 @@ final class ArchitectureProjectionModel {
                 rawDependencyModel.get(),
                 model,
                 getArchitectureAnnotations());
-        ArchitectureViewStyle style = viewStyle.get();
-        if (style == ArchitectureViewStyle.COMPONENT) {
+        ArchitectureKind style = viewStyle.get();
+        if (style == ArchitectureKind.COMPONENT) {
             original = requireArchitectureStyle(ArchitectureKind.COMPONENT).build(context);
-        } else if (style == ArchitectureViewStyle.HEXAGONAL) {
+        } else if (style == ArchitectureKind.HEXAGONAL) {
             original = requireArchitectureStyle(ArchitectureKind.HEXAGONAL).build(context);
         } else {
             original = requireArchitectureStyle(ArchitectureKind.LAYERED).build(context);

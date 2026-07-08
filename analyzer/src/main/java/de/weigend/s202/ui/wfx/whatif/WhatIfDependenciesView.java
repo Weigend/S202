@@ -49,7 +49,7 @@ import java.util.Set;
 
 /**
  * WFX side-panel view that lists the current What-If consequences for the
- * focused {@link de.weigend.s202.ui.ArchitectureView ArchitectureView}.
+ * focused {@link de.weigend.s202.ui.core.canvas.ArchitectureView ArchitectureView}.
  * Decoupled from the chart — wired in by {@link WhatIfDependenciesModule}
  * and fed from the architecture model directly.
  *

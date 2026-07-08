@@ -16,7 +16,7 @@
 package de.weigend.s202.ui.wfx.whatif;
 
 import de.weigend.s202.domain.architecture.Architecture;
-import de.weigend.s202.ui.ArchitectureView;
+import de.weigend.s202.ui.core.canvas.ArchitectureView;
 import de.weigend.s202.ui.core.platform.ArchitectureWfxView;
 import io.softwareecg.wfx.lookup.api.Lookup;
 import io.softwareecg.wfx.platform.api.Module;

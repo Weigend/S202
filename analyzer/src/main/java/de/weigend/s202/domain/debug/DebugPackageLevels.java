@@ -93,7 +93,7 @@ public class DebugPackageLevels {
         
         // Debug: Show dependencies of ArchitectureView in detail
         System.out.println("\n=== DEPENDENCY CHAIN ANALYSIS ===");
-        String[] keyClasses = {"de.weigend.s202.ui.wfx.S202Main", "de.weigend.s202.ui.ArchitectureView"};
+        String[] keyClasses = {"de.weigend.s202.ui.wfx.S202Main", "de.weigend.s202.ui.core.canvas.ArchitectureView"};
         for (String className : keyClasses) {
             DomainModel.CalculatedElementInfo info = model.getClass(className);
             if (info != null) {

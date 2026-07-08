@@ -21,8 +21,8 @@ import de.weigend.s202.domain.architecture.ComponentArchitecture;
 import de.weigend.s202.domain.impl.ComponentArchitectureModel;
 import de.weigend.s202.domain.architecture.Element;
 import io.softwareecg.wfx.lookup.api.Lookup;
-import de.weigend.s202.ui.ArchitectureView;
-import de.weigend.s202.ui.ArchitectureViewStyle;
+import de.weigend.s202.ui.core.canvas.ArchitectureView;
+import de.weigend.s202.domain.architecture.ArchitectureKind;
 import de.weigend.s202.ui.core.graph.LevelClassBox;
 import de.weigend.s202.ui.core.graph.LevelPackageBox;
 import de.weigend.s202.ui.views.component.ComponentBox;
@@ -357,7 +357,7 @@ public class ArchitectureTreeBuilderTest {
         runOnFxThread(() -> {
             ArchitectureNode root = componentSourceRoot();
             ArchitectureView view = new ArchitectureView();
-            view.setViewStyle(ArchitectureViewStyle.COMPONENT);
+            view.setViewStyle(ArchitectureKind.COMPONENT);
             view.setArchitectureRoot(root);
 
             ComponentBox component = findComponent(view, "com.acme.payment");
