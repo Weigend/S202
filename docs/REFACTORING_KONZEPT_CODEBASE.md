@@ -357,7 +357,8 @@ Grundregeln für jeden Schritt:
 | 1 (A1–A3) | ✅ | 0 Paket-Tangles, 0 Klassen-Zyklen, 0 Back-Edges; neue Basis-Pakete `ui.graph` und `ui.wfx.view` |
 | 2 | ✅ | S202Module **2361 → 374** Zeilen; 8 Controller + Basis-Paket `ui.wfx.shell` (der Selbsttest fing dabei einen neuen Tangle im ersten Wurf ab — Infrastruktur musste unter die Feature-Pakete) |
 | 3 | ✅* | ArchitectureView **2343 → 868** Zeilen; 12 Einheiten (ProjectionModel, BoundsExporter, TangleOverlay-, WhatIfEdit-, ScopeAndReport-, Selection-, StateKeeper-, OverlayRenderCoordinator, TreeBuilderFactory, AbstractArchitectureView) |
-| 4 | 🔄 | TangleEdgeRenderer-Split, TreeBuilderSupport, DependencyRenderer-Dedup |
+| 4 | ✅ | TangleEdgeRenderer **1350 → 224** (+5 Pipeline-Einheiten ≤ 386); Tree-Builder-Trio **589/811/880 → 496/392/483** (+ TreeBuilderSupport, ComponentProjection, 5 Hex-Einheiten); DependencyRenderer **708 → 380** (+ DependencyArrowPainter 313, Zeichen-Duplikat vereinigt) |
+| 5 | ⏳ | 11 Mittelklasse-Kandidaten aus Teil F (Reader/Report/3D/Domain) — wie geplant opportunistisch beim nächsten Feature-Touch |
 
 **\*Dokumentierte Abweichung (Phase 3):** ArchitectureView liegt bei 868
 statt ≤500 Zeilen. Der Rest besteht aus (a) dem Szenen-Aufbau
