@@ -20,8 +20,8 @@ import com.fasterxml.jackson.databind.SerializationFeature;
 import de.weigend.s202.domain.DependencyEdge;
 import de.weigend.s202.domain.DomainModel;
 import de.weigend.s202.reader.DependencyModel;
-import de.weigend.s202.ui.model.ArchitectureNode;
-import de.weigend.s202.ui.model.ArchitectureNode.NodeType;
+import de.weigend.s202.ui.core.model.ArchitectureNode;
+import de.weigend.s202.ui.core.model.ArchitectureNode.NodeType;
 import javafx.geometry.Bounds;
 
 import java.io.IOException;

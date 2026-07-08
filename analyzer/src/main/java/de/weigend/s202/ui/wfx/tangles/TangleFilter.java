@@ -15,7 +15,7 @@
  */
 package de.weigend.s202.ui.wfx.tangles;
 
-import de.weigend.s202.ui.model.ArchitectureNode;
+import de.weigend.s202.ui.core.model.ArchitectureNode;
 
 import java.util.ArrayList;
 import java.util.List;

@@ -15,7 +15,7 @@
  */
 package de.weigend.s202.ui.tree;
 
-import de.weigend.s202.ui.graph.GraphSelection;
+import de.weigend.s202.ui.core.graph.GraphSelection;
 import javafx.geometry.Pos;
 import javafx.scene.Cursor;
 import javafx.scene.control.Label;

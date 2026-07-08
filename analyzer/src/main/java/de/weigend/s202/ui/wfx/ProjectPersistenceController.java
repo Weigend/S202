@@ -25,15 +25,15 @@ import de.weigend.s202.project.ProjectStore;
 import de.weigend.s202.project.S202Project;
 import de.weigend.s202.reader.DependencyModel;
 import de.weigend.s202.ui.ArchitectureView;
-import de.weigend.s202.ui.layout.horizontal.HorizontalRowLayoutOptimizer;
-import de.weigend.s202.ui.model.ArchitectureNode;
-import de.weigend.s202.ui.model.ArchitectureNodeBuilder;
+import de.weigend.s202.ui.core.layout.horizontal.HorizontalRowLayoutOptimizer;
+import de.weigend.s202.ui.core.model.ArchitectureNode;
+import de.weigend.s202.ui.core.model.ArchitectureNodeBuilder;
 import de.weigend.s202.ui.wfx.shell.ArchitectureViewManager;
 import de.weigend.s202.ui.wfx.shell.Dialogs;
 import de.weigend.s202.ui.wfx.shell.ProgressPublisher;
 import de.weigend.s202.ui.wfx.shell.RecentDirectories;
 import de.weigend.s202.ui.wfx.shell.RefactoringPreviewState;
-import de.weigend.s202.ui.wfx.view.ArchitectureWfxView;
+import de.weigend.s202.ui.core.platform.ArchitectureWfxView;
 import io.softwareecg.wfx.lookup.api.Lookup;
 import io.softwareecg.wfx.windowmanager.api.WindowManager;
 import javafx.concurrent.Task;
@@ -149,7 +149,7 @@ public final class ProjectPersistenceController {
                         projectMapper.toArchitectureAnnotations(project.architectureAnnotations());
                 ArchitectureNode root = architectureNodeBuilder.build(domainModel);
                 new HorizontalRowLayoutOptimizer().assignHorizontalLayoutOrders(root);
-                de.weigend.s202.ui.consistency.ArchitectureConsistencyDevHook
+                de.weigend.s202.ui.core.consistency.ArchitectureConsistencyDevHook
                         .runIfEnabled(domainModel, root);
                 QualityMetrics metrics = QualityMetrics.compute(domainModel);
                 LayoutInvariantReport invariants = projectMapper.toLayoutInvariantReport(project.layoutInvariantReport());

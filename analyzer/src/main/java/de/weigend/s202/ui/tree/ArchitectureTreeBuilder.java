@@ -15,12 +15,12 @@
  */
 package de.weigend.s202.ui.tree;
 
-import de.weigend.s202.ui.graph.ArchitectureDragController;
-import de.weigend.s202.ui.graph.LevelClassBox;
-import de.weigend.s202.ui.graph.LevelPackageBox;
-import de.weigend.s202.ui.layout.horizontal.HorizontalLayoutOrdering;
-import de.weigend.s202.ui.model.ArchitectureNode;
-import de.weigend.s202.ui.model.ArchitectureNode.NodeType;
+import de.weigend.s202.ui.core.graph.ArchitectureDragController;
+import de.weigend.s202.ui.core.graph.LevelClassBox;
+import de.weigend.s202.ui.core.graph.LevelPackageBox;
+import de.weigend.s202.ui.core.layout.horizontal.HorizontalLayoutOrdering;
+import de.weigend.s202.ui.core.model.ArchitectureNode;
+import de.weigend.s202.ui.core.model.ArchitectureNode.NodeType;
 import javafx.application.Platform;
 import javafx.scene.Node;
 import javafx.scene.layout.HBox;

@@ -20,7 +20,7 @@ import de.weigend.s202.domain.architecture.ArchitectureAnnotations;
 import de.weigend.s202.domain.architecture.ComponentArchitecture;
 import de.weigend.s202.domain.architecture.HexagonalArchitecture;
 import de.weigend.s202.reader.DependencyModel;
-import de.weigend.s202.ui.model.ArchitectureNode;
+import de.weigend.s202.ui.core.model.ArchitectureNode;
 import de.weigend.s202.ui.tree.ArchitectureTreeBuilder;
 import de.weigend.s202.ui.tree.ComponentArchitectureTreeBuilder;
 import de.weigend.s202.ui.tree.HexagonalArchitectureTreeBuilder;

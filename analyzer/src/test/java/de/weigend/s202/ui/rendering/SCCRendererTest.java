@@ -15,7 +15,7 @@
  */
 package de.weigend.s202.ui.rendering;
 
-import de.weigend.s202.ui.model.ArchitectureNode;
+import de.weigend.s202.ui.core.model.ArchitectureNode;
 import io.softwareecg.wfx.lookup.api.Lookup;
 import javafx.scene.layout.Pane;
 import javafx.scene.paint.Color;

@@ -15,7 +15,7 @@
  */
 package de.weigend.s202.ui.rendering;
 
-import de.weigend.s202.ui.model.ArchitectureNode;
+import de.weigend.s202.ui.core.model.ArchitectureNode;
 import javafx.scene.control.ScrollPane;
 import javafx.scene.layout.Pane;
 

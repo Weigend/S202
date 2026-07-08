@@ -17,9 +17,9 @@ package de.weigend.s202.ui.tree;
 
 import de.weigend.s202.domain.architecture.ArchitectureAnnotations;
 import de.weigend.s202.domain.architecture.HexagonalArchitecture;
-import de.weigend.s202.ui.graph.LevelClassBox;
-import de.weigend.s202.ui.graph.LevelPackageBox;
-import de.weigend.s202.ui.model.ArchitectureNode;
+import de.weigend.s202.ui.core.graph.LevelClassBox;
+import de.weigend.s202.ui.core.graph.LevelPackageBox;
+import de.weigend.s202.ui.core.model.ArchitectureNode;
 import javafx.application.Platform;
 import javafx.geometry.Insets;
 import javafx.geometry.Pos;

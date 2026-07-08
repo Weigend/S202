@@ -15,9 +15,9 @@
  */
 package de.weigend.s202.ui.tree;
 
-import de.weigend.s202.ui.graph.ArchitectureDragController;
-import de.weigend.s202.ui.model.ArchitectureNode;
-import de.weigend.s202.ui.model.ArchitectureNode.NodeType;
+import de.weigend.s202.ui.core.graph.ArchitectureDragController;
+import de.weigend.s202.ui.core.model.ArchitectureNode;
+import de.weigend.s202.ui.core.model.ArchitectureNode.NodeType;
 import javafx.geometry.Insets;
 import javafx.geometry.Pos;
 import javafx.scene.layout.HBox;

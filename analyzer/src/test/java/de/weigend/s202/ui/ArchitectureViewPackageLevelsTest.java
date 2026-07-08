@@ -19,9 +19,9 @@ import de.weigend.s202.reader.impl.java.InputAnalyzer;
 import de.weigend.s202.reader.DependencyModel;
 import de.weigend.s202.domain.impl.LevelCalculator;
 import de.weigend.s202.domain.DomainModel;
-import de.weigend.s202.ui.model.ArchitectureNode;
-import de.weigend.s202.ui.model.ArchitectureNode.NodeType;
-import de.weigend.s202.ui.model.ArchitectureNodeBuilder;
+import de.weigend.s202.ui.core.model.ArchitectureNode;
+import de.weigend.s202.ui.core.model.ArchitectureNode.NodeType;
+import de.weigend.s202.ui.core.model.ArchitectureNodeBuilder;
 import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.*;

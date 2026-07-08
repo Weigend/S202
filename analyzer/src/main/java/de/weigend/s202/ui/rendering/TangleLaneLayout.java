@@ -16,8 +16,8 @@
 package de.weigend.s202.ui.rendering;
 
 import de.weigend.s202.domain.DependencyEdge;
-import de.weigend.s202.ui.graph.LevelClassBox;
-import de.weigend.s202.ui.graph.LevelPackageBox;
+import de.weigend.s202.ui.core.graph.LevelClassBox;
+import de.weigend.s202.ui.core.graph.LevelPackageBox;
 import javafx.geometry.Bounds;
 import javafx.scene.Node;
 import javafx.scene.layout.Pane;

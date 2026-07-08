@@ -21,7 +21,7 @@ import de.weigend.s202.ui.city3d.CityView3DServer;
 import de.weigend.s202.ui.wfx.events.NodeSelectionEvent;
 import de.weigend.s202.ui.wfx.shell.ArchitectureViewManager;
 import de.weigend.s202.ui.wfx.shell.Dialogs;
-import de.weigend.s202.ui.wfx.view.ArchitectureWfxView;
+import de.weigend.s202.ui.core.platform.ArchitectureWfxView;
 import io.softwareecg.wfx.lookup.api.Lookup;
 import io.softwareecg.wfx.platform.api.EventBus;
 import javafx.application.Platform;

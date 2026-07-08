@@ -15,8 +15,8 @@
  */
 package de.weigend.s202.ui.rendering;
 
-import de.weigend.s202.ui.model.ArchitectureNode;
-import de.weigend.s202.ui.zoom.ZoomController;
+import de.weigend.s202.ui.core.model.ArchitectureNode;
+import de.weigend.s202.ui.core.canvas.ZoomController;
 import javafx.scene.layout.Pane;
 import javafx.scene.shape.Rectangle;
 import org.junit.jupiter.api.Test;

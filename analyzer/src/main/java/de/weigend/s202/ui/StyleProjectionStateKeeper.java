@@ -16,9 +16,9 @@
 package de.weigend.s202.ui;
 
 import de.weigend.s202.ui.component.ComponentBox;
-import de.weigend.s202.ui.zoom.ZoomController;
-import de.weigend.s202.ui.graph.LevelPackageBox;
-import de.weigend.s202.ui.graph.PulseCoalescer;
+import de.weigend.s202.ui.core.canvas.ZoomController;
+import de.weigend.s202.ui.core.graph.LevelPackageBox;
+import de.weigend.s202.ui.core.graph.PulseCoalescer;
 import javafx.application.Platform;
 import javafx.scene.Node;
 import javafx.scene.Parent;

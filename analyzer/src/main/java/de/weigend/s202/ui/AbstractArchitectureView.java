@@ -16,7 +16,7 @@
 package de.weigend.s202.ui;
 
 import de.weigend.s202.analysis.quality.QualityMetrics;
-import de.weigend.s202.ui.model.ArchitectureNode;
+import de.weigend.s202.ui.core.model.ArchitectureNode;
 import javafx.beans.property.BooleanProperty;
 import javafx.beans.property.IntegerProperty;
 import javafx.beans.property.ReadOnlyDoubleProperty;

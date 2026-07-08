@@ -16,8 +16,8 @@
 package de.weigend.s202.ui.wfx.view3d;
 
 import de.weigend.s202.domain.architecture.Architecture;
-import de.weigend.s202.ui.model.ArchitectureNode;
-import de.weigend.s202.ui.model.ArchitectureNode.NodeType;
+import de.weigend.s202.ui.core.model.ArchitectureNode;
+import de.weigend.s202.ui.core.model.ArchitectureNode.NodeType;
 import javafx.geometry.Bounds;
 import javafx.scene.AmbientLight;
 import javafx.scene.Group;

@@ -21,7 +21,7 @@ import de.weigend.s202.domain.architecture.Violation;
 import de.weigend.s202.domain.StronglyConnectedComponent;
 import io.softwareecg.wfx.lookup.api.Lookup;
 import de.weigend.s202.domain.SCCFinder;
-import de.weigend.s202.ui.model.ArchitectureNode;
+import de.weigend.s202.ui.core.model.ArchitectureNode;
 import io.softwareecg.wfx.windowmanager.api.Position;
 import io.softwareecg.wfx.windowmanager.api.View;
 import io.softwareecg.wfx.windowmanager.api.ViewKind;

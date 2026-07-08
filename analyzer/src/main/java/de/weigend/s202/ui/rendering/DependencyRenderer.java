@@ -15,12 +15,12 @@
  */
 package de.weigend.s202.ui.rendering;
 
-import de.weigend.s202.ui.graph.GraphSelection;
-import de.weigend.s202.ui.graph.LevelClassBox;
-import de.weigend.s202.ui.graph.LevelPackageBox;
+import de.weigend.s202.ui.core.graph.GraphSelection;
+import de.weigend.s202.ui.core.graph.LevelClassBox;
+import de.weigend.s202.ui.core.graph.LevelPackageBox;
 import de.weigend.s202.ui.component.ComponentBox;
-import de.weigend.s202.ui.model.ArchitectureNode;
-import de.weigend.s202.ui.zoom.ZoomController;
+import de.weigend.s202.ui.core.model.ArchitectureNode;
+import de.weigend.s202.ui.core.canvas.ZoomController;
 import javafx.scene.Node;
 import javafx.scene.Parent;
 import javafx.scene.control.ScrollPane;

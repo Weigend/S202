@@ -17,11 +17,11 @@ package de.weigend.s202.ui;
 
 import de.weigend.s202.domain.architecture.WhatIfArchitecture;
 import de.weigend.s202.ui.component.ComponentBox;
-import de.weigend.s202.ui.graph.ArchitectureDragController;
-import de.weigend.s202.ui.graph.GraphSelection;
-import de.weigend.s202.ui.graph.LevelClassBox;
-import de.weigend.s202.ui.graph.LevelPackageBox;
-import de.weigend.s202.ui.graph.PulseCoalescer;
+import de.weigend.s202.ui.core.graph.ArchitectureDragController;
+import de.weigend.s202.ui.core.graph.GraphSelection;
+import de.weigend.s202.ui.core.graph.LevelClassBox;
+import de.weigend.s202.ui.core.graph.LevelPackageBox;
+import de.weigend.s202.ui.core.graph.PulseCoalescer;
 import javafx.beans.property.BooleanProperty;
 import javafx.geometry.Pos;
 import javafx.scene.Node;

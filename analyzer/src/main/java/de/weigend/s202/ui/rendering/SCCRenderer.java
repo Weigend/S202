@@ -18,7 +18,7 @@ package de.weigend.s202.ui.rendering;
 import de.weigend.s202.domain.StronglyConnectedComponent;
 import io.softwareecg.wfx.lookup.api.Lookup;
 import de.weigend.s202.domain.SCCFinder;
-import de.weigend.s202.ui.model.ArchitectureNode;
+import de.weigend.s202.ui.core.model.ArchitectureNode;
 import javafx.geometry.Bounds;
 import javafx.scene.Node;
 import javafx.scene.Parent;

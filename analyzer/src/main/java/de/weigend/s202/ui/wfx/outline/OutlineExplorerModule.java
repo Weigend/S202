@@ -17,8 +17,8 @@ package de.weigend.s202.ui.wfx.outline;
 
 import de.weigend.s202.reader.DependencyModel;
 import de.weigend.s202.ui.ArchitectureView;
-import de.weigend.s202.ui.model.ArchitectureNode;
-import de.weigend.s202.ui.wfx.view.ArchitectureWfxView;
+import de.weigend.s202.ui.core.model.ArchitectureNode;
+import de.weigend.s202.ui.core.platform.ArchitectureWfxView;
 import de.weigend.s202.ui.wfx.events.MethodSelectionEvent;
 import de.weigend.s202.ui.wfx.events.NodeSelectionEvent;
 import de.weigend.s202.ui.wfx.events.OpenScopeEvent;

@@ -15,8 +15,8 @@
  */
 package de.weigend.s202.ui;
 
-import de.weigend.s202.ui.graph.GraphSelection;
-import de.weigend.s202.ui.graph.PulseCoalescer;
+import de.weigend.s202.ui.core.graph.GraphSelection;
+import de.weigend.s202.ui.core.graph.PulseCoalescer;
 import javafx.application.Platform;
 import javafx.beans.property.ReadOnlyStringProperty;
 import javafx.beans.property.ReadOnlyStringWrapper;

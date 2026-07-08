@@ -16,7 +16,7 @@
 package de.weigend.s202.ui.wfx.outline;
 
 import de.weigend.s202.reader.DependencyModel;
-import de.weigend.s202.ui.model.ArchitectureNode;
+import de.weigend.s202.ui.core.model.ArchitectureNode;
 import io.softwareecg.wfx.windowmanager.api.Position;
 import io.softwareecg.wfx.windowmanager.api.View;
 import javafx.scene.Parent;

@@ -15,11 +15,11 @@
  */
 package de.weigend.s202.ui;
 
-import de.weigend.s202.ui.graph.ArchitectureDragController;
-import de.weigend.s202.ui.graph.GraphSelection;
-import de.weigend.s202.ui.graph.LevelClassBox;
-import de.weigend.s202.ui.graph.LevelPackageBox;
-import de.weigend.s202.ui.graph.PulseCoalescer;
+import de.weigend.s202.ui.core.graph.ArchitectureDragController;
+import de.weigend.s202.ui.core.graph.GraphSelection;
+import de.weigend.s202.ui.core.graph.LevelClassBox;
+import de.weigend.s202.ui.core.graph.LevelPackageBox;
+import de.weigend.s202.ui.core.graph.PulseCoalescer;
 import de.weigend.s202.analysis.quality.QualityMetrics;
 import de.weigend.s202.domain.DependencyEdge;
 import de.weigend.s202.domain.DomainModel;
@@ -35,9 +35,9 @@ import de.weigend.s202.domain.architecture.ViolationKind;
 import de.weigend.s202.domain.architecture.WhatIfArchitecture;
 import de.weigend.s202.reader.DependencyModel;
 import de.weigend.s202.ui.component.ComponentBox;
-import de.weigend.s202.ui.model.ArchitectureNode;
-import de.weigend.s202.ui.model.ArchitectureNodeCloner;
-import de.weigend.s202.ui.model.ScopeExtensionModel;
+import de.weigend.s202.ui.core.model.ArchitectureNode;
+import de.weigend.s202.ui.core.model.ArchitectureNodeCloner;
+import de.weigend.s202.ui.core.model.ScopeExtensionModel;
 import de.weigend.s202.ui.rendering.DependencyRenderer;
 import de.weigend.s202.ui.rendering.DependencyRendererStrategy;
 import de.weigend.s202.ui.rendering.SCCRenderer;
@@ -46,7 +46,7 @@ import de.weigend.s202.ui.rendering.WhatIfUpwardEdgeRenderer;
 import de.weigend.s202.ui.tree.ArchitectureTreeBuilder;
 import de.weigend.s202.ui.tree.ComponentArchitectureTreeBuilder;
 import de.weigend.s202.ui.tree.HexagonalArchitectureTreeBuilder;
-import de.weigend.s202.ui.zoom.ZoomController;
+import de.weigend.s202.ui.core.canvas.ZoomController;
 import io.softwareecg.wfx.lookup.api.Lookup;
 import javafx.collections.FXCollections;
 import javafx.collections.ObservableList;
