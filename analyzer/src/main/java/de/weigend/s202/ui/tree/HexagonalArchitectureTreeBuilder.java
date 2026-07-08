@@ -15,6 +15,8 @@
  */
 package de.weigend.s202.ui.tree;
 
+import de.weigend.s202.ui.core.canvas.ArchitectureTreeBuilder;
+import de.weigend.s202.ui.core.canvas.TreeBuilderSupport;
 import de.weigend.s202.domain.architecture.ArchitectureAnnotations;
 import de.weigend.s202.domain.architecture.HexagonalArchitecture;
 import de.weigend.s202.ui.core.graph.LevelClassBox;

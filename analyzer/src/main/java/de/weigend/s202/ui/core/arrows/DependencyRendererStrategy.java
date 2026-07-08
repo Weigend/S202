@@ -13,7 +13,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package de.weigend.s202.ui.rendering;
+package de.weigend.s202.ui.core.arrows;
 
 import de.weigend.s202.ui.core.model.ArchitectureNode;
 import javafx.scene.control.ScrollPane;

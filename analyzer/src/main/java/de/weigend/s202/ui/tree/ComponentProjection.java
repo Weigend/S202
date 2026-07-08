@@ -19,6 +19,7 @@ import de.weigend.s202.domain.architecture.ArchitectureAnnotations;
 import de.weigend.s202.domain.architecture.ComponentArchitecture;
 import de.weigend.s202.domain.architecture.Element;
 import de.weigend.s202.ui.component.ComponentBox;
+import de.weigend.s202.ui.core.canvas.TreeBuilderSupport;
 import de.weigend.s202.ui.core.graph.LevelClassBox;
 import de.weigend.s202.ui.core.layout.horizontal.HorizontalLayoutOrdering;
 import de.weigend.s202.ui.core.model.ArchitectureNode;

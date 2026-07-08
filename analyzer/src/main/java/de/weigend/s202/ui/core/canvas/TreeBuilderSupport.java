@@ -13,7 +13,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package de.weigend.s202.ui.tree;
+package de.weigend.s202.ui.core.canvas;
 
 import de.weigend.s202.ui.core.graph.ArchitectureDragController;
 import de.weigend.s202.ui.core.model.ArchitectureNode;
@@ -31,13 +31,13 @@ import java.util.function.Consumer;
  * top-level container/row plumbing, the transparent-package skipping and
  * small FQN utilities in one place instead of duplicating them per builder.
  */
-final class TreeBuilderSupport {
+public final class TreeBuilderSupport {
 
     // 60px gives enough room for up to 6 bypass lanes (24 base + 5×6px) before
     // they leave the visible content area.
-    static final double TOP_LEVEL_HORIZONTAL_PADDING = 60.0;
+    public static final double TOP_LEVEL_HORIZONTAL_PADDING = 60.0;
     // Seven 6px-spaced tangle lanes need 36px span plus arrow-head clearance.
-    static final double TOP_LEVEL_VERTICAL_PADDING = 52.0;
+    public static final double TOP_LEVEL_VERTICAL_PADDING = 52.0;
 
     private TreeBuilderSupport() {
     }
@@ -47,7 +47,7 @@ final class TreeBuilderSupport {
      * A package is transparent if it is the ONLY sub-package of its parent.
      * This visually de-emphasizes "pass-through" packages like de.weigend.s202.
      */
-    static boolean shouldChildrenBeTransparent(ArchitectureNode parentNode) {
+    public static boolean shouldChildrenBeTransparent(ArchitectureNode parentNode) {
         // Count how many sub-packages the parent has
         long packageCount = parentNode.getChildren().stream()
                 .filter(c -> c.getType() == NodeType.PACKAGE)
@@ -66,7 +66,7 @@ final class TreeBuilderSupport {
      *        unchanged; scope views use this so the selected package remains
      *        visible as the root of the scoped chart.
      */
-    static ArchitectureNode effectiveRoot(ArchitectureNode rootNode,
+    public static ArchitectureNode effectiveRoot(ArchitectureNode rootNode,
                                           boolean skipTransparentTopLevelPackages,
                                           Consumer<ArchitectureNode> skippedPackageSink) {
         ArchitectureNode effectiveRoot = rootNode;
@@ -87,7 +87,7 @@ final class TreeBuilderSupport {
      * Tags the top-level stack with the effective root's fqcn so the
      * What-If drop handler can resolve a "dropped at top level" event.
      */
-    static void tagWhatIfRoot(VBox topLevelContainer, ArchitectureNode effectiveRoot) {
+    public static void tagWhatIfRoot(VBox topLevelContainer, ArchitectureNode effectiveRoot) {
         topLevelContainer.getProperties().put("s202.whatif.rootFqcn",
                 effectiveRoot.getFullName() == null ? "" : effectiveRoot.getFullName());
     }
@@ -95,7 +95,7 @@ final class TreeBuilderSupport {
     /**
      * Creates the padded, drag-aware VBox that stacks the top-level rows.
      */
-    static VBox createTopLevelContainer(double spacing, String backgroundColor) {
+    public static VBox createTopLevelContainer(double spacing, String backgroundColor) {
         VBox topLevelContainer = new VBox(spacing);
         topLevelContainer.setPadding(new Insets(
                 TOP_LEVEL_VERTICAL_PADDING,
@@ -111,7 +111,7 @@ final class TreeBuilderSupport {
      * Creates one top-level row (same level = side by side) and appends it to
      * the container.
      */
-    static HBox createTopLevelRow(VBox topLevelContainer, double spacing) {
+    public static HBox createTopLevelRow(VBox topLevelContainer, double spacing) {
         HBox hbox = new HBox(spacing);
         hbox.setMaxWidth(Double.MAX_VALUE);
         hbox.setAlignment(Pos.CENTER);
@@ -124,7 +124,7 @@ final class TreeBuilderSupport {
     /**
      * Extract parent package name from a fully qualified name.
      */
-    static String parentOf(String fqn) {
+    public static String parentOf(String fqn) {
         if (fqn == null || !fqn.contains(".")) {
             return "";
         }
@@ -134,7 +134,7 @@ final class TreeBuilderSupport {
     /**
      * Simple (last segment) name of a fully qualified name.
      */
-    static String simpleName(String fqn) {
+    public static String simpleName(String fqn) {
         if (fqn == null || fqn.isBlank()) {
             return "";
         }

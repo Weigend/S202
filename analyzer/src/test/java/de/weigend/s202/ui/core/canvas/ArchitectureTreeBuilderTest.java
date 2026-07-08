@@ -13,8 +13,9 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package de.weigend.s202.ui.tree;
+package de.weigend.s202.ui.core.canvas;
 
+import de.weigend.s202.ui.tree.ComponentArchitectureTreeBuilder;
 import de.weigend.s202.domain.architecture.ArchitectureAnnotations;
 import de.weigend.s202.domain.architecture.ComponentArchitecture;
 import de.weigend.s202.domain.impl.ComponentArchitectureModel;
