@@ -31,15 +31,8 @@ import java.util.EventObject;
 @jakarta.inject.Singleton
 public final class ProgressPublisher {
 
-    private final Object source;
-
     @jakarta.inject.Inject
     ProgressPublisher() {
-        this.source = this;
-    }
-
-    public ProgressPublisher(Object source) {
-        this.source = source;
     }
 
     public void status(String message) {
@@ -49,7 +42,7 @@ public final class ProgressPublisher {
     @SuppressWarnings("unchecked")
     public void progress(String message, double progress) {
         Runnable publish = () -> Lookup.lookup(EventBus.class)
-                .publish(new ProgressEvent(message, progress, source));
+                .publish(new ProgressEvent(message, progress, this));
         if (Platform.isFxApplicationThread()) {
             publish.run();
         } else {

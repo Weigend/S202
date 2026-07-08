@@ -141,21 +141,31 @@ public class S202Module implements Module {
 
 
     private final RecentDirectories recentDirs = new RecentDirectories();
-    private final ProgressPublisher progressPublisher = Lookup.lookup(ProgressPublisher.class);
+    // Geteilte Plattform-Dienste: per Konstruktor injiziert, NICHT als
+    // Feld-Initializer via Lookup — S202Module ist selbst ein Avaje-@Singleton,
+    // dessen Felder während des Scope-Baus laufen, bevor Lookup verdrahtet ist.
+    private final ProgressPublisher progressPublisher;
+    private final RefactoringPreviewState previewState;
+    private final ArchitectureViewManager viewManager;
 
     private S202StatusBar statusBar;
 
     private ToolbarController toolbar;
 
-    private final RefactoringPreviewState previewState = Lookup.lookup(RefactoringPreviewState.class);
-    private final ArchitectureViewManager viewManager = Lookup.lookup(ArchitectureViewManager.class);
     private final QualityReportController qualityReport;
     private final AnalysisPipeline pipeline;
     private final SourceOpenController sourceOpen;
     private final ProjectPersistenceController persistence;
 
-    public S202Module(ApplicationWindow applicationWindow) {
+    @jakarta.inject.Inject
+    public S202Module(ApplicationWindow applicationWindow,
+                      ProgressPublisher progressPublisher,
+                      RefactoringPreviewState previewState,
+                      ArchitectureViewManager viewManager) {
         this.applicationWindow = applicationWindow;
+        this.progressPublisher = progressPublisher;
+        this.previewState = previewState;
+        this.viewManager = viewManager;
         this.qualityReport = new QualityReportController(
                 viewManager, previewState, progressPublisher, recentDirs,
                 () -> applicationWindow.getStage(), this::appVersion);
