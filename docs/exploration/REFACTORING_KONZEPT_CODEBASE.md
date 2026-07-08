@@ -3,7 +3,7 @@
 *Stand: Juli 2026 · Befund toolverifiziert (S202-Analyse auf `s202-code-analyzer-1.0.0.jar`)*
 
 Dieses Dokument ist das interne Umbau-Konzept für die eigene Codebase.
-(Nicht zu verwechseln mit [S202_REFACTORING.md](S202_REFACTORING.md), das den
+(Nicht zu verwechseln mit [S202_REFACTORING.md](../S202_REFACTORING.md), das den
 Nutzer-Workflow beschreibt.)
 
 ---
