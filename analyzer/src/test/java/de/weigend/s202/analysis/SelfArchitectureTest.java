@@ -119,6 +119,57 @@ public class SelfArchitectureTest {
                         + ", gefunden " + backEdges + ":\n" + detail);
     }
 
+    /**
+     * Komponenten-Regeln aus docs/UI_KOMPONENTEN_KONZEPT.md §4: Die
+     * UI-Fachkomponenten unter {@code ui.views.*} sind geschlossen —
+     * sie kennen einander nicht, kennen die Shell nicht, und der Kern
+     * ({@code ui.core.*}) kennt niemanden über sich.
+     */
+    @Test
+    void uiComponentRulesRespected() {
+        final String VIEWS = "de.weigend.s202.ui.views.";
+        final String CORE = "de.weigend.s202.ui.core.";
+        final String FEATURES = "de.weigend.s202.ui.features.";
+        final String APP = "de.weigend.s202.ui.wfx.";
+
+        List<String> violations = new java.util.ArrayList<>();
+        for (Map.Entry<String, DomainModel.CalculatedElementInfo> e : model.getAllClasses().entrySet()) {
+            String from = e.getKey();
+            for (String to : e.getValue().dependencies) {
+                if (model.getClass(to) == null) {
+                    continue;
+                }
+                String fromView = viewComponentOf(from, VIEWS);
+                String toView = viewComponentOf(to, VIEWS);
+                if (fromView != null && toView != null && !fromView.equals(toView)) {
+                    violations.add("views." + fromView + " -> views." + toView + ": " + from + " -> " + to);
+                }
+                if (fromView != null && to.startsWith(APP)) {
+                    violations.add("views." + fromView + " -> app: " + from + " -> " + to);
+                }
+                if (from.startsWith(CORE)
+                        && (to.startsWith(VIEWS) || to.startsWith(FEATURES) || to.startsWith(APP))) {
+                    violations.add("core -> oben: " + from + " -> " + to);
+                }
+                if (from.startsWith(FEATURES) && to.startsWith(VIEWS)) {
+                    violations.add("features -> views: " + from + " -> " + to);
+                }
+            }
+        }
+        assertTrue(violations.isEmpty(),
+                "Komponenten-Regeln verletzt (" + violations.size() + "):\n  "
+                        + String.join("\n  ", violations.stream().sorted().toList()));
+    }
+
+    private static String viewComponentOf(String className, String viewsPrefix) {
+        if (!className.startsWith(viewsPrefix)) {
+            return null;
+        }
+        String rest = className.substring(viewsPrefix.length());
+        int dot = rest.indexOf('.');
+        return dot < 0 ? null : rest.substring(0, dot);
+    }
+
     private static Path findOwnClassesDir() {
         for (String candidate : new String[]{"target/classes", "analyzer/target/classes"}) {
             Path p = Path.of(candidate);
