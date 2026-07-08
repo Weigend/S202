@@ -244,9 +244,13 @@ M2 ist die eigentliche Architekturänderung und braucht die meiste Sorgfalt
 - *What-If als `ui.features.whatif`*: liegt regelkonform als Feature-Paket
   vor; ein formales `ViewFeature`-SPI lohnt erst mit einem zweiten
   Querschnitts-Feature.
-- *Rename `ArchitectureView` → `ArchitectureCanvas`* und die tangle-benannten
-  Canvas-Methoden (`setTangleVisualization` …): rein kosmetisch; Typ-Kanten
-  sind sauber (SPI), nur die Begriffe erinnern an die Herkunft.
+- ~~*Rename `ArchitectureView` → `ArchitectureCanvas`* und die tangle-benannten
+  Canvas-Methoden~~ **erledigt**: `ArchitectureView`→`ArchitectureCanvas`
+  (+ `AbstractArchitectureCanvas`), `TangleOverlayController`→
+  `EdgeOverlayController`, und die Canvas-API spricht die neutrale
+  Edge-Overlay-Vokabel (`setEdgeOverlay`, `applyEdgeCut`, `setPreferredScope`
+  …). Bewusst behalten: `getCycleBreakEdges` und `arch.tangles()` — echte
+  Domänenbegriffe (SCCs), keine Tangle-View-Begriffe.
 - *Runtime-Falle dokumentiert*: geteilte `core.platform`-Dienste werden per
   Konstruktor-Injektion bezogen, NICHT als Feld-Initializer-`Lookup` — bei
   Avaje-`@Singleton`-Modulen läuft die Feldinitialisierung vor der
