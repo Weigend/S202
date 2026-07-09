@@ -19,6 +19,8 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.SerializationFeature;
 import de.weigend.s202.domain.DependencyEdge;
 import de.weigend.s202.domain.DomainModel;
+import de.weigend.s202.domain.architecture.Violation;
+import de.weigend.s202.domain.impl.HierarchicalLayeredArchitectureBuilder;
 import de.weigend.s202.reader.DependencyModel;
 import de.weigend.s202.ui.core.model.ArchitectureNode;
 import de.weigend.s202.ui.core.model.ArchitectureNode.NodeType;
@@ -60,10 +62,17 @@ public final class CityModelSerializer {
         /** @return whether the package is part of a package tangle. */
         boolean packageInCycle(String fqn);
 
+        /**
+         * @return whether the directed class edge from → to is an architectural
+         *         violation (an UPWARD edge by the layered style's visual rank).
+         */
+        boolean violation(String from, String to);
+
         Metrics NONE = new Metrics() {
             public int methodCount(String fqn) { return -1; }
             public boolean classInCycle(String fqn) { return false; }
             public boolean packageInCycle(String fqn) { return false; }
+            public boolean violation(String from, String to) { return false; }
         };
     }
 
@@ -82,6 +91,14 @@ public final class CityModelSerializer {
         for (Set<String> tangle : calculated.getPackageTangles()) {
             packageCycle.addAll(tangle);
         }
+        // Reuse the layered style's own violation detection so the City3D
+        // "violations" overlay is identical to the 2D "Verstöße": UPWARD edges by
+        // hierarchical visual rank, which also catches package-tangle back-edges a
+        // flat per-class level comparison would miss.
+        Set<String> violationEdges = new HashSet<>();
+        for (Violation v : new HierarchicalLayeredArchitectureBuilder().build(calculated).violations()) {
+            violationEdges.add(v.sourceFqn() + "\0" + v.targetFqn());
+        }
         return new Metrics() {
             @Override public int methodCount(String fqn) {
                 DependencyModel.ClassInfo ci = raw.getClass(fqn);
@@ -89,6 +106,7 @@ public final class CityModelSerializer {
             }
             @Override public boolean classInCycle(String fqn) { return classCycle.contains(fqn); }
             @Override public boolean packageInCycle(String fqn) { return packageCycle.contains(fqn); }
+            @Override public boolean violation(String from, String to) { return violationEdges.contains(from + "\0" + to); }
         };
     }
 
@@ -154,7 +172,7 @@ public final class CityModelSerializer {
                     node.getDependents().size(), node.getDependencies().size(),
                     m.methodCount(fqn), node.isInterfaceType(), m.classInCycle(fqn)));
             for (String to : node.getDependencies()) {
-                dependencies.add(new CityModel.Dependency(fqn, to));
+                dependencies.add(new CityModel.Dependency(fqn, to, m.violation(fqn, to)));
             }
             // Classes may still nest (inner types); keep walking.
             for (ArchitectureNode child : node.getChildren()) {

@@ -62,6 +62,17 @@ public record CityModel(int maxLevel,
                            boolean isInterface,
                            boolean inCycle) {}
 
-    /** A directed class-to-class dependency (both endpoints are fully qualified names). */
-    public record Dependency(String from, String to) {}
+    /**
+     * A directed class-to-class dependency (both endpoints are fully qualified names).
+     *
+     * <p>{@code violation} marks an architectural violation exactly as the layered
+     * architecture defines it: an UPWARD edge by hierarchical <em>visual rank</em>
+     * (the chain of package levels from the outermost ancestor down to the class),
+     * the same rule the 2D architecture view uses. So the City3D "violations" overlay
+     * matches the 2D "Verstöße" one-to-one. This includes package-tangle back-edges
+     * — e.g. a class edge {@code sub1.A → sub2.C} that realises the upward package
+     * edge {@code sub1 → sub2} — which a flat per-class {@code architectureLevel}
+     * comparison would miss (A may sit above C by flat level yet below it by rank).
+     */
+    public record Dependency(String from, String to, boolean violation) {}
 }
