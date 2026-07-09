@@ -151,6 +151,10 @@ public class S202MenuBar {
                 "file.openGo", "Open Go Module...",
                 e -> publish(new MenuRequestEvent.OpenGoSource(this)));
 
+        MenuItem openJavaScriptItem = MenuUtil.createMenuItem(
+                "file.openJavaScript", "Open JavaScript Source...",
+                e -> publish(new MenuRequestEvent.OpenJavaScriptSource(this)));
+
         MenuItem openMavenItem = MenuUtil.createMenuItem(
                 "file.openMaven", "Open Maven Project...",
                 e -> publish(new MenuRequestEvent.OpenMavenProject(this)));
@@ -167,7 +171,7 @@ public class S202MenuBar {
         exitItem.setAccelerator(new KeyCodeCombination(KeyCode.Q, KeyCombination.SHORTCUT_DOWN));
 
         Menu openSourceMenu = MenuUtil.createMenu("file.openSource", "Open Source Code");
-        openSourceMenu.getItems().addAll(openGoItem, openPythonItem, openCItem);
+        openSourceMenu.getItems().addAll(openJavaScriptItem, openGoItem, openPythonItem, openCItem);
 
         Menu fileMenu = MenuUtil.createMenu("file", "File");
         fileMenu.getItems().addAll(

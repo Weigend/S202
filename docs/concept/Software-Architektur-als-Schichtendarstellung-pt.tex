@@ -538,7 +538,15 @@ Os termos back edge e viola\c{c}\~ao descrevem pap\'eis diferentes:
         separadamente no c\'alculo dos n\'iveis para que o grafo de c\'alculo
         se torne ac\'iclico. Ela pertence ao tratamento de ciclos.
   \item[Viola\c{c}\~ao] Uma depend\^encia concreta que, depois da ordem
-        calculada, corre para cima. Ela pode vir de uma SCC, mas n\~ao precisa.
+        calculada, corre para cima. O que conta aqui \'e a ordem
+        \emph{aninhada}, n\~ao o n\'ivel global plano: as cadeias de
+        \emph{localLevel} dos dois extremos s\~ao comparadas a partir do
+        cont\^einer comum mais externo para baixo, e a dire\c{c}\~ao \'e decidida
+        pelo primeiro cont\^einer em que diferem~-- ou seja, o \emph{localLevel}
+        do n\'ivel-alvo apropriado (chamado \emph{visual rank} no c\'odigo). Uma
+        aresta pode correr para baixo globalmente (pelo \emph{architectureLevel})
+        e ainda assim apontar para cima entre dois pacotes irm\~aos~-- e nesse
+        caso \'e uma viola\c{c}\~ao. Ela pode vir de uma SCC, mas n\~ao precisa.
         Viola\c{c}\~oes s\~ao portanto um superconjunto dos back edges: um
         back edge pode tornar-se vis\'ivel como viola\c{c}\~ao, mas nem toda
         viola\c{c}\~ao \'e um back edge. Conceitualmente, a viola\c{c}\~ao
@@ -700,10 +708,14 @@ estejam dispon\'iveis as informa\c{c}\~oes que justificam essa posi\c{c}\~ao.
         ponderado somente entre irm\~aos dos filhos diretos \'e constru\'ido;
         as back edges de classes do Passo~5 s\~ao exclu\'idas; o grafo de
         irm\~aos \'e ac\'iclico por constru\c{c}\~ao; o caminho mais longo
-        produz um \emph{localLevel} por filho. O \emph{localLevel}
-        governa o posicionamento visual dentro da caixa pai; o
-        \emph{architectureLevel} \'e o n\'ivel sem\^antico global que aciona a
-        detec\c{c}\~ao de viola\c{c}\~oes.
+        produz um \emph{localLevel} por filho. O \emph{localLevel} governa o
+        posicionamento visual dentro da caixa pai e \'e tamb\'em a base da
+        detec\c{c}\~ao vis\'ivel de viola\c{c}\~oes (o \emph{visual rank} sobre a
+        cadeia de n\'iveis aninhada descrita acima). O \emph{architectureLevel}
+        \'e o n\'ivel sem\^antico global; ele aciona o layout e o invariante
+        global de consist\^encia~-- uma condi\c{c}\~ao necess\'aria, mas n\~ao
+        suficiente, pois uma compara\c{c}\~ao global plana n\~ao detecta arestas
+        aninhadas que sobem entre cont\^eineres irm\~aos.
   \item \textbf{Verificar consist\^encia:} No fim, a representa\c{c}\~ao
         pronta \'e verificada redundantemente contra as regras de
         consist\^encia. Depend\^encias normais, SCCs, back edges e

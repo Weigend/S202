@@ -45,6 +45,10 @@ public abstract class MenuRequestEvent extends EventObject {
         public OpenGoSource(Object source) { super(source); }
     }
 
+    public static final class OpenJavaScriptSource extends MenuRequestEvent {
+        public OpenJavaScriptSource(Object source) { super(source); }
+    }
+
     public static final class OpenMavenProject extends MenuRequestEvent {
         public OpenMavenProject(Object source) { super(source); }
     }

@@ -101,10 +101,12 @@ export class DependencyViz {
     for (const dep of model.dependencies ?? []) {
       const a = anchors[dep.from], b = anchors[dep.to];
       if (!a || !b || dep.from === dep.to) continue;
-      // Verstoß nur, wenn die Kante echt AUFWÄRTS läuft (Quell- < Ziel-Level);
-      // Gleich-Level-Kanten (SCC-intern) bleiben neutral, sonst ist in
-      // hochzyklischen Systemen fast alles rot.
-      const violation = (level.get(dep.from) ?? 0) < (level.get(dep.to) ?? 0);
+      // Verstoß = authoritative aus dem Domain-Model (UPWARD nach hierarchischem
+      // Visual-Rank, exakt wie die 2D-Ansicht) — erfasst auch Paket-Back-Edges
+      // (z. B. sub1.A→sub2.C), die eine flache Level-Heuristik übersieht.
+      // Fallback auf die flache Heuristik nur, falls das Feld in einer alten
+      // city.json fehlt.
+      const violation = dep.violation ?? ((level.get(dep.from) ?? 0) < (level.get(dep.to) ?? 0));
       const e = { from: dep.from, to: dep.to, a, b, violation };
       this.edges.push(e);
       if (!this.byFrom.has(dep.from)) this.byFrom.set(dep.from, []);

@@ -466,96 +466,127 @@
   } ],
   "dependencies" : [ {
     "from" : "com.example.C",
-    "to" : "com.example.B"
+    "to" : "com.example.B",
+    "violation" : false
   }, {
     "from" : "com.example.B",
-    "to" : "com.example.A"
+    "to" : "com.example.A",
+    "violation" : false
   }, {
     "from" : "com.example2.E",
-    "to" : "com.example1.X"
+    "to" : "com.example1.X",
+    "violation" : false
   }, {
     "from" : "com.example2.E",
-    "to" : "com.example.B"
+    "to" : "com.example.B",
+    "violation" : false
   }, {
     "from" : "com.example2.E",
-    "to" : "com.example2.A"
+    "to" : "com.example2.A",
+    "violation" : false
   }, {
     "from" : "com.example2.C",
-    "to" : "com.example2.D"
+    "to" : "com.example2.D",
+    "violation" : false
   }, {
     "from" : "com.example2.A",
-    "to" : "com.example2.C"
+    "to" : "com.example2.C",
+    "violation" : false
   }, {
     "from" : "com.example2.A",
-    "to" : "com.example2.B"
+    "to" : "com.example2.B",
+    "violation" : false
   }, {
     "from" : "com.example2.B",
-    "to" : "com.example2.D"
+    "to" : "com.example2.D",
+    "violation" : false
   }, {
     "from" : "com.example3.sub1.A",
-    "to" : "com.example3.sub2.C"
+    "to" : "com.example3.sub2.C",
+    "violation" : true
   }, {
     "from" : "com.example3.sub1.A",
-    "to" : "com.example3.sub1.B"
+    "to" : "com.example3.sub1.B",
+    "violation" : false
   }, {
     "from" : "com.example3.sub2.C",
-    "to" : "com.example3.sub1.B"
+    "to" : "com.example3.sub1.B",
+    "violation" : false
   }, {
     "from" : "com.example3.sub2.D",
-    "to" : "com.example3.sub1.A"
+    "to" : "com.example3.sub1.A",
+    "violation" : false
   }, {
     "from" : "sccs.api.PaymentController",
-    "to" : "sccs.platform.Infrastructure"
+    "to" : "sccs.platform.Infrastructure",
+    "violation" : false
   }, {
     "from" : "sccs.api.PaymentController",
-    "to" : "sccs.service.PaymentService"
+    "to" : "sccs.service.PaymentService",
+    "violation" : false
   }, {
     "from" : "sccs.api.NotificationController",
-    "to" : "sccs.service.NotificationService"
+    "to" : "sccs.service.NotificationService",
+    "violation" : false
   }, {
     "from" : "sccs.api.NotificationController",
-    "to" : "sccs.platform.Infrastructure"
+    "to" : "sccs.platform.Infrastructure",
+    "violation" : false
   }, {
     "from" : "sccs.app.AppMain",
-    "to" : "sccs.infra.MessageQueue"
+    "to" : "sccs.infra.MessageQueue",
+    "violation" : false
   }, {
     "from" : "sccs.app.AppMain",
-    "to" : "sccs.infra.PaymentRepository"
+    "to" : "sccs.infra.PaymentRepository",
+    "violation" : false
   }, {
     "from" : "sccs.core.Event",
-    "to" : "sccs.infra.MessageQueue"
+    "to" : "sccs.infra.MessageQueue",
+    "violation" : true
   }, {
     "from" : "sccs.core.Order",
-    "to" : "sccs.infra.PaymentRepository"
+    "to" : "sccs.infra.PaymentRepository",
+    "violation" : true
   }, {
     "from" : "sccs.infra.MessageQueue",
-    "to" : "sccs.service.NotificationService"
+    "to" : "sccs.service.NotificationService",
+    "violation" : false
   }, {
     "from" : "sccs.infra.MessageQueue",
-    "to" : "sccs.api.NotificationController"
+    "to" : "sccs.api.NotificationController",
+    "violation" : false
   }, {
     "from" : "sccs.infra.MessageQueue",
-    "to" : "sccs.core.Event"
+    "to" : "sccs.core.Event",
+    "violation" : false
   }, {
     "from" : "sccs.infra.PaymentRepository",
-    "to" : "sccs.api.PaymentController"
+    "to" : "sccs.api.PaymentController",
+    "violation" : false
   }, {
     "from" : "sccs.infra.PaymentRepository",
-    "to" : "sccs.service.PaymentService"
+    "to" : "sccs.service.PaymentService",
+    "violation" : false
   }, {
     "from" : "sccs.infra.PaymentRepository",
-    "to" : "sccs.core.Order"
+    "to" : "sccs.core.Order",
+    "violation" : false
   }, {
     "from" : "sccs.service.NotificationService",
-    "to" : "sccs.infra.MessageQueue"
+    "to" : "sccs.infra.MessageQueue",
+    "violation" : true
   }, {
     "from" : "sccs.service.NotificationService",
-    "to" : "sccs.core.Event"
+    "to" : "sccs.core.Event",
+    "violation" : false
   }, {
     "from" : "sccs.service.PaymentService",
-    "to" : "sccs.core.Order"
+    "to" : "sccs.core.Order",
+    "violation" : false
   }, {
     "from" : "sccs.service.PaymentService",
-    "to" : "sccs.infra.PaymentRepository"
+    "to" : "sccs.infra.PaymentRepository",
+    "violation" : true
   } ]
 }
