@@ -527,7 +527,15 @@ Die Begriffe Back-Edge und Verletzung beschreiben unterschiedliche Rollen:
         Levelberechnung gesondert behandelt wird, damit der Berechnungsgraph
         azyklisch wird. Sie geh\"ort zur Zyklusbehandlung.
   \item[Verletzung] Eine konkrete Abh\"angigkeit, die nach der berechneten
-        Ordnung nach oben l\"auft. Sie kann aus einer SCC stammen, muss es aber
+        Ordnung nach oben l\"auft. Ma\ss{}geblich ist dabei die
+        \emph{geschachtelte} Ordnung, nicht das flache globale Level: Verglichen
+        wird die \emph{localLevel}-Kette beider Endpunkte vom \"au\ss{}ersten
+        gemeinsamen Container abw\"arts; die Richtung entscheidet der erste
+        Container, in dem sie sich unterscheiden~-- d.\,h. das \emph{localLevel}
+        der passenden Zielebene (im Code \emph{visual rank} genannt). Eine Kante
+        kann global (nach \emph{architectureLevel}) abw\"arts laufen und trotzdem
+        zwischen zwei Geschwisterpaketen nach oben zeigen~-- dann ist sie eine
+        Verletzung. Sie kann aus einer SCC stammen, muss es aber
         nicht. Verletzungen sind damit eine Obermenge der Back-Edges: Eine
         Back-Edge kann als Verletzung sichtbar werden, aber nicht jede
         Verletzung ist eine Back-Edge. Begrifflich bleibt eine Verletzung die
@@ -684,9 +692,14 @@ vorliegen, die diese Position begr\"unden.
         Klassen-Back-Edges aus Schritt~5 werden ausgeschlossen; der
         Geschwistergraph ist konstruktionsbedingt azyklisch; Longest-Path ergibt
         dann ein \emph{localLevel} pro Kind. Das \emph{localLevel} bestimmt
-        die visuelle Position innerhalb der Parent-Box; das
-        \emph{architectureLevel} ist das globale semantische Level, das die
-        Verletzungserkennung steuert.
+        die visuelle Position innerhalb der Parent-Box und ist zugleich die
+        Grundlage der sichtbaren Verletzungserkennung (der oben beschriebene
+        \emph{visual rank} \"uber die geschachtelte Level-Kette). Das
+        \emph{architectureLevel} ist das globale semantische Level; es steuert
+        das Layout und den globalen Konsistenz-Invariant~-- eine notwendige,
+        aber nicht hinreichende Bedingung, da ein flacher globaler Vergleich
+        geschachtelte Aufw\"artskanten zwischen Geschwistercontainern nicht
+        erkennt.
   \item \textbf{Konsistenz pr\"ufen:} Zum Schluss wird die fertige Darstellung
         redundant gegen die Konsistenzregeln gepr\"uft. Normale Abh\"angigkeiten,
         SCCs, Back-Edges und Verletzungen werden unterschieden und klassifiziert.

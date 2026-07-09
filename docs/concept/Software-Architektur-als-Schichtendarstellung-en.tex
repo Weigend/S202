@@ -505,8 +505,16 @@ The terms back edge and violation describe different roles:
         level computation so that the computation graph becomes acyclic. It
         belongs to cycle handling.
   \item[Violation] A concrete dependency that runs upward after the computed
-        order has been applied. It may come from an SCC, but it does not have
-        to. Violations are therefore a superset of back edges: a back edge can
+        order has been applied. What counts here is the \emph{nested} order, not
+        the flat global level: the \emph{localLevel} chains of both endpoints are
+        compared from the outermost shared container downward, and the direction
+        is decided by the first container in which they differ~-- i.e. the
+        \emph{localLevel} of the appropriate target level (called \emph{visual
+        rank} in the code). An edge can run downward globally (by
+        \emph{architectureLevel}) yet still point upward between two sibling
+        packages~-- in which case it is a violation. It may come from an SCC, but
+        it does not have to. Violations are therefore a superset of back edges: a
+        back edge can
         become visible as a violation, but not every violation is a back edge.
         Conceptually, a violation remains the visible deviation from the
         ordering, while a back edge describes the role of the edge in cycle
@@ -653,9 +661,13 @@ information that justifies this position is available.
         each parent container a sibling-only weighted graph of the direct
         children is built, excluding class back-edges from Step~5; the sibling
         graph is acyclic by construction; longest-path yields a
-        \emph{localLevel} per child. \emph{localLevel}
-        governs visual positioning inside the parent box; \emph{architectureLevel}
-        is the global semantic level that drives violation detection.
+        \emph{localLevel} per child. \emph{localLevel} governs visual positioning
+        inside the parent box and is also the basis of the visible violation
+        detection (the \emph{visual rank} over the nested level chain described
+        above). \emph{architectureLevel} is the global semantic level; it drives
+        the layout and the global consistency invariant~-- a necessary but not
+        sufficient condition, since a flat global comparison does not detect
+        nested upward edges between sibling containers.
   \item \textbf{Check consistency:} Finally, the finished representation is
         checked redundantly against the consistency rules. Normal dependencies,
         SCCs, back edges, and violations are distinguished and classified.
