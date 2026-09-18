@@ -22,8 +22,10 @@ jobs:
           cache: maven
 
       - name: Build WFX
+        env:
+          WFX_VERSION: "1.1.2"
         run: |
-          git clone --depth 1 https://github.com/Weigend/wfx.git /tmp/wfx
+          git clone --depth 1 --branch "v${WFX_VERSION}" https://github.com/Weigend/wfx.git /tmp/wfx
           cd /tmp/wfx
           mvn install -DskipTests --batch-mode
 

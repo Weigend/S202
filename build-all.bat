@@ -6,7 +6,8 @@
 :: What it does:
 ::   1. Checks for git, Java 21+, and Maven
 ::   2. Installs WFX into the local Maven cache (%USERPROFILE%\.m2) if not present
-::      (clones https://github.com/Weigend/wfx and runs mvn install -DskipTests)
+::      (clones tag v%WFX_VERSION% of https://github.com/Weigend/wfx and runs
+::       mvn install -DskipTests)
 ::   3. Builds S202
 ::   4. Builds the City3D web bundle (city3d\dist) if Node.js 18+ is available
 ::      (optional - without it the app runs, only File > Show City3D View is unavailable)
@@ -16,8 +17,9 @@
 setlocal enabledelayedexpansion
 
 set WFX_REPO=https://github.com/Weigend/wfx.git
-set WFX_VERSION=1.0.1
-set WFX_JAR=%USERPROFILE%\.m2\repository\io\softwareecg\wfx\wfx-platform\%WFX_VERSION%\wfx-platform-%WFX_VERSION%.jar
+set WFX_VERSION=1.1.2
+set WFX_TAG=v%WFX_VERSION%
+set WFX_JAR=%USERPROFILE%\.m2\repository\io\softwareecg\wfx\platform-core\%WFX_VERSION%\platform-core-%WFX_VERSION%.jar
 set S202_DIR=%~dp0
 
 echo.
@@ -91,18 +93,18 @@ echo   [build-all] Maven %MVN_VER%  OK
 if exist "%WFX_JAR%" (
     echo   [build-all] WFX %WFX_VERSION% already in local Maven cache -- skipping.
 ) else (
-    echo   [build-all] WFX %WFX_VERSION% not found -- cloning and building ...
+    echo   [build-all] WFX %WFX_VERSION% not found -- cloning tag %WFX_TAG% and building ...
     echo   [build-all] (this happens only once^)
     echo.
 
     set WFX_TMP=%TEMP%\wfx-bootstrap-%RANDOM%
-    git clone --depth 1 %WFX_REPO% "%WFX_TMP%"
+    git clone --depth 1 --branch %WFX_TAG% %WFX_REPO% "!WFX_TMP!"
     if errorlevel 1 (
-        echo   [build-all] ERROR: git clone failed. Check network / proxy settings.
+        echo   [build-all] ERROR: git clone of WFX tag %WFX_TAG% failed. Check network / proxy settings.
         goto :fail
     )
 
-    pushd "%WFX_TMP%"
+    pushd "!WFX_TMP!"
     mvn install -DskipTests
     if errorlevel 1 (
         popd
@@ -110,7 +112,7 @@ if exist "%WFX_JAR%" (
         goto :fail
     )
     popd
-    rmdir /s /q "%WFX_TMP%"
+    rmdir /s /q "!WFX_TMP!"
     echo.
     echo   [build-all] WFX installed successfully.
 )
