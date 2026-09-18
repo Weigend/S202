@@ -6,7 +6,8 @@
 # What it does:
 #   1. Checks for git, Java 21+, and Maven
 #   2. Installs WFX into the local Maven cache (~/.m2) if not already present
-#      (clones https://github.com/Weigend/wfx and runs mvn install -DskipTests)
+#      (clones tag v$WFX_VERSION of https://github.com/Weigend/wfx and runs
+#       mvn install -DskipTests)
 #   3. Builds S202
 #   4. Builds the City3D web bundle (city3d/dist) if Node.js 18+ is available
 #      (optional — without it the app runs, only File > Show City3D View is unavailable)
@@ -22,8 +23,9 @@
 set -euo pipefail
 
 WFX_REPO="https://github.com/Weigend/wfx.git"
-WFX_VERSION="1.0.1"
-WFX_JAR="$HOME/.m2/repository/io/softwareecg/wfx/wfx-platform/${WFX_VERSION}/wfx-platform-${WFX_VERSION}.jar"
+WFX_VERSION="1.1.2"
+WFX_TAG="v${WFX_VERSION}"
+WFX_JAR="$HOME/.m2/repository/io/softwareecg/wfx/platform-core/${WFX_VERSION}/platform-core-${WFX_VERSION}.jar"
 
 S202_DIR="$(cd "$(dirname "$0")" && pwd)"
 
@@ -83,14 +85,14 @@ check_mvn
 if [ -f "$WFX_JAR" ]; then
     info "WFX ${WFX_VERSION} already in local Maven cache — skipping."
 else
-    info "WFX ${WFX_VERSION} not found in ~/.m2 — cloning and building …"
+    info "WFX ${WFX_VERSION} not found in ~/.m2 — cloning tag ${WFX_TAG} and building …"
     info "(this happens only once)"
     echo ""
 
     WFX_TMP="$(mktemp -d)"
 
-    git clone --depth 1 "$WFX_REPO" "$WFX_TMP/wfx" \
-        || { rm -rf "$WFX_TMP"; error "git clone of WFX failed. Check network / proxy settings."; }
+    git clone --depth 1 --branch "$WFX_TAG" "$WFX_REPO" "$WFX_TMP/wfx" \
+        || { rm -rf "$WFX_TMP"; error "git clone of WFX tag ${WFX_TAG} failed. Check network / proxy settings."; }
 
     (
         cd "$WFX_TMP/wfx"
