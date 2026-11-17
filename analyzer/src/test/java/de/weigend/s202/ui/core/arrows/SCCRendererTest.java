@@ -78,6 +78,46 @@ class SCCRendererTest {
         assertEquals(0, fixture.sccPane.getChildren().size());
     }
 
+    @Test
+    void classCyclesComeFromTheModelNotFromTheVisibleClasses() {
+        // A -> B -> C -> A, but only A and B have a box: C is collapsed away.
+        de.weigend.s202.domain.DomainModel model = new de.weigend.s202.domain.DomainModel();
+        addClass(model, "pkg.a.A", "pkg.b.B");
+        addClass(model, "pkg.b.B", "pkg.c.C");
+        addClass(model, "pkg.c.C", "pkg.a.A");
+
+        ArchitectureNode root = new ArchitectureNode("", "", ArchitectureNode.NodeType.PACKAGE, true);
+        ArchitectureNode a = new ArchitectureNode("pkg.a.A", "A", ArchitectureNode.NodeType.CLASS, true);
+        ArchitectureNode b = new ArchitectureNode("pkg.b.B", "B", ArchitectureNode.NodeType.CLASS, true);
+        a.setDependencies(Set.of("pkg.b.B"));
+        b.setDependencies(Set.of("pkg.c.C"));
+        root.addChild(a);
+        root.addChild(b);
+        Rectangle aNode = new Rectangle(10, 10, 20, 20);
+        Rectangle bNode = new Rectangle(100, 100, 20, 20);
+        Map<String, javafx.scene.Node> registry = new HashMap<>();
+        registry.put("pkg.a.A", aNode);
+        registry.put("pkg.b.B", bNode);
+        Pane sccPane = new Pane();
+        new Pane(aNode, bNode, new Pane(sccPane));
+        SCCRenderer renderer = new SCCRenderer(sccPane, registry, ignored -> {});
+        renderer.setShowClassScc(true);
+
+        renderer.drawSccLines(root);
+        assertEquals(0, sccPane.getChildren().size(), "the visible classes alone form no cycle");
+
+        renderer.setEdgeCycles(de.weigend.s202.domain.EdgeCycleClassifier.of(
+                model, Set.of(), Lookup.lookup(de.weigend.s202.domain.SCCFinder.class)));
+        renderer.drawSccLines(root);
+        assertEquals(3, sccPane.getChildren().size(), "A -> B lies on the model's class cycle: line plus arrowhead");
+        assertEquals(Color.RED, ((Line) sccPane.getChildren().get(0)).getStroke());
+    }
+
+    private static void addClass(de.weigend.s202.domain.DomainModel model, String fqn, String... dependencies) {
+        model.addClass(fqn, new de.weigend.s202.domain.DomainModel.CalculatedElementInfo(
+                fqn, fqn.substring(fqn.lastIndexOf('.') + 1), "CLASS", 0, Set.of(dependencies)));
+    }
+
     private static Fixture fixture() {
         ArchitectureNode root = new ArchitectureNode("", "", ArchitectureNode.NodeType.PACKAGE, true);
         ArchitectureNode a = new ArchitectureNode("pkg.a.A", "A", ArchitectureNode.NodeType.CLASS, true);

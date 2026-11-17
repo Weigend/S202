@@ -15,6 +15,7 @@
  */
 package de.weigend.s202.ui.core.canvas;
 
+import de.weigend.s202.ui.core.graph.ElementLookup;
 import de.weigend.s202.domain.architecture.ArchitectureKind;
 import de.weigend.s202.domain.architecture.WhatIfArchitecture;
 import de.weigend.s202.ui.core.graph.ArchitectureDragController;
@@ -240,12 +241,18 @@ public final class WhatIfEditController {
         if (containerFqn == null || containerFqn.isEmpty()) {
             return rootContainer.get();
         }
-        Node container = elementRegistry.get(containerFqn);
-        return container instanceof LevelPackageBox lpb ? lpb.getContentContainer() : null;
+        Node container = ElementLookup.materialize(elementRegistry, containerFqn);
+        if (container instanceof LevelPackageBox lpb) {
+            // Rows are about to be inserted: the package's own content must
+            // exist first, or a later lazy build would land on top of them.
+            lpb.materialize();
+            return lpb.getContentContainer();
+        }
+        return null;
     }
 
     private void applyMoveToScene(WhatIfUndoManager.Move move) {
-        Node node = elementRegistry.get(move.fqn());
+        Node node = ElementLookup.materialize(elementRegistry, move.fqn());
         if (node == null) return;
         VBox stack = findRowStack(move.containerFqn());
         if (stack == null) return;

@@ -434,7 +434,7 @@ final class QualityReportModelBuilder {
 
         Map<String, Integer> outgoing = new TreeMap<>();
         Map<String, Integer> incoming = new TreeMap<>();
-        for (Map.Entry<String, Map<String, Integer>> from : domain.getPackageEdgeWeights().entrySet()) {
+        for (Map.Entry<String, Map<String, Integer>> from : domain.getSiblingEdgeWeights().entrySet()) {
             int out = from.getValue().values().stream().mapToInt(Integer::intValue).sum();
             outgoing.merge(from.getKey(), out, Integer::sum);
             for (Map.Entry<String, Integer> to : from.getValue().entrySet()) {
@@ -582,14 +582,14 @@ final class QualityReportModelBuilder {
 
     private List<QualityReportModel.EdgeSample> packageCycleSamples(DomainModel domain, Set<String> members) {
         List<QualityReportModel.EdgeSample> samples = new ArrayList<>();
-        for (Map.Entry<String, Map<String, Integer>> from : domain.getPackageEdgeWeights().entrySet()) {
+        for (Map.Entry<String, Map<String, Integer>> from : domain.getSiblingEdgeWeights().entrySet()) {
             if (!members.contains(from.getKey())) {
                 continue;
             }
             for (Map.Entry<String, Integer> to : from.getValue().entrySet()) {
                 if (members.contains(to.getKey())) {
                     String label = Integer.toString(to.getValue());
-                    if (domain.isPackageBackEdge(from.getKey(), to.getKey())) {
+                    if (domain.isContainerBackEdge(from.getKey(), to.getKey())) {
                         label += " back-edge";
                     }
                     samples.add(new QualityReportModel.EdgeSample(from.getKey(), to.getKey(), label));

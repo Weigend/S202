@@ -13,11 +13,9 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package de.weigend.s202.ui.wfx;
+package de.weigend.s202.ui.views.city3d;
 
 import de.weigend.s202.ui.core.canvas.ArchitectureCanvas;
-import de.weigend.s202.ui.views.city3d.CityModelSerializer;
-import de.weigend.s202.ui.views.city3d.CityView3DServer;
 import de.weigend.s202.ui.core.events.NodeSelectionEvent;
 import de.weigend.s202.ui.core.platform.ArchitectureViewManager;
 import de.weigend.s202.ui.core.platform.Dialogs;

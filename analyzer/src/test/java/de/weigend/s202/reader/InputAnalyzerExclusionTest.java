@@ -75,10 +75,10 @@ class InputAnalyzerExclusionTest {
     void starPatternMatchesAcrossAnyPackage() throws IOException {
         writeConfig(List.of("*.WfxModule"));
         InputAnalyzer.reloadExcludedPrefixes();
-        assertTrue(InputAnalyzer.isExcludedClass("de.weigend.s202.ui.wfx.WfxModule"));
+        assertTrue(InputAnalyzer.isExcludedClass("de.weigend.s202.ui.shell.WfxModule"));
         assertTrue(InputAnalyzer.isExcludedClass("foo.bar.WfxModule"));
-        assertFalse(InputAnalyzer.isExcludedClass("de.weigend.s202.ui.wfx.WfxModuleHelper"));
-        assertFalse(InputAnalyzer.isExcludedClass("de.weigend.s202.ui.wfx.S202Module"));
+        assertFalse(InputAnalyzer.isExcludedClass("de.weigend.s202.ui.shell.WfxModuleHelper"));
+        assertFalse(InputAnalyzer.isExcludedClass("de.weigend.s202.ui.shell.S202Module"));
     }
 
     @Test
@@ -95,7 +95,7 @@ class InputAnalyzerExclusionTest {
         writeConfig(List.of("de.weigend.s202.S202Module"));
         InputAnalyzer.reloadExcludedPrefixes();
         assertTrue(InputAnalyzer.isExcludedClass("de.weigend.s202.S202Module"));
-        assertFalse(InputAnalyzer.isExcludedClass("de.weigend.s202.ui.wfx.S202Module"));
+        assertFalse(InputAnalyzer.isExcludedClass("de.weigend.s202.ui.shell.S202Module"));
     }
 
     @Test

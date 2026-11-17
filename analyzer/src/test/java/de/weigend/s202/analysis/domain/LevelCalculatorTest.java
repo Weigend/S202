@@ -41,7 +41,7 @@ class LevelCalculatorTest {
     @BeforeEach
     void setUp() throws IOException {
         calculator = new LevelCalculator();
-        testJarPath = "../test-example/target/test-example-1.0.0.jar";
+        testJarPath = "../test-example/target/test-example-1.1.0.jar";
         
         // Load the raw model first
         InputAnalyzer analyzer = new InputAnalyzer();
@@ -113,46 +113,94 @@ class LevelCalculatorTest {
 
     @Test
     void testCalculateDependencyConsistency() {
-        // Check class-level consistency for the non-cyclic com.example* classes only.
-        // The sccs.* package intentionally contains architectural violations (back-edges
-        // pointing upward) that the heuristic does not correctly resolve — those are
-        // the adversarial test cases for the SCC-breaking strategy comparison.
+        // Every class dependency that is not a level cut runs strictly downward in
+        // the global class level. Level cuts are the back-edges inside a class cycle
+        // (the sccs.* cycles); a back-edge without a class cycle, such as
+        // sub1.A -> sub2.C in com.example3, is no exception and must still count.
         boolean consistent = calculatedModel.getAllClasses().values().stream()
-            .filter(c -> c.fullName.startsWith("com."))
             .allMatch(classInfo -> {
                 for (String depName : classInfo.dependencies) {
                     DomainModel.CalculatedElementInfo dep = calculatedModel.getClass(depName);
                     if (dep == null) continue;
-                    if (!dep.fullName.startsWith("com.")) continue;
+                    if (calculatedModel.isClassLevelCut(classInfo.fullName, depName)) continue;
                     if (classInfo.architectureLevel <= dep.architectureLevel) return false;
                 }
                 return true;
             });
-        assertTrue(consistent, "Level consistency should hold for com.* classes");
+        assertTrue(consistent, "Dependencies that are not level cuts must run downward");
     }
 
     @Test
-    void testCalculatePackageDependencyConsistency() {
-        // For dominant package edges (wAB > wBA): level(A) > level(B) must hold.
-        // For peer edges (wAB == wBA): level(A) == level(B) is correct — they are
-        // in the same SCC of the package graph and get equalized.
-        Map<String, Map<String, Integer>> weights = calculatedModel.getPackageEdgeWeights();
+    void testLevelCutsAreBackEdgesInsideClassCycles() {
+        // A level cut is always a class back-edge, and there are class cycles in the
+        // example (sccs.*), so some back-edges must be level cuts.
+        assertTrue(calculatedModel.getClassLevelCutCount() > 0, "sccs.* cycles must produce level cuts");
+        for (var cut : calculatedModel.getClassLevelCuts()) {
+            assertTrue(calculatedModel.isClassBackEdge(cut.from(), cut.to()),
+                "Level cut " + cut.from() + " -> " + cut.to() + " must be a class back-edge");
+        }
+    }
+
+    @Test
+    void testBackEdgeWithoutClassCycleStillCountsForClassLevel() {
+        // com.example3: sub1 and sub2 use each other (sub1.A -> sub2.C, sub2.C -> sub1.B,
+        // sub2.D -> sub1.A) but no class cycle exists. The container cut makes
+        // sub1.A -> sub2.C a back-edge for the layout; the global class level keeps it,
+        // because it is a real acyclic dependency: D -> A -> C -> B is a chain of depth 3.
+        String a = "com.example3.sub1.A";
+        String c = "com.example3.sub2.C";
+        assertTrue(calculatedModel.isClassBackEdge(a, c), "sub1.A -> sub2.C runs against the container order");
+        assertFalse(calculatedModel.isClassLevelCut(a, c), "sub1.A -> sub2.C closes no class cycle");
+        assertEquals(0, calculatedModel.getClass("com.example3.sub1.B").architectureLevel);
+        assertEquals(1, calculatedModel.getClass(c).architectureLevel);
+        assertEquals(2, calculatedModel.getClass(a).architectureLevel);
+        assertEquals(3, calculatedModel.getClass("com.example3.sub2.D").architectureLevel);
+    }
+
+    @Test
+    void testCalculateSiblingOrderConsistency() {
+        // Every sibling edge of a container that was not cut runs from a higher to a
+        // lower localLevel — the picture's own promise. Cut edges (container
+        // back-edges) are exactly the ones inside tangles.
+        Map<String, Map<String, Integer>> weights = calculatedModel.getSiblingEdgeWeights();
         boolean consistent = weights.entrySet().stream().allMatch(fromEntry -> {
             String from = fromEntry.getKey();
-            DomainModel.CalculatedElementInfo fromPkg = calculatedModel.getPackage(from);
-            if (fromPkg == null) return true;
+            DomainModel.CalculatedElementInfo fromInfo = element(from);
+            if (fromInfo == null) return true;
             for (Map.Entry<String, Integer> toEntry : fromEntry.getValue().entrySet()) {
                 String to = toEntry.getKey();
-                int wAB = toEntry.getValue();
-                int wBA = weights.getOrDefault(to, Map.of()).getOrDefault(from, 0);
-                DomainModel.CalculatedElementInfo toPkg = calculatedModel.getPackage(to);
-                if (toPkg == null) continue;
-                // Only enforce strict ordering for the dominant direction
-                if (wAB > wBA && fromPkg.architectureLevel <= toPkg.architectureLevel) return false;
+                if (calculatedModel.isContainerBackEdge(from, to)) continue;
+                DomainModel.CalculatedElementInfo toInfo = element(to);
+                if (toInfo == null) continue;
+                if (fromInfo.localLevel <= toInfo.localLevel) return false;
             }
             return true;
         });
-        assertTrue(consistent, "Package level consistency should hold for dominant edges");
+        assertTrue(consistent, "Non-cut sibling edges must run downward within their container");
+    }
+
+    @Test
+    void testSiblingWeightIsTheSumOfItsClassEdgeWeights() {
+        // Every class dependency carries its own weight into exactly one sibling edge.
+        Map<String, Map<String, Integer>> summed = new java.util.TreeMap<>();
+        for (DomainModel.CalculatedElementInfo cls : calculatedModel.getAllClasses().values()) {
+            for (String dep : cls.dependencies) {
+                if (calculatedModel.getClass(dep) == null) continue;
+                var projection = de.weigend.s202.domain.ContainerProjection.project(cls.fullName, dep);
+                if (projection == null) continue;
+                int weight = calculatedModel.getClassEdgeWeight(cls.fullName, dep);
+                assertTrue(weight >= 1, cls.fullName + " -> " + dep + " must carry a weight");
+                summed.computeIfAbsent(projection.fromSibling(), k -> new java.util.TreeMap<>())
+                        .merge(projection.toSibling(), weight, Integer::sum);
+            }
+        }
+        assertEquals(new java.util.TreeMap<>(calculatedModel.getSiblingEdgeWeights()), summed);
+        assertEquals(0, calculatedModel.getClassEdgeWeight("no.Such", "no.Other"));
+    }
+
+    private DomainModel.CalculatedElementInfo element(String fqn) {
+        DomainModel.CalculatedElementInfo info = calculatedModel.getClass(fqn);
+        return info != null ? info : calculatedModel.getPackage(fqn);
     }
 
     @Test
@@ -379,14 +427,14 @@ class LevelCalculatorTest {
     }
 
     @Test
-    void testDomainPackageComInheritsMaxChildLevel() {
+    void testDomainPackageComIsNotLiftedByItsOwnSubtree() {
         DomainModel.CalculatedElementInfo pkgCom = calculatedModel.getPackage("com");
         assertNotNull(pkgCom, "Package com should exist");
-        // Parent->child edges contribute to the weighted package graph
-        // now, so com aggregates the outgoing deps of its descendants.
-        // With example3 sub-packages added, com now ends up at L2.
-        assertEquals(2, pkgCom.architectureLevel,
-            "Package com aggregates its descendants' outgoing deps → L2");
+        // A package's architectureLevel counts only dependencies that leave its
+        // subtree. com contains everything it uses, so its own inner structure
+        // (example2 -> example, the example3 cycle) must not lift it.
+        assertEquals(0, pkgCom.architectureLevel,
+            "Package com has no dependencies outside its subtree → L0");
     }
 
     @Test
@@ -429,9 +477,11 @@ class LevelCalculatorTest {
 
     @Test
     void testDomainLevelDistribution() {
-        // Check class-level distribution for the non-adversarial com.* classes only.
+        // Class-level distribution of the com.* classes. com.example3 has a package
+        // cycle between sub1 and sub2 but no class cycle, so its classes form the
+        // plain chain sub2.D -> sub1.A -> sub2.C -> sub1.B.
         // Level 0: com.example.A, com.example1.X, com.example2.D, com.example3.sub1.B
-        // Level 1: com.example.B, com.example2.C, com.example2.B, com.example3.sub2.C
+        // Level 1: com.example.B, com.example2.B, com.example2.C, com.example3.sub2.C
         // Level 2: com.example.C, com.example2.A, com.example3.sub1.A
         // Level 3: com.example2.E, com.example3.sub2.D
         Map<Integer, java.util.List<DomainModel.CalculatedElementInfo>> byLevel =
@@ -451,7 +501,7 @@ class LevelCalculatorTest {
             .toList();
 
         assertEquals(4, comLevel0.size(), "Level 0 should have 4 com.* classes (A, X, D, B_ex3)");
-        assertEquals(4, comLevel1.size(), "Level 1 should have 4 com.* classes (B, C_ex2, B_ex2, C_ex3)");
+        assertEquals(4, comLevel1.size(), "Level 1 should have 4 com.* classes (B, B_ex2, C_ex2, C_ex3)");
         assertEquals(3, comLevel2.size(), "Level 2 should have 3 com.* classes (C, A_ex2, A_ex3)");
         assertEquals(2, comLevel3.size(), "Level 3 should have 2 com.* classes (E, D_ex3)");
     }

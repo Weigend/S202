@@ -129,4 +129,26 @@ class ArchitectureTypesTest {
         assertSame(List.of(), a.violations());
         assertSame(List.of(), a.tangles());
     }
+
+    @Test
+    void tangleLabelUsesSimpleNamesForContainerAndMembers() {
+        Tangle classes = new Tangle(java.util.Set.of("net.minecraft.block.Block", "net.minecraft.block.BlockAir"));
+        assertEquals("block: Block, BlockAir", classes.label(m -> false));
+
+        Tangle root = new Tangle(java.util.Set.of("com", "net"));
+        assertEquals("<root>: com, net", root.label(m -> true));
+    }
+
+    @Test
+    void tangleLabelNamesPackagesFirstAndAbbreviatesLongTangles() {
+        java.util.Set<String> packages = java.util.Set.of("net.minecraft.block.material", "net.minecraft.block.state");
+        Tangle mixed = new Tangle(java.util.Set.of(
+                "net.minecraft.block.Block", "net.minecraft.block.BlockAir", "net.minecraft.block.BlockAnvil",
+                "net.minecraft.block.material", "net.minecraft.block.state"));
+
+        assertEquals("block: material, state, Block, \u2026 (5)", mixed.label(packages::contains));
+
+        Tangle three = new Tangle(java.util.Set.of("sccs.api", "sccs.core", "sccs.infra"));
+        assertEquals("sccs: api, core, infra", three.label(m -> true), "three members are still spelled out");
+    }
 }

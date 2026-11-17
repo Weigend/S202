@@ -15,15 +15,17 @@
  */
 package de.weigend.s202.ui.views.city3d;
 
+import de.weigend.s202.domain.DomainComputer;
 import de.weigend.s202.domain.DomainModel;
-import de.weigend.s202.domain.impl.LevelCalculator;
 import de.weigend.s202.reader.DependencyModel;
-import de.weigend.s202.reader.impl.java.InputAnalyzer;
+import de.weigend.s202.reader.LanguageAnalyzer;
 import de.weigend.s202.ui.core.layout.horizontal.HorizontalRowLayoutOptimizer;
 import de.weigend.s202.ui.core.model.ArchitectureNode;
 import de.weigend.s202.ui.core.model.ArchitectureNodeBuilder;
+import io.softwareecg.wfx.lookup.api.Lookup;
 
 import java.nio.file.Path;
+import java.util.List;
 
 /**
  * Headless Phase-0 exporter for the City3D prototype: runs the plain-Java
@@ -32,12 +34,18 @@ import java.nio.file.Path;
  *
  * <p>No JavaFX is involved, so there are no 2D footprints — the client computes
  * a level-row layout itself. This mirrors the pipeline exercised by
- * {@code FullPipelineTest}: {@code InputAnalyzer -> LevelCalculator ->
- * ArchitectureNodeBuilder}.
+ * {@code FullPipelineTest}, but obtains reader and domain via their public SPIs
+ * ({@code LanguageAnalyzer -> DomainComputer -> ArchitectureNodeBuilder}) rather
+ * than reaching into the {@code impl} packages.
  *
  * <pre>
  *   Usage: CityModelExporter &lt;input.jar&gt; [output.json]
  *          (output defaults to ./city3d/city.json)
+ *
+ *   # needs classpathScope=runtime so the reader/domain DI beans boot:
+ *   mvn -q org.codehaus.mojo:exec-maven-plugin:3.1.0:java -Dexec.classpathScope=runtime \
+ *     -Dexec.mainClass=de.weigend.s202.ui.views.city3d.CityModelExporter \
+ *     -Dexec.args="app.jar city3d/public/city.json"
  * </pre>
  */
 public final class CityModelExporter {
@@ -51,21 +59,32 @@ public final class CityModelExporter {
         Path output = Path.of(args.length >= 2 ? args[1] : "city3d/public/city.json");
 
         System.out.println("City3D export: analysing " + jarPath);
-        DependencyModel raw = new InputAnalyzer().analyze(jarPath);
-        DomainModel calculated = new LevelCalculator().calculate(raw);
-        ArchitectureNode root = new ArchitectureNodeBuilder().build(calculated);
-        new HorizontalRowLayoutOptimizer().assignHorizontalLayoutOrders(root);
+        // Standalone tool: boot the DI container ourselves so the reader/domain
+        // SPIs resolve (the running app does this during WFX platform startup).
+        Lookup.init();
+        try {
+            LanguageAnalyzer javaAnalyzer = Lookup.findAll(LanguageAnalyzer.class).stream()
+                    .filter(a -> "Java bytecode".equalsIgnoreCase(a.displayName()))
+                    .findFirst()
+                    .orElseThrow(() -> new IllegalStateException("No Java analyzer registered"));
+            DependencyModel raw = javaAnalyzer.analyze(List.of(Path.of(jarPath)));
+            DomainModel calculated = Lookup.lookup(DomainComputer.class).compute(raw);
+            ArchitectureNode root = new ArchitectureNodeBuilder().build(calculated);
+            new HorizontalRowLayoutOptimizer().assignHorizontalLayoutOrders(root);
 
-        CityModelSerializer.Metrics metrics = CityModelSerializer.metricsFrom(raw, calculated);
+            CityModelSerializer.Metrics metrics = CityModelSerializer.metricsFrom(raw, calculated);
 
-        CityModelSerializer serializer = new CityModelSerializer();
-        CityModel model = serializer.build(root, null, metrics); // headless: no footprints
-        java.nio.file.Files.writeString(output, serializer.toJson(model));
+            CityModelSerializer serializer = new CityModelSerializer();
+            CityModel model = serializer.build(root, null, metrics); // headless: no footprints
+            java.nio.file.Files.writeString(output, serializer.toJson(model));
 
-        long cycleClasses = model.buildings().stream().filter(CityModel.Building::inCycle).count();
-        System.out.printf("City3D export: wrote %s%n  maxLevel=%d, districts=%d, buildings=%d, dependencies=%d, classesInCycle=%d%n",
-                output.toAbsolutePath(), model.maxLevel(),
-                model.districts().size(), model.buildings().size(), model.dependencies().size(), cycleClasses);
+            long cycleClasses = model.buildings().stream().filter(CityModel.Building::inCycle).count();
+            System.out.printf("City3D export: wrote %s%n  maxLevel=%d, districts=%d, buildings=%d, dependencies=%d, classesInCycle=%d%n",
+                    output.toAbsolutePath(), model.maxLevel(),
+                    model.districts().size(), model.buildings().size(), model.dependencies().size(), cycleClasses);
+        } finally {
+            Lookup.shutdown();
+        }
     }
 
     private CityModelExporter() {

@@ -6,8 +6,8 @@
 # What it does:
 #   1. Checks for git, Java 21+, and Maven
 #   2. Installs WFX into the local Maven cache (~/.m2) if not already present
-#      (clones tag v$WFX_VERSION of https://github.com/Weigend/wfx and runs
-#       mvn install -DskipTests)
+#      (clones the matching release tag of https://github.com/Weigend/wfx and
+#       runs mvn install -DskipTests)
 #   3. Builds S202
 #   4. Builds the City3D web bundle (city3d/dist) if Node.js 18+ is available
 #      (optional — without it the app runs, only File > Show City3D View is unavailable)
@@ -23,11 +23,24 @@
 set -euo pipefail
 
 WFX_REPO="https://github.com/Weigend/wfx.git"
-WFX_VERSION="1.1.2"
-WFX_TAG="v${WFX_VERSION}"
-WFX_JAR="$HOME/.m2/repository/io/softwareecg/wfx/platform-core/${WFX_VERSION}/platform-core-${WFX_VERSION}.jar"
 
 S202_DIR="$(cd "$(dirname "$0")" && pwd)"
+
+# The required WFX version lives in exactly one place: the wfx.version property
+# in analyzer/pom.xml. Deriving it here keeps the bootstrap from drifting away
+# from what the build actually resolves.
+ANALYZER_POM="$S202_DIR/analyzer/pom.xml"
+WFX_VERSION="$(sed -n 's:.*<wfx\.version>\(.*\)</wfx\.version>.*:\1:p' "$ANALYZER_POM" | head -1)"
+
+# Clone the release tag, not the default branch: once WFX main moves past this
+# version, a plain clone would install artifacts the S202 build does not ask for.
+WFX_TAG="v${WFX_VERSION}"
+
+# Guard artifact for the "already cached?" check. platform-core is one of the
+# nine WFX modules analyzer/pom.xml depends on, so its presence is a meaningful
+# signal. (An earlier version probed 'wfx-platform', which WFX does not publish,
+# so the check never hit and WFX was rebuilt on every run.)
+WFX_JAR="$HOME/.m2/repository/io/softwareecg/wfx/platform-core/${WFX_VERSION}/platform-core-${WFX_VERSION}.jar"
 
 # ── helpers ──────────────────────────────────────────────────────────────────
 
@@ -79,6 +92,11 @@ echo ""
 check_cmd git "Install git (https://git-scm.com)."
 check_java
 check_mvn
+
+if [ -z "$WFX_VERSION" ]; then
+    error "Could not read <wfx.version> from $ANALYZER_POM."
+fi
+info "WFX $WFX_VERSION  (from analyzer/pom.xml)"
 
 # ── Step 1: install WFX if not already cached ────────────────────────────────
 

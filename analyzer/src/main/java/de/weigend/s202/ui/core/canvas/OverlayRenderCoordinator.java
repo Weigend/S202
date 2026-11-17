@@ -15,17 +15,23 @@
  */
 package de.weigend.s202.ui.core.canvas;
 
-import de.weigend.s202.ui.core.canvas.EdgeOverlayController;
+import de.weigend.s202.domain.DependencyEdge;
+import de.weigend.s202.domain.DomainModel;
+import de.weigend.s202.domain.EdgeCycleClassifier;
+import de.weigend.s202.domain.SCCFinder;
 import de.weigend.s202.domain.architecture.Architecture;
+import de.weigend.s202.domain.architecture.ArchitectureKind;
 import de.weigend.s202.domain.architecture.ViolationKind;
 import de.weigend.s202.domain.architecture.WhatIfArchitecture;
 import de.weigend.s202.ui.core.model.ArchitectureNode;
 import de.weigend.s202.ui.core.arrows.DependencyRenderer;
 import de.weigend.s202.ui.core.arrows.DependencyRendererStrategy;
 import de.weigend.s202.ui.core.arrows.SCCRenderer;
+import de.weigend.s202.ui.core.arrows.TangleEdgeScope;
 import de.weigend.s202.ui.core.arrows.WhatIfUpwardEdgeRenderer;
 import de.weigend.s202.ui.core.graph.PulseCoalescer;
 import de.weigend.s202.ui.core.canvas.ZoomController;
+import io.softwareecg.wfx.lookup.api.Lookup;
 import javafx.beans.property.BooleanProperty;
 import javafx.scene.Node;
 import javafx.scene.control.ScrollPane;
@@ -48,15 +54,15 @@ final class OverlayRenderCoordinator {
     private final Pane dependencyPane;
     private final Pane sccPane;
     private final Pane whatIfPane;
-    private final Pane edgeOverlayPane;
     private final Map<String, Node> elementRegistry;
     private final BooleanProperty showDependencies;
     private final BooleanProperty showScc;
     private final BooleanProperty showPackageScc;
     private final BooleanProperty showWhatIfViolations;
-    private final BooleanProperty showOverlayDebugLines;
     private final PulseCoalescer arrowsCoalescer;
-    private final EdgeOverlayController edgeOverlay;
+    private final de.weigend.s202.ui.core.arrows.DependencyEdgeActions edgeActions;
+    /** The refactoring-preview cuts; a cycle they break is no longer one. */
+    private final Supplier<Set<DependencyEdge>> appliedCuts;
     private final ArchitectureProjectionModel projection;
     private final Supplier<ArchitectureNode> currentRoot;
     private final Supplier<de.weigend.s202.ui.core.spi.StyleView> styleView;
@@ -70,23 +76,33 @@ final class OverlayRenderCoordinator {
     private DependencyRenderer classicRenderer;
     private SCCRenderer sccRenderer;
     private WhatIfUpwardEdgeRenderer whatIfRenderer;
-    private de.weigend.s202.ui.core.spi.EdgeOverlayRenderer overlayRenderer;
 
     // Lines need redraw after zoom/scroll changes (perf optimization).
     private boolean linesNeedUpdate = false;
 
+    // What the model knows about each class dependency — rebuilt when the
+    // model or the preview cuts change.
+    private EdgeCycleClassifier edgeCycles;
+    private DomainModel edgeCyclesModel;
+    private Set<DependencyEdge> edgeCyclesCuts = Set.of();
+
+    // Non-null in a tangle view.
+    private TangleEdgeScope tangleScope;
+    private TangleEdgeScope.Stats tangleStats;
+    private EdgeCycleClassifier tangleStatsCycles;
+    private ArchitectureNode tangleStatsRoot;
+
     OverlayRenderCoordinator(Pane dependencyPane,
                              Pane sccPane,
                              Pane whatIfPane,
-                             Pane edgeOverlayPane,
                              Map<String, Node> elementRegistry,
                              BooleanProperty showDependencies,
                              BooleanProperty showScc,
                              BooleanProperty showPackageScc,
                              BooleanProperty showWhatIfViolations,
-                             BooleanProperty showOverlayDebugLines,
                              PulseCoalescer arrowsCoalescer,
-                             EdgeOverlayController edgeOverlay,
+                             de.weigend.s202.ui.core.arrows.DependencyEdgeActions edgeActions,
+                             Supplier<Set<DependencyEdge>> appliedCuts,
                              ArchitectureProjectionModel projection,
                              Supplier<ArchitectureNode> currentRoot,
                              Supplier<de.weigend.s202.ui.core.spi.StyleView> styleView,
@@ -96,15 +112,14 @@ final class OverlayRenderCoordinator {
         this.dependencyPane = dependencyPane;
         this.sccPane = sccPane;
         this.whatIfPane = whatIfPane;
-        this.edgeOverlayPane = edgeOverlayPane;
         this.elementRegistry = elementRegistry;
         this.showDependencies = showDependencies;
         this.showScc = showScc;
         this.showPackageScc = showPackageScc;
         this.showWhatIfViolations = showWhatIfViolations;
-        this.showOverlayDebugLines = showOverlayDebugLines;
         this.arrowsCoalescer = arrowsCoalescer;
-        this.edgeOverlay = edgeOverlay;
+        this.edgeActions = edgeActions;
+        this.appliedCuts = appliedCuts;
         this.projection = projection;
         this.currentRoot = currentRoot;
         this.styleView = styleView;
@@ -118,6 +133,7 @@ final class OverlayRenderCoordinator {
                           ScrollPane scrollPane, ZoomController zoomController) {
         classicRenderer = new DependencyRenderer(dependencyPane, elementRegistry, zoomController, status);
         classicRenderer.setCoordinateContext(zoomableContent, overlayPane, scrollPane);
+        classicRenderer.setEdgeActions(edgeActions);
         dependencyRenderer = classicRenderer;
 
         sccRenderer = new SCCRenderer(sccPane, elementRegistry, status);
@@ -126,19 +142,6 @@ final class OverlayRenderCoordinator {
 
         whatIfRenderer = new WhatIfUpwardEdgeRenderer(whatIfPane, elementRegistry);
         whatIfRenderer.setCoordinateContext(zoomableContent, overlayPane);
-
-        // Kanten-Overlay-Renderer kommt (falls die Tangle-Komponente installiert
-        // ist) über das SPI — der Kern kennt die Pipeline nicht.
-        overlayRenderer = io.softwareecg.wfx.lookup.api.Lookup
-                .findAll(de.weigend.s202.ui.core.spi.EdgeOverlayRendererFactory.class).stream()
-                .findFirst()
-                .map(factory -> factory.create(edgeOverlayPane, elementRegistry, status))
-                .orElse(null);
-        if (overlayRenderer != null) {
-            overlayRenderer.setCoordinateContext(zoomableContent, overlayPane);
-            edgeOverlay.attachRenderer(overlayRenderer);
-            overlayRenderer.setShowDebugLines(showOverlayDebugLines.get());
-        }
 
         dependencyRenderer.clearDependencyArrows();
         sccRenderer.clearSccLines();
@@ -194,7 +197,7 @@ final class OverlayRenderCoordinator {
             updateSccRendererTangles();
             sccRenderer.clearSccLines();
             if (currentRoot.get() != null) {
-                sccRenderer.drawSccLines(currentRoot.get());
+                drawSccLines();
                 linesNeedUpdate = false;
             }
             sccPane.setVisible(true);
@@ -215,12 +218,6 @@ final class OverlayRenderCoordinator {
         }
     }
 
-    void applyShowOverlayDebugLines(boolean visible) {
-        if (overlayRenderer != null) {
-            overlayRenderer.setShowDebugLines(visible);
-        }
-    }
-
     /* ----- Zeichnen ----------------------------------------------------------- */
 
     void handleZoomChanged() {
@@ -229,7 +226,7 @@ final class OverlayRenderCoordinator {
             drawDependencyArrows();
         }
         if ((showScc.get() || showPackageScc.get()) && sccPane != null && sccPane.isVisible()) {
-            sccRenderer.drawSccLines(currentRoot.get());
+            drawSccLines();
         }
     }
 
@@ -240,7 +237,7 @@ final class OverlayRenderCoordinator {
         }
         if (showScc.get() || showPackageScc.get()) {
             updateSccRendererTangles();
-            sccRenderer.drawSccLines(currentRoot.get());
+            drawSccLines();
         }
         if (whatIfRenderer != null) {
             Architecture source = violationOverlayArchitecture();
@@ -254,8 +251,60 @@ final class OverlayRenderCoordinator {
     }
 
     private void drawDependencyArrows() {
+        // Back-edges are the layered layout's own violations; the radial and
+        // component layouts keep judging direction by architecture level.
+        classicRenderer.setEdgeCycles(edgeCycles(), projection.viewStyle() == ArchitectureKind.LAYERED);
+        classicRenderer.setTangleScope(tangleScope);
         dependencyRenderer.setSelectedFullName(selectedFullName.get());
         dependencyRenderer.drawDependencyArrows(currentRoot.get());
+    }
+
+    private void drawSccLines() {
+        sccRenderer.setEdgeCycles(edgeCycles());
+        sccRenderer.drawSccLines(currentRoot.get());
+    }
+
+    /* ----- Zyklen-Wissen des Modells und Tangle-Sicht ------------------------- */
+
+    /** What the model, minus the preview cuts, knows about each class dependency; null without a model. */
+    private EdgeCycleClassifier edgeCycles() {
+        DomainModel model = projection.getDomainModel();
+        if (model == null) {
+            edgeCycles = null;
+            edgeCyclesModel = null;
+            return null;
+        }
+        Set<DependencyEdge> cuts = appliedCuts.get();
+        if (edgeCycles == null || model != edgeCyclesModel || !edgeCyclesCuts.equals(cuts)) {
+            edgeCycles = EdgeCycleClassifier.of(model, cuts, Lookup.lookup(SCCFinder.class));
+            edgeCyclesModel = model;
+            edgeCyclesCuts = Set.copyOf(cuts);
+        }
+        return edgeCycles;
+    }
+
+    void setTangleScope(TangleEdgeScope scope) {
+        tangleScope = scope;
+        tangleStats = null;
+    }
+
+    TangleEdgeScope tangleScope() {
+        return tangleScope;
+    }
+
+    /** Counts of the tangle's dependencies by property; empty outside a tangle view. */
+    TangleEdgeScope.Stats tangleStats() {
+        if (tangleScope == null) {
+            return TangleEdgeScope.Stats.EMPTY;
+        }
+        EdgeCycleClassifier cycles = edgeCycles();
+        ArchitectureNode root = currentRoot.get();
+        if (tangleStats == null || cycles != tangleStatsCycles || root != tangleStatsRoot) {
+            tangleStats = tangleScope.stats(root, cycles, edgeActions::isCut);
+            tangleStatsCycles = cycles;
+            tangleStatsRoot = root;
+        }
+        return tangleStats;
     }
 
     private Architecture violationOverlayArchitecture() {

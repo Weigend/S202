@@ -19,11 +19,15 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.SerializationFeature;
 import de.weigend.s202.domain.DependencyEdge;
 import de.weigend.s202.domain.DomainModel;
+import de.weigend.s202.domain.architecture.Architecture;
+import de.weigend.s202.domain.architecture.ArchitectureContext;
+import de.weigend.s202.domain.architecture.ArchitectureKind;
+import de.weigend.s202.domain.architecture.ArchitectureStyle;
 import de.weigend.s202.domain.architecture.Violation;
-import de.weigend.s202.domain.impl.HierarchicalLayeredArchitectureBuilder;
 import de.weigend.s202.reader.DependencyModel;
 import de.weigend.s202.ui.core.model.ArchitectureNode;
 import de.weigend.s202.ui.core.model.ArchitectureNode.NodeType;
+import io.softwareecg.wfx.lookup.api.Lookup;
 import javafx.geometry.Bounds;
 
 import java.io.IOException;
@@ -96,7 +100,12 @@ public final class CityModelSerializer {
         // hierarchical visual rank, which also catches package-tangle back-edges a
         // flat per-class level comparison would miss.
         Set<String> violationEdges = new HashSet<>();
-        for (Violation v : new HierarchicalLayeredArchitectureBuilder().build(calculated).violations()) {
+        ArchitectureStyle layeredStyle = Lookup.findAll(ArchitectureStyle.class).stream()
+                .filter(style -> style.kind() == ArchitectureKind.LAYERED)
+                .findFirst()
+                .orElseThrow(() -> new IllegalStateException("No layered architecture style registered"));
+        Architecture layered = layeredStyle.build(new ArchitectureContext(raw, calculated, null));
+        for (Violation v : layered.violations()) {
             violationEdges.add(v.sourceFqn() + "\0" + v.targetFqn());
         }
         return new Metrics() {

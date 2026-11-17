@@ -17,7 +17,6 @@ package de.weigend.s202.ui.core.canvas;
 
 import de.weigend.s202.ui.core.canvas.WhatIfEditController;
 import de.weigend.s202.ui.core.canvas.WhatIfUndoManager;
-import de.weigend.s202.ui.core.canvas.EdgeOverlayController;
 import de.weigend.s202.ui.core.graph.ArchitectureDragController;
 import de.weigend.s202.ui.core.graph.GraphSelection;
 import de.weigend.s202.ui.core.graph.LevelClassBox;
@@ -43,6 +42,7 @@ import de.weigend.s202.ui.core.model.ScopeExtensionModel;
 import de.weigend.s202.ui.core.arrows.DependencyRenderer;
 import de.weigend.s202.ui.core.arrows.DependencyRendererStrategy;
 import de.weigend.s202.ui.core.arrows.SCCRenderer;
+import de.weigend.s202.ui.core.arrows.TangleEdgeScope;
 import de.weigend.s202.ui.core.arrows.WhatIfUpwardEdgeRenderer;
 import de.weigend.s202.ui.core.canvas.ArchitectureTreeBuilder;
 import de.weigend.s202.ui.views.component.ComponentArchitectureTreeBuilder;
@@ -111,7 +111,6 @@ public class ArchitectureCanvas extends AbstractArchitectureCanvas {
     private Pane dependencyPane;   // Container for dependency lines
     private Pane sccPane;          // Container for SCC lines
     private Pane whatIfPane;       // Container for What-If upward-edge overlay
-    private Pane edgeOverlayPane;       // Container for the dedicated pinned-edge overlay
     private StackPane overlayPane; // Contains dependency, SCC, What-If and tangle panes
     private StackPane contentPane;
     private ArchitectureNode currentRootNode;
@@ -137,7 +136,7 @@ public class ArchitectureCanvas extends AbstractArchitectureCanvas {
     private final Map<ArchitectureKind, de.weigend.s202.ui.core.spi.StyleView> styleViews =
             new java.util.EnumMap<>(ArchitectureKind.class);
     private final StyleProjectionStateKeeper stateKeeper;
-    private final EdgeOverlayController edgeOverlay;
+    private final PreviewCutController previewCuts;
     private final WhatIfEditController whatIfEdit;
     private final ScopeExtensionController scopeExtension;
 
@@ -161,7 +160,7 @@ public class ArchitectureCanvas extends AbstractArchitectureCanvas {
         stateKeeper = new StyleProjectionStateKeeper(
                 scrollPane, () -> zoomController, () -> whatIfRootContainer, zoomFactor::get, arrowsCoalescer,
                 this::styleView);
-        edgeOverlay = new EdgeOverlayController(edgeOverlayPane, this::setStatus);
+        previewCuts = new PreviewCutController(this::setStatus, arrowsCoalescer::markDirty);
         whatIfEdit = new WhatIfEditController(
                 this,
                 elementRegistry,
@@ -186,11 +185,12 @@ public class ArchitectureCanvas extends AbstractArchitectureCanvas {
                 this::resetVisualLayout,
                 showWhatIfViolations);
         overlay = new OverlayRenderCoordinator(
-                dependencyPane, sccPane, whatIfPane, edgeOverlayPane,
+                dependencyPane, sccPane, whatIfPane,
                 elementRegistry,
-                showDependencies, showScc, showPackageScc, showWhatIfViolations, showOverlayDebugLines,
+                showDependencies, showScc, showPackageScc, showWhatIfViolations,
                 arrowsCoalescer,
-                edgeOverlay,
+                previewCuts,
+                previewCuts::appliedCutEdges,
                 projection,
                 () -> currentRootNode,
                 this::styleView,
@@ -206,11 +206,12 @@ public class ArchitectureCanvas extends AbstractArchitectureCanvas {
                 projection::getArchitecture,
                 arrowsCoalescer::markDirty,
                 this::isSkipTransparentTopLevelPackages,
+                this::isPlainNodes,
                 () -> getScene() == null ? null : getScene().getWindow(),
                 this::setStatus,
                 this::refreshStyleProjection,
                 () -> whatIfEdit.undoManager().effectiveMoves(),
-                edgeOverlay::appliedCutEdges);
+                previewCuts::appliedCutEdges);
         scopeExtension = new ScopeExtensionController(
                 this::setStatus,
                 () -> currentRootNode,
@@ -263,12 +264,6 @@ public class ArchitectureCanvas extends AbstractArchitectureCanvas {
         whatIfPane.setPickOnBounds(false);
         whatIfPane.setVisible(false);
         whatIfPane.setManaged(false);
-
-        edgeOverlayPane = new Pane();
-        edgeOverlayPane.setMouseTransparent(false);
-        edgeOverlayPane.setPickOnBounds(false);
-        edgeOverlayPane.setVisible(false);
-        edgeOverlayPane.setManaged(false);
 
         contentPane = new StackPane();
         contentPane.getChildren().add(scrollPane);
@@ -341,7 +336,6 @@ public class ArchitectureCanvas extends AbstractArchitectureCanvas {
         showScc.addListener((obs, was, isNow) -> overlay.applyShowScc(isNow));
         showPackageScc.addListener((obs, was, isNow) -> overlay.applyShowPackageScc(isNow));
         showWhatIfViolations.addListener((obs, was, isNow) -> overlay.applyShowWhatIfViolations(isNow));
-        showOverlayDebugLines.addListener((obs, was, isNow) -> overlay.applyShowOverlayDebugLines(isNow));
     }
 
     /**
@@ -446,14 +440,11 @@ public class ArchitectureCanvas extends AbstractArchitectureCanvas {
         dependencyPane.setVisible(false);
         sccPane.getChildren().clear();
         sccPane.setVisible(false);
-        edgeOverlayPane.getChildren().clear();
-        // Don't reset edgeOverlayPane.visible / pending overlay edges here — we want
-        // the per-tab edge overlay to survive a refreshLayout.
 
         overlayPane = new StackPane();
         overlayPane.setMouseTransparent(false);
         overlayPane.setPickOnBounds(false);
-        overlayPane.getChildren().addAll(dependencyPane, sccPane, whatIfPane, edgeOverlayPane);
+        overlayPane.getChildren().addAll(dependencyPane, sccPane, whatIfPane);
 
         StackPane contentWithOverlay = new StackPane();
         contentWithOverlay.getChildren().addAll(topLevelContainer, overlayPane);
@@ -503,10 +494,6 @@ public class ArchitectureCanvas extends AbstractArchitectureCanvas {
             stateKeeper.scheduleDeferredViewportRestore(preservedState);
         }
         showWhatIfViolations.set(false);
-
-        // Re-apply any pending edge overlay now that the renderer
-        // exists and the new tree is in place.
-        edgeOverlay.reapplyPendingEdges();
 
         setStatus("Architecture loaded: " + rootNode.getLevelCount() + " levels");
 
@@ -791,38 +778,29 @@ public class ArchitectureCanvas extends AbstractArchitectureCanvas {
         overlay.highlightSccEdge(from, to);
     }
 
-    public void setEdgeOverlay(List<DependencyEdge> edges,
-                                       String selectedFrom, String selectedTo) {
-        edgeOverlay.setVisualization(edges, selectedFrom, selectedTo);
-    }
-
-    /** Update only the selected overlay edge without re-supplying the edge list. */
-    public void setSelectedOverlayEdge(String from, String to) {
-        edgeOverlay.setSelectedEdge(from, to);
-    }
-
     public Set<DependencyEdge> getCycleBreakEdges() {
-        return edgeOverlay.getCycleBreakEdges();
+        return previewCuts.getCycleBreakEdges();
     }
 
     public void setCycleBreakEdges(Set<DependencyEdge> cycleBreakEdges) {
-        edgeOverlay.setCycleBreakEdges(cycleBreakEdges);
+        previewCuts.setCycleBreakEdges(cycleBreakEdges);
     }
 
+    /** Replace the refactoring-preview cuts shown by this view's dependency arrows. */
     public void setAppliedCutEdges(Set<DependencyEdge> appliedCutEdges) {
-        edgeOverlay.setAppliedCutEdges(appliedCutEdges);
+        previewCuts.setAppliedCutEdges(appliedCutEdges);
     }
 
     public void applyEdgeCut(String from, String to) {
-        edgeOverlay.applyEdgeCut(from, to);
+        previewCuts.applyEdgeCut(from, to);
     }
 
     public void applyEdgeCuts(Collection<DependencyEdge> cuts) {
-        edgeOverlay.applyEdgeCuts(cuts);
+        previewCuts.applyEdgeCuts(cuts);
     }
 
     public void restoreEdgeCut(String from, String to) {
-        edgeOverlay.restoreEdgeCut(from, to);
+        previewCuts.restoreEdgeCut(from, to);
     }
 
     private static String simple(String fqn) {
@@ -831,6 +809,33 @@ public class ArchitectureCanvas extends AbstractArchitectureCanvas {
         }
         int dot = fqn.lastIndexOf('.');
         return dot < 0 ? fqn : fqn.substring(dot + 1);
+    }
+
+    /* ----- Tangle-Sicht ------------------------------------------------------ */
+
+    /**
+     * Turns this canvas into a tangle view: its dependency arrows show the
+     * dependencies between the scope's members, styled by what they are.
+     * {@code null} makes it a regular view again.
+     */
+    public void setTangleScope(TangleEdgeScope scope) {
+        overlay.setTangleScope(scope);
+        arrowsCoalescer.markDirty();
+    }
+
+    /** The tangle this canvas shows, or {@code null} for a regular view. */
+    public TangleEdgeScope getTangleScope() {
+        return overlay.tangleScope();
+    }
+
+    /** Counts of the tangle's dependencies by property; empty for a regular view. */
+    public TangleEdgeScope.Stats getTangleEdgeStats() {
+        return overlay.tangleStats();
+    }
+
+    /** Redraws the dependency arrows, e.g. after the tangle scope's highlight changed. */
+    public void redrawDependencyArrows() {
+        arrowsCoalescer.markDirty();
     }
 
     /* ----- Bounds-Export (3D-Ansicht, Report-Screenshots) ------------------- */
@@ -863,27 +868,28 @@ public class ArchitectureCanvas extends AbstractArchitectureCanvas {
     }
 
     /**
-     * Set a sink that receives {@code (from, to)} whenever the user clicks
-     * a tangle SCC edge in the {@link TangleEdgeRenderer} overlay. Pass
-     * {@code null} to detach.
+     * Set a sink that receives {@code (from, to)} whenever the user selects a
+     * class-to-class dependency arrow, and {@code (null, null)} when the
+     * arrow is deselected. Pass {@code null} to detach.
      */
-    public void setOnOverlayEdgeClicked(BiConsumer<String, String> sink) {
-        edgeOverlay.setOnEdgeClicked(sink);
+    public void setOnDependencyEdgeClicked(BiConsumer<String, String> sink) {
+        previewCuts.setOnEdgeClicked(sink);
     }
 
     /**
-     * Set a sink that receives {@code (from, to)} whenever the user applies a
-     * recommended cut edge in the edge overlay. Pass {@code null} to detach.
+     * Set a sink that receives {@code (from, to)} whenever the user cuts a
+     * class-to-class dependency arrow via its context menu. Pass {@code null}
+     * to detach.
      */
-    public void setOnOverlayEdgeCut(BiConsumer<String, String> sink) {
-        edgeOverlay.setOnEdgeCut(sink);
+    public void setOnDependencyEdgeCut(BiConsumer<String, String> sink) {
+        previewCuts.setOnEdgeCut(sink);
     }
 
     /**
      * Set a sink that receives {@code (from, to)} whenever the user restores a
-     * refactoring-preview cut edge in the edge overlay. Pass {@code null} to detach.
+     * cut dependency arrow via its context menu. Pass {@code null} to detach.
      */
-    public void setOnOverlayEdgeRestore(BiConsumer<String, String> sink) {
-        edgeOverlay.setOnEdgeRestore(sink);
+    public void setOnDependencyEdgeRestore(BiConsumer<String, String> sink) {
+        previewCuts.setOnEdgeRestore(sink);
     }
 }

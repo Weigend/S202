@@ -15,6 +15,7 @@
  */
 package de.weigend.s202.ui.core.canvas;
 
+import de.weigend.s202.ui.core.graph.ElementLookup;
 import de.weigend.s202.ui.core.graph.GraphSelection;
 import de.weigend.s202.ui.core.graph.PulseCoalescer;
 import javafx.application.Platform;
@@ -89,7 +90,9 @@ final class SelectionController {
         if (fullName == null) {
             return;
         }
-        Node node = elementRegistry.get(fullName);
+        // Builds the box first when it lies in a package that has not created
+        // its content yet; nothing is expanded.
+        Node node = ElementLookup.materialize(elementRegistry, fullName);
         if (node instanceof GraphSelection.Selectable target) {
             runWithoutSelectionSink(() -> GraphSelection.ensureSelected(target));
             // Defer scrolling until layout has settled; the box may have just
@@ -108,7 +111,7 @@ final class SelectionController {
 
     /** Auswahl nach einem Rebuild wiederherstellen, ohne den Viewport zu bewegen. */
     void restoreSelectionWithoutScrolling(String fullName) {
-        Node node = elementRegistry.get(fullName);
+        Node node = ElementLookup.materialize(elementRegistry, fullName);
         if (node instanceof GraphSelection.Selectable target) {
             runWithoutSelectionSink(() -> GraphSelection.ensureSelected(target));
             return;

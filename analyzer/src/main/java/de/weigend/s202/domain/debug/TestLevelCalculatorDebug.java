@@ -26,7 +26,7 @@ import java.util.List;
 
 public class TestLevelCalculatorDebug {
     public static void main(String[] args) throws Exception {
-        String jarPath = "../test-example/target/test-example-1.0.0.jar";
+        String jarPath = "../test-example/target/test-example-1.1.0.jar";
         
         System.out.println("=== TESTING LEVEL CALCULATOR ===\n");
         

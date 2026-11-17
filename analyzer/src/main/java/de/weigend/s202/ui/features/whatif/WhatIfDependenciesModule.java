@@ -74,6 +74,11 @@ public class WhatIfDependenciesModule implements Module {
     public void start() {
         io.softwareecg.wfx.platform.api.EventBus<java.util.EventObject> bus =
                 Lookup.lookup(io.softwareecg.wfx.platform.api.EventBus.class);
+        view.setOnOpenTangle(req -> bus.publish(new de.weigend.s202.ui.core.events.OpenTangleEvent(
+                new java.util.HashSet<>(req.tangle().members()),
+                String.join("|", req.tangle().members()),
+                req.title(),
+                view)));
         bus.subscribe(de.weigend.s202.ui.core.events.ArchitectureViewRegisteredEvent.class, ev -> {
             dockUnder(ev.getWrapper());
             return true;
@@ -179,7 +184,32 @@ public class WhatIfDependenciesModule implements Module {
         }
         Architecture wif = boundView.getWhatIfArchitecture();
         Architecture displayed = wif != null ? wif : boundView.getArchitecture();
-        view.bind(displayed, boundView.getRawDependencyModel(), boundView.getSelectedFullName());
+        view.bind(displayed, boundView.getRawDependencyModel(), boundView.getSelectedFullName(),
+                visibleClassesOf(boundView));
+    }
+
+    /**
+     * A tangle tab carries the full model of its source view but displays only
+     * the classes of its tangle. Its panel content is limited to those classes;
+     * regular architecture and scope views are not restricted.
+     */
+    private static java.util.Set<String> visibleClassesOf(ArchitectureCanvas canvas) {
+        if (canvas.isScopeOwner() || canvas.getArchitectureRoot() == null) {
+            return null;
+        }
+        java.util.Set<String> classes = new java.util.HashSet<>();
+        collectClasses(canvas.getArchitectureRoot(), classes);
+        return classes;
+    }
+
+    private static void collectClasses(de.weigend.s202.ui.core.model.ArchitectureNode node,
+                                       java.util.Set<String> out) {
+        if (node.getType() == de.weigend.s202.ui.core.model.ArchitectureNode.NodeType.CLASS) {
+            out.add(node.getFullName());
+        }
+        for (de.weigend.s202.ui.core.model.ArchitectureNode child : node.getChildren()) {
+            collectClasses(child, out);
+        }
     }
 
     private ArchitectureWfxView focusedArchitectureView() {

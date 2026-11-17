@@ -115,23 +115,37 @@ The **Layered Architecture View** is the default view after loading a JAR or pro
 
 ## Tangle View and Top Tangles
 
-Packages involved in cyclic dependencies form **tangles** — groups of classes and packages that are mutually dependent and cannot be cleanly layered. The main view lists the largest tangles ranked by size (**Top Tangles**). A double-click on any tangle entry opens the **Tangle View**, a focused sub-view that shows only the classes and packages involved in that specific cycle.
+Classes and packages that depend on each other in a cycle form **tangles** — groups of siblings inside one package that cannot be cleanly layered. The **Top Tangles** panel lists them, package tangles first, then by size. A double-click on an entry opens the **Tangle View**, a focused tab that shows only the members of that tangle and the dependencies between them.
 
-![Tangle View showing a cyclic dependency cluster](docs/wfx/wfx-tangle-view.png)
+![Tangle View showing a small tangle from Minecraft's world generation](docs/tangle-view-minecraft.png)
+
+The screenshot shows a small tangle from the world generation of Minecraft 1.12 (Forge-mapped JAR): the class `ChunkGeneratorEnd` and the packages `feature` and `structure`.
+
+**Reading the view:**
+
+- **Nodes**: Every member is one node — icon and name, no box. Package members start collapsed.
+- **Numbers**: The number on an arrow counts the method calls that carry the dependency — what cutting it would cost. A dependency without calls (inheritance, a field or parameter type) counts 1.
+- **Back-edges**: Red, heavy arrows are the dependencies the layout had to cut to put the members in order, so they run upward. They are the candidates to remove.
+- **Solid or dashed**: A solid arrow lies on a class cycle; only a code change resolves it. A dashed arrow lies on a package cycle only; moving a class is enough.
+- **Legend bar**: The bar above the view counts the dependencies of each kind. Each entry is a toggle that highlights its kind; **Context** also shows the classes of the members that play no part in the tangle.
+
+Expanding a package member shows the classes behind its arrows — only those that take part in the tangle:
+
+![Tangle View with the package members expanded](docs/tangle-view-minecraft-expanded.png)
+
+Here the single back-edge turns out to be `MapGenEndCity → ChunkGeneratorEnd`, carried by two method calls.
 
 **Cutting edges to resolve the tangle:**
 
-The Tangle View provides a **Cut** function to remove individual dependency edges. Cuts operate at the *method level*: each cut targets the specific method calls that create the dependency, not the entire class relationship. After every cut the view refreshes immediately so the effect on the remaining cycle is visible at once.
+A right-click on an arrow between two classes offers **Cut**. A cut is a refactoring preview: the dependency is treated as if it were gone, and no code is changed. The arrow stays visible, thin and green, so it can be brought back with **Restore**. **Cut All** on an entry of the Top Tangles panel cuts all back-edges of that tangle in one step.
 
-For cases where an entire class dependency should be removed in one step, **Cut All** eliminates all method-level edges between two classes together.
+After every cut the view and the legend refresh immediately. In the example one cut is enough: no back-edge is left, and the legend reports that no cycle is left between the members. The seven remaining dependencies still count as *Class cycle* — they lie on a larger class cycle of Minecraft that runs through classes outside this tangle:
 
-The goal is a cycle-free graph like the one below, where every remaining arrow points in a consistent direction:
-
-![Tangle resolved — cycle-free result](docs/wfx/wfx-tangle-resolved.png)
+![Tangle View after cutting the back-edge](docs/tangle-view-minecraft-cut.png)
 
 **Using the cut list as a refactoring plan:**
 
-The user decides which edges to cut — guided by what is easiest to implement, what fits the intended target architecture, or what minimises the change surface. The resulting list of cuts is a concrete, method-level refactoring plan that can be handed directly to developers: each entry names the exact call site to remove or redirect, making the path from tangled to clean architecture traceable and reviewable before a single line of production code is touched.
+The user decides which edges to cut — guided by what is easiest to implement, what fits the intended target architecture, or what minimises the change surface. The Top Tangles panel keeps the cuts as **Refactoring Preview** entries, each naming the class dependency to remove or redirect; the entry of a tangle lists the method calls behind each of its dependencies. That list is a concrete refactoring plan that can be handed directly to developers, making the path from tangled to clean architecture traceable and reviewable before a single line of production code is touched.
 
 ## Component View
 
@@ -169,7 +183,7 @@ The screenshot shows the bundled **test-hexagon** example (the *paperwhale* book
 To try it, build and load the example project under [`test-hexagon`](test-hexagon):
 
 ```bash
-mvn -pl test-hexagon -am install    # produces test-hexagon/target/test-hexagon-1.0.0.jar
+mvn -pl test-hexagon -am install    # produces test-hexagon/target/test-hexagon-1.1.0.jar
 ```
 
 Then **File → Open Maven Project…** on `test-hexagon/pom.xml` (or **Open JAR…** on the produced JAR) and switch to **View → Hexagonal View**.

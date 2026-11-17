@@ -116,6 +116,14 @@ public final class ArchitectureViewManager {
         ArchitectureCanvas view = wrapper.getArchitectureView();
         view.architectureAnnotationsProperty().addListener((obs, oldValue, newValue) ->
                 propagateArchitectureAnnotations(view, newValue));
+        // "Cut" / "Restore" on a dependency arrow of any architecture view goes
+        // onto the bus; the refactoring preview distributes it to all views.
+        @SuppressWarnings("unchecked")
+        EventBus<EventObject> bus = Lookup.lookup(EventBus.class);
+        view.setOnDependencyEdgeCut((from, to) ->
+                bus.publish(new de.weigend.s202.ui.core.events.CutTangleEdgeEvent(from, to, view)));
+        view.setOnDependencyEdgeRestore((from, to) ->
+                bus.publish(new de.weigend.s202.ui.core.events.RestoreTangleEdgeEvent(from, to, view)));
         // Interessierte Module (z. B. What-If-Dependencies-Panel) docken sich
         // selbst an — der Manager kennt keine Komponenten.
         Lookup.lookup(io.softwareecg.wfx.platform.api.EventBus.class)

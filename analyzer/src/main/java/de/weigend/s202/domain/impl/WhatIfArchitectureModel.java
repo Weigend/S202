@@ -172,29 +172,63 @@ public final class WhatIfArchitectureModel implements WhatIfArchitecture {
 
     @Override
     public List<Tangle> tangles() {
-        Map<String, String> classPackages = currentClassPackages();
-        Map<String, Set<String>> packageGraph = new LinkedHashMap<>();
-        collectPackages(root, packageGraph);
+        // Container tangles on the virtual tree: every package node (and the
+        // root) is a container; a static edge projects onto the two children of
+        // the deepest container holding both endpoints. Only tangles with at
+        // least one package member are package cycles.
+        Map<String, List<String>> pathByClass = new HashMap<>();
+        Set<String> packageFqns = new LinkedHashSet<>();
+        collectClassPaths(root, List.of(), pathByClass, packageFqns);
 
+        Map<String, Map<String, Set<String>>> graphs = new LinkedHashMap<>();
         for (StaticEdge edge : staticEdges) {
-            String sourcePackage = classPackages.get(edge.source());
-            String targetPackage = classPackages.get(edge.target());
-            if (sourcePackage == null
-                    || targetPackage == null
-                    || sourcePackage.isEmpty()
-                    || targetPackage.isEmpty()
-                    || sourcePackage.equals(targetPackage)) {
+            List<String> sourcePath = pathByClass.get(edge.source());
+            List<String> targetPath = pathByClass.get(edge.target());
+            if (sourcePath == null || targetPath == null) {
                 continue;
             }
-            packageGraph.computeIfAbsent(sourcePackage, ignored -> new LinkedHashSet<>())
-                    .add(targetPackage);
-            packageGraph.computeIfAbsent(targetPackage, ignored -> new LinkedHashSet<>());
+            int k = 0;
+            while (k < sourcePath.size() && k < targetPath.size()
+                    && sourcePath.get(k).equals(targetPath.get(k))) {
+                k++;
+            }
+            String container = k == 0 ? "" : sourcePath.get(k - 1);
+            String sourceSibling = k < sourcePath.size() ? sourcePath.get(k) : edge.source();
+            String targetSibling = k < targetPath.size() ? targetPath.get(k) : edge.target();
+            if (sourceSibling.equals(targetSibling)) {
+                continue;
+            }
+            Map<String, Set<String>> graph = graphs.computeIfAbsent(container, ignored -> new LinkedHashMap<>());
+            graph.computeIfAbsent(sourceSibling, ignored -> new LinkedHashSet<>()).add(targetSibling);
+            graph.computeIfAbsent(targetSibling, ignored -> new LinkedHashSet<>());
         }
 
-        return new TarjanSCCFinder().findSCCs(packageGraph).stream()
-                .filter(StronglyConnectedComponent::isTangle)
-                .map(scc -> new Tangle(scc.getMembers()))
-                .toList();
+        List<Tangle> result = new ArrayList<>();
+        for (Map<String, Set<String>> graph : graphs.values()) {
+            for (StronglyConnectedComponent scc : new TarjanSCCFinder().findSCCs(graph)) {
+                if (scc.isTangle() && scc.getMembers().stream().anyMatch(packageFqns::contains)) {
+                    result.add(new Tangle(scc.getMembers()));
+                }
+            }
+        }
+        return result;
+    }
+
+    /** Records for every class the chain of package nodes above it (outermost first). */
+    private static void collectClassPaths(Node parent, List<String> path,
+                                          Map<String, List<String>> out, Set<String> packageFqns) {
+        for (List<Node> row : parent.rows) {
+            for (Node child : row) {
+                if (child.isPackage) {
+                    packageFqns.add(child.fqn);
+                    List<String> childPath = new ArrayList<>(path);
+                    childPath.add(child.fqn);
+                    collectClassPaths(child, childPath, out, packageFqns);
+                } else {
+                    out.put(child.fqn, path);
+                }
+            }
+        }
     }
 
     /**
@@ -327,19 +361,6 @@ public final class WhatIfArchitectureModel implements WhatIfArchitecture {
                     collectClassPackages(child, child.fqn, out);
                 } else {
                     out.put(child.fqn, currentPackage);
-                }
-            }
-        }
-    }
-
-    private static void collectPackages(Node parent, Map<String, Set<String>> out) {
-        for (List<Node> row : parent.rows) {
-            for (Node child : row) {
-                if (child.isPackage) {
-                    if (!child.fqn.isEmpty()) {
-                        out.computeIfAbsent(child.fqn, ignored -> new LinkedHashSet<>());
-                    }
-                    collectPackages(child, out);
                 }
             }
         }

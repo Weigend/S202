@@ -46,7 +46,6 @@ public abstract class AbstractArchitectureCanvas extends BorderPane {
     final BooleanProperty showScc = new SimpleBooleanProperty(false);
     final BooleanProperty showPackageScc = new SimpleBooleanProperty(false);
     final BooleanProperty showWhatIfViolations = new SimpleBooleanProperty(false);
-    final BooleanProperty showOverlayDebugLines = new SimpleBooleanProperty(false);
     final ReadOnlyDoubleWrapper zoomFactor = new ReadOnlyDoubleWrapper(1.0);
     final ReadOnlyObjectWrapper<ArchitectureNode> architectureRoot = new ReadOnlyObjectWrapper<>(null);
     final ReadOnlyObjectWrapper<QualityMetrics> qualityMetrics = new ReadOnlyObjectWrapper<>(null);
@@ -56,6 +55,7 @@ public abstract class AbstractArchitectureCanvas extends BorderPane {
     private String preferredScope;
     private boolean scopeOwner = true;
     private boolean skipTransparentTopLevelPackages = true;
+    private boolean plainNodes;
     private ArchitectureNode scopeExtensionSourceRoot;
     ArchitectureKind viewStyle = ArchitectureKind.LAYERED;
 
@@ -189,18 +189,6 @@ public abstract class AbstractArchitectureCanvas extends BorderPane {
         showWhatIfViolations.set(show);
     }
 
-    public BooleanProperty showOverlayDebugLinesProperty() {
-        return showOverlayDebugLines;
-    }
-
-    public boolean isShowOverlayDebugLines() {
-        return showOverlayDebugLines.get();
-    }
-
-    public void setShowOverlayDebugLines(boolean show) {
-        showOverlayDebugLines.set(show);
-    }
-
     /* ----- View-Konfiguration --------------------------------------------------- */
 
     public String getPreferredScope() {
@@ -222,6 +210,20 @@ public abstract class AbstractArchitectureCanvas extends BorderPane {
 
     boolean isSkipTransparentTopLevelPackages() {
         return skipTransparentTopLevelPackages;
+    }
+
+    /**
+     * Draws packages and classes the way a graph draws its nodes — icon and
+     * name, no surrounding box — with the levels further apart. For views
+     * that are about the dependencies, not the containment: the tangle view.
+     * Takes effect with the next root.
+     */
+    public void setPlainNodes(boolean plain) {
+        plainNodes = plain;
+    }
+
+    boolean isPlainNodes() {
+        return plainNodes;
     }
 
     public ArchitectureKind getViewStyle() {

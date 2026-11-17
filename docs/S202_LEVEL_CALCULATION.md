@@ -1,117 +1,109 @@
 # S202 Level Calculation
 
-Every class and package is assigned an integer **ArchitectureLevel**.
-Low level = foundation, high level = consumer of the foundation.
-A separate **LocalLevel** controls the visual position of each element within
-its parent container.
+Developer notes for `domain.impl.LevelCalculator` and `ContainerLevelizer`.
+The concept paper in `docs/concept/*.tex` is the authoritative description;
+this file is the short map from concept to code.
 
 ---
 
-## The Core Problem
+## The Model: Containers, Siblings, One Decision per Dependency
 
-Without cycles the solution is trivial: longest-path on the dependency graph.
-Cycles (SCCs) make this impossible — within a cycle, not all edges can point
-downward at the same time. Some edges must be ignored for the level
-calculation. The question is: which ones, and why exactly those?
+S202 levelizes like Structure101: **every container orders its own direct
+children**. A container is a package (or the root); its children — classes and
+sub-packages alike — are its *siblings*.
 
-The answer must not be arbitrary. S202 derives the cut decision from the
-**package graph** — it provides the architectural direction.
-
----
-
-## The Three Phases
-
-### Phase 1 — Global Package ArchitectureLevel
-
-S202 builds a weighted directed graph across **all** packages. Each edge P→Q
-has weight equal to the total method-call count from classes in P's subtree to
-classes in Q's subtree. Where no method-call data exists, a fallback weight of
-1 is used. Weights are propagated up the ancestor chain of the source package:
-a call from `com.a.X` to `com.b.Y` contributes to `com.a→com.b` and also to
-`com→com.b`.
-
-Cycles in this graph are broken using the **rank score**:
+Every class dependency `X → Y` is attributed to exactly **one** container: the
+deepest one that holds both X and Y. There it becomes a weighted edge between
+the two siblings whose subtrees contain X and Y (`ContainerProjection.project`).
 
 ```
-rank(P) = (Σ outgoing weights − Σ incoming weights)
-          / max(1, Σ outgoing + Σ incoming)
+com.a.X   -> com.b.c.Y     container com      edge com.a   -> com.b     (packages)
+com.a.X   -> com.a.Y       container com.a    edge com.a.X -> com.a.Y   (classes)
+com.a.X   -> com.a.b.Y     container com.a    edge com.a.X -> com.a.b   (class -> package)
 ```
 
-- High rank → P uses more than it is used → belongs higher
-- Low rank → P is more often used → belongs lower
-
-**Asymmetric SCC** (ranks differ): all edges where
-`rank(from) < rank(to)` are cut in one pass.
-
-**Symmetric SCC** (all ranks equal → topology provides no direction):
-all internal edges are removed. Levels then arise from external
-dependencies; if there are none, nodes remain at the same level.
-
-**Important:** Symmetry is detected via the rank, not via equal weights.
-An SCC with uniformly weighted edges can still have different ranks
-(when in/out-degrees differ) — and therefore a clear cut direction.
-
-After cycle handling: longest-path on the DAG → `architectureLevel` per package.
+Nothing is propagated to other containers. Edge weight = method-call count
+from X to Y, fallback 1.
 
 ---
 
-### Phase 2 — Class ArchitectureLevel (guided by package order)
+## Pipeline
 
-**Case A:** Classes A and B are in the same SCC but in packages with
-different `architectureLevel` values:
+| Step | What | Where |
+|---|---|---|
+| 1, 2 | Create class and package elements. Only edge kinds other than `USES` count as dependencies. | `LevelCalculator` |
+| 3 | **Container levelization** per container: Tarjan → *container tangles*; deterministic rank cut → *container back-edges*; longest path → `localLevel`. | `ContainerLevelizer` |
+| 4 | **Class back-edges**: a class dependency is a back-edge iff its projection is a cut sibling edge. | `LevelCalculator` |
+| 5 | **Class `architectureLevel`**: longest path on the class graph minus the *level cuts* — the back-edges that lie inside a class cycle (Tarjan on the class graph). A back-edge outside any class cycle still counts. Acyclic by construction: every class cycle contains at least one back-edge. | `LevelCalculator` |
+| 6 | **Package `architectureLevel`**: longest path on the package graph where `A → B` iff a non-back-edge class dependency leads from A's subtree into B's subtree and neither contains the other. Acyclic by construction. | `LevelCalculator` |
+| 7 | Reverse dependencies. | `LevelCalculator` |
+
+### Rank cut (Step 3)
+
+Inside an SCC of a sibling graph:
 
 ```
-pkgLevel(A) < pkgLevel(B)  →  edge A→B is a back-edge → cut
+rank(S) = (out(S) - in(S)) / max(1, out(S) + in(S))      weights within the SCC
 ```
 
-The package `architectureLevel` from Phase 1 is the decision basis. The class
-SCC is broken up by the package DAG.
+Every edge with `rank(to) > rank(from)` is cut; if no edge qualifies, all
+internal edges are cut (symmetric tangle, no justified direction). SCCs are
+recomputed after each round until none remains. Deterministic: all iteration is
+over sorted names, no thresholds.
 
-**Case B:** All SCC members are in the same package level — no package
-context provides a direction. All internal edges are removed; levels arise
-from external dependencies.
-
-All removed edges (Case A and Case B) are recorded as **classBackEdge** —
-they appear in the UI as dashed violation edges.
-
-After cycle handling: longest-path on the cleaned graph → `architectureLevel`
-per class.
+This is a deterministic stand-in for Structure101's minimal feedback set; it
+is not a minimisation.
 
 ---
 
-### Phase 3 — Local Display Position (LocalLevelCalculator)
+## Properties (checked by `LayoutInvariantChecker`)
 
-After class levels are computed, S202 runs the **LocalLevelCalculator** over
-every parent container separately. For each container, it builds a weighted
-sibling-only graph of the direct children (packages or classes). Dependencies
-that leave the container or stay within the same child subtree are excluded.
+| Rule | Statement |
+|---|---|
+| R1 | Class dependency that is not a level cut ⇒ `level(A) > level(B)`; every level cut is a class back-edge |
+| R2 | Non-cut sibling edge ⇒ `localLevel(from) > localLevel(to)` |
+| R3 | Every container back-edge lies inside a container tangle |
+| R4 | Non-back-edge class dependency across different package subtrees ⇒ `pkgLevel(A) > pkgLevel(B)` |
+| R5 | Every dependency that runs upward by nested visual rank is a class back-edge |
 
-Class back-edges from Phase 2 are excluded when building the sibling graph,
-so the sibling graph is acyclic by construction. Longest-path yields a
-`localLevel` per element.
+Consequences:
 
-`localLevel` determines the **visual position** within the parent container.
-`architectureLevel` is the **global semantic level** — it drives violation
-detection.
+- **Violation = back-edge.** The dashed upward edges in the view are exactly the
+  class back-edges; there is no second notion.
+- **Back-edges only inside tangles.** Outside cycles every dependency runs
+  downward.
+- **No containment inflation.** A package's `architectureLevel` counts only
+  dependencies leaving its subtree. A root package that contains everything it
+  uses is level 0.
+- `localLevel` is the architecture hypothesis and drives the layout; it is
+  local to each container.
+- `architectureLevel` is global: the real depth of the dependency chain below
+  an element. The class level therefore ignores a dependency only where a class
+  cycle forces it to (*level cut*). A back-edge that merely runs against the
+  order of two packages, without closing a class cycle, is a violation in the
+  picture but still counts towards the class level. The package level follows
+  the same rule one level up: it ignores exactly the dependencies cut to break
+  a cycle between sibling subtrees.
 
 ---
 
-## Key Points
+## Two Kinds of Cycles
 
-**No threshold.** The old algorithm used ε = 0.1 as a cutoff for the rank
-score. Without a threshold, S202 cuts every edge that is architecturally
-justifiable — including marginally asymmetric cases. Result on Minecraft 1.12:
-−6 % wrong-direction edges.
+- **Class cycles (red overlay)**: SCCs of the flat class graph (Tarjan). Answer
+  *which classes* are entangled.
+- **Package cycles (orange overlay)**: container tangles with at least one
+  package member (`DomainModel.getPackageTangles()`). Members are siblings of
+  one container — packages covering their subtree, possibly together with
+  classes of that container. Class-only container tangles are left to the red
+  overlay (`getContainerTangles()` returns all of them).
 
-**Rank beats weight.** `minWeight == maxWeight` sounds like symmetry but is
-not necessarily so. If nodes have different numbers of in- and out-edges,
-different ranks emerge — and with them a clear direction. Symmetric treatment
-only applies when all ranks are truly equal.
+A package cycle can exist without any class cycle (two packages using each
+other through different classes); a class cycle inside one package is not a
+package cycle.
 
-**All in one pass.** Within an SCC, all qualifying edges are cut simultaneously
-(not one at a time with a restart). Cutting one edge and recalculating can
-destroy the global dominance order in multi-node SCCs.
+---
 
-**Deterministic.** Every iteration runs over alphabetically sorted node lists.
-No random element, no threshold, no size-dependent special case — the same
-input always produces the same result.
+## Order Independence
+
+Classes, packages, dependencies and SCC members are always iterated in sorted
+order; the result does not depend on jar packing order.

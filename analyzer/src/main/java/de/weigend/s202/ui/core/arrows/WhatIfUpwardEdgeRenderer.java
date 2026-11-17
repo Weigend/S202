@@ -15,10 +15,12 @@
  */
 package de.weigend.s202.ui.core.arrows;
 
+import de.weigend.s202.ui.core.graph.ElementLookup;
 import de.weigend.s202.domain.architecture.Architecture;
 import de.weigend.s202.domain.architecture.EndpointPair;
 import de.weigend.s202.domain.architecture.ViolationKind;
 import de.weigend.s202.ui.core.graph.LevelClassBox;
+import de.weigend.s202.ui.core.graph.LevelPackageBox;
 import de.weigend.s202.ui.core.graph.ContainerBox;
 import de.weigend.s202.ui.core.arrows.ClassEdge;
 import javafx.geometry.Bounds;
@@ -162,9 +164,17 @@ public final class WhatIfUpwardEdgeRenderer {
     private String visibleEndpointFqn(String fqcn) {
         Node node = elementRegistry.get(fqcn);
         if (node == null) {
-            return null;
-        }
-        if (isActuallyVisible(node)) {
+            // No box yet: the class lies in a collapsed package that builds
+            // its content lazily. That package stands in for it.
+            LevelPackageBox pending = ElementLookup.pendingContainer(elementRegistry, fqcn);
+            if (pending == null) {
+                return null;
+            }
+            if (isActuallyVisible(pending)) {
+                return pending.getFullName();
+            }
+            node = pending;
+        } else if (isActuallyVisible(node)) {
             return fqcn;
         }
         Node n = node.getParent();

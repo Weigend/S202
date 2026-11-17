@@ -19,34 +19,35 @@ import de.weigend.s202.ui.views.tangle.TangleEdgeMethodResolver;
 import de.weigend.s202.ui.core.model.TangleFilter;
 import de.weigend.s202.domain.DependencyEdge;
 import de.weigend.s202.reader.DependencyModel;
+import de.weigend.s202.ui.core.arrows.TangleEdgeScope;
 import de.weigend.s202.ui.core.canvas.ArchitectureCanvas;
 import de.weigend.s202.ui.core.model.ArchitectureNode;
 import de.weigend.s202.ui.core.platform.ArchitectureViewManager;
 import de.weigend.s202.ui.core.platform.Dialogs;
 import de.weigend.s202.ui.core.platform.ProgressPublisher;
 import de.weigend.s202.ui.core.platform.RefactoringPreviewState;
-import de.weigend.s202.ui.core.events.CutTangleEdgeEvent;
 import de.weigend.s202.ui.core.events.MethodSelectionEvent;
 import de.weigend.s202.ui.core.events.NodeSelectionEvent;
-import de.weigend.s202.ui.core.events.RestoreTangleEdgeEvent;
 import de.weigend.s202.ui.core.platform.ArchitectureWfxView;
 import io.softwareecg.wfx.lookup.api.Lookup;
 import io.softwareecg.wfx.platform.api.EventBus;
 import io.softwareecg.wfx.windowmanager.api.WindowManager;
 import javafx.application.Platform;
 
-import java.util.ArrayList;
 import java.util.EventObject;
-import java.util.LinkedHashSet;
-import java.util.List;
 import java.util.Set;
 import java.util.stream.Collectors;
 
 /**
- * Öffnet und pflegt die dedizierten Tangle-Tabs: pro Tangle ein wiederver-
- * wendeter Tab mit dem {@code TangleEdgeRenderer}-Overlay, plus die
- * Verteilung der Preview-Cuts (cut/restore) auf alle offenen Views.
- * Aus S202Module extrahiert; die EventBus-Subscriptions bleiben dort.
+ * Öffnet und pflegt die Tangle-Tabs: pro Tangle ein wiederverwendeter Tab.
+ * Ein Tangle-Tab ist die normale Architekturansicht, beschränkt auf das
+ * Tangle und als Graph gezeichnet: die Mitglieder als Knoten (Symbol und
+ * Name, ohne Box), Paket-Mitglieder zunächst zugeklappt und aufgeklappt nur
+ * mit den beteiligten Klassen, und als Pfeile nur die Abhängigkeiten zwischen
+ * zwei Mitgliedern — gezeichnet nach dem, was sie sind (Back-Edge,
+ * Klassenzyklus, nur Paketzyklus), beschriftet mit ihrem Gewicht. Die
+ * {@link TangleLegendBar} erklärt und filtert.
+ * Dazu die Verteilung der Preview-Cuts (cut/restore) auf alle offenen Views.
  */
 public final class TangleTabController {
 
@@ -66,10 +67,10 @@ public final class TangleTabController {
      * Open the Tangle tab focused on a specific tangle. Each tangle entry gets
      * one tab, reused on later double-clicks of that same entry.
      * <p>
-     * The tab uses the dedicated {@code TangleEdgeRenderer} for the cycle
-     * visualisation — independent of the toolbar's Show Dependencies / Show
-     * SCC checkboxes, with arrows that dock to the box perimeters and an
-     * orthogonal intra-SCC edge visualisation.
+     * The tab is a regular architecture view cut down to the tangle (see
+     * {@link TangleFilter#scope}) with the dependency arrows switched on;
+     * collapsed packages roll their dependencies up into one counted arrow
+     * as usual.
      */
     public void openTangleView(Set<String> members, String tangleKey, String title) {
         if (members == null || members.isEmpty()) {
@@ -84,22 +85,60 @@ public final class TangleTabController {
         if (sourceRoot == null) {
             return;
         }
-        ArchitectureNode filteredRoot = TangleFilter.filter(sourceRoot, members);
+        ArchitectureNode filteredRoot = TangleFilter.scope(sourceRoot, members, false);
         if (filteredRoot == null) {
             Dialogs.showError("Open Tangle", "None of the tangle's classes were found in the focused architecture.");
             return;
         }
 
-        List<DependencyEdge> edges =
-                collectInternalEdges(filteredRoot, members, sourceView.getRawDependencyModel());
-
         WindowManager wm = Lookup.lookup(WindowManager.class);
-        String key = tangleKey == null || tangleKey.isBlank()
-                ? members.stream().sorted().collect(Collectors.joining("|"))
-                : tangleKey;
-        ArchitectureWfxView wrapper = reusableTangleWrapper(wm, key, title);
+        ArchitectureWfxView wrapper = reusableTangleWrapper(wm, tangleKeyOf(members, tangleKey), title);
         ArchitectureCanvas tangleView = wrapper.getArchitectureView();
 
+        // Carry the focused view's models through so the side panels keep
+        // working when this new tab gains focus.
+        tangleView.setDomainModel(sourceView.getDomainModel());
+        tangleView.setRawDependencyModel(sourceView.getRawDependencyModel());
+        tangleView.setCycleBreakEdges(sourceView.getCycleBreakEdges());
+        tangleView.setAppliedCutEdges(previewState.cuts());
+        // Classes only: the tree holds nothing but them and their package
+        // chains, show all of it. Otherwise every member starts as one node,
+        // so the first picture is the tangle itself: its members and the
+        // weighted dependencies between them. Opening a package member
+        // shows the classes behind its arrows.
+        tangleView.setPackageDepth(isClassOnly(members, sourceView.getRawDependencyModel())
+                ? CLASS_ONLY_DEPTH : MEMBERS_ONLY_DEPTH);
+
+        // The scope tells the arrows which dependencies are the tangle; the
+        // legend above the view explains and filters them.
+        TangleEdgeScope scope = new TangleEdgeScope(members);
+        TangleLegendBar legend = (TangleLegendBar) tangleView.getTop();
+        legend.bind(scope, () -> {
+            ArchitectureNode root = TangleFilter.scope(sourceRoot, members, scope.isShowContext());
+            if (root != null) {
+                showRoot(tangleView, root);
+            }
+        });
+        tangleView.setTangleScope(scope);
+
+        // The legend's context switch survives reopening a tab; a fresh tab
+        // starts without context.
+        ArchitectureNode context = scope.isShowContext() ? TangleFilter.scope(sourceRoot, members, true) : null;
+        showRoot(tangleView, context != null ? context : filteredRoot);
+        tangleView.setQualityMetrics(sourceView.getQualityMetrics());
+        legend.refreshCounts();
+
+        wm.showView(wrapper);
+    }
+
+    private static String tangleKeyOf(Set<String> members, String tangleKey) {
+        return tangleKey == null || tangleKey.isBlank()
+                ? members.stream().sorted().collect(Collectors.joining("|"))
+                : tangleKey;
+    }
+
+    /** Shows {@code root} in the tangle view with the arrows on, keeping the user's zoom. */
+    private static void showRoot(ArchitectureCanvas tangleView, ArchitectureNode root) {
         // Snapshot the current zoom before setArchitectureRoot wipes it via
         // resetZoom — the user typically tunes the zoom once for a tangle
         // and we don't want each subsequent open-from-tree to snap back to
@@ -110,19 +149,11 @@ public final class TangleTabController {
             previousZoom = zoomProp.get();
         }
 
-        // Carry the focused view's models through so the side panels keep
-        // working when this new tab gains focus.
-        tangleView.setDomainModel(sourceView.getDomainModel());
-        tangleView.setRawDependencyModel(sourceView.getRawDependencyModel());
-        tangleView.setCycleBreakEdges(sourceView.getCycleBreakEdges());
-        tangleView.setAppliedCutEdges(previewState.cuts());
-        tangleView.setArchitectureRoot(filteredRoot);
-        tangleView.setQualityMetrics(sourceView.getQualityMetrics());
+        tangleView.setArchitectureRoot(root);
 
-        // Install the dedicated tangle edge overlay. The renderer listens to
-        // layoutBounds itself so the first paint lands once the box layout
-        // settles — no Platform.runLater fight with the FX pulse.
-        tangleView.setEdgeOverlay(edges, null, null);
+        // Every root build switches the arrows off; a tangle tab is about the
+        // dependencies, so switch them back on.
+        tangleView.setShowDependencies(true);
 
         // Restore the captured zoom (if any) — defer one pulse so the new
         // ZoomController has a laid-out content node to scale against.
@@ -130,8 +161,23 @@ public final class TangleTabController {
             final double zoom = previousZoom;
             Platform.runLater(() -> tangleView.setZoom(zoom));
         }
+    }
 
-        wm.showView(wrapper);
+    /** Package depth for views of classes only — the maximum the toolbar's depth spinner offers. */
+    private static final int CLASS_ONLY_DEPTH = 10;
+    /** Package depth that leaves every package member collapsed. */
+    private static final int MEMBERS_ONLY_DEPTH = 0;
+
+    private static boolean isClassOnly(Set<String> members, DependencyModel rawModel) {
+        if (rawModel == null) {
+            return false;
+        }
+        for (String member : members) {
+            if (rawModel.getClass(member) == null) {
+                return false;
+            }
+        }
+        return true;
     }
 
     /**
@@ -147,15 +193,17 @@ public final class TangleTabController {
         String viewId = viewManager.nextViewId();
         ArchitectureCanvas tangleView = new ArchitectureCanvas();
         tangleView.setScopeOwner(false);
+        // The tree is rooted at the tangle's container; its direct content
+        // are the members, none of which may be skipped as a namespace wrapper.
+        tangleView.setSkipTransparentTopLevelPackages(false);
+        // A tangle is a graph: nodes and weighted arrows, not nested boxes.
+        tangleView.setPlainNodes(true);
+        tangleView.setTop(new TangleLegendBar(tangleView));
         tangleView.setStatusSink(progress::status);
         EventBus<EventObject> bus = Lookup.lookup(EventBus.class);
         tangleView.setOnNodeSelected(fqn -> bus.publish(new NodeSelectionEvent(fqn, tangleView)));
-        tangleView.setOnOverlayEdgeClicked((from, to) ->
+        tangleView.setOnDependencyEdgeClicked((from, to) ->
                 publishTangleEdgeSelection(bus, tangleView, from, to));
-        tangleView.setOnOverlayEdgeCut((from, to) ->
-                bus.publish(new CutTangleEdgeEvent(from, to, tangleView)));
-        tangleView.setOnOverlayEdgeRestore((from, to) ->
-                bus.publish(new RestoreTangleEdgeEvent(from, to, tangleView)));
         viewManager.applyStylesheet(tangleView);
         String viewTitle = title == null || title.isBlank() ? "Tangle" : title;
         ArchitectureWfxView wrapper = new ArchitectureWfxView(viewId, viewTitle, tangleView);
@@ -209,65 +257,5 @@ public final class TangleTabController {
             return;
         }
         bus.publish(new NodeSelectionEvent(to != null ? to : from, tangleView));
-    }
-
-    /**
-     * Walk the (already filtered) tangle subtree and emit one edge per
-     * intra-tangle dependency. Edges are deduplicated by (from, to) and
-     * sorted alphabetically for stable rendering.
-     */
-    private static List<DependencyEdge> collectInternalEdges(ArchitectureNode root, Set<String> members,
-                                                             DependencyModel rawModel) {
-        Set<DependencyEdge> seen = new LinkedHashSet<>();
-        collectInternalEdgesRec(root, members, rawModel, seen);
-        List<DependencyEdge> sorted = new ArrayList<>(seen);
-        sorted.sort((a, b) -> {
-            int c = a.from().compareTo(b.from());
-            return c != 0 ? c : a.to().compareTo(b.to());
-        });
-        return sorted;
-    }
-
-    private static void collectInternalEdgesRec(ArchitectureNode node,
-                                                Set<String> members,
-                                                DependencyModel rawModel,
-                                                Set<DependencyEdge> out) {
-        if (node.getType() == ArchitectureNode.NodeType.CLASS && members.contains(node.getFullName())) {
-            String fromClass = node.getFullName();
-            for (String dep : node.getDependencies()) {
-                if (!members.contains(dep) || dep.equals(fromClass)) continue;
-                // Replace CALLS dependencies with method-level edges so individual
-                // method cuts don't silently remove unrelated calls on the same pair.
-                Set<DependencyEdge> methodEdges = collectMethodLevelEdges(rawModel, fromClass, dep);
-                if (methodEdges.isEmpty()) {
-                    out.add(new DependencyEdge(fromClass, dep));  // non-CALLS (EXTENDS etc.)
-                } else {
-                    out.addAll(methodEdges);
-                }
-            }
-        }
-        for (ArchitectureNode child : node.getChildren()) {
-            collectInternalEdgesRec(child, members, rawModel, out);
-        }
-    }
-
-    private static Set<DependencyEdge> collectMethodLevelEdges(
-            DependencyModel rawModel, String fromClass, String toClass) {
-        if (rawModel == null) return Set.of();
-        DependencyModel.ClassInfo info = rawModel.getClass(fromClass);
-        if (info == null) return Set.of();
-        Set<DependencyEdge> result = new LinkedHashSet<>();
-        for (DependencyModel.MethodInfo m : info.methods.values()) {
-            for (String call : m.methodCalls.keySet()) {
-                int dot = call.lastIndexOf('.');
-                if (dot <= 0) continue;
-                String owner = call.substring(0, dot);
-                String methodName = call.substring(dot + 1);
-                if (!toClass.equals(owner)) continue;
-                if ("<init>".equals(methodName) || "<clinit>".equals(methodName)) continue;
-                result.add(new DependencyEdge(fromClass, toClass + "|" + methodName));
-            }
-        }
-        return result;
     }
 }

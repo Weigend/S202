@@ -15,6 +15,7 @@
  */
 package de.weigend.s202.ui.views.tangle;
 
+import de.weigend.s202.domain.ContainerProjection;
 import de.weigend.s202.domain.DependencyEdge;
 import de.weigend.s202.domain.StronglyConnectedComponent;
 import de.weigend.s202.domain.SCCFinder;
@@ -351,10 +352,12 @@ public class TopTanglesModule implements Module {
     }
 
     /**
-     * Build the scoped class-dependency graph, run Tarjan, take the largest
-     * {@code topN} tangles and enumerate their internal edges for display.
-     * The {@code rawModel} (may be null) is used to look up edge kinds —
-     * EXTENDS / IMPLEMENTS / IMPORTS / CALLS / INSTANTIATES — for each from→to pair.
+     * Compute the container tangles of the current model (applied preview
+     * cuts removed from the class graph), keep those in {@code scope}, take
+     * the largest {@code topN} and enumerate the class edges between their
+     * members. Members are siblings of one container — packages covering
+     * their subtree or classes. The {@code rawModel} (may be null) is used to
+     * look up edge kinds for each from→to pair.
      */
     static List<TopTanglesView.Tangle> computeTopTangles(DomainModel model,
                                                         DependencyModel rawModel,
@@ -371,49 +374,55 @@ public class TopTanglesModule implements Module {
         Map<String, Set<String>> graph = new HashMap<>();
         for (var entry : model.getAllClasses().entrySet()) {
             String fqn = entry.getKey();
-            if (!inScope(fqn, scope)) {
-                continue;
-            }
             Set<String> deps = entry.getValue().dependencies.stream()
-                    .filter(d -> inScope(d, scope))
                     .filter(d -> !isCycleBreakEdge(appliedCutEdges, fqn, d))
                     .collect(Collectors.toCollection(HashSet::new));
             graph.put(fqn, deps);
         }
 
-        List<StronglyConnectedComponent> sccs = Lookup.lookup(SCCFinder.class).findSCCs(graph);
-        return sccs.stream()
-                .filter(StronglyConnectedComponent::isTangle)
-                .sorted(Comparator.comparingInt(StronglyConnectedComponent::getSize).reversed())
+        SCCFinder finder = Lookup.lookup(SCCFinder.class);
+        return ContainerProjection.tangles(graph, finder).stream()
+                .map(de.weigend.s202.domain.architecture.Tangle::new)
+                .filter(t -> t.inScope(scope))
+                // Package tangles (at least one package member) first — they are the
+                // architectural findings; class-only tangles inside one package follow.
+                .sorted(Comparator.comparing(
+                                (de.weigend.s202.domain.architecture.Tangle t) ->
+                                        t.members().stream().noneMatch(m -> model.getPackage(m) != null))
+                        .thenComparing(Comparator.comparingInt(
+                                (de.weigend.s202.domain.architecture.Tangle t) -> t.members().size()).reversed())
+                        .thenComparing(t -> tangleKey(new ArrayList<>(t.members()))))
                 .limit(topN)
-                .map(scc -> toTangle(scc, graph, rawModel, cycleBreakEdges, appliedCutEdges))
+                .map(t -> toTangle(t, model, graph, rawModel, cycleBreakEdges, appliedCutEdges))
                 .toList();
     }
 
-    private static TopTanglesView.Tangle toTangle(StronglyConnectedComponent scc,
+    private static TopTanglesView.Tangle toTangle(de.weigend.s202.domain.architecture.Tangle tangle,
+                                                  DomainModel model,
                                                   Map<String, Set<String>> graph,
                                                   DependencyModel rawModel,
                                                   Set<DependencyEdge> cycleBreakEdges,
                                                   Set<DependencyEdge> appliedCutEdges) {
-        Set<String> members = scc.getMembers();
-        List<String> sortedMembers = members.stream().sorted().toList();
+        List<String> sortedMembers = new ArrayList<>(tangle.members());
         List<TopTanglesView.TangleEdge> edges = new ArrayList<>();
-        for (String from : sortedMembers) {
+        for (String from : graph.keySet()) {
+            String fromMember = tangle.memberContaining(from);
+            if (fromMember == null) continue;
             for (String to : graph.getOrDefault(from, Set.of())) {
-                if (members.contains(to)) {
-                    boolean cycleBreakEdge = isCycleBreakEdge(cycleBreakEdges, from, to);
-                    boolean appliedCutEdge = isCycleBreakEdge(appliedCutEdges, from, to);
-                    edges.add(new TopTanglesView.TangleEdge(
-                            from, to, buildKindEntries(rawModel, from, to), cycleBreakEdge, appliedCutEdge));
-                }
+                String toMember = tangle.memberContaining(to);
+                if (toMember == null || toMember.equals(fromMember)) continue;
+                boolean cycleBreakEdge = isCycleBreakEdge(cycleBreakEdges, from, to);
+                boolean appliedCutEdge = isCycleBreakEdge(appliedCutEdges, from, to);
+                edges.add(new TopTanglesView.TangleEdge(
+                        from, to, buildKindEntries(rawModel, from, to), cycleBreakEdge, appliedCutEdge));
             }
         }
         edges.sort(Comparator.comparing(TopTanglesView.TangleEdge::from)
                 .thenComparing(TopTanglesView.TangleEdge::to));
         return new TopTanglesView.Tangle(
-                members.size(),
+                sortedMembers.size(),
                 tangleKey(sortedMembers),
-                tangleTitle(sortedMembers),
+                tangle.label(m -> model.getPackage(m) != null),
                 sortedMembers,
                 edges);
     }
@@ -549,17 +558,6 @@ public class TopTanglesModule implements Module {
 
     private static String tangleKey(List<String> sortedMembers) {
         return String.join("|", sortedMembers);
-    }
-
-    private static String tangleTitle(List<String> sortedMembers) {
-        String preview = sortedMembers.stream()
-                .limit(2)
-                .map(TopTanglesModule::simple)
-                .collect(Collectors.joining(", "));
-        if (sortedMembers.size() > 2) {
-            preview += ", ...";
-        }
-        return "Tangle " + sortedMembers.size() + " (" + preview + ")";
     }
 
     private static String simple(String fqn) {

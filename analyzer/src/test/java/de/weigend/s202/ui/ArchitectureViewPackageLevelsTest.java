@@ -33,7 +33,7 @@ public class ArchitectureViewPackageLevelsTest {
 
     @Test
     public void testPackageLevelsInArchitectureNode() throws Exception {
-        String jarPath = "../test-example/target/test-example-1.0.0.jar";
+        String jarPath = "../test-example/target/test-example-1.1.0.jar";
         
         // Step 1: Analyze
         InputAnalyzer analyzer = new InputAnalyzer();
@@ -48,8 +48,8 @@ public class ArchitectureViewPackageLevelsTest {
         // it's no longer artificially at L0 — it sits at L1 because
         // com.example2 carries deps into com.example/com.example1 which
         // propagate up to the com node as well.
-        assertEquals(2, domainModel.getPackage("com").architectureLevel,
-                "com aggregates outgoing deps from its descendants → L2");
+        assertEquals(0, domainModel.getPackage("com").architectureLevel,
+                "com has no dependencies outside its own subtree → L0");
         assertEquals(0, domainModel.getPackage("com.example").architectureLevel, "com.example has no cross-pkg deps → L0");
         assertEquals(0, domainModel.getPackage("com.example1").architectureLevel);
         assertEquals(1, domainModel.getPackage("com.example2").architectureLevel, "com.example2 depends on com.example → package L1");

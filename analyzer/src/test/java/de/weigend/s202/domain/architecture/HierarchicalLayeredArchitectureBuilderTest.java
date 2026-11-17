@@ -41,8 +41,8 @@ class HierarchicalLayeredArchitectureBuilderTest {
     @Test
     void emptyDomainModelProducesEmptyArchitecture() {
         DomainModel domain = new DomainModel();
-        domain.setPackageEdgeWeights(Map.of());
-        domain.setPackageBackEdges(Set.of());
+        domain.setSiblingEdgeWeights(Map.of());
+        domain.setContainerBackEdges(Set.of());
 
         Architecture arch = new HierarchicalLayeredArchitectureBuilder().build(domain);
 
@@ -59,8 +59,8 @@ class HierarchicalLayeredArchitectureBuilderTest {
         addClass(domain, "app.HighA", 1, Set.of("app.LowB"));
         addClass(domain, "app.HighB", 1, Set.of("app.LowB"));
         addClass(domain, "app.LowB", 0, Set.of());
-        domain.setPackageEdgeWeights(Map.of());
-        domain.setPackageBackEdges(Set.of());
+        domain.setSiblingEdgeWeights(Map.of());
+        domain.setContainerBackEdges(Set.of());
 
         HierarchicalLayeredArchitecture arch =
                 (HierarchicalLayeredArchitecture) new HierarchicalLayeredArchitectureBuilder().build(domain);
@@ -85,8 +85,8 @@ class HierarchicalLayeredArchitectureBuilderTest {
         addPackage(domain, "domain", 0);
         addClass(domain, "ui.View", 2, Set.of());
         addClass(domain, "domain.Model", 0, Set.of());
-        domain.setPackageEdgeWeights(Map.of());
-        domain.setPackageBackEdges(Set.of());
+        domain.setSiblingEdgeWeights(Map.of());
+        domain.setContainerBackEdges(Set.of());
 
         HierarchicalLayeredArchitecture arch =
                 (HierarchicalLayeredArchitecture) new HierarchicalLayeredArchitectureBuilder().build(domain);
@@ -111,8 +111,8 @@ class HierarchicalLayeredArchitectureBuilderTest {
         addPackage(domain, "app", 1);
         addClass(domain, "app.Low", 0, Set.of("app.High"));   // upward
         addClass(domain, "app.High", 1, Set.of());
-        domain.setPackageEdgeWeights(Map.of());
-        domain.setPackageBackEdges(Set.of());
+        domain.setSiblingEdgeWeights(Map.of());
+        domain.setContainerBackEdges(Set.of());
 
         HierarchicalLayeredArchitecture arch =
                 (HierarchicalLayeredArchitecture) new HierarchicalLayeredArchitectureBuilder().build(domain);
@@ -132,8 +132,8 @@ class HierarchicalLayeredArchitectureBuilderTest {
         addPackage(domain, "app", 1);
         addClass(domain, "app.Low", 0, Set.of("app.High"));   // upward
         addClass(domain, "app.High", 1, Set.of());
-        domain.setPackageEdgeWeights(Map.of());
-        domain.setPackageBackEdges(Set.of());
+        domain.setSiblingEdgeWeights(Map.of());
+        domain.setContainerBackEdges(Set.of());
         domain.setClassBackEdges(Set.of("app.Low\0app.High"));
 
         HierarchicalLayeredArchitecture arch =
@@ -153,11 +153,11 @@ class HierarchicalLayeredArchitectureBuilderTest {
         addPackage(domain, "b", 0);
         addClass(domain, "a.X", 0, Set.of("b.Y"));
         addClass(domain, "b.Y", 0, Set.of("a.X"));
-        domain.setPackageEdgeWeights(Map.of(
+        domain.setSiblingEdgeWeights(Map.of(
                 "a", Map.of("b", 1),
                 "b", Map.of("a", 1)));
-        domain.setPackageBackEdges(Set.of("b\0a"));
-        domain.setPackageTangles(List.of(Set.of("a", "b")));
+        domain.setContainerBackEdges(Set.of("b\0a"));
+        domain.setContainerTangles(List.of(Set.of("a", "b")));
 
         HierarchicalLayeredArchitecture arch =
                 (HierarchicalLayeredArchitecture) new HierarchicalLayeredArchitectureBuilder().build(domain);
@@ -179,8 +179,8 @@ class HierarchicalLayeredArchitectureBuilderTest {
         addPackage(domain, "de.weigend.s202", 0);
         addPackage(domain, "de.weigend.s202.app", 0);
         addClass(domain, "de.weigend.s202.app.X", 0, Set.of());
-        domain.setPackageEdgeWeights(Map.of());
-        domain.setPackageBackEdges(Set.of());
+        domain.setSiblingEdgeWeights(Map.of());
+        domain.setContainerBackEdges(Set.of());
 
         HierarchicalLayeredArchitecture arch =
                 (HierarchicalLayeredArchitecture) new HierarchicalLayeredArchitectureBuilder().build(domain);
@@ -200,8 +200,8 @@ class HierarchicalLayeredArchitectureBuilderTest {
         addClass(domain, "app.A", 2, Set.of());
         addClass(domain, "app.B", 1, Set.of());
         addClass(domain, "app.C", 0, Set.of());
-        domain.setPackageEdgeWeights(Map.of());
-        domain.setPackageBackEdges(Set.of());
+        domain.setSiblingEdgeWeights(Map.of());
+        domain.setContainerBackEdges(Set.of());
 
         HierarchicalLayeredArchitecture arch =
                 (HierarchicalLayeredArchitecture) new HierarchicalLayeredArchitectureBuilder().build(domain);

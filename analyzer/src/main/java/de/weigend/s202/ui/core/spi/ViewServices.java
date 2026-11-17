@@ -44,6 +44,7 @@ import java.util.function.Supplier;
  * @param architecture        aktuelle Architektur-Projektion des Stils
  * @param markArrowsDirty     Kanten-Overlay zum Neuzeichnen anstoßen
  * @param skipTransparentTopLevelPackages Namespace-Wrapper oben überspringen?
+ * @param plainNodes          Pakete und Klassen als Graph-Knoten (Symbol und Name, ohne Box)?
  * @param dialogOwner         Fenster für Dialoge der Ansicht (kann null sein)
  * @param status              Statuszeilen-Senke
  * @param refreshView         Stil-Projektion neu aufbauen (Statusmeldung optional)
@@ -59,6 +60,7 @@ public record ViewServices(
         Supplier<Architecture> architecture,
         Runnable markArrowsDirty,
         Supplier<Boolean> skipTransparentTopLevelPackages,
+        Supplier<Boolean> plainNodes,
         Supplier<Window> dialogOwner,
         Consumer<String> status,
         Consumer<String> refreshView,

@@ -26,35 +26,58 @@ public class DomainModel {
     private final Map<String, CalculatedElementInfo> packages = new HashMap<>();
 
     /**
-     * Weighted inter-package dependency graph.
-     * weight(P_A → P_B) = aggregated method-call count from classes in P_A's
-     * subtree to classes in P_B, with a fallback weight of 1 for structural
-     * references without method-call data.
-     * Populated by LevelCalculator after package-level computation.
+     * Weighted sibling graphs of all containers, keyed by source sibling fqn.
+     * A container is a package (or the root) whose direct children — classes
+     * and sub-packages alike — are its siblings. weight(S_A → S_B) is the
+     * aggregated method-call count from classes in S_A's subtree to classes in
+     * S_B's subtree (fallback 1 per class dependency without call data).
+     * Because every class dependency is attributed to exactly one container
+     * (the deepest common one), the map holds only sibling pairs.
+     * Populated by LevelCalculator (container levelization step).
      */
-    private Map<String, Map<String, Integer>> packageEdgeWeights = new LinkedHashMap<>();
+    private Map<String, Map<String, Integer>> siblingEdgeWeights = new LinkedHashMap<>();
 
     /**
-     * Package back-edges identified and cut during SCC-breaking of the package graph.
-     * Stored as "from\0to" keys. R3 excludes these from level-direction checks,
-     * mirroring how R1 excludes class-level back-edges.
+     * Weight of every class dependency that entered {@link #siblingEdgeWeights},
+     * stored as "from\0to" keys: its method-call count, 1 without call data.
+     * A sibling weight is the sum of the class weights projected onto it.
      */
-    private Set<String> packageBackEdgeKeys = new LinkedHashSet<>();
+    private Map<String, Integer> classEdgeWeights = new HashMap<>();
 
     /**
-     * Class back-edges cut by the package-hypothesis-guided SCC-breaking phase
-     * (Phase 1 of Step 4). An edge A→B is here when pkgLevel(A.pkg) &lt; pkgLevel(B.pkg)
-     * and A→B was part of a cycle. R1 excludes these from level-direction checks.
-     * Stored as "from\0to" keys, analogous to {@link #packageBackEdgeKeys}.
+     * Sibling edges cut while breaking container tangles. Stored as
+     * "from\0to" keys. A cut sibling edge is the hierarchical back-edge;
+     * every class dependency whose projection onto its container is such an
+     * edge is a {@link #classBackEdgeKeys class back-edge}.
+     */
+    private Set<String> containerBackEdgeKeys = new LinkedHashSet<>();
+
+    /**
+     * Class dependencies A→B whose sibling projection in the deepest common
+     * container of A and B is a cut sibling edge. They are the edges that run
+     * against the layout order (the violations of the picture) and the edges
+     * the package level DAG ignores.
+     * Stored as "from\0to" keys, analogous to {@link #containerBackEdgeKeys}.
      */
     private Set<String> classBackEdgeKeys = new LinkedHashSet<>();
 
     /**
-     * Package-level SCCs of size ≥ 2 found on the original (pre-cycle-breaking)
-     * package graph. Populated by LevelCalculator so consumers do not need to
-     * re-run Tarjan.
+     * The class back-edges that lie inside a class cycle (both endpoints in
+     * the same SCC of the class graph). Only these are ignored when the class
+     * {@code architectureLevel} is computed: a back-edge outside any class
+     * cycle is a real, acyclic dependency and still counts towards the depth
+     * of the class. Removing the level cuts makes the class graph acyclic,
+     * because every class cycle contains at least one of them.
+     * Always a subset of {@link #classBackEdgeKeys}.
      */
-    private List<Set<String>> packageTangles = new ArrayList<>();
+    private Set<String> classLevelCutKeys = new LinkedHashSet<>();
+
+    /**
+     * Container tangles: SCCs of size ≥ 2 in the sibling graph of one
+     * container. Members are sibling fqns, i.e. classes and/or packages that
+     * share the same parent. Populated by LevelCalculator.
+     */
+    private List<Set<String>> containerTangles = new ArrayList<>();
 
     /**
      * Information about a calculated element (class or package) with its level.
@@ -110,18 +133,41 @@ public class DomainModel {
         }
     }
 
-    // ===== Package graph API =====
+    // ===== Container graph API =====
 
-    public void setPackageEdgeWeights(Map<String, Map<String, Integer>> weights) {
-        packageEdgeWeights = new LinkedHashMap<>(weights);
+    public void setSiblingEdgeWeights(Map<String, Map<String, Integer>> weights) {
+        siblingEdgeWeights = new LinkedHashMap<>(weights);
     }
 
-    public void setPackageBackEdges(Set<String> backEdgeKeys) {
-        packageBackEdgeKeys = new LinkedHashSet<>(backEdgeKeys);
+    /** Returns the weighted sibling graphs of all containers (unmodifiable). */
+    public Map<String, Map<String, Integer>> getSiblingEdgeWeights() {
+        return Collections.unmodifiableMap(siblingEdgeWeights);
     }
 
-    public boolean isPackageBackEdge(String from, String to) {
-        return packageBackEdgeKeys.contains(from + "\0" + to);
+    /** Returns the weight of sibling edge S_A → S_B, or 0 if no edge exists. */
+    public int getSiblingEdgeWeight(String from, String to) {
+        return siblingEdgeWeights.getOrDefault(from, Map.of()).getOrDefault(to, 0);
+    }
+
+    public void setClassEdgeWeights(Map<String, Integer> weights) {
+        classEdgeWeights = new HashMap<>(weights);
+    }
+
+    /** Returns the weight of class dependency A → B, or 0 if it was not weighted. */
+    public int getClassEdgeWeight(String from, String to) {
+        return classEdgeWeights.getOrDefault(from + "\0" + to, 0);
+    }
+
+    public void setContainerBackEdges(Set<String> backEdgeKeys) {
+        containerBackEdgeKeys = new LinkedHashSet<>(backEdgeKeys);
+    }
+
+    public boolean isContainerBackEdge(String from, String to) {
+        return containerBackEdgeKeys.contains(from + "\0" + to);
+    }
+
+    public Set<DependencyEdge> getContainerBackEdges() {
+        return toEdges(containerBackEdgeKeys);
     }
 
     public void setClassBackEdges(Set<String> backEdgeKeys) {
@@ -137,8 +183,29 @@ public class DomainModel {
     }
 
     public Set<DependencyEdge> getClassBackEdges() {
+        return toEdges(classBackEdgeKeys);
+    }
+
+    public void setClassLevelCuts(Set<String> levelCutKeys) {
+        classLevelCutKeys = new LinkedHashSet<>(levelCutKeys);
+    }
+
+    /** True when A→B is ignored for the class {@code architectureLevel}: a back-edge inside a class cycle. */
+    public boolean isClassLevelCut(String from, String to) {
+        return classLevelCutKeys.contains(from + "\0" + to);
+    }
+
+    public int getClassLevelCutCount() {
+        return classLevelCutKeys.size();
+    }
+
+    public Set<DependencyEdge> getClassLevelCuts() {
+        return toEdges(classLevelCutKeys);
+    }
+
+    private static Set<DependencyEdge> toEdges(Set<String> keys) {
         Set<DependencyEdge> result = new LinkedHashSet<>();
-        for (String key : classBackEdgeKeys) {
+        for (String key : keys) {
             int sep = key.indexOf('\0');
             if (sep > 0) {
                 result.add(new DependencyEdge(key.substring(0, sep), key.substring(sep + 1)));
@@ -147,22 +214,31 @@ public class DomainModel {
         return Collections.unmodifiableSet(result);
     }
 
-    public void setPackageTangles(List<Set<String>> tangles) {
-        packageTangles = new ArrayList<>(tangles);
+    public void setContainerTangles(List<Set<String>> tangles) {
+        containerTangles = new ArrayList<>(tangles);
     }
 
+    /** All container tangles, including those whose members are classes only. */
+    public List<Set<String>> getContainerTangles() {
+        return Collections.unmodifiableList(containerTangles);
+    }
+
+    /**
+     * Container tangles with at least one package member — the "package
+     * cycles" of the orange overlay. Class-only tangles are the domain of the
+     * class-SCC (red) overlay and are left out here.
+     */
     public List<Set<String>> getPackageTangles() {
-        return Collections.unmodifiableList(packageTangles);
-    }
-
-    /** Returns the full weighted inter-package graph (unmodifiable). */
-    public Map<String, Map<String, Integer>> getPackageEdgeWeights() {
-        return Collections.unmodifiableMap(packageEdgeWeights);
-    }
-
-    /** Returns the weight of edge P_A → P_B, or 0 if no edge exists. */
-    public int getPackageEdgeWeight(String from, String to) {
-        return packageEdgeWeights.getOrDefault(from, Map.of()).getOrDefault(to, 0);
+        List<Set<String>> result = new ArrayList<>();
+        for (Set<String> tangle : containerTangles) {
+            for (String member : tangle) {
+                if (packages.containsKey(member)) {
+                    result.add(tangle);
+                    break;
+                }
+            }
+        }
+        return Collections.unmodifiableList(result);
     }
 
     // ===== Public API =====

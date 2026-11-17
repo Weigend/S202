@@ -625,6 +625,13 @@
     -fx-min-width: 40px;
 }
 
+/* A class drawn as a graph node (tangle view): icon and name only. */
+.class-box.plain-node {
+    -fx-border-color: transparent;
+    -fx-background-color: transparent;
+    -fx-min-width: 0;
+}
+
 .class-box-selected {
     -fx-font-size: 9px;
     -fx-border-color: #ff6600;

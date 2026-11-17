@@ -33,7 +33,7 @@ public class LevelCalculatorIntegrationTest {
     public void testPackageLevelingWithCrossPackageDependencies() throws Exception {
         // Load the test JAR
         InputAnalyzer analyzer = new InputAnalyzer();
-        DependencyModel rawModel = analyzer.analyze("../test-example/target/test-example-1.0.0.jar");
+        DependencyModel rawModel = analyzer.analyze("../test-example/target/test-example-1.1.0.jar");
         
         // Calculate levels
         LevelCalculator calculator = new LevelCalculator();

@@ -60,7 +60,11 @@ final class LayeredStyleView implements StyleView {
     }
 
     private ArchitectureTreeBuilder builder() {
-        return new ArchitectureTreeBuilder(services.elementRegistry(), services.selectionSink());
+        // Packages that start collapsed build their content on first expand:
+        // large code bases would otherwise put every hidden box into the scene.
+        return new ArchitectureTreeBuilder(services.elementRegistry(), services.selectionSink())
+                .lazyCollapsedPackages(true)
+                .plainNodes(services.plainNodes().get());
     }
 
     @Override

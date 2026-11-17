@@ -34,7 +34,7 @@
 \title{Software Architecture as a Layered Representation\\
   \large Analyzing Software Architecture with S202}
 \author{Johannes Weigend}
-\date{Final version, May~30,~2026}
+\date{Revised version, November~14,~2026}
 
 \begin{document}
 
@@ -43,7 +43,8 @@
 \begin{abstract}
 S202 computes a hierarchical layered representation of Java systems from
 bytecode. The tool derives an architectural hypothesis from the observed class
-dependencies, distinguishes two kinds of cycles — class-level cycles and
+dependencies by letting every package container order its direct children
+independently, distinguishes two kinds of cycles — class-level cycles and
 package-level cycles — makes both visible as separately toggled findings, and
 checks the finished representation redundantly against consistency rules. This
 document describes typical errors in the computation of such layouts, explains
@@ -245,6 +246,13 @@ remain stable architectural units. Otherwise a single outlier class is enough
 to lift the package to the wrong level and thereby make the container
 unusable, even though that container is supposed to provide orientation.
 
+The same mixing exists one level up. If a package's level is computed from a
+graph that also carries the dependencies among its own sub-packages, a package
+rises merely because it is deeply layered inside. A package that contains
+everything it uses belongs on level~0, no matter how its children relate to one
+another. The complete rule therefore reads: an element's level arises only from
+dependencies that leave its own interior.
+
 \subsection{The Big Lake}
 
 The formally clean answer to cycles is: all elements of an SCC receive the
@@ -268,13 +276,16 @@ visible as separately toggled overlays:
         form such a cycle. Class cycles reveal implementation-level coupling
         that prevents a strict linear order of individual classes. They are
         detected by Tarjan's algorithm on the class dependency graph.
-  \item[Package cycles (orange)] Tangles at the package level, detected on the
-        direct aggregated package graph (without the ancestor propagation
-        described later). A package cycle means that two or more
-        packages depend on each other as a group, regardless of which concrete
-        classes inside them are responsible. Package cycles reveal
+  \item[Package cycles (orange)] Tangles inside a container. A container is a
+        package (or the root); its children are the classes and sub-packages it
+        directly contains. Two children depend on each other as soon as any
+        class in the subtree of one uses a class in the subtree of the other.
+        When children of a container form a cycle this way and at least one of
+        them is a package, there is a package cycle, regardless of which
+        concrete classes inside them are responsible. Package cycles reveal
         architectural-level coupling: the package structure itself has circular
-        dependencies.
+        dependencies. A cycle consisting only of classes of the same package is
+        not a package cycle; the red overlay shows it.
 \end{description}
 
 The distinction matters because the two kinds answer different questions:
@@ -301,149 +312,147 @@ is also meaningful on its own: the package-cycle overlay reveals the
 structural shape of the problem, while the class-cycle overlay reveals the
 concrete edges that cause it.
 
-\section{The Package Graph as an Architectural Hypothesis}
+\section{The Container as the Unit of Ordering}
 
 The solution chosen by S202 is to separate analysis, ordering, and
-representation consistently. The class graph remains the raw model of the
-actual dependencies. It is not changed merely because a layered representation
-requires a DAG. Instead, S202 creates additional views from this graph: SCCs
-for cycle detection, a weighted package graph for the architectural
-hypothesis, and a hierarchical UI structure for the representation.
+presentation consistently. The class graph remains the raw model of the actual
+dependencies. It is not modified just because a layered representation needs
+a DAG. Instead, S202 derives additional views from this graph: SCCs for cycle
+detection, a weighted sibling graph per container for ordering, and a
+hierarchical UI structure for presentation.
 
-The term architectural hypothesis does not mean an asserted target
-architecture. It means the actual architecture inferred from the observed
-dependencies: the order that best fits the existing code and its dependencies
+Architectural hypothesis here does not mean a claimed target architecture. It
+means an as-is architecture derived from the observed dependencies: the order
+that most closely corresponds to the existing code and its dependencies,
 without hiding where this order is broken by cycles or back edges.
 
-The package ordering is the central connecting element. It is not derived from
-the highest class levels, but from aggregated package dependencies. This
-separation is the decisive step: classes are ordered within their packages,
-whereas packages are ordered by their own package relationships. This allows a
-package to remain stable as a container even when individual classes inside it
-are high or low. At the same time, the package ordering provides a criterion
-for selecting back edges not arbitrarily, but as concrete violations of the
+The unit of ordering is the container. Every package orders its direct
+children — classes and sub-packages alike — solely by the dependencies that
+run between those children. What happens inside a child is that child's
+business; what leaves the container is the business of its parent. Structure101
+builds its \emph{Levelized Structure Maps} by the same rule. It is the decisive
+step: a class dependency is counted exactly once, namely in the container that
+holds both endpoints as children of different subtrees. There is no global
+package order from which the local one would be derived, and consequently no
+local order that could contradict a global one. A package stays stable as a
+container because only its relations to its siblings determine its position.
+At the same time, the container order provides a criterion for not choosing
+back edges arbitrarily, but for marking them as concrete violations of the
 expected order.
 
-Thus, the failure modes described above do not disappear because of one
-algorithmic trick, but because the computation steps have clear
-responsibilities: first dependencies are analyzed, then a plausible order is
-determined, then the visible structure is built, and finally the result is
-checked to see whether the representation satisfies its own claim.
+The error modes described above thus disappear not through a single
+algorithmic trick, but through a clear responsibility: every container decides
+for itself and finally. First the dependencies are analyzed, then a plausible
+order is determined per container, then the visible structure is built, and
+finally it is checked whether the representation keeps its own promise.
 
-\section{From Class Dependencies to Package Ordering}
+\section{From Class Dependencies to Container Ordering}
 
 In S202, the flat class graph is not the visible layout model. It is an
-analysis artifact: it is used to capture concrete dependencies, detect SCCs,
-aggregate class dependencies into package relationships, and derive the later
-levels from them. The visible S202 graph is then built from the package
-structure and the local order inside package containers.
+analysis artifact: it serves to capture concrete dependencies, detect SCCs,
+and assign every dependency to the container that decides its direction. The
+visible S202 graphic then arises from the package structure and the order
+inside each container.
 
-Package ordering is built from a weighted directed graph spanning \emph{all}
-packages. Classes are not comparison nodes in this step; they provide the
-information for aggregation. For each class dependency, S202 counts the method
-calls from the source class to the target class and attributes this count to
-the corresponding package edge: if a class in the subtree of package $P$ calls
-a class in the subtree of package $Q$ via $n$ method calls, the edge $P \to Q$
-receives weight $n$. If a class has only dependencies without method-call data
-into a target package, it contributes a fallback weight of~1 to that package
-edge (per class and target package, not per dependency).
-
-To capture the contribution of nested packages, each weight is propagated up
-the ancestor chain of the source package: a call from \texttt{com.a.X} to
-\texttt{com.b.Y} contributes weight to \texttt{com.a}$\to$\texttt{com.b} and
-also to \texttt{com}$\to$\texttt{com.b}. The transitive order among packages
-emerges from the subsequent longest-path computation — no additional transitive
-edges are added to the graph.
-
-Ancestor propagation can, however, create cycles that do not exist in the
-direct package graph. Package cycles (tangles) are therefore detected on the
-direct, non-propagated package graph; cycle-breaking and level assignment, by
-contrast, operate on the propagated graph.
-
-A concrete numerical example: the class dependencies
-\texttt{com.a.A}$\to$\texttt{net.b.B} and \texttt{com.a.B}$\to$\texttt{net.b.B}
-produce the following edges in the package graph:
+For every class dependency $X \to Y$, S202 determines the deepest container
+that holds both $X$ and $Y$, and the two children of that container whose
+subtrees contain $X$ and $Y$. The dependency becomes an edge between these two
+siblings — and only there:
 
 \begin{lstlisting}
-com.a -(2)-> net.b
-com   -(2)-> net.b
+com.a.X -> com.b.c.Y    container com     edge com.a   -> com.b
+com.a.X -> com.a.Y      container com.a   edge com.a.X -> com.a.Y
+com.a.X -> com.a.b.Y    container com.a   edge com.a.X -> com.a.b
 \end{lstlisting}
 
-Only the source side is propagated up the ancestor chain; the target side stays
-at the direct parent package of the target class. \texttt{net.b} is not further
-propagated to \texttt{net}. Propagating the target side as well would produce a
-cross-product of source and target ancestors for every class dependency: the
-number of edges grows quadratically with package depth, without any information
-gain for the ordering computation.
+The weight of a sibling edge is the sum of the method calls of all class
+dependencies projected onto it; a dependency without call data contributes a
+fallback weight of~1. Nothing is propagated: neither the source nor the target
+side is multiplied along the ancestor chain. The number of edges is bounded by
+the number of class dependencies, and every dependency has exactly one place
+where its direction is decided. Classes and packages are equal nodes in this
+graph; a class directly in a package and a sub-package of the same package are
+ordered against each other.
 
-Before level computation, the package graph must be acyclic. If packages form
-an SCC, S202 uses a rank measure to evaluate whether a package tends more to
-use other packages or to be used by them:
+Cycles in a sibling graph are the tangles of that container. Before level
+computation, the graph must be acyclic. When siblings form an SCC, S202 uses a
+rank measure to assess whether a sibling tends to use others or tends to be
+used by them:
 
 \[
-  rank(P) = \frac{out(P) - in(P)}{\max(1,\; out(P) + in(P))}
+  rank(S) = \frac{out(S) - in(S)}{\max(1,\; out(S) + in(S))}
 \]
 
-$out(P)$ is the sum of the edge weights from $P$ to other members of the same
-SCC, and $in(P)$ is the sum of the edge weights from those members to $P$. A
-positive rank means that the package uses more than it is used; it therefore
-tends to belong higher up. A negative rank means that the package is more
-often used and tends to belong lower down.
+$out(S)$ is the sum of the edge weights from $S$ to other members of the same
+SCC, $in(S)$ the sum of the edge weights from those members to $S$. A positive
+rank means: the element uses more than it is used; it tends to belong at the
+top. A negative rank means: the element is rather used and tends to belong at
+the bottom.
 
-In a package SCC, all edges $P \to Q$ for which $rank(P) < rank(Q)$ holds are
-treated as back edges~-- that is, all edges that run against the dependency
-flow. No threshold is used: any measurable rank difference is sufficient
-justification for a cut.
+Inside an SCC, all edges $S \to T$ with $rank(S) < rank(T)$ are cut — that
+is, all edges that run against the dependency flow. No threshold is used: any
+measurable rank difference is sufficient justification for a cut. If all ranks
+inside an SCC are equal, the topology provides no directional information. In
+that case all internal edges are removed, and the levels of the affected nodes
+arise solely from dependencies outside the former SCC. If there are no such
+dependencies either, the nodes remain on the same level — as true peers
+without a justifiable order.
 
-If all ranks within an SCC are equal, the topology provides no directional
-information. In this case, all internal edges are removed and the levels of the
-affected nodes are determined solely by dependencies outside the former SCC. If
-no such dependencies exist either, the nodes remain at the same level~-- as
-genuine peers with no justifiable ordering.
-
-Both kinds of cuts are applied iteratively: after each pass, the SCCs are
-recomputed, and for any remaining residual SCCs the ranks are recalculated over
+Both kinds of cuts are applied iteratively: after each pass the SCCs are
+recomputed, and for remaining residual SCCs the ranks are recalculated over
 their members. The procedure ends when no SCC with at least two members
-remains.
+remains. Symmetry detection is based on the rank measure, not on comparing
+weights: an SCC in which all edges carry the same weight is not necessarily
+symmetric, because different in- and out-degrees produce different ranks
+despite equal weights. The cut sibling edges are the \emph{container back
+edges}. Structure101 looks for a smallest possible set of feedback edges at
+this point; the rank cut is a deterministic substitute without any claim of
+minimality. It is order-independent because all elements are processed in
+sorted order.
 
-Symmetry detection is based on the rank measure, not on weight comparison. An
-SCC in which all edges carry the same weight is not necessarily symmetric:
-different in- and out-degrees produce different ranks despite equal weights and
-thereby yield a clear cut direction.
+After this cycle handling, S202 computes the levels on the resulting DAG.
+Level~0 consists of the siblings that use no other sibling. Every other
+sibling lies one level above the highest sibling it directly uses. This
+produces the transitive layering: from $B \to A$ and $C \to B$ follows $A$ on
+level~0, $B$ on level~1 and $C$ on level~2, even if no direct edge $C \to A$
+exists.
 
-After this cycle handling, S202 computes levels on the resulting DAG. Level~0
-contains the packages that do not use any other packages. Every other package
-is placed one level above the highest package it directly uses. This creates
-the transitive layering: from $B \to A$ and $C \to B$, it follows that $A$ is
-on Level~0, $B$ on Level~1, and $C$ on Level~2, even though no direct edge
-$C \to A$ exists.
+This rule — known as \emph{longest-path} or \emph{ASAP levelization} —
+anchors every element as low as possible, directly above its deepest
+dependency. It matches the invariant Structure101 documents for its Levelized
+Structure Maps: every element depends on at least one element on the level
+immediately below. The alternative of pulling every element flush
+\emph{beneath its consumer} instead (ALAP) would break that invariant, since a
+gap could open between an element and its nearest dependency.
 
-This rule — known as \emph{longest-path} or \emph{ASAP} levelization — anchors
-every package as low as possible, immediately above its deepest dependency. It
-matches the invariant that Structure101 documents for its Levelized Structure
-Maps: every item depends on at least one item on the level immediately below it.
-The alternative of instead pulling each package flush \emph{beneath its
-consumer} (ALAP) would violate this invariant, since a gap could open up between
-a package and its nearest dependency.
+One consequence is accepted deliberately: siblings with the same role but
+dependency chains of different depth land on different levels. If several
+adapters sit above the same application layer, but one of them additionally
+sits above a shared utility package, that one is placed one level higher than
+the others — levelization measures dependency depth, not architectural role.
 
-One consequence is accepted deliberately: packages with the same role but
-dependency chains of different depth end up on different levels. If, say,
-several adapters sit above the same application layer but one of them
-additionally sits above a shared helper package, that one is placed one level
-higher than the rest — levelization measures dependency depth, not
-architectural role.
+The \emph{localLevel} computed this way is the architectural hypothesis. It
+determines the position of every element inside its container, and the chain
+of localLevels from the root down to the element is the order against which
+violations are measured. It is deliberately local: it compares siblings only.
 
-The levels produced here are the \emph{architectureLevel} of each package —
-the architectural hypothesis used in the next step to guide class
-SCC-breaking. A separate step, run after class levels are assigned, applies
-the same approach within each parent container independently. It builds a
-sibling-only weighted graph of the direct children, excluding class back-edges
-already resolved in the previous step, and derives a \emph{localLevel} for
-every element. The local level controls visual
-positioning inside the parent container and has no effect on the architectural
-hypothesis or violation detection.
+In addition, S202 maintains a global \emph{architectureLevel} for every
+element. It measures how deep the dependency chain below an element really is
+and is therefore a measure of its complexity; the height in the 3D view and
+the ring of the hexagonal view are based on it. The \emph{architectureLevel}
+of a class is its longest-path depth in the class graph. Only the
+\emph{level cuts} are set aside: back edges that lie inside a class cycle. A
+back edge that merely runs against the order of two packages, without closing
+a class cycle, is a real acyclic dependency and still counts. The
+\emph{architectureLevel} of a package follows the same rule one level up: it
+is its longest-path depth in a package graph in which $P$ depends on $Q$
+whenever a non-back-edge leads from the subtree of $P$ into the subtree of $Q$
+and neither package contains the other. Both graphs are acyclic by
+construction. A package is thus never lifted by its own interior: whoever
+contains everything it uses stands on level~0. The global level influences
+neither the layout nor the detection of violations.
 
-\section{From Class Cycles to Package Ordering}
+\section{From Class Cycles to Back Edges}
 
 Figure~\ref{fig:cyclic-class} shows a cyclic example from the Example JAR as a
 classic class graph. The two subgraphs for Notification and Payment each
@@ -466,63 +475,67 @@ algorithm.
 In the cyclic case, the class graph therefore raises the technical question:
 which edge must be ignored so that the SCC becomes a computable DAG again for
 level assignment? The class graph alone does not provide an architectural
-criterion for that. The package ordering provides this criterion through two
-cases.
+criterion for that. The container order provides it: a class dependency is a
+back edge exactly when its projection in its container is a cut sibling edge.
 
-\textbf{Case A} covers SCCs whose members span different package levels. An
-edge $A \to B$ inside such an SCC is cut when
-$\mathit{pkgLevel}(A) < \mathit{pkgLevel}(B)$ — it runs from a
-lower-positioned package toward a higher-positioned one, against the
-architectural direction. The edge is then not an arbitrary cut edge but a
-concrete dependency that violates the package order. The cut is applied
-iteratively until no edge inside an SCC runs against the package hypothesis;
-SCCs that remain afterwards are handled by Case~B.
+A class cycle that lies inside one package is cut inside that package — there
+the classes themselves are the siblings. A class cycle that runs through
+several packages appears in the common parent container as a tangle between
+packages and is cut there; inside the packages involved, only the edges with
+both endpoints inside still count. The retroactive correction from the
+catalogue of errors cannot arise this way: no container has to revise a
+decision of another one.
 
-\textbf{Case B} covers SCCs confined entirely to a single package level — no
-package context provides a direction. All internal edges of such an SCC are
-removed. Class levels for the former cycle members then arise from their
-dependencies outside the SCC; nodes with no such external dependencies end up
-at the same level.
+From this follows a property that can be proven: every class cycle contains
+at least one back edge. In the deepest container that holds all classes of the
+cycle, it projects onto a cycle between siblings, and there at least one edge
+was cut. For the global class level it is therefore sufficient to set aside
+the back edges inside class cycles~-- the \emph{level cuts}. The class graph
+is acyclic afterwards; level computation needs no further cycle handling and
+no special cases.
 
-All edges removed in both cases are recorded as \emph{classBackEdge} findings
-and remain visible as dashed violation edges.
+Back edges outside class cycles, by contrast, stay in the level computation.
+Two packages can use each other through different classes without any class
+cycle arising. The edge against the package order is then a violation in the
+picture, but still part of the real dependency depth of its class.
+
+All back edges are recorded as \emph{classBackEdge} findings and remain
+visible as dashed violation edges.
 
 \begin{figure}[H]
   \centering
   \includegraphics[width=0.6\textwidth]{figures/s202-dependencies-cyclic.png}
   \caption{Cyclic example in the S202 representation. The dashed edges are
-  violations: they run against the order derived from package dependencies and
-  remain visible findings of the architectural hypothesis. All four dashed
-  edges belong to the two SCCs and are classified by S202 as back edges for
-  level computation.}
+  violations: they run against the computed container order and remain visible
+  findings of the architectural hypothesis. All four dashed edges are back
+  edges: projections of the sibling edges \texttt{core}$\to$\texttt{infra} and
+  \texttt{service}$\to$\texttt{infra} cut in the container \texttt{sccs}.}
   \label{fig:s202-cyclic}
 \end{figure}
 
-The terms back edge and violation describe different roles:
+The terms back edge and violation describe different roles of the same edges:
 
 \begin{description}
-  \item[Back edge] A selected edge inside an SCC that is handled separately for
-        level computation so that the computation graph becomes acyclic. It
-        belongs to cycle handling.
-  \item[Violation] A concrete dependency that runs upward after the computed
-        order has been applied. What counts here is the \emph{nested} order, not
-        the flat global level: the \emph{localLevel} chains of both endpoints are
-        compared from the outermost shared container downward, and the direction
-        is decided by the first container in which they differ~-- i.e. the
-        \emph{localLevel} of the appropriate target level (called \emph{visual
-        rank} in the code). An edge can run downward globally (by
-        \emph{architectureLevel}) yet still point upward between two sibling
-        packages~-- in which case it is a violation. It may come from an SCC, but
-        it does not have to. Violations are therefore a superset of back edges: a
-        back edge can
-        become visible as a violation, but not every violation is a back edge.
-        Conceptually, a violation remains the visible deviation from the
-        ordering, while a back edge describes the role of the edge in cycle
-        handling.
+  \item[Back edge] A class dependency whose projection in its container was cut
+        while breaking a tangle. It belongs to cycle handling. If it also lies
+        inside a class cycle, it is a level cut and is set aside for the global
+        class level.
+  \item[Violation] A concrete dependency that runs upward in the computed
+        order. What counts here is the \emph{nested} order, not a flat global
+        level: the \emph{localLevel} chains of both endpoints are compared from
+        the outermost shared container downward, and the direction is decided
+        by the first container in which they differ (called \emph{visual rank}
+        in the code). Every violation is a back edge, because outside the cut
+        edges all sibling edges run downward. Conversely, a back edge runs
+        upward or sideways; only when a second path inside a tangle already
+        fixes the direction can a cut edge end up pointing downward, and then it
+        is not a visible violation. Conceptually, a violation remains the
+        visible deviation from the ordering, while a back edge describes the role
+        of the edge in cycle handling.
 \end{description}
 
 S202 therefore does not hide the cycle. Edges classified as back edges remain
-visible as violations because they explain why the package ordering does not
+visible as violations because they explain why the container order does not
 fully match the concrete class dependencies. This makes the deviation
 traceable rather than arbitrary.
 
@@ -540,33 +553,35 @@ consistency rules. These rules do not recompute the layout and do not correct
 anything. They only read the result and ask whether the generated
 representation is internally consistent.
 
-The check considers three levels:
+The check consists of five rules:
 
 \begin{enumerate}
-  \item \textbf{Class graph:} For normal class dependencies, the following
-        must hold: if $A \to B$, then $A$ is on a higher level than $B$.
-        Exceptions must be classified explicitly, for example as a back edge
-        or as an edge inside a class SCC. Class-level cycles detected here
-        correspond to the red overlay in the UI.
-  \item \textbf{Package graph:} The computed package ordering must be
-        consistent with the weighted package dependencies. For every package
-        dependency $P \to Q$ that is not classified as a package back edge,
-        $P$ must lie strictly above $Q$ in the computed ordering. Edges cut
-        during package SCC-breaking must be classified as package back edges
-        and are exempt from this check. Package-level cycles detected here
-        correspond to the orange overlay in the UI.
-  \item \textbf{Visible representation:} The visible arrangement must match
-        the computed model. Package containers, local class positions, and
-        nested levels must not silently reverse the computed architectural
-        hypothesis.
+  \item \textbf{Class graph:} For every class dependency $A \to B$ that is not
+        a level cut, $A$ is on a higher level than $B$, and every level cut is
+        a back edge. There are no further exceptions, because the class graph
+        without level cuts is acyclic.
+  \item \textbf{Container:} In every container, every sibling edge that was not
+        cut runs from a higher to a lower \emph{localLevel}. This is the promise
+        of the representation itself.
+  \item \textbf{Back edges only in tangles:} Every cut sibling edge connects
+        two members of the same container tangle. Nothing is cut outside cycles.
+  \item \textbf{Package graph:} For every non-back-edge between classes of two
+        packages that do not contain each other, the source package lies above
+        the target package.
+  \item \textbf{Visible representation:} Every dependency that runs upward in
+        the nested order is a back edge. The picture shows no violation the model
+        does not know about.
 \end{enumerate}
 
 These consistency rules are neither an additional optimization nor a second
 layout algorithm. They are an independent plausibility check after the
 calculation has finished. This is exactly why they find errors that normal
-unit tests easily miss: a package level was computed correctly, but displayed
-incorrectly locally; a back edge was cut, but not marked as such; a normal edge
-runs upward without being part of an SCC.
+unit tests easily miss: an edge was silently cut during layout without
+counting as a back edge; a back edge lies outside every tangle; a normal edge
+runs upward. Exactly the first of these errors went unnoticed for a long time
+in an earlier version of S202, because the order came from a global package
+graph and the position from a local sibling graph, and nobody checked whether
+the two agreed.
 
 The decisive point is redundancy. The pipeline generates the representation.
 The rules then check whether this representation satisfies its own claim. This
@@ -619,77 +634,60 @@ entire domain relationship between two classes.
 
 \section{Implementation at the Conceptual Level}
 
-The implementation deliberately separates the calculation into several phases.
-The decisive point is that no phase fixes a visible position before the
+The implementation deliberately separates the computation into several
+phases. The decisive point is that no phase fixes a visible position before the
 information that justifies this position is available.
 
 \begin{enumerate}
   \item \textbf{Build the class graph:} A directed class graph is created from
-        the bytecode. This graph remains the domain raw model of the analysis.
-        Only edges that carry at least one relationship of kind
-        \texttt{extends}, \texttt{implements}, \texttt{imports},
-        \texttt{instantiates}, or \texttt{calls} enter the ordering
-        computation; pure type references (field types, parameter and return
-        types, casts) remain in the raw model but are not considered.
+        the bytecode. This graph remains the raw domain model of the analysis.
+        Only edges carrying at least one relation of kind \texttt{extends},
+        \texttt{implements}, \texttt{imports}, \texttt{instantiates}, or
+        \texttt{calls} enter the ordering computation; pure type references
+        (field types, parameter and return types, casts) are kept in the raw
+        model but not counted.
   \item \textbf{Detect SCCs:} Strongly connected components are determined on
-        the class graph using Tarjan. The result is not yet a layout; it is the
+        the class graph using Tarjan. The result is not yet a layout, but the
         information which classes can be ordered acyclically and which belong
-        to cycles.
-  \item \textbf{Derive the package graph:} Class dependencies are aggregated
-        into a weighted global package graph. Each method call from a class in
-        package $P$ to a class in package $Q$ contributes to the weight of
-        edge $P \to Q$, propagated up the ancestor chain of $P$. The result is
-        a single flat graph spanning all packages.
-  \item \textbf{Compute package ordering:} The rank measure $rank(P)$ is
-        computed from the weighted incoming and outgoing edges. All edges for
-        which $rank(P) < rank(Q)$ holds are classified as back edges and cut;
-        residual SCCs are processed again with recomputed ranks until the
-        package graph is acyclic. If all ranks within an SCC are equal, all
-        internal edges are removed; levels then arise from dependencies outside
-        the former SCC.
-  \item \textbf{Determine class back edges:} Class SCCs are broken using the
-        package hypothesis. \emph{Case A} — an edge $A \to B$ inside an SCC
-        is cut when $\mathit{pkgLevel}(A) < \mathit{pkgLevel}(B)$: it runs
-        against the architectural direction. \emph{Case B} — when all SCC
-        members share the same package level, no package context provides a
-        direction; all internal edges are removed. In both cases, \emph{cut}
-        means the edge is excluded from the DAG used for level computation but
-        preserved as a \emph{classBackEdge} finding visible as a dashed
-        violation edge.
-  \item \textbf{Assign local display positions:} After class levels are
-        assigned, the \emph{localLevel} of every element is computed. Inside
-        each parent container a sibling-only weighted graph of the direct
-        children is built, excluding class back-edges from Step~5; the sibling
-        graph is acyclic by construction; longest-path yields a
-        \emph{localLevel} per child. \emph{localLevel} governs visual positioning
-        inside the parent box and is also the basis of the visible violation
-        detection (the \emph{visual rank} over the nested level chain described
-        above). \emph{architectureLevel} is the global semantic level; it drives
-        the layout and the global consistency invariant~-- a necessary but not
-        sufficient condition, since a flat global comparison does not detect
-        nested upward edges between sibling containers.
+        to cycles (red overlay).
+  \item \textbf{Order the containers:} Every class dependency is projected onto
+        the two children of the deepest common container and counted there as a
+        weighted sibling edge. Per container, the SCCs of the sibling graph are
+        recorded as tangles (orange overlay), resolved with the rank cut, and
+        the remaining order is translated by longest-path into a
+        \emph{localLevel} per child. The cut sibling edges are the container
+        back edges.
+  \item \textbf{Derive class back edges:} A class dependency is a back edge
+        when its projection was cut. It is kept as a \emph{classBackEdge}
+        finding and shown as a dashed violation edge.
+  \item \textbf{Compute global levels:} The \emph{architectureLevel} of
+        classes arises by longest-path on the class graph without the level
+        cuts~-- the back edges inside class cycles~--, that of packages on the
+        package graph of non-back-edges between different subtrees. Both
+        graphs are acyclic by construction.
   \item \textbf{Check consistency:} Finally, the finished representation is
-        checked redundantly against the consistency rules. Normal dependencies,
-        SCCs, back edges, and violations are distinguished and classified.
+        checked redundantly against the five consistency rules.
 \end{enumerate}
 
 In short:
 
 \begin{lstlisting}
 Bytecode -> class graph -> class SCCs (red overlay)
-         -> package graph -> package SCCs / tangles (orange overlay)
-         -> package architectureLevel
-         -> class architectureLevel -> localLevel -> consistency rules
+         -> per container: sibling graph -> tangles (orange overlay)
+                           -> rank cut (back edges) -> localLevel
+         -> class back edges -> level cuts
+         -> architectureLevel (classes, packages)
+         -> consistency rules
 \end{lstlisting}
 
 \section{Conclusion}
 
 S202 computes the most plausible hypothesis of the actual architecture from
 the existing dependencies. The result is a verifiable hierarchical layered
-representation: class dependencies provide the graph, package dependencies
-provide a robust order, back edges make necessary breaks visible, and
-consistency rules check whether the finished representation satisfies its own
-claim.
+representation: class dependencies provide the graph, every container orders
+its children by exactly these dependencies, back edges make necessary breaks
+visible, and consistency rules check whether the finished representation
+satisfies its own claim.
 
 A key design decision is the explicit separation of two kinds of cycles.
 Class cycles and package cycles are detected independently, stored as distinct

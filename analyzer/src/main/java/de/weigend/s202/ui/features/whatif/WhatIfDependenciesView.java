@@ -35,6 +35,9 @@ import javafx.scene.control.ListView;
 import javafx.scene.control.SplitPane;
 import javafx.scene.control.TreeItem;
 import javafx.scene.control.TreeView;
+import javafx.scene.control.Tooltip;
+import javafx.scene.input.MouseButton;
+import javafx.scene.input.MouseEvent;
 import javafx.scene.layout.BorderPane;
 import javafx.scene.layout.Priority;
 import javafx.scene.layout.VBox;
@@ -42,10 +45,13 @@ import javafx.scene.layout.VBox;
 import java.net.URL;
 import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.IdentityHashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.TreeSet;
+import java.util.function.Consumer;
 
 /**
  * WFX side-panel view that lists the current What-If consequences for the
@@ -85,6 +91,27 @@ public final class WhatIfDependenciesView implements View {
     private Architecture architecture;
     private DependencyModel rawDepModel;
     private String selectedFullName;
+    /**
+     * Classes the bound view displays, or {@code null} when it shows the whole
+     * architecture. A tangle tab shows a handful of classes of a much larger
+     * model; the panel then lists only what lies between those classes.
+     */
+    private Set<String> visibleClasses;
+    /** Tangles behind the rows of {@link #sccList}, same order. */
+    private List<Tangle> sccTangles = List.of();
+    /** What a double-click on a row of {@link #upwardTree} opens. */
+    private Map<TreeItem<String>, OpenTangleRequest> upwardRequests = Map.of();
+    private Consumer<OpenTangleRequest> onOpenTangle;
+
+    /**
+     * A double-click on a row: open a tangle view for it. For a package-tangle
+     * row {@code tangle} is that tangle; for a wrong-direction row it holds the
+     * classes of the clicked edge or edge group, so the view shows exactly
+     * those classes and every dependency between them.
+     */
+    public record OpenTangleRequest(Tangle tangle, String title) {}
+
+    private static final String OPEN_HINT = "Double-click an entry to open it in a tangle view";
     private static final Set<ViolationKind> COMPONENT_VIOLATION_KINDS = Set.of(
             ViolationKind.COMPONENT_API_BYPASS,
             ViolationKind.COMPONENT_API_LEAKS_IMPLEMENTATION,
@@ -126,6 +153,33 @@ public final class WhatIfDependenciesView implements View {
         sccSection = new VBox(sccHeader, sccList);
         sccSection.setStyle(PANEL_STYLE);
         VBox.setVgrow(sccList, Priority.ALWAYS);
+        sccList.setOnMouseClicked(ev -> {
+            if (ev.getButton() != MouseButton.PRIMARY || ev.getClickCount() != 2 || onOpenTangle == null) {
+                return;
+            }
+            int index = sccList.getSelectionModel().getSelectedIndex();
+            if (index < 0 || index >= sccTangles.size()) {
+                return;
+            }
+            onOpenTangle.accept(new OpenTangleRequest(sccTangles.get(index), sccList.getItems().get(index)));
+            ev.consume();
+        });
+        sccList.setTooltip(new Tooltip(OPEN_HINT));
+
+        // Filter on PRESSED, like the Top Tangles tree: the second press of a
+        // double-click must open the view before the default handler toggles
+        // the row's expansion.
+        upwardTree.addEventFilter(MouseEvent.MOUSE_PRESSED, ev -> {
+            if (ev.getButton() != MouseButton.PRIMARY || ev.getClickCount() != 2 || onOpenTangle == null) {
+                return;
+            }
+            OpenTangleRequest request = upwardRequests.get(upwardTree.getSelectionModel().getSelectedItem());
+            if (request != null) {
+                onOpenTangle.accept(request);
+                ev.consume();
+            }
+        });
+        upwardTree.setTooltip(new Tooltip(OPEN_HINT));
 
         split = new SplitPane(upwardSection, sccSection);
         split.setOrientation(Orientation.VERTICAL);
@@ -145,9 +199,19 @@ public final class WhatIfDependenciesView implements View {
 
     /** Re-bind the view to a different architecture context and optional class/package scope. */
     public void bind(Architecture architecture, DependencyModel rawDepModel, String selectedFullName) {
+        bind(architecture, rawDepModel, selectedFullName, null);
+    }
+
+    /**
+     * Re-bind the view to an architecture context of which the bound view
+     * displays only {@code visibleClasses}; {@code null} means all of it.
+     */
+    public void bind(Architecture architecture, DependencyModel rawDepModel, String selectedFullName,
+                     Set<String> visibleClasses) {
         this.architecture = architecture;
         this.rawDepModel = rawDepModel;
         this.selectedFullName = selectedFullName;
+        this.visibleClasses = visibleClasses;
         refresh();
     }
 
@@ -181,22 +245,25 @@ public final class WhatIfDependenciesView implements View {
         if (architecture == null) {
             return Map.of();
         }
-        if (hasSelection()) {
-            return groupScopedViolations(architecture, rawDepModel, selectedFullName, Set.of(ViolationKind.UPWARD));
+        if (hasSelection() || visibleClasses != null) {
+            return groupScopedViolations(architecture, rawDepModel, selectedFullName,
+                    Set.of(ViolationKind.UPWARD), visibleClasses);
         }
         return architecture.groupUpwardViolations(WhatIfDependenciesView::parentOf);
     }
 
     private Map<EndpointPair, List<Violation>> aggregatedStyleViolations() {
         if (architecture instanceof ComponentArchitecture) {
-            if (hasSelection()) {
-                return groupScopedViolations(architecture, rawDepModel, selectedFullName, COMPONENT_VIOLATION_KINDS);
+            if (hasSelection() || visibleClasses != null) {
+                return groupScopedViolations(architecture, rawDepModel, selectedFullName,
+                        COMPONENT_VIOLATION_KINDS, visibleClasses);
             }
             return architecture.groupViolations(WhatIfDependenciesView::parentOf, COMPONENT_VIOLATION_KINDS);
         }
         if (architecture instanceof HexagonalArchitecture) {
-            if (hasSelection()) {
-                return groupScopedViolations(architecture, rawDepModel, selectedFullName, HEXAGONAL_VIOLATION_KINDS);
+            if (hasSelection() || visibleClasses != null) {
+                return groupScopedViolations(architecture, rawDepModel, selectedFullName,
+                        HEXAGONAL_VIOLATION_KINDS, visibleClasses);
             }
             return architecture.groupViolations(WhatIfDependenciesView::parentOf, HEXAGONAL_VIOLATION_KINDS);
         }
@@ -207,15 +274,31 @@ public final class WhatIfDependenciesView implements View {
                                                                     DependencyModel rawDepModel,
                                                                     String selectedFullName,
                                                                     Set<ViolationKind> kinds) {
+        return groupScopedViolations(architecture, rawDepModel, selectedFullName, kinds, null);
+    }
+
+    /**
+     * @param visibleClasses when non-null, only violations between two of these
+     *                       classes count — the bound view shows nothing else
+     */
+    static Map<EndpointPair, List<Violation>> groupScopedViolations(Architecture architecture,
+                                                                    DependencyModel rawDepModel,
+                                                                    String selectedFullName,
+                                                                    Set<ViolationKind> kinds,
+                                                                    Set<String> visibleClasses) {
         if (architecture == null) {
             return Map.of();
         }
-        if (!hasSelection(selectedFullName)) {
+        if (!hasSelection(selectedFullName) && visibleClasses == null) {
             return architecture.groupViolations(WhatIfDependenciesView::parentOf, kinds);
         }
         Map<EndpointPair, List<Violation>> grouped = new LinkedHashMap<>();
         for (Violation v : architecture.violations()) {
             if (kinds != null && !kinds.isEmpty() && !kinds.contains(v.kind())) {
+                continue;
+            }
+            if (visibleClasses != null
+                    && !(visibleClasses.contains(v.sourceFqn()) && visibleClasses.contains(v.targetFqn()))) {
                 continue;
             }
             if (!violationTouchesSelection(v, rawDepModel, selectedFullName)) {
@@ -247,6 +330,8 @@ public final class WhatIfDependenciesView implements View {
 
     private TreeItem<String> buildUpwardTree(Map<EndpointPair, List<Violation>> grouped) {
         TreeItem<String> rootItem = new TreeItem<>("");
+        Map<TreeItem<String>, OpenTangleRequest> requests = new IdentityHashMap<>();
+        upwardRequests = requests;
         if (grouped.isEmpty()) {
             return rootItem;
         }
@@ -260,17 +345,59 @@ public final class WhatIfDependenciesView implements View {
             List<Violation> edges = entry.getValue();
             String label = pair.source() + " ↑ " + pair.target() + "  (" + edges.size() + ")";
             TreeItem<String> top = new TreeItem<>(label);
+            requests.put(top, requestForGroup(pair, edges));
             List<Violation> sortedEdges = edges.stream()
                     .sorted(Comparator.comparing(Violation::sourceFqn).thenComparing(Violation::targetFqn))
                     .toList();
             for (Violation v : sortedEdges) {
                 TreeItem<String> classItem = new TreeItem<>(simple(v.sourceFqn()) + " → " + simple(v.targetFqn()));
                 attachMethodCallChildren(classItem, v.sourceFqn(), v.targetFqn());
+                OpenTangleRequest edgeRequest = requestForEdge(v);
+                requests.put(classItem, edgeRequest);
+                // A method-call row opens the class edge it belongs to.
+                classItem.getChildren().forEach(methodItem -> requests.put(methodItem, edgeRequest));
                 top.getChildren().add(classItem);
             }
             rootItem.getChildren().add(top);
         }
         return rootItem;
+    }
+
+    /**
+     * Tangle view for one wrong-direction class edge: its two classes. The view
+     * then shows this edge together with whatever runs back between them.
+     * {@code null} for a self-dependency, which has nothing to show.
+     */
+    static OpenTangleRequest requestForEdge(Violation v) {
+        if (v.sourceFqn().equals(v.targetFqn())) {
+            return null;
+        }
+        return new OpenTangleRequest(
+                new Tangle(Set.of(v.sourceFqn(), v.targetFqn())),
+                simple(v.sourceFqn()) + " → " + simple(v.targetFqn()));
+    }
+
+    /**
+     * Tangle view for a group of wrong-direction edges between two packages:
+     * every class that is an endpoint of one of them. Classes rather than the
+     * two packages, so the view stays focused on the finding and also works
+     * when both ends lie in the same package or one package contains the other.
+     */
+    static OpenTangleRequest requestForGroup(EndpointPair pair, List<Violation> edges) {
+        Set<String> classes = new TreeSet<>();
+        for (Violation v : edges) {
+            classes.add(v.sourceFqn());
+            classes.add(v.targetFqn());
+        }
+        if (classes.size() < 2) {
+            return null;
+        }
+        return new OpenTangleRequest(new Tangle(classes),
+                packageLabel(pair.source()) + " ↑ " + packageLabel(pair.target()));
+    }
+
+    private static String packageLabel(String packageFqn) {
+        return packageFqn == null || packageFqn.isEmpty() ? "<root>" : simple(packageFqn);
     }
 
     private TreeItem<String> buildComponentViolationTree(Map<EndpointPair, List<Violation>> grouped) {
@@ -332,33 +459,72 @@ public final class WhatIfDependenciesView implements View {
         }
     }
 
+    /** Handler for a double-click on a wrong-direction row or a package-tangle row. */
+    public void setOnOpenTangle(Consumer<OpenTangleRequest> handler) {
+        this.onOpenTangle = handler;
+    }
+
     private ObservableList<String> buildSccList() {
         ObservableList<String> items = FXCollections.observableArrayList();
         if (architecture == null) {
+            sccTangles = List.of();
             return items;
         }
-        for (Tangle t : scopedTangles(architecture, rawDepModel, selectedFullName)) {
-            items.add(formatTangle(t.members().stream().sorted().toList()));
+        List<Tangle> tangles = scopedTangles(architecture, rawDepModel, selectedFullName, visibleClasses);
+        for (Tangle t : tangles) {
+            items.add(t.label(m -> rawDepModel == null || rawDepModel.getClass(m) == null));
         }
+        sccTangles = tangles;
         return items;
     }
 
     static List<Tangle> scopedTangles(Architecture architecture,
                                       DependencyModel rawDepModel,
                                       String selectedFullName) {
+        return scopedTangles(architecture, rawDepModel, selectedFullName, null);
+    }
+
+    /**
+     * @param visibleClasses when non-null, only tangles the bound view shows
+     *                       completely count: every member is one of these
+     *                       classes or a package holding at least one of them
+     */
+    static List<Tangle> scopedTangles(Architecture architecture,
+                                      DependencyModel rawDepModel,
+                                      String selectedFullName,
+                                      Set<String> visibleClasses) {
         if (architecture == null) {
             return List.of();
         }
-        if (!hasSelection(selectedFullName)) {
+        String packageScope = hasSelection(selectedFullName)
+                ? selectedPackageScope(rawDepModel, selectedFullName)
+                : null;
+        if (packageScope == null && visibleClasses == null) {
             return architecture.tangles();
         }
-        String packageScope = selectedPackageScope(rawDepModel, selectedFullName);
-        boolean classSelection = isClassSelection(rawDepModel, selectedFullName);
         return architecture.tangles().stream()
-                .filter(t -> t.members().stream().anyMatch(member -> classSelection
-                        ? member.equals(packageScope)
-                        : packageInScope(member, packageScope)))
+                .filter(t -> t.inScope(packageScope))
+                .filter(t -> visibleClasses == null || allMembersVisible(t, visibleClasses))
                 .toList();
+    }
+
+    private static boolean allMembersVisible(Tangle tangle, Set<String> visibleClasses) {
+        for (String member : tangle.members()) {
+            String prefix = member + ".";
+            boolean visible = visibleClasses.contains(member);
+            if (!visible) {
+                for (String cls : visibleClasses) {
+                    if (cls.startsWith(prefix)) {
+                        visible = true;
+                        break;
+                    }
+                }
+            }
+            if (!visible) {
+                return false;
+            }
+        }
+        return true;
     }
 
     private static boolean violationTouchesSelection(Violation violation,
@@ -406,7 +572,10 @@ public final class WhatIfDependenciesView implements View {
     }
 
     private String scopeSuffix() {
-        return hasSelection() ? " for " + selectedFullName : "";
+        if (hasSelection()) {
+            return " for " + selectedFullName;
+        }
+        return visibleClasses != null ? " in this view" : "";
     }
 
     private static boolean packageInScope(String fqn, String packageScope) {
@@ -414,10 +583,6 @@ public final class WhatIfDependenciesView implements View {
             return false;
         }
         return fqn.equals(packageScope) || (!packageScope.isEmpty() && fqn.startsWith(packageScope + "."));
-    }
-
-    private static String formatTangle(List<String> members) {
-        return "{ " + String.join(", ", members) + " }";
     }
 
     private static String simple(String fqcn) {

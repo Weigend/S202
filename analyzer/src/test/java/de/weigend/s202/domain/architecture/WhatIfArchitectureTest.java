@@ -126,8 +126,8 @@ class WhatIfArchitectureTest {
         addPackage(domain, "de.weigend.s202.domain", 0);
         addClass(domain, "de.weigend.s202.ui.View", 1, Set.of("de.weigend.s202.domain.Model"));
         addClass(domain, "de.weigend.s202.domain.Model", 0, Set.of());
-        domain.setPackageEdgeWeights(Map.of());
-        domain.setPackageBackEdges(Set.of());
+        domain.setSiblingEdgeWeights(Map.of());
+        domain.setContainerBackEdges(Set.of());
 
         HierarchicalLayeredArchitecture original =
                 (HierarchicalLayeredArchitecture) new HierarchicalLayeredArchitectureBuilder().build(domain);
@@ -171,8 +171,8 @@ class WhatIfArchitectureTest {
         addClass(domain, "ui.B", 1, Set.of("domain.X"));
         addClass(domain, "domain.X", 0, Set.of());
         addClass(domain, "domain.Y", 0, Set.of());
-        domain.setPackageEdgeWeights(Map.of());
-        domain.setPackageBackEdges(Set.of());
+        domain.setSiblingEdgeWeights(Map.of());
+        domain.setContainerBackEdges(Set.of());
         HierarchicalLayeredArchitecture original =
                 (HierarchicalLayeredArchitecture) new HierarchicalLayeredArchitectureBuilder().build(domain);
         WhatIfArchitecture wif = new WhatIfArchitectureModel(original, domain);
@@ -257,8 +257,8 @@ class WhatIfArchitectureTest {
         addPackage(domain, "domain", 0);
         addClass(domain, "ui.View", 1, Set.of("domain.Model"));
         addClass(domain, "domain.Model", 0, Set.of());
-        domain.setPackageEdgeWeights(Map.of());
-        domain.setPackageBackEdges(Set.of());
+        domain.setSiblingEdgeWeights(Map.of());
+        domain.setContainerBackEdges(Set.of());
         return domain;
     }
 
@@ -268,10 +268,10 @@ class WhatIfArchitectureTest {
         addPackage(domain, "b", 0);
         addClass(domain, "a.X", 0, Set.of("b.Y"));
         addClass(domain, "b.Y", 0, Set.of("a.X"));
-        domain.setPackageEdgeWeights(Map.of(
+        domain.setSiblingEdgeWeights(Map.of(
                 "a", Map.of("b", 1),
                 "b", Map.of("a", 1)));
-        domain.setPackageBackEdges(Set.of("b\0a"));
+        domain.setContainerBackEdges(Set.of("b\0a"));
         return domain;
     }
 
@@ -283,10 +283,10 @@ class WhatIfArchitectureTest {
         addClass(domain, "a.A", 0, Set.of("b.B"));
         addClass(domain, "b.B", 0, Set.of());
         addClass(domain, "c.C", 0, Set.of("a.A"));
-        domain.setPackageEdgeWeights(Map.of(
+        domain.setSiblingEdgeWeights(Map.of(
                 "a", Map.of("b", 1),
                 "c", Map.of("a", 1)));
-        domain.setPackageBackEdges(Set.of());
+        domain.setContainerBackEdges(Set.of());
         return domain;
     }
 

@@ -31,7 +31,7 @@ import java.util.*;
  */
 public class DebugPackageLevels {
     public static void main(String[] args) throws Exception {
-        String jarPath = args.length > 0 ? args[0] : "../test-example/target/test-example-1.0.0.jar";
+        String jarPath = args.length > 0 ? args[0] : "../test-example/target/test-example-1.1.0.jar";
         
         System.out.println("=== ANALYZING JAR: " + jarPath + " ===\n");
         
@@ -93,7 +93,7 @@ public class DebugPackageLevels {
         
         // Debug: Show dependencies of ArchitectureCanvas in detail
         System.out.println("\n=== DEPENDENCY CHAIN ANALYSIS ===");
-        String[] keyClasses = {"de.weigend.s202.ui.wfx.S202Main", "de.weigend.s202.ui.core.canvas.ArchitectureCanvas"};
+        String[] keyClasses = {"de.weigend.s202.ui.shell.S202Main", "de.weigend.s202.ui.core.canvas.ArchitectureCanvas"};
         for (String className : keyClasses) {
             DomainModel.CalculatedElementInfo info = model.getClass(className);
             if (info != null) {

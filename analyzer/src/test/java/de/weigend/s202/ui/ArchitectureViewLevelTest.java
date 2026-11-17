@@ -37,7 +37,7 @@ public class ArchitectureViewLevelTest {
         
         // Load test JAR
         String testJarPath = System.getProperty("user.dir")
-                + "/../test-example/target/test-example-1.0.0.jar";
+                + "/../test-example/target/test-example-1.1.0.jar";
         
         // Step 1: Analyze
         InputAnalyzer inputAnalyzer = new InputAnalyzer();
@@ -55,8 +55,8 @@ public class ArchitectureViewLevelTest {
         // architectureLevel reflects honest dep-chain depth — parent->child
         // edges contribute, so com aggregates its descendants' outgoing
         // deps. With example3 sub-packages added, com lands at L2.
-        assertEquals(2, calculatedModel.getAllPackages().get("com").architectureLevel,
-                "com aggregates descendants' deps → L2");
+        assertEquals(0, calculatedModel.getAllPackages().get("com").architectureLevel,
+                "com has no dependencies outside its own subtree → L0");
         assertEquals(0, calculatedModel.getAllPackages().get("com.example").architectureLevel, "com.example has no cross-pkg deps → L0");
         assertEquals(0, calculatedModel.getAllPackages().get("com.example1").architectureLevel, "com.example1 has no cross-pkg deps → L0");
         assertEquals(1, calculatedModel.getAllPackages().get("com.example2").architectureLevel, "com.example2 depends on com.example → package L1");

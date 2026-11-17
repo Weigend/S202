@@ -24,7 +24,6 @@ import de.weigend.s202.ui.core.model.ArchitectureNode.NodeType;
 import javafx.application.Platform;
 import javafx.scene.Node;
 import javafx.scene.layout.HBox;
-import javafx.scene.layout.Priority;
 import javafx.scene.layout.VBox;
 
 import java.util.ArrayList;
@@ -56,6 +55,8 @@ public class ArchitectureTreeBuilder {
 
     private final Map<String, Node> elementRegistry;
     private final Consumer<String> selectionChangeSink;
+    private boolean lazyCollapsedPackages;
+    private boolean plainNodes;
 
     /**
      * Creates a new ArchitectureTreeBuilder.
@@ -69,6 +70,34 @@ public class ArchitectureTreeBuilder {
     public ArchitectureTreeBuilder(Map<String, Node> elementRegistry, Consumer<String> selectionChangeSink) {
         this.elementRegistry = Objects.requireNonNull(elementRegistry, "elementRegistry cannot be null");
         this.selectionChangeSink = selectionChangeSink;
+    }
+
+    /**
+     * When enabled, a package that starts collapsed (beyond {@code maxDepth})
+     * gets no child boxes at build time. They are created — one level at a
+     * time — when the package is expanded for the first time, or when
+     * {@link de.weigend.s202.ui.core.graph.ElementLookup#materialize} asks for
+     * one of its elements. Until then such elements have no registry entry;
+     * {@link de.weigend.s202.ui.core.graph.ElementLookup#pendingContainer}
+     * names the collapsed package standing in for them.
+     *
+     * <p>Off by default: callers that copy the registry after the build
+     * (nested builders) would miss boxes registered later.
+     */
+    public ArchitectureTreeBuilder lazyCollapsedPackages(boolean lazy) {
+        this.lazyCollapsedPackages = lazy;
+        return this;
+    }
+
+    /**
+     * When enabled, packages and classes are drawn the way a graph draws its
+     * nodes — icon and name, no surrounding box — and the levels move apart
+     * to leave room for the arrows. A view that is about the dependencies
+     * rather than the containment uses this.
+     */
+    public ArchitectureTreeBuilder plainNodes(boolean plain) {
+        this.plainNodes = plain;
+        return this;
     }
 
     /**
@@ -130,16 +159,14 @@ public class ArchitectureTreeBuilder {
         Map<Integer, HBox> topLevelRows = new HashMap<>();
         for (ArchitectureNode child : sortedChildren) {
             HBox levelRow = topLevelRows.computeIfAbsent(child.getLevel(),
-                    l -> TreeBuilderSupport.createTopLevelRow(topLevelContainer, 8));
+                    l -> TreeBuilderSupport.createTopLevelRow(topLevelContainer, siblingGap()));
 
             if (child.getType() == NodeType.PACKAGE) {
                 LevelPackageBox packageBox = createPackageBox(child);
                 packageContainers.put(child.getFullName(), packageBox);
                 elementRegistry.put(child.getFullName(), packageBox);
 
-                packageBox.setMaxWidth(Double.MAX_VALUE);
-                packageBox.setMaxHeight(Double.MAX_VALUE);
-                HBox.setHgrow(packageBox, Priority.ALWAYS);
+                packageBox.fillRow();
                 levelRow.getChildren().add(packageBox);
 
                 // Depth 1 = this level visible, collapse if beyond maxDepth
@@ -147,7 +174,12 @@ public class ArchitectureTreeBuilder {
                     packageBox.setExpanded(false);
                 }
 
-                processArchitectureNode(child, packageContainers, packageBox, elementsAddedToParent, effectiveRoot, false, 1, maxDepth);
+                if (maxDepth < 1 && lazyCollapsedPackages) {
+                    deferChildren(child, packageBox, packageContainers, packageBox,
+                            elementsAddedToParent, effectiveRoot, 1, maxDepth);
+                } else {
+                    processArchitectureNode(child, packageContainers, packageBox, elementsAddedToParent, effectiveRoot, false, 1, maxDepth);
+                }
             } else if (child.getType() == NodeType.CLASS) {
                 LevelClassBox classBox = createClassBox(child);
                 elementRegistry.put(child.getFullName(), classBox);
@@ -237,24 +269,28 @@ public class ArchitectureTreeBuilder {
                                       BuildProgressCounter counter,
                                       ProgressSink progressSink) {
         HBox levelRow = topLevelRows.computeIfAbsent(child.getLevel(),
-                l -> TreeBuilderSupport.createTopLevelRow(topLevelContainer, 8));
+                l -> TreeBuilderSupport.createTopLevelRow(topLevelContainer, siblingGap()));
 
         if (child.getType() == NodeType.PACKAGE) {
             LevelPackageBox packageBox = createPackageBox(child);
             packageContainers.put(child.getFullName(), packageBox);
             elementRegistry.put(child.getFullName(), packageBox);
 
-            packageBox.setMaxWidth(Double.MAX_VALUE);
-            packageBox.setMaxHeight(Double.MAX_VALUE);
-            HBox.setHgrow(packageBox, Priority.ALWAYS);
+            packageBox.fillRow();
             levelRow.getChildren().add(packageBox);
 
             if (maxDepth < 1) {
                 packageBox.setExpanded(false);
             }
 
-            enqueueChildren(child, packageContainers, packageBox, elementsAddedToParent,
-                    effectiveRoot, 1, maxDepth, queue, counter, progressSink);
+            if (maxDepth < 1 && lazyCollapsedPackages) {
+                deferChildren(child, packageBox, packageContainers, packageBox,
+                        elementsAddedToParent, effectiveRoot, 1, maxDepth);
+                counter.processed += child.getTotalNodeCount() - 1;
+            } else {
+                enqueueChildren(child, packageContainers, packageBox, elementsAddedToParent,
+                        effectiveRoot, 1, maxDepth, queue, counter, progressSink);
+            }
         } else if (child.getType() == NodeType.CLASS) {
             LevelClassBox classBox = createClassBox(child);
             elementRegistry.put(child.getFullName(), classBox);
@@ -312,6 +348,14 @@ public class ArchitectureTreeBuilder {
 
                 if (currentDepth >= maxDepth) {
                     packageBox.setExpanded(false);
+                    if (lazyCollapsedPackages) {
+                        deferChildren(child, packageBox, packageContainers, packageBox,
+                                elementsAddedToParent, archRoot, currentDepth + 1, maxDepth);
+                        counter.processed += child.getTotalNodeCount() - 1;
+                        elementsAddedToParent.add(child.getFullName());
+                        reportProgress(counter, child, progressSink);
+                        return;
+                    }
                 }
             }
             LevelPackageBox packageBox = packageContainers.get(child.getFullName());
@@ -345,7 +389,8 @@ public class ArchitectureTreeBuilder {
     }
 
     private VBox createTopLevelContainer() {
-        return TreeBuilderSupport.createTopLevelContainer(8, "#f5f5f0");
+        return TreeBuilderSupport.createTopLevelContainer(
+                plainNodes ? LevelPackageBox.PLAIN_LEVEL_GAP : 8, "#f5f5f0");
     }
 
     /**
@@ -394,6 +439,12 @@ public class ArchitectureTreeBuilder {
                     // Collapse if beyond max depth
                     if (currentDepth >= maxDepth) {
                         packageBox.setExpanded(false);
+                        if (lazyCollapsedPackages) {
+                            deferChildren(child, packageBox, packageContainers, rootLevel,
+                                    elementsAddedToParent, archRoot, currentDepth + 1, maxDepth);
+                            elementsAddedToParent.add(child.getFullName());
+                            continue;
+                        }
                     }
                 }
                 // Recursively process children
@@ -409,6 +460,35 @@ public class ArchitectureTreeBuilder {
         }
     }
 
+    /**
+     * Leaves {@code packageBox} without children for now. The deferred build
+     * runs the regular synchronous path for this package only: it creates the
+     * direct children, and sub-packages are again collapsed and deferred
+     * because they lie beyond {@code maxDepth} as well.
+     */
+    private void deferChildren(ArchitectureNode node,
+                               LevelPackageBox packageBox,
+                               Map<String, LevelPackageBox> packageContainers,
+                               LevelPackageBox rootLevel,
+                               Set<String> elementsAddedToParent,
+                               ArchitectureNode archRoot,
+                               int childDepth,
+                               int maxDepth) {
+        Set<String> pending = new HashSet<>();
+        collectDescendantNames(node, pending);
+        packageBox.setLazyContent(
+                () -> processArchitectureNode(node, packageContainers, rootLevel, elementsAddedToParent,
+                        archRoot, false, childDepth, maxDepth),
+                pending);
+    }
+
+    private static void collectDescendantNames(ArchitectureNode node, Set<String> out) {
+        for (ArchitectureNode child : node.getChildren()) {
+            out.add(child.getFullName());
+            collectDescendantNames(child, out);
+        }
+    }
+
     private LevelPackageBox createPackageBox(ArchitectureNode node) {
         return createPackageBox(node.getSimpleName(), node.getLevel(), node.getFullName(), node.getArchitectureLevel());
     }
@@ -419,6 +499,7 @@ public class ArchitectureTreeBuilder {
                                              int architectureLevel) {
         LevelPackageBox packageBox = new LevelPackageBox(simpleName, level, false, fullName, architectureLevel);
         packageBox.setSelectionChangeSink(selectionChangeSink);
+        packageBox.setPlain(plainNodes);
         return packageBox;
     }
 
@@ -430,7 +511,12 @@ public class ArchitectureTreeBuilder {
                 node.isInterfaceType(),
                 node.getArchitectureLevel());
         classBox.setSelectionChangeSink(selectionChangeSink);
+        classBox.setPlain(plainNodes);
         return classBox;
+    }
+
+    private double siblingGap() {
+        return plainNodes ? LevelPackageBox.PLAIN_SIBLING_GAP : 8;
     }
 
     /**

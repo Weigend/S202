@@ -687,11 +687,18 @@ final class QualityReportHtmlWriter {
                 }
                 figcaption { margin-top: 7px; color: var(--muted); font-size: 12px; }
                 .gallery {
-                  display: grid;
-                  grid-template-columns: repeat(auto-fit, minmax(360px, 1fr));
+                  display: flex;
+                  flex-wrap: wrap;
+                  justify-content: center;
+                  align-items: flex-start;
                   gap: 18px;
                   margin-top: 18px;
                 }
+                /* Scope screenshots keep their own size: never enlarged, shrunk only to fit the page. */
+                .gallery figure { max-width: 100%; }
+                .gallery img { display: block; width: auto; max-width: 100%; margin: 0 auto; }
+                /* The caption wraps at the width of its image instead of widening the figure. */
+                .gallery figcaption { width: 0; min-width: 100%; }
                 table {
                   width: 100%;
                   border-collapse: collapse;

@@ -130,7 +130,7 @@ public class SelfArchitectureTest {
         final String VIEWS = "de.weigend.s202.ui.views.";
         final String CORE = "de.weigend.s202.ui.core.";
         final String FEATURES = "de.weigend.s202.ui.features.";
-        final String APP = "de.weigend.s202.ui.wfx.";
+        final String APP = "de.weigend.s202.ui.shell.";
 
         List<String> violations = new java.util.ArrayList<>();
         for (Map.Entry<String, DomainModel.CalculatedElementInfo> e : model.getAllClasses().entrySet()) {

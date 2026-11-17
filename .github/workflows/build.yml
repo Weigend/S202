@@ -22,9 +22,10 @@ jobs:
           cache: maven
 
       - name: Build WFX
-        env:
-          WFX_VERSION: "1.1.2"
         run: |
+          # Same source of truth as build-all.sh: the wfx.version property.
+          WFX_VERSION="$(sed -n 's:.*<wfx\.version>\(.*\)</wfx\.version>.*:\1:p' analyzer/pom.xml | head -1)"
+          test -n "$WFX_VERSION" || { echo "wfx.version not found in analyzer/pom.xml"; exit 1; }
           git clone --depth 1 --branch "v${WFX_VERSION}" https://github.com/Weigend/wfx.git /tmp/wfx
           cd /tmp/wfx
           mvn install -DskipTests --batch-mode

@@ -15,6 +15,8 @@
  */
 package de.weigend.s202.ui.core.arrows;
 
+import de.weigend.s202.domain.EdgeCycleClassifier;
+import de.weigend.s202.domain.EdgeCycleClassifier.CycleKind;
 import de.weigend.s202.domain.StronglyConnectedComponent;
 import io.softwareecg.wfx.lookup.api.Lookup;
 import de.weigend.s202.domain.SCCFinder;
@@ -33,11 +35,13 @@ import java.util.function.Function;
 
 /**
  * Renders SCC (Strongly Connected Components) visualization.
- * Detects cyclic dependencies using Tarjan's algorithm and draws red arrows.
+ * Draws red arrows for the dependencies that lie on a class cycle.
  *
  * <p>Features:
  * <ul>
- *   <li>Detects cycles using Tarjan's SCC algorithm</li>
+ *   <li>Class cycles come from the model ({@link EdgeCycleClassifier}), so
+ *       the answer does not depend on which classes are currently visible;
+ *       without a bound model the visible classes are searched for cycles</li>
  *   <li>Draws red arrows for cyclic dependencies only</li>
  *   <li>Interactive hover effects with status updates</li>
  *   <li>Visibility filtering (only draws visible elements)</li>
@@ -59,6 +63,9 @@ public class SCCRenderer {
     /** Package tangles for the active architecture — used to draw cross-package cycle contributions. */
     private List<Set<String>> packageTangles = List.of();
     private Function<String, String> packageResolver = SCCRenderer::staticPackage;
+
+    /** Class cycles of the whole model; null until a model is bound. */
+    private EdgeCycleClassifier edgeCycles;
 
     private boolean showClassScc = false;
     private boolean showPackageCycles = false;
@@ -89,6 +96,11 @@ public class SCCRenderer {
 
     public void setPackageResolver(Function<String, String> packageResolver) {
         this.packageResolver = packageResolver == null ? SCCRenderer::staticPackage : packageResolver;
+    }
+
+    /** Binds the model's class cycles; with {@code null} the visible classes are searched for cycles. */
+    public void setEdgeCycles(EdgeCycleClassifier edgeCycles) {
+        this.edgeCycles = edgeCycles;
     }
 
     public void setShowClassScc(boolean show) { this.showClassScc = show; }
@@ -184,13 +196,13 @@ public class SCCRenderer {
             return;
         }
 
-        // Step 2: Find SCCs
-        List<StronglyConnectedComponent> sccs = Lookup.lookup(SCCFinder.class).findSCCs(classDependencies);
-
-        // Step 3: Draw red lines for strict class-level SCCs (size > 1)
+        // Step 2 + 3: Draw red lines for strict class-level SCCs (size > 1)
         Set<String> classSccMembers = new HashSet<>();
         int sccCount = 0;
-        if (showClassScc) {
+        if (showClassScc && edgeCycles != null) {
+            sccCount = drawModelClassCycleLines(classDependencies, classSccMembers);
+        } else if (showClassScc) {
+            List<StronglyConnectedComponent> sccs = Lookup.lookup(SCCFinder.class).findSCCs(classDependencies);
             for (StronglyConnectedComponent scc : sccs) {
                 if (scc.isTangle()) {
                     drawSccComponentLines(scc, classDependencies, SCC_COLOR);
@@ -222,6 +234,35 @@ public class SCCRenderer {
     }
 
     /**
+     * Draws every dependency between two visible classes that lies on a class
+     * cycle of the model. The cycle may close through classes that are
+     * collapsed or not part of this view at all.
+     *
+     * @return the number of distinct class cycles drawn
+     */
+    private int drawModelClassCycleLines(Map<String, Set<String>> classDependencies, Set<String> cycleMembers) {
+        Set<Integer> cycles = new HashSet<>();
+        for (Map.Entry<String, Set<String>> entry : classDependencies.entrySet()) {
+            String from = entry.getKey();
+            Node sourceNode = elementRegistry.get(from);
+            for (String to : entry.getValue()) {
+                if (edgeCycles.cycleOf(from, to) != CycleKind.CLASS_CYCLE) {
+                    continue;
+                }
+                Node targetNode = elementRegistry.get(to);
+                if (targetNode == null || !isNodeActuallyVisible(targetNode)) {
+                    continue;
+                }
+                createSccLine(sourceNode, targetNode, from, to);
+                cycleMembers.add(from);
+                cycleMembers.add(to);
+                cycles.add(edgeCycles.classCycleId(from));
+            }
+        }
+        return cycles.size();
+    }
+
+    /**
      * Recursively collects class dependencies from visible (expanded) nodes.
      */
     private void collectVisibleClassDependencies(ArchitectureNode node, Map<String, Set<String>> result) {
@@ -247,18 +288,20 @@ public class SCCRenderer {
     }
 
     /**
-     * Draws lines connecting all members of a single SCC that are visible.
-     * Only draws the actual dependency edges within the SCC, not all pairs.
+     * Draws the class dependencies that realise a container tangle: every edge
+     * between classes that belong to two different members of the tangle.
+     * Members are siblings of one container — packages (covering their whole
+     * subtree) or classes.
      */
     private int drawPackageCycleLines(Map<String, Set<String>> classDeps, Set<String> skipClasses) {
         int count = 0;
         for (Set<String> tangle : packageTangles) {
             for (String cls : classDeps.keySet()) {
-                String clsPkg = packageOf(cls);
-                if (!tangle.contains(clsPkg)) continue;
+                String clsMember = tangleMemberOf(tangle, cls);
+                if (clsMember == null) continue;
                 for (String dep : classDeps.getOrDefault(cls, Set.of())) {
-                    String depPkg = packageOf(dep);
-                    if (!tangle.contains(depPkg) || depPkg.equals(clsPkg)) continue;
+                    String depMember = tangleMemberOf(tangle, dep);
+                    if (depMember == null || depMember.equals(clsMember)) continue;
                     if (skipClasses.contains(cls) && skipClasses.contains(dep)) continue;
                     Node src = elementRegistry.get(cls);
                     Node tgt = elementRegistry.get(dep);
@@ -270,6 +313,17 @@ public class SCCRenderer {
             }
         }
         return count;
+    }
+
+    /** The tangle member that contains {@code fqn}: the class itself or its nearest enclosing package member. */
+    private String tangleMemberOf(Set<String> tangle, String fqn) {
+        if (tangle.contains(fqn)) return fqn;
+        String pkg = packageOf(fqn);
+        while (pkg != null && !pkg.isEmpty()) {
+            if (tangle.contains(pkg)) return pkg;
+            pkg = staticPackage(pkg);
+        }
+        return null;
     }
 
     private String packageOf(String fqn) {

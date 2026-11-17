@@ -15,6 +15,7 @@
  */
 package de.weigend.s202.ui.core.canvas;
 
+import de.weigend.s202.ui.core.graph.ElementLookup;
 import de.weigend.s202.ui.views.component.ComponentArchitectureTreeBuilder;
 import de.weigend.s202.domain.architecture.ArchitectureAnnotations;
 import de.weigend.s202.domain.architecture.ComponentArchitecture;
@@ -443,6 +444,184 @@ public class ArchitectureTreeBuilderTest {
             assertSame(registry.get(payment.getFullName()), rows.get(0).getChildren().get(0));
             assertSame(registry.get(shipping.getFullName()), rows.get(1).getChildren().get(0));
         });
+    }
+
+    /**
+     * Lazy mode: a package that starts collapsed gets no child boxes until it
+     * is expanded, and then only one level at a time.
+     */
+    @Test
+    public void testLazyCollapsedPackageBuildsChildrenOnFirstExpand() {
+        runOnFxThread(() -> {
+            Map<String, Node> registry = new HashMap<>();
+            new ArchitectureTreeBuilder(registry).lazyCollapsedPackages(true).buildTree(lazySourceRoot(), 1);
+
+            LevelPackageBox ab = (LevelPackageBox) registry.get("a.b");
+            assertNotNull(ab, "a.b is visible as a collapsed box");
+            assertFalse(ab.isExpanded());
+            assertFalse(ab.isMaterialized(), "collapsed package must not have built its content");
+            assertFalse(registry.containsKey("a.b.Y"), "class inside the collapsed package has no box yet");
+            assertFalse(registry.containsKey("a.b.c"));
+            assertTrue(registry.containsKey("a.X"), "content of the expanded package is built");
+
+            ab.setExpanded(true);
+
+            assertTrue(ab.isMaterialized());
+            assertTrue(registry.get("a.b.Y") instanceof LevelClassBox, "direct class child is built on expand");
+            LevelPackageBox abc = (LevelPackageBox) registry.get("a.b.c");
+            assertNotNull(abc, "direct sub-package is built on expand");
+            assertTrue(isDescendantOf(abc, ab));
+            assertFalse(abc.isExpanded(), "sub-package beyond maxDepth starts collapsed");
+            assertFalse(abc.isMaterialized(), "and defers its own content again");
+            assertFalse(registry.containsKey("a.b.c.Z"));
+        });
+    }
+
+    /** Expanding everything in lazy mode yields exactly the boxes of the eager build. */
+    @Test
+    public void testLazyBuildMatchesEagerBuildOnceEverythingIsExpanded() {
+        runOnFxThread(() -> {
+            Map<String, Node> eager = new HashMap<>();
+            new ArchitectureTreeBuilder(eager).buildTree(lazySourceRoot(), 1);
+
+            Map<String, Node> lazy = new HashMap<>();
+            new ArchitectureTreeBuilder(lazy).lazyCollapsedPackages(true).buildTree(lazySourceRoot(), 1);
+            assertTrue(lazy.size() < eager.size(), "lazy build must create fewer boxes up front");
+
+            boolean expanded = true;
+            while (expanded) {
+                expanded = false;
+                for (Node node : new ArrayList<>(lazy.values())) {
+                    if (node instanceof LevelPackageBox box && !box.isExpanded()) {
+                        box.setExpanded(true);
+                        expanded = true;
+                    }
+                }
+            }
+            assertEquals(eager.keySet(), lazy.keySet());
+            for (String fqn : eager.keySet()) {
+                assertEquals(eager.get(fqn).getClass(), lazy.get(fqn).getClass(), fqn);
+            }
+        });
+    }
+
+    /** The asynchronous build defers the same packages as the synchronous one. */
+    @Test
+    public void testLazyAsyncBuildDefersCollapsedPackages() {
+        runOnFxThread(() -> {
+            Map<String, Node> sync = new HashMap<>();
+            new ArchitectureTreeBuilder(sync).lazyCollapsedPackages(true).buildTree(lazySourceRoot(), 1);
+
+            Map<String, Node> async = new HashMap<>();
+            AtomicReference<VBox> result = new AtomicReference<>();
+            new ArchitectureTreeBuilder(async).lazyCollapsedPackages(true).buildTreeAsync(
+                    lazySourceRoot(), 1, null, result::set);
+
+            assertNotNull(result.get(), "small trees complete within the first batch");
+            assertEquals(sync.keySet(), async.keySet());
+            assertFalse(((LevelPackageBox) async.get("a.b")).isMaterialized());
+        });
+    }
+
+    /** Renderers ask for the collapsed package standing in for an element; nothing gets built. */
+    @Test
+    public void testPendingContainerNamesCollapsedPackageWithoutBuilding() {
+        runOnFxThread(() -> {
+            Map<String, Node> registry = new HashMap<>();
+            new ArchitectureTreeBuilder(registry).lazyCollapsedPackages(true).buildTree(lazySourceRoot(), 1);
+            Node ab = registry.get("a.b");
+
+            assertSame(ab, ElementLookup.pendingContainer(registry, "a.b.Y"));
+            assertSame(ab, ElementLookup.pendingContainer(registry, "a.b.c.Z"),
+                    "elements of deferred sub-packages roll up to the innermost existing box");
+            assertNull(ElementLookup.pendingContainer(registry, "a.X"), "registered elements have no stand-in");
+            assertNull(ElementLookup.pendingContainer(registry, "a.b.NotInView"),
+                    "names below a collapsed package that are not part of the view stay unknown");
+            assertNull(ElementLookup.pendingContainer(registry, "q.Unknown"));
+            assertFalse(((LevelPackageBox) ab).isMaterialized(), "lookup must not build anything");
+        });
+    }
+
+    /** Selection and what-if moves need the element's own box: it is built without expanding anything. */
+    @Test
+    public void testMaterializeBuildsPathWithoutExpanding() {
+        runOnFxThread(() -> {
+            Map<String, Node> registry = new HashMap<>();
+            new ArchitectureTreeBuilder(registry).lazyCollapsedPackages(true).buildTree(lazySourceRoot(), 1);
+            LevelPackageBox ab = (LevelPackageBox) registry.get("a.b");
+
+            Node z = ElementLookup.materialize(registry, "a.b.c.Z");
+
+            assertTrue(z instanceof LevelClassBox);
+            assertSame(z, registry.get("a.b.c.Z"));
+            LevelPackageBox abc = (LevelPackageBox) registry.get("a.b.c");
+            assertTrue(isDescendantOf(z, abc));
+            assertFalse(ab.isExpanded(), "materializing must not expand a.b");
+            assertFalse(abc.isExpanded(), "materializing must not expand a.b.c");
+            assertNull(ElementLookup.materialize(registry, "a.b.NotInView"));
+            assertSame(registry.get("a.X"), ElementLookup.materialize(registry, "a.X"));
+        });
+    }
+
+    /**
+     * root -> a (L1) -> X, b -> Y, c -> Z ; z (L0) -> W. Two top-level packages
+     * keep {@code a} from being skipped as a transparent passthrough.
+     */
+    /**
+     * A view of plain nodes draws classes and packages as icon and name: no
+     * box around a class, a package no wider than its content, and the level
+     * rows further apart so that arrows and their weights fit in between.
+     */
+    @Test
+    public void testPlainNodesDropTheBoxesAndSpreadTheLevels() {
+        runOnFxThread(() -> {
+            ArchitectureNode root = new ArchitectureNode("root", "root", NodeType.PACKAGE, true, 0);
+            ArchitectureNode pkg = new ArchitectureNode("root.p", "p", NodeType.PACKAGE, true, 1);
+            pkg.addChild(new ArchitectureNode("root.p.Inner", "Inner", NodeType.CLASS, true, 0));
+            root.addChild(pkg);
+            root.addChild(new ArchitectureNode("root.Top", "Top", NodeType.CLASS, true, 0));
+
+            Map<String, Node> registry = new HashMap<>();
+            VBox plain = new ArchitectureTreeBuilder(registry).plainNodes(true).buildTree(root, 3, false);
+
+            LevelClassBox top = (LevelClassBox) registry.get("root.Top");
+            LevelPackageBox p = (LevelPackageBox) registry.get("root.p");
+            assertTrue(top.getStyleClass().contains("plain-node"));
+            assertTrue(((LevelClassBox) registry.get("root.p.Inner")).getStyleClass().contains("plain-node"));
+            assertEquals(javafx.scene.layout.Region.USE_PREF_SIZE, p.getMaxWidth(), "keeps the width of its content");
+            assertNull(HBox.getHgrow(p));
+            assertTrue(p.getStyle().contains("-fx-background-color: transparent"));
+            assertEquals(LevelPackageBox.PLAIN_LEVEL_GAP, plain.getSpacing());
+            assertEquals(LevelPackageBox.PLAIN_LEVEL_GAP, p.getContentContainer().getSpacing());
+
+            String opened = p.getStyle();
+            p.setExpanded(false);
+            assertNotEquals(opened, p.getStyle(), "collapsed, the frame around the content is gone");
+
+            Map<String, Node> boxed = new HashMap<>();
+            new ArchitectureTreeBuilder(boxed).buildTree(root, 3, false);
+            LevelPackageBox boxedP = (LevelPackageBox) boxed.get("root.p");
+            assertFalse(((LevelClassBox) boxed.get("root.Top")).getStyleClass().contains("plain-node"));
+            assertEquals(Double.MAX_VALUE, boxedP.getMaxWidth());
+            assertEquals(javafx.scene.layout.Priority.ALWAYS, HBox.getHgrow(boxedP));
+        });
+    }
+
+    private static ArchitectureNode lazySourceRoot() {
+        ArchitectureNode root = new ArchitectureNode("root", "root", NodeType.PACKAGE, true, 0);
+        ArchitectureNode a = new ArchitectureNode("a", "a", NodeType.PACKAGE, true, 1);
+        ArchitectureNode ab = new ArchitectureNode("a.b", "b", NodeType.PACKAGE, true, 0);
+        ArchitectureNode abc = new ArchitectureNode("a.b.c", "c", NodeType.PACKAGE, true, 0);
+        ArchitectureNode z = new ArchitectureNode("z", "z", NodeType.PACKAGE, true, 0);
+        root.addChild(a);
+        root.addChild(z);
+        a.addChild(new ArchitectureNode("a.X", "X", NodeType.CLASS, true, 1));
+        a.addChild(ab);
+        ab.addChild(new ArchitectureNode("a.b.Y", "Y", NodeType.CLASS, true, 1));
+        ab.addChild(abc);
+        abc.addChild(new ArchitectureNode("a.b.c.Z", "Z", NodeType.CLASS, true, 0));
+        z.addChild(new ArchitectureNode("z.W", "W", NodeType.CLASS, true, 0));
+        return root;
     }
 
     private static ArchitectureNode componentSourceRoot() {

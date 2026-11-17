@@ -160,6 +160,17 @@ public class LevelClassBox extends HBox implements GraphSelection.Selectable {
         }
     }
 
+    /**
+     * Draws this class the way a graph draws a node: icon and name, without
+     * the surrounding box. The selected look stays as it is.
+     */
+    public void setPlain(boolean plain) {
+        getStyleClass().remove("plain-node");
+        if (plain) {
+            getStyleClass().add("plain-node");
+        }
+    }
+
     private static final String STYLE_MOVED_BORDER =
             "-fx-border-color: #1d4ed8; -fx-border-width: 2;";
 

@@ -60,8 +60,8 @@ class ArchitectureConsistencyDevHookTest {
         DomainModel domain = new DomainModel();
         domain.addPackage("app", new CalculatedElementInfo("app", "app", "PACKAGE", 0, new HashSet<>()));
         domain.addClass("app.X", new CalculatedElementInfo("app.X", "X", "CLASS", 0, new HashSet<>()));
-        domain.setPackageEdgeWeights(Map.of());
-        domain.setPackageBackEdges(Set.of());
+        domain.setSiblingEdgeWeights(Map.of());
+        domain.setContainerBackEdges(Set.of());
         return domain;
     }
 

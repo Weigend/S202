@@ -31,6 +31,7 @@ import org.kordamp.ikonli.materialdesign2.MaterialDesignP;
 
 import java.util.Map;
 import java.util.Objects;
+import java.util.Set;
 import java.util.TreeMap;
 import java.util.function.Consumer;
 
@@ -51,6 +52,18 @@ public class LevelPackageBox extends VBox implements GraphSelection.Selectable, 
             "-fx-background-color: #fff3a0; -fx-border-color: #1d4ed8; -fx-border-width: 3;";
     private static final String STYLE_TRANSPARENT =
             "-fx-background-color: transparent; -fx-border-width: 0;";
+    // A plain package is icon and name only; opened, a thin frame holds its content together.
+    private static final String STYLE_PLAIN_COLLAPSED =
+            "-fx-background-color: transparent; -fx-border-color: transparent; -fx-border-width: 1;";
+    private static final String STYLE_PLAIN_EXPANDED =
+            "-fx-background-color: transparent; -fx-border-color: #b9bcc0; -fx-border-width: 1;";
+
+    /** Gap between the level rows of plain boxes: room for the arrows and their weights. */
+    public static final double PLAIN_LEVEL_GAP = 30.0;
+    /** Gap between plain boxes on the same level. */
+    public static final double PLAIN_SIBLING_GAP = 26.0;
+    private static final double LEVEL_GAP = 6.0;
+    private static final double SIBLING_GAP = 10.0;
     private static final Color PACKAGE_COLOR = Color.web("#e6c46a");
 
     private Label toggleIcon;
@@ -65,9 +78,14 @@ public class LevelPackageBox extends VBox implements GraphSelection.Selectable, 
     private final String fullName;
     private final Map<Integer, HBox> levelRows;
     private final boolean transparent;
+    private boolean plain;
     private boolean selected;
     private boolean virtuallyMoved;
     private Consumer<String> selectionChangeSink;
+    /** Builds the child boxes on first use; {@code null} once they exist. */
+    private Runnable lazyContent;
+    /** Full names of all elements {@link #lazyContent} will create, directly or in sub-packages. */
+    private Set<String> pendingElements = Set.of();
 
     // Static callback for notifying when expand/collapse changes
     private static Runnable onExpandChangeCallback = null;
@@ -128,7 +146,7 @@ public class LevelPackageBox extends VBox implements GraphSelection.Selectable, 
 
         createHeader();
 
-        contentContainer = new VBox(6);
+        contentContainer = new VBox(LEVEL_GAP);
         contentContainer.setPadding(transparent ? new Insets(0, 0, 0, 10) : new Insets(6, 6, 6, 20));
         contentContainer.setMaxWidth(Double.MAX_VALUE);
         ArchitectureDragController.markAsRowStack(contentContainer);
@@ -168,9 +186,43 @@ public class LevelPackageBox extends VBox implements GraphSelection.Selectable, 
         }
         if (virtuallyMoved) {
             this.setStyle(selected ? STYLE_MOVED_SELECTED : STYLE_MOVED);
+        } else if (selected) {
+            this.setStyle(STYLE_SELECTED);
+        } else if (plain) {
+            this.setStyle(isExpanded ? STYLE_PLAIN_EXPANDED : STYLE_PLAIN_COLLAPSED);
         } else {
-            this.setStyle(selected ? STYLE_SELECTED : STYLE_NORMAL);
+            this.setStyle(STYLE_NORMAL);
         }
+    }
+
+    /**
+     * Draws this package the way a graph draws a node: icon and name, no
+     * filled box, no wider than its content, with room around it for arrows.
+     * Call before any child is added.
+     */
+    public void setPlain(boolean plain) {
+        if (this.plain == plain || transparent) {
+            return;
+        }
+        this.plain = plain;
+        contentContainer.setSpacing(plain ? PLAIN_LEVEL_GAP : LEVEL_GAP);
+        contentContainer.setPadding(plain ? new Insets(8, 12, 10, 12) : new Insets(6, 6, 6, 20));
+        setMaxWidth(plain ? Region.USE_PREF_SIZE : Double.MAX_VALUE);
+        setMaxHeight(plain ? Region.USE_PREF_SIZE : Double.MAX_VALUE);
+        applyBaseStyle();
+    }
+
+    /**
+     * Lets this box share the width and height of the level row it was added
+     * to. A plain box keeps the size of its content.
+     */
+    public void fillRow() {
+        if (plain) {
+            return;
+        }
+        setMaxWidth(Double.MAX_VALUE);
+        setMaxHeight(Double.MAX_VALUE);
+        HBox.setHgrow(this, Priority.ALWAYS);
     }
 
     private void handleSelectionClick(int clickCount) {
@@ -233,6 +285,44 @@ public class LevelPackageBox extends VBox implements GraphSelection.Selectable, 
         return isExpanded;
     }
 
+    /**
+     * Defers the creation of this package's child boxes. A package that starts
+     * collapsed needs no children in the scene graph; {@code builder} runs once,
+     * on the first expand or on {@link #materialize()}.
+     *
+     * @param builder         adds the child boxes to this package
+     * @param pendingElements full names of every class and package below this
+     *                        one that does not exist as a box yet
+     */
+    public void setLazyContent(Runnable builder, Set<String> pendingElements) {
+        this.lazyContent = Objects.requireNonNull(builder, "builder cannot be null");
+        this.pendingElements = Objects.requireNonNull(pendingElements, "pendingElements cannot be null");
+    }
+
+    /** False while the child boxes of this package have not been created yet. */
+    public boolean isMaterialized() {
+        return lazyContent == null;
+    }
+
+    /** True when {@code fqn} is an element below this package whose box does not exist yet. */
+    public boolean hasPendingElement(String fqn) {
+        return lazyContent != null && pendingElements.contains(fqn);
+    }
+
+    /**
+     * Creates the child boxes if that was deferred. Does not expand the
+     * package: the new boxes stay hidden while it is collapsed. Idempotent.
+     */
+    public void materialize() {
+        Runnable builder = lazyContent;
+        if (builder == null) {
+            return;
+        }
+        lazyContent = null;
+        pendingElements = Set.of();
+        builder.run();
+    }
+
     public void setExpanded(boolean expanded) {
         if (this.isExpanded != expanded) {
             toggleExpanded();
@@ -242,6 +332,7 @@ public class LevelPackageBox extends VBox implements GraphSelection.Selectable, 
     private void toggleExpanded() {
         isExpanded = !isExpanded;
         if (isExpanded) {
+            materialize();
             toggleIcon.setText("−");
             contentContainer.setVisible(true);
             contentContainer.setManaged(true);
@@ -250,6 +341,9 @@ public class LevelPackageBox extends VBox implements GraphSelection.Selectable, 
             toggleIcon.setText("+");
             contentContainer.setVisible(false);
             contentContainer.setManaged(false);
+        }
+        if (plain) {
+            applyBaseStyle(); // the frame comes and goes with the content
         }
 
         if (onExpandChangeCallback != null) {
@@ -265,7 +359,7 @@ public class LevelPackageBox extends VBox implements GraphSelection.Selectable, 
         Objects.requireNonNull(node, "node cannot be null");
 
         HBox levelRow = levelRows.computeIfAbsent(levelNumber, level -> {
-            HBox hbox = new HBox(10);
+            HBox hbox = new HBox(plain ? PLAIN_SIBLING_GAP : SIBLING_GAP);
             // Always transparent — the row's bg used to mirror the package
             // bg (#fffacd), which becomes visible as a stripe once the package
             // switches to its selected bg. Letting the row inherit avoids that.
@@ -281,10 +375,8 @@ public class LevelPackageBox extends VBox implements GraphSelection.Selectable, 
             return hbox;
         });
 
-        if (node instanceof LevelPackageBox) {
-            ((Region) node).setMaxWidth(Double.MAX_VALUE);
-            ((Region) node).setMaxHeight(Double.MAX_VALUE);
-            HBox.setHgrow(node, Priority.ALWAYS);
+        if (node instanceof LevelPackageBox box) {
+            box.fillRow();
         }
         levelRow.getChildren().add(node);
     }

@@ -52,12 +52,13 @@ import java.util.Set;
  *
  * <p>Violations follow the hierarchical-layered style:
  * <ul>
- *   <li>{@link ViolationKind#UPWARD} — every class dep A→B where
- *       {@code A.level < B.level}. Members of a class-level SCC share a
- *       level by construction so they're naturally excluded.</li>
- *   <li>{@link ViolationKind#PACKAGE_TANGLE} — every package edge the
- *       level calculator marked as a back-edge (cycle member).</li>
+ *   <li>{@link ViolationKind#UPWARD} — every class dep A→B that runs upward
+ *       by nested visual rank (the localLevel chain from the outermost
+ *       container down to the class). By construction of the container
+ *       levelization these are exactly the class back-edges.</li>
  * </ul>
+ * Tangles are the container tangles with at least one package member
+ * ({@link DomainModel#getPackageTangles()}).
  */
 @Singleton
 public final class HierarchicalLayeredArchitectureBuilder implements ArchitectureStyle {

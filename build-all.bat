@@ -6,8 +6,8 @@
 :: What it does:
 ::   1. Checks for git, Java 21+, and Maven
 ::   2. Installs WFX into the local Maven cache (%USERPROFILE%\.m2) if not present
-::      (clones tag v%WFX_VERSION% of https://github.com/Weigend/wfx and runs
-::       mvn install -DskipTests)
+::      (clones the matching release tag of https://github.com/Weigend/wfx and
+::       runs mvn install -DskipTests)
 ::   3. Builds S202
 ::   4. Builds the City3D web bundle (city3d\dist) if Node.js 18+ is available
 ::      (optional - without it the app runs, only File > Show City3D View is unavailable)
@@ -17,10 +17,24 @@
 setlocal enabledelayedexpansion
 
 set WFX_REPO=https://github.com/Weigend/wfx.git
-set WFX_VERSION=1.1.2
-set WFX_TAG=v%WFX_VERSION%
-set WFX_JAR=%USERPROFILE%\.m2\repository\io\softwareecg\wfx\platform-core\%WFX_VERSION%\platform-core-%WFX_VERSION%.jar
 set S202_DIR=%~dp0
+
+:: The required WFX version lives in exactly one place: the wfx.version property
+:: in analyzer\pom.xml. Deriving it here keeps the bootstrap from drifting away
+:: from what the build actually resolves.
+set ANALYZER_POM=%S202_DIR%analyzer\pom.xml
+set WFX_LINE=
+for /f "delims=" %%l in ('findstr /r /c:"<wfx\.version>" "%ANALYZER_POM%"') do (
+    if not defined WFX_LINE set "WFX_LINE=%%l"
+)
+set "WFX_VERSION=%WFX_LINE:*<wfx.version>=%"
+set "WFX_VERSION=%WFX_VERSION:</wfx.version>=%"
+
+:: Guard artifact for the "already cached?" check. platform-core is one of the
+:: nine WFX modules analyzer\pom.xml depends on, so its presence is a meaningful
+:: signal. (An earlier version probed 'wfx-platform', which WFX does not publish,
+:: so the check never hit and WFX was rebuilt on every run.)
+set WFX_JAR=%USERPROFILE%\.m2\repository\io\softwareecg\wfx\platform-core\%WFX_VERSION%\platform-core-%WFX_VERSION%.jar
 
 echo.
 echo ========================================
@@ -89,18 +103,26 @@ if %MVN_MAJOR% EQU 3 if %MVN_MINOR% LSS 9 (
 echo   [build-all] Maven %MVN_VER%  OK
 :mvn_ok
 
+if not defined WFX_VERSION (
+    echo   [build-all] ERROR: Could not read ^<wfx.version^> from %ANALYZER_POM%.
+    goto :fail
+)
+echo   [build-all] WFX %WFX_VERSION%  ^(from analyzer\pom.xml^)
+
 :: ── Step 1: install WFX if not cached ────────────────────────────────────────
 if exist "%WFX_JAR%" (
     echo   [build-all] WFX %WFX_VERSION% already in local Maven cache -- skipping.
 ) else (
-    echo   [build-all] WFX %WFX_VERSION% not found -- cloning tag %WFX_TAG% and building ...
+    echo   [build-all] WFX %WFX_VERSION% not found -- cloning tag v%WFX_VERSION% and building ...
     echo   [build-all] (this happens only once^)
     echo.
 
+    :: !WFX_TMP!, not %WFX_TMP%: the whole if/else block is parsed in one go, so
+    :: %-expansion would substitute the (still empty) value before the set runs.
     set WFX_TMP=%TEMP%\wfx-bootstrap-%RANDOM%
-    git clone --depth 1 --branch %WFX_TAG% %WFX_REPO% "!WFX_TMP!"
+    git clone --depth 1 --branch v%WFX_VERSION% %WFX_REPO% "!WFX_TMP!"
     if errorlevel 1 (
-        echo   [build-all] ERROR: git clone of WFX tag %WFX_TAG% failed. Check network / proxy settings.
+        echo   [build-all] ERROR: git clone of WFX tag v%WFX_VERSION% failed. Check network / proxy settings.
         goto :fail
     )
 

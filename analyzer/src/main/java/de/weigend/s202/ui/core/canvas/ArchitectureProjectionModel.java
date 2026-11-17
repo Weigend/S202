@@ -58,6 +58,10 @@ final class ArchitectureProjectionModel {
         this.afterRebuild = afterRebuild;
     }
 
+    ArchitectureKind viewStyle() {
+        return viewStyle.get();
+    }
+
     /* ----- Properties (Instanzen bleiben stabil) ---------------------------- */
 
     ReadOnlyObjectProperty<DomainModel> domainModelProperty() {
