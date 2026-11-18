@@ -7,7 +7,7 @@
     <parent>
         <groupId>de.weigend</groupId>
         <artifactId>structure202-parent</artifactId>
-        <version>1.1.0</version>
+        <version>1.2.0</version>
     </parent>
 
     <artifactId>s202-annotations</artifactId>

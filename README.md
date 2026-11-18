@@ -209,7 +209,7 @@ The screenshot shows the bundled **test-hexagon** example (the *paperwhale* book
 To try it, build and load the example project under [`test-hexagon`](test-hexagon):
 
 ```bash
-mvn -pl test-hexagon -am install    # produces test-hexagon/target/test-hexagon-1.1.0.jar
+mvn -pl test-hexagon -am install    # produces test-hexagon/target/test-hexagon-1.2.0.jar
 ```
 
 Then **File → Open Maven Project…** on `test-hexagon/pom.xml` (or **Open JAR…** on the produced JAR) and switch to **View → Hexagonal View**.
