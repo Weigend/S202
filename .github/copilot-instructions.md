@@ -3,7 +3,7 @@
 ## Project Overview
 S202 is a **JavaFX-based bytecode analysis and architecture visualization tool**. It parses Java `.class` files, extracts dependency graphs, detects cyclic dependencies (SCC), and visualizes code architecture.
 
-**Tech Stack**: Java 21, JavaFX 21.0.5, ASM 9.6, JUnit 5, Maven, WFX 1.4.0 rich-client platform
+**Tech Stack**: Java 21, JavaFX 21.0.5, ASM 9.6, JUnit 5, Maven, WFX 1.4.1 rich-client platform
 
 ## Architecture
 
