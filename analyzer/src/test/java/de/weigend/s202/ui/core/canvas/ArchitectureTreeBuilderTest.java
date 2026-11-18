@@ -72,28 +72,10 @@ public class ArchitectureTreeBuilderTest {
         Lookup.shutdown();
     }
 
-    @AfterAll
-    static void stopJavaFX() {
-        if (!javaFxStarted) {
-            return;
-        }
-        CountDownLatch requested = new CountDownLatch(1);
-        try {
-            Platform.runLater(() -> {
-                try {
-                    Platform.setImplicitExit(true);
-                    Platform.exit();
-                } finally {
-                    requested.countDown();
-                }
-            });
-            requested.await(FX_TIMEOUT.toMillis(), TimeUnit.MILLISECONDS);
-        } catch (IllegalStateException ignored) {
-            // JavaFX was already shut down.
-        } catch (InterruptedException ignored) {
-            Thread.currentThread().interrupt();
-        }
-    }
+    // The JavaFX toolkit is deliberately left running: it can be started only
+    // once per JVM, and the test classes that run after this one in the same
+    // Surefire fork need it too. Shutting it down here made them skip all
+    // their tests. The fork ends the toolkit together with the JVM.
 
     private static boolean startJavaFx() {
         CountDownLatch ready = new CountDownLatch(1);

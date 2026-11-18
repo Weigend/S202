@@ -51,12 +51,17 @@ import java.util.regex.Pattern;
  * This is the raw analysis layer - NO layer calculation, NO UI dependencies.
  * 
  * <p>External library prefixes are loaded from {@code excluded-prefixes.txt} in the
- * current working directory. If the file is not found, built-in defaults are used.</p>
+ * current working directory or one of its parents, else from the file named by the
+ * system property {@code s202.excludedPrefixes}. If neither exists, built-in defaults
+ * are used.</p>
  */
 @Singleton
 public class InputAnalyzer implements LanguageAnalyzer {
     
     private static final String EXCLUDED_PREFIXES_FILE = "excluded-prefixes.txt";
+
+    /** Fallback location of the file when none is found in the working directory or its parents. */
+    private static final String EXCLUDED_PREFIXES_PROPERTY = "s202.excludedPrefixes";
     
     /**
      * Minimal default exclusions - only JDK internal classes that are never part of user code.
@@ -192,6 +197,15 @@ public class InputAnalyzer implements LanguageAnalyzer {
                 return here;
             }
             dir = dir.getParent();
+        }
+        // Packaged app: the launcher points at the copy shipped next to the jars,
+        // because the working directory is wherever the user started the program.
+        String configured = System.getProperty(EXCLUDED_PREFIXES_PROPERTY);
+        if (configured != null && !configured.isBlank()) {
+            Path shipped = Paths.get(configured);
+            if (Files.isRegularFile(shipped)) {
+                return shipped;
+            }
         }
         return null;
     }

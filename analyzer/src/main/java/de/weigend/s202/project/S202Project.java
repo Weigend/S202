@@ -21,8 +21,12 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * Serializable project snapshot. It captures the analyzed data model, not UI
- * state such as windows, zoom, package depth, selected nodes, or open tabs.
+ * Serializable project snapshot: one analysis and what the user had open on
+ * it. It captures the analyzed data model, the annotations and preview cuts
+ * made on it, and its tabs — what each shows and how it was set up (package
+ * depth, zoom, open packages). It does not capture where the tabs sat in the
+ * window; the arrangement of the window belongs to the workbench, not to one
+ * analysis.
  */
 public record S202Project(
         String format,
@@ -34,11 +38,14 @@ public record S202Project(
         ArchitectureAnnotationsDto architectureAnnotations,
         List<CycleBreakEdgeDto> cycleBreakEdges,
         LayoutInvariantReportDto layoutInvariantReport,
+        List<CycleBreakEdgeDto> previewCuts,
+        List<ViewDto> views,
         String savedAt) {
 
     public static final String FORMAT = "structure202-project";
     public static final int MIN_SUPPORTED_FORMAT_VERSION = 1;
-    public static final int FORMAT_VERSION = 3;
+    /** Version 4 added {@link #previewCuts()} and {@link #views()}. */
+    public static final int FORMAT_VERSION = 4;
 
     public record CreatedWith(String app, String version) {}
 
@@ -120,6 +127,42 @@ public record S202Project(
             List<String> dependents) {}
 
     public record CycleBreakEdgeDto(String from, String to) {}
+
+    /**
+     * One tab of the analysis: what it shows ({@code kind} to
+     * {@code tangleContext}) and how the user left it (the rest).
+     *
+     * @param kind             LAYERED, COMPONENT, HEXAGONAL, SCOPE or TANGLE
+     * @param label            the tab title behind the name of the analysis;
+     *                         null for the layered view of the whole analysis
+     * @param scope            the package the tree is limited to; null for
+     *                         the whole analysis
+     * @param scopeExtensions  what "Add to Scope" added to that package
+     * @param tangleMembers    the members of the tangle (TANGLE only)
+     * @param tangleKey        the key the tangle tab is reused under
+     * @param tangleContext    whether the tangle tab shows the members' context
+     * @param expandedPackages package FQN to open (true) or closed (false)
+     * @param active           whether this was the tab the user worked in
+     */
+    public record ViewDto(
+            String kind,
+            String label,
+            String scope,
+            List<String> scopeExtensions,
+            List<String> tangleMembers,
+            String tangleKey,
+            boolean tangleContext,
+            int packageDepth,
+            boolean showDependencies,
+            boolean showClassCycles,
+            boolean showPackageCycles,
+            boolean showViolations,
+            double zoom,
+            double horizontalScroll,
+            double verticalScroll,
+            Map<String, Boolean> expandedPackages,
+            String selected,
+            boolean active) {}
 
     public record LayoutInvariantReportDto(
             List<String> sourcePaths,

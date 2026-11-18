@@ -1,0 +1,115 @@
+name: Package
+
+# Builds the self-contained program for every operating system. jpackage cannot
+# cross-build, so each archive is produced on a runner of its own OS.
+#
+#   - Run it by hand (Actions > Package > Run workflow) to get the archives as
+#     workflow artifacts.
+#   - Publishing a GitHub release runs it too and attaches the archives to that
+#     release.
+
+on:
+  workflow_dispatch:
+  release:
+    types: [published]
+
+permissions:
+  contents: read
+
+jobs:
+  package:
+    name: ${{ matrix.name }}
+    runs-on: ${{ matrix.os }}
+    permissions:
+      contents: write   # attach the archive to the release
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: Linux x64
+            os: ubuntu-latest
+          - name: Windows x64
+            os: windows-latest
+          - name: macOS arm64 (Apple Silicon)
+            os: macos-latest
+          - name: macOS x64 (Intel)
+            os: macos-15-intel
+
+    defaults:
+      run:
+        shell: bash
+
+    steps:
+      - name: Checkout S202
+        uses: actions/checkout@v4
+
+      # Liberica "Full JDK" ships the JavaFX jmods, which package-app.sh links
+      # into the bundled Java runtime.
+      - name: Set up Java 21 with JavaFX
+        uses: actions/setup-java@v4
+        with:
+          distribution: liberica
+          java-package: jdk+fx
+          java-version: "21"
+          cache: maven
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: city3d/package-lock.json
+
+      - name: Check that the release tag matches the project version
+        if: github.event_name == 'release'
+        env:
+          TAG: ${{ github.event.release.tag_name }}
+        run: |
+          VERSION="$(sed -n 's:.*<version>\(.*\)</version>.*:\1:p' pom.xml | head -1)"
+          if [ "$TAG" != "v$VERSION" ]; then
+            echo "Release tag $TAG does not match the project version $VERSION in pom.xml." >&2
+            exit 1
+          fi
+
+      - name: Build WFX
+        env:
+          WFX_DIR: ${{ runner.temp }}/wfx
+        run: |
+          # Same source of truth as build-all.sh: the wfx.version property.
+          WFX_VERSION="$(sed -n 's:.*<wfx\.version>\(.*\)</wfx\.version>.*:\1:p' analyzer/pom.xml | head -1)"
+          test -n "$WFX_VERSION" || { echo "wfx.version not found in analyzer/pom.xml"; exit 1; }
+          git clone --depth 1 --branch "v${WFX_VERSION}" https://github.com/Weigend/wfx.git "$WFX_DIR"
+          cd "$WFX_DIR"
+          mvn install -DskipTests --batch-mode
+
+      # Tests run in the Build workflow on every push; here only the jars are needed.
+      - name: Build S202
+        run: mvn clean install -DskipTests --batch-mode
+
+      - name: Build the City3D web bundle
+        working-directory: city3d
+        run: |
+          npm ci --no-audit --no-fund
+          npm run build
+
+      - name: Package and smoke-test
+        run: ./package-app.sh --smoke
+
+      - name: Upload the archive as workflow artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: S202-${{ runner.os }}-${{ runner.arch }}
+          path: |
+            analyzer/target/package/S202-*.tar.gz
+            analyzer/target/package/S202-*.zip
+          if-no-files-found: error
+
+      - name: Attach the archive to the release
+        if: github.event_name == 'release'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.event.release.tag_name }}
+        run: |
+          shopt -s nullglob
+          gh release upload "$TAG" analyzer/target/package/S202-*.tar.gz analyzer/target/package/S202-*.zip \
+            --repo "$GITHUB_REPOSITORY" --clobber

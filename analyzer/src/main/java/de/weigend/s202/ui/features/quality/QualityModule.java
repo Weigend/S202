@@ -19,9 +19,9 @@ import de.weigend.s202.analysis.quality.QualityMetrics;
 import de.weigend.s202.domain.DomainModel;
 import de.weigend.s202.ui.core.canvas.ArchitectureCanvas;
 import de.weigend.s202.ui.core.model.ArchitectureNode;
-import de.weigend.s202.ui.core.platform.ArchitectureWfxView;
 import de.weigend.s202.ui.features.outline.OutlineExplorerView;
 import io.softwareecg.wfx.lookup.api.Lookup;
+import io.softwareecg.wfx.lookup.api.LookupContext;
 import io.softwareecg.wfx.platform.api.Module;
 import io.softwareecg.wfx.platform.api.exceptions.PlatformException;
 import io.softwareecg.wfx.windowmanager.api.View;
@@ -37,9 +37,9 @@ import java.util.Set;
  * WFX module providing the Quality view — a 2D fat-vs-tangled plot rendered
  * below the outline explorer in the LEFT dock area.
  * <p>
- * Tracks {@link WindowManager#focusedViewProperty()}: when an
- * {@link ArchitectureWfxView} gains focus, the plot mirrors that view's
- * metrics. When the user selects a package in the chart, the plot scopes its
+ * Follows {@link WindowManager#getActiveLookup()}: the plot mirrors the
+ * metrics of the architecture tab the user works in, also while the focus is
+ * in a panel. When the user selects a package in the chart, the plot scopes its
  * metrics to that package's classes. In scope views, class selection or no
  * selection falls back to the currently displayed scope; regular views fall
  * back to JAR-level metrics.
@@ -54,6 +54,7 @@ public class QualityModule implements Module {
     private ChangeListener<QualityMetrics> metricsListener;
     private ChangeListener<String> selectionListener;
     private ChangeListener<ArchitectureNode> rootListener;
+    private LookupContext.Subscription activeViewSubscription;
 
     @Override
     public String getName() {
@@ -88,21 +89,24 @@ public class QualityModule implements Module {
             wm.register(qualityView);
         }
 
-        wm.focusedViewProperty().addListener((obs, was, isNow) -> rebindToFocusedView());
-        rebindToFocusedView();
+        LookupContext active = wm.getActiveLookup();
+        activeViewSubscription = active.observe(ArchitectureCanvas.class,
+                canvases -> rebindTo(canvases.isEmpty() ? null : canvases.get(0)));
+        rebindTo(active.lookup(ArchitectureCanvas.class));
     }
 
     @Override
     public void stop() {
+        if (activeViewSubscription != null) {
+            activeViewSubscription.cancel();
+            activeViewSubscription = null;
+        }
         unbind();
     }
 
-    private void rebindToFocusedView() {
-        ArchitectureWfxView focused = focusedArchitectureView();
-        ArchitectureCanvas newBound = focused == null ? null : focused.getArchitectureView();
-
-        // Same fix as OutlineExplorerModule: focus moving onto a side panel
-        // shouldn't trigger a re-bind to the same chart.
+    private void rebindTo(ArchitectureCanvas newBound) {
+        // Same as OutlineExplorerModule: nothing to do for the chart we are
+        // already bound to.
         if (newBound == boundView) {
             return;
         }
@@ -185,41 +189,5 @@ public class QualityModule implements Module {
         metricsListener = null;
         selectionListener = null;
         rootListener = null;
-    }
-
-    private ArchitectureWfxView focusedArchitectureView() {
-        WindowManager wm = Lookup.lookup(WindowManager.class);
-        ArchitectureWfxView focused = wm.getRegisteredViews().stream()
-                .filter(ArchitectureWfxView.class::isInstance)
-                .map(ArchitectureWfxView.class::cast)
-                .filter(v -> v == wm.getFocusedView())
-                .findFirst()
-                .orElse(null);
-        if (focused != null) {
-            return focused;
-        }
-
-        ArchitectureWfxView current = wrapperFor(boundView);
-        if (current != null) {
-            return current;
-        }
-
-        return wm.getRegisteredViews().stream()
-                .filter(ArchitectureWfxView.class::isInstance)
-                .map(ArchitectureWfxView.class::cast)
-                .findFirst()
-                .orElse(null);
-    }
-
-    private ArchitectureWfxView wrapperFor(ArchitectureCanvas view) {
-        if (view == null) {
-            return null;
-        }
-        return Lookup.lookup(WindowManager.class).getRegisteredViews().stream()
-                .filter(ArchitectureWfxView.class::isInstance)
-                .map(ArchitectureWfxView.class::cast)
-                .filter(wrapper -> wrapper.getArchitectureView() == view)
-                .findFirst()
-                .orElse(null);
     }
 }

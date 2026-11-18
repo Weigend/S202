@@ -37,11 +37,11 @@ import de.weigend.s202.ui.core.layout.horizontal.HorizontalRowLayoutOptimizer;
 import de.weigend.s202.ui.core.model.ArchitectureNode;
 import de.weigend.s202.ui.core.model.ArchitectureNodeBuilder;
 import de.weigend.s202.ui.core.model.ArchitectureNodeCloner;
+import de.weigend.s202.ui.core.platform.AnalysisDocument;
 import de.weigend.s202.ui.core.platform.ArchitectureViewManager;
 import de.weigend.s202.ui.core.platform.Dialogs;
 import de.weigend.s202.ui.core.platform.ProgressPublisher;
 import de.weigend.s202.ui.core.platform.RecentDirectories;
-import de.weigend.s202.ui.core.platform.RefactoringPreviewState;
 import de.weigend.s202.ui.core.platform.ArchitectureWfxView;
 import de.weigend.s202.ui.core.events.CutTangleEdgeEvent;
 import de.weigend.s202.ui.core.events.CutTangleEdgesEvent;
@@ -140,7 +140,6 @@ public class S202Module implements Module {
     // Feld-Initializer via Lookup — S202Module ist selbst ein Avaje-@Singleton,
     // dessen Felder während des Scope-Baus laufen, bevor Lookup verdrahtet ist.
     private final ProgressPublisher progressPublisher;
-    private final RefactoringPreviewState previewState;
     private final ArchitectureViewManager viewManager;
 
     private S202StatusBar statusBar;
@@ -150,28 +149,26 @@ public class S202Module implements Module {
     private final AnalysisPipeline pipeline;
     private final SourceOpenController sourceOpen;
     private final ProjectPersistenceController persistence;
+    private final SessionLayout sessionLayout = new SessionLayout();
 
     @jakarta.inject.Inject
     public S202Module(ApplicationWindow applicationWindow,
                       ProgressPublisher progressPublisher,
-                      RefactoringPreviewState previewState,
                       ArchitectureViewManager viewManager,
                       RecentDirectories recentDirs) {
         this.applicationWindow = applicationWindow;
         this.progressPublisher = progressPublisher;
-        this.previewState = previewState;
         this.viewManager = viewManager;
         this.recentDirs = recentDirs;
         this.pipeline = new AnalysisPipeline(
-                viewManager, previewState, progressPublisher, () -> applicationWindow.getStage());
+                viewManager, progressPublisher, () -> applicationWindow.getStage());
         this.sourceOpen = new SourceOpenController(
                 pipeline, progressPublisher, recentDirs, () -> applicationWindow.getStage());
         this.toolbar = new ToolbarController(
                 applicationWindow, viewManager, () -> sourceOpen.openAnyChooser());
         this.persistence = new ProjectPersistenceController(
-                viewManager, previewState, progressPublisher, recentDirs,
-                () -> applicationWindow.getStage(), this::appVersion,
-                () -> toolbar.rebind());
+                viewManager, progressPublisher, recentDirs,
+                () -> applicationWindow.getStage(), this::appVersion);
     }
 
     @Override
@@ -224,10 +221,25 @@ public class S202Module implements Module {
         subscribeToMenuRequests(bus);
         subscribeToNodeSelection(bus);
         subscribeToOpenScope(bus);
+        showActiveDocumentInWindowTitle();
 
         toolbar.install();
+        restoreSessionLayout();
 
         statusBar.setMessage("Ready to analyze code. Open JARs or Python source roots to begin.");
+    }
+
+    /**
+     * Bringt Hauptfenster und Panels in die Anordnung, in der die letzte
+     * Sitzung endete. Die Panels erst, wenn jedes Modul gestartet ist: Die
+     * Module registrieren ihre Views in ihrem start(), und der läuft für alle
+     * in einem Zug auf dem FX-Thread — der nachgestellte Aufruf kommt danach.
+     */
+    private void restoreSessionLayout() {
+        if (applicationWindow.getStage() != null) {
+            sessionLayout.restoreWindow(applicationWindow.getStage());
+        }
+        Platform.runLater(() -> sessionLayout.restoreViews(Lookup.lookup(WindowManager.class)));
     }
 
     private void subscribeToOpenScope(EventBus<EventObject> bus) {
@@ -262,13 +274,26 @@ public class S202Module implements Module {
         bus.subscribe(MenuRequestEvent.Redo.class, ev -> { if (toolbar.boundView() != null) toolbar.boundView().redoWhatIf(); return true; });
     }
 
+    /**
+     * Der Fenstertitel nennt das aktive Dokument — das, auf das sich Outline,
+     * Tangles, Quality und die Menü-Aktionen gerade beziehen.
+     */
+    private void showActiveDocumentInWindowTitle() {
+        String applicationTitle = applicationWindow.getTitle();
+        String suffix = applicationTitle == null || applicationTitle.isBlank()
+                ? "" : " \u2013 " + applicationTitle;
+        Lookup.lookup(WindowManager.class).getActiveLookup().observe(AnalysisDocument.class, documents ->
+                applicationWindow.setTitle(documents.isEmpty()
+                        ? applicationTitle
+                        : documents.get(0).name() + suffix));
+    }
+
     private void subscribeToNodeSelection(EventBus<EventObject> bus) {
         bus.subscribe(NodeSelectionEvent.class, ev -> {
-            ArchitectureWfxView focused = viewManager.focusedArchitectureView();
-            if (focused == null) {
+            ArchitectureCanvas view = viewManager.activeCanvas();
+            if (view == null) {
                 return true;
             }
-            ArchitectureCanvas view = focused.getArchitectureView();
             // The graph already selected the node inline; skip our own echo.
             if (ev.getSource() == view) {
                 return true;
@@ -330,7 +355,7 @@ public class S202Module implements Module {
 
     @Override
     public void stop() {
-        // nothing to release
+        sessionLayout.save(applicationWindow.getStage(), Lookup.lookup(WindowManager.class));
     }
 
 

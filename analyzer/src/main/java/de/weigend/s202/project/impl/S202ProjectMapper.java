@@ -61,6 +61,19 @@ public final class S202ProjectMapper implements ProjectMapper {
                                  ArchitectureAnnotations annotations,
                                  LayoutInvariantReport invariantReport,
                                  Set<DependencyEdge> cycleBreakEdges) {
+        return toProject(appVersion, source, rawModel, domainModel, annotations, invariantReport,
+                cycleBreakEdges, Set.of(), List.of());
+    }
+
+    public S202Project toProject(String appVersion,
+                                 S202Project.Source source,
+                                 DependencyModel rawModel,
+                                 DomainModel domainModel,
+                                 ArchitectureAnnotations annotations,
+                                 LayoutInvariantReport invariantReport,
+                                 Set<DependencyEdge> cycleBreakEdges,
+                                 Set<DependencyEdge> previewCuts,
+                                 List<S202Project.ViewDto> views) {
         return new S202Project(
                 S202Project.FORMAT,
                 S202Project.FORMAT_VERSION,
@@ -71,6 +84,8 @@ public final class S202ProjectMapper implements ProjectMapper {
                 toArchitectureAnnotationsDto(annotations),
                 toCycleBreakEdgeDtos(cycleBreakEdges),
                 toLayoutInvariantReportDto(invariantReport),
+                toCycleBreakEdgeDtos(previewCuts),
+                views == null ? List.of() : List.copyOf(views),
                 Instant.now().toString());
     }
 
@@ -225,6 +240,10 @@ public final class S202ProjectMapper implements ProjectMapper {
         return dtos.stream()
                 .map(edge -> new DependencyEdge(edge.from(), edge.to()))
                 .collect(Collectors.toUnmodifiableSet());
+    }
+
+    public Set<DependencyEdge> toPreviewCuts(List<S202Project.CycleBreakEdgeDto> dtos) {
+        return toCycleBreakEdges(dtos);
     }
 
     private S202Project.DependencyModelDto toDependencyModelDto(DependencyModel model) {

@@ -22,10 +22,11 @@ import de.weigend.s202.reader.DependencyModel;
 import de.weigend.s202.ui.core.arrows.TangleEdgeScope;
 import de.weigend.s202.ui.core.canvas.ArchitectureCanvas;
 import de.weigend.s202.ui.core.model.ArchitectureNode;
+import de.weigend.s202.ui.core.platform.AnalysisDocument;
 import de.weigend.s202.ui.core.platform.ArchitectureViewManager;
 import de.weigend.s202.ui.core.platform.Dialogs;
 import de.weigend.s202.ui.core.platform.ProgressPublisher;
-import de.weigend.s202.ui.core.platform.RefactoringPreviewState;
+import de.weigend.s202.ui.core.platform.ViewDescriptor;
 import de.weigend.s202.ui.core.events.MethodSelectionEvent;
 import de.weigend.s202.ui.core.events.NodeSelectionEvent;
 import de.weigend.s202.ui.core.platform.ArchitectureWfxView;
@@ -36,10 +37,12 @@ import javafx.application.Platform;
 
 import java.util.EventObject;
 import java.util.Set;
+import java.util.function.Consumer;
 import java.util.stream.Collectors;
 
 /**
- * Öffnet und pflegt die Tangle-Tabs: pro Tangle ein wiederverwendeter Tab.
+ * Öffnet und pflegt die Tangle-Tabs: pro Dokument und Tangle ein
+ * wiederverwendeter Tab.
  * Ein Tangle-Tab ist die normale Architekturansicht, beschränkt auf das
  * Tangle und als Graph gezeichnet: die Mitglieder als Knoten (Symbol und
  * Name, ohne Box), Paket-Mitglieder zunächst zugeklappt und aufgeklappt nur
@@ -47,72 +50,88 @@ import java.util.stream.Collectors;
  * zwei Mitgliedern — gezeichnet nach dem, was sie sind (Back-Edge,
  * Klassenzyklus, nur Paketzyklus), beschriftet mit ihrem Gewicht. Die
  * {@link TangleLegendBar} erklärt und filtert.
- * Dazu die Verteilung der Preview-Cuts (cut/restore) auf alle offenen Views.
+ * Dazu die Preview-Cuts (cut/restore): Sie gehören dem Dokument und werden auf
+ * dessen Tabs verteilt — die Tabs eines anderen Dokuments bleiben unberührt.
  */
 public final class TangleTabController {
 
     private final ArchitectureViewManager viewManager;
-    private final RefactoringPreviewState previewState;
     private final ProgressPublisher progress;
 
     public TangleTabController(ArchitectureViewManager viewManager,
-                               RefactoringPreviewState previewState,
                                ProgressPublisher progress) {
         this.viewManager = viewManager;
-        this.previewState = previewState;
         this.progress = progress;
     }
 
     /**
-     * Open the Tangle tab focused on a specific tangle. Each tangle entry gets
-     * one tab, reused on later double-clicks of that same entry.
-     * <p>
-     * The tab is a regular architecture view cut down to the tangle (see
-     * {@link TangleFilter#scope}) with the dependency arrows switched on;
-     * collapsed packages roll their dependencies up into one counted arrow
-     * as usual.
+     * Open the Tangle tab of the active document for a specific tangle. Each
+     * tangle entry gets one tab per document, reused on later double-clicks
+     * of that same entry. The tangle is looked for in what the active tab
+     * shows.
      */
     public void openTangleView(Set<String> members, String tangleKey, String title) {
         if (members == null || members.isEmpty()) {
             return;
         }
-        ArchitectureWfxView source = viewManager.focusedSourceArchitectureView();
-        if (source == null) {
+        AnalysisDocument document = viewManager.activeDocument();
+        if (document == null) {
             return;
         }
-        ArchitectureCanvas sourceView = source.getArchitectureView();
-        ArchitectureNode sourceRoot = sourceView.getArchitectureRoot();
-        if (sourceRoot == null) {
-            return;
-        }
-        ArchitectureNode filteredRoot = TangleFilter.scope(sourceRoot, members, false);
-        if (filteredRoot == null) {
+        ViewDescriptor descriptor = ViewDescriptor.tangle(
+                title == null || title.isBlank() ? "Tangle" : title,
+                members, tangleKeyOf(members, tangleKey), viewManager.activeDescriptor());
+        if (open(document, descriptor, canvas -> { }, wrapper -> { }) == null) {
             Dialogs.showError("Open Tangle", "None of the tangle's classes were found in the focused architecture.");
-            return;
+        }
+    }
+
+    /**
+     * Opens the tangle tab that {@code descriptor} describes — the
+     * {@link ArchitectureViewManager.ViewOpener} for tangle tabs, used by the
+     * double-click on a tangle entry and by a loaded project alike.
+     * <p>
+     * The tab is a regular architecture view cut down to the tangle (see
+     * {@link TangleFilter#scope}) with the dependency arrows switched on;
+     * collapsed packages roll their dependencies up into one counted arrow
+     * as usual.
+     *
+     * @return the tab; {@code null} if the document has none of the tangle's members
+     */
+    public ArchitectureWfxView open(AnalysisDocument document, ViewDescriptor descriptor,
+                                    Consumer<ArchitectureCanvas> prepare,
+                                    Consumer<ArchitectureWfxView> whenBuilt) {
+        Set<String> members = descriptor.tangleMembers();
+        ArchitectureNode sourceRoot = viewManager.rootFor(document, descriptor);
+        ArchitectureNode filteredRoot = sourceRoot == null ? null : TangleFilter.scope(sourceRoot, members, false);
+        if (filteredRoot == null) {
+            return null;
         }
 
         WindowManager wm = Lookup.lookup(WindowManager.class);
-        ArchitectureWfxView wrapper = reusableTangleWrapper(wm, tangleKeyOf(members, tangleKey), title);
+        ArchitectureWfxView existing = openTangleTab(document, descriptor.tangleKey());
+        ArchitectureWfxView wrapper = existing != null ? existing : newTangleTab(document, descriptor);
+        if (existing != null) {
+            // Reopened: back to the document's models and current cuts.
+            viewManager.attach(wrapper, document);
+        }
         ArchitectureCanvas tangleView = wrapper.getArchitectureView();
-
-        // Carry the focused view's models through so the side panels keep
-        // working when this new tab gains focus.
-        tangleView.setDomainModel(sourceView.getDomainModel());
-        tangleView.setRawDependencyModel(sourceView.getRawDependencyModel());
-        tangleView.setCycleBreakEdges(sourceView.getCycleBreakEdges());
-        tangleView.setAppliedCutEdges(previewState.cuts());
         // Classes only: the tree holds nothing but them and their package
         // chains, show all of it. Otherwise every member starts as one node,
         // so the first picture is the tangle itself: its members and the
         // weighted dependencies between them. Opening a package member
         // shows the classes behind its arrows.
-        tangleView.setPackageDepth(isClassOnly(members, sourceView.getRawDependencyModel())
+        tangleView.setPackageDepth(isClassOnly(members, document.rawModel())
                 ? CLASS_ONLY_DEPTH : MEMBERS_ONLY_DEPTH);
+        prepare.accept(tangleView);
 
         // The scope tells the arrows which dependencies are the tangle; the
         // legend above the view explains and filters them.
         TangleEdgeScope scope = new TangleEdgeScope(members);
         TangleLegendBar legend = (TangleLegendBar) tangleView.getTop();
+        if (descriptor.tangleContext()) {
+            legend.preselectContext();
+        }
         legend.bind(scope, () -> {
             ArchitectureNode root = TangleFilter.scope(sourceRoot, members, scope.isShowContext());
             if (root != null) {
@@ -122,13 +141,15 @@ public final class TangleTabController {
         tangleView.setTangleScope(scope);
 
         // The legend's context switch survives reopening a tab; a fresh tab
-        // starts without context.
+        // starts without context unless its description asks for it.
         ArchitectureNode context = scope.isShowContext() ? TangleFilter.scope(sourceRoot, members, true) : null;
         showRoot(tangleView, context != null ? context : filteredRoot);
-        tangleView.setQualityMetrics(sourceView.getQualityMetrics());
+        tangleView.setQualityMetrics(document.metrics());
         legend.refreshCounts();
 
         wm.showView(wrapper);
+        whenBuilt.accept(wrapper);
+        return wrapper;
     }
 
     private static String tangleKeyOf(Set<String> members, String tangleKey) {
@@ -180,16 +201,19 @@ public final class TangleTabController {
         return true;
     }
 
-    /**
-     * @return the tangle wrapper for {@code key}, reused if still registered;
-     *         otherwise a freshly created one.
-     */
-    @SuppressWarnings("unchecked")
-    private ArchitectureWfxView reusableTangleWrapper(WindowManager wm, String key, String title) {
-        ArchitectureWfxView existing = viewManager.tangleViewFor(key);
-        if (existing != null && wm.hasRegisteredView(existing)) {
-            return existing;
+    /** @return the open tab of {@code document} that shows the tangle {@code key}, or {@code null}. */
+    private ArchitectureWfxView openTangleTab(AnalysisDocument document, String key) {
+        for (ArchitectureWfxView wrapper : viewManager.viewsOf(document)) {
+            if (key.equals(wrapper.getTangleKey())) {
+                return wrapper;
+            }
         }
+        return null;
+    }
+
+    /** Creates and registers the tab of {@code document} that {@code descriptor} describes. */
+    @SuppressWarnings("unchecked")
+    private ArchitectureWfxView newTangleTab(AnalysisDocument document, ViewDescriptor descriptor) {
         String viewId = viewManager.nextViewId();
         ArchitectureCanvas tangleView = new ArchitectureCanvas();
         tangleView.setScopeOwner(false);
@@ -205,37 +229,48 @@ public final class TangleTabController {
         tangleView.setOnDependencyEdgeClicked((from, to) ->
                 publishTangleEdgeSelection(bus, tangleView, from, to));
         viewManager.applyStylesheet(tangleView);
-        String viewTitle = title == null || title.isBlank() ? "Tangle" : title;
-        ArchitectureWfxView wrapper = new ArchitectureWfxView(viewId, viewTitle, tangleView);
+        String viewTitle = viewManager.titleOf(document, descriptor.label());
+        ArchitectureWfxView wrapper = new ArchitectureWfxView(viewId, viewTitle, tangleView, descriptor);
+        // The models before the tab appears: the panels that follow the new
+        // tab find the same document there, not an empty view.
+        viewManager.attach(wrapper, document);
         viewManager.registerArchitectureView(wrapper);
-        viewManager.putTangleView(key, wrapper);
         return wrapper;
     }
 
-    /* ----- Preview-Cuts auf alle offenen Views verteilen -------------------- */
+    /* ----- Preview-Cuts: im Dokument merken, auf seine Tabs verteilen -------- */
 
-    public void applyPreviewCutToViews(String from, String to) {
-        previewState.add(new DependencyEdge(from, to));
-        for (ArchitectureWfxView wrapper : viewManager.registeredArchitectureViews()) {
+    /** @return {@code false}, wenn sich an den Cuts des Dokuments nichts geändert hat */
+    public boolean applyPreviewCut(AnalysisDocument document, String from, String to) {
+        if (document == null || !document.addPreviewCut(new DependencyEdge(from, to))) {
+            return false;
+        }
+        for (ArchitectureWfxView wrapper : viewManager.viewsOf(document)) {
             wrapper.getArchitectureView().applyEdgeCut(from, to);
         }
+        return true;
     }
 
-    public void applyPreviewCutsToViews(Set<DependencyEdge> edges) {
-        if (edges == null || edges.isEmpty()) {
-            return;
+    /** @return {@code false}, wenn sich an den Cuts des Dokuments nichts geändert hat */
+    public boolean applyPreviewCuts(AnalysisDocument document, Set<DependencyEdge> edges) {
+        if (document == null || edges == null || edges.isEmpty() || !document.addPreviewCuts(edges)) {
+            return false;
         }
-        previewState.addAll(edges);
-        for (ArchitectureWfxView wrapper : viewManager.registeredArchitectureViews()) {
+        for (ArchitectureWfxView wrapper : viewManager.viewsOf(document)) {
             wrapper.getArchitectureView().applyEdgeCuts(edges);
         }
+        return true;
     }
 
-    public void restorePreviewCutInViews(String from, String to) {
-        previewState.remove(new DependencyEdge(from, to));
-        for (ArchitectureWfxView wrapper : viewManager.registeredArchitectureViews()) {
+    /** @return {@code false}, wenn sich an den Cuts des Dokuments nichts geändert hat */
+    public boolean restorePreviewCut(AnalysisDocument document, String from, String to) {
+        if (document == null || !document.removePreviewCut(new DependencyEdge(from, to))) {
+            return false;
+        }
+        for (ArchitectureWfxView wrapper : viewManager.viewsOf(document)) {
             wrapper.getArchitectureView().restoreEdgeCut(from, to);
         }
+        return true;
     }
 
     /* ----- Kanten-Selektion & Kanten-Sammlung -------------------------------- */

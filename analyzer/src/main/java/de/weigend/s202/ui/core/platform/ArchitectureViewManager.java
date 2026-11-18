@@ -15,53 +15,80 @@
  */
 package de.weigend.s202.ui.core.platform;
 
-import de.weigend.s202.analysis.invariants.LayoutInvariantReport;
 import de.weigend.s202.domain.architecture.ArchitectureAnnotations;
-import de.weigend.s202.project.S202Project;
-import de.weigend.s202.ui.core.canvas.ArchitectureCanvas;
 import de.weigend.s202.domain.architecture.ArchitectureKind;
+import de.weigend.s202.ui.core.canvas.ArchitectureCanvas;
+import de.weigend.s202.ui.core.events.NodeSelectionEvent;
 import de.weigend.s202.ui.core.model.ArchitectureNode;
 import de.weigend.s202.ui.core.model.ArchitectureNodeCloner;
-import de.weigend.s202.ui.core.events.NodeSelectionEvent;
-import de.weigend.s202.ui.core.platform.ArchitectureWfxView;
+import de.weigend.s202.ui.core.model.ScopeExtensionModel;
 import io.softwareecg.wfx.lookup.api.Lookup;
+import io.softwareecg.wfx.lookup.api.LookupContext;
 import io.softwareecg.wfx.platform.api.EventBus;
 import io.softwareecg.wfx.windowmanager.api.View;
 import io.softwareecg.wfx.windowmanager.api.ViewKind;
 import io.softwareecg.wfx.windowmanager.api.WindowManager;
 
 import java.util.ArrayList;
+import java.util.EnumMap;
 import java.util.EventObject;
-import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.function.Consumer;
 
 /**
  * Besitzt und verwaltet alle Architektur-Tabs: Erzeugung/Registrierung der
- * {@link ArchitectureWfxView}-Wrapper, Fokus-Auflösung, die View-Kontexte
- * (Quelle, Invarianten-Report), die Tangle-Tab-Registry sowie die
- * Projektions-Views (Component/Hexagonal/Scope). Aus S202Module extrahiert;
- * S202Module bleibt Composition-Root und verdrahtet nur noch.
+ * {@link ArchitectureWfxView}-Wrapper, die Zuordnung von Tabs zu ihrem
+ * {@link AnalysisDocument} sowie das Öffnen eines Tabs aus seiner
+ * {@link ViewDescriptor Beschreibung} — für die Menü-Aktionen ebenso wie für
+ * das Laden eines Projekts. Aus S202Module extrahiert; S202Module bleibt
+ * Composition-Root und verdrahtet nur noch.
+ * <p>
+ * Welcher Tab und welches Dokument „gemeint“ sind, entscheidet nicht dieser
+ * Manager, sondern der aktive Kontext des wfx-WindowManagers: Er folgt dem
+ * Tab, in dem der Benutzer arbeitet, bleibt stehen, solange der Fokus in
+ * einem Panel liegt, und geht beim Schließen auf den vorher aktiven Tab
+ * zurück. {@link #activeCanvas()} und {@link #activeDocument()} lesen ihn nur.
  */
 @jakarta.inject.Singleton
 public final class ArchitectureViewManager {
 
+    /** Trennt im Tab-Titel den Namen des Dokuments von der Sicht darauf. */
+    private static final String TITLE_SEPARATOR = " · ";
+
+    /**
+     * Baut einen Tab einer Art auf. Die Schichten-, Projektions- und
+     * Scope-Tabs baut dieser Manager selbst; andere Fachkomponenten melden
+     * ihre Art mit {@link #registerOpener} an (die Tangle-Tabs).
+     */
+    @FunctionalInterface
+    public interface ViewOpener {
+
+        /**
+         * @param prepare   läuft auf dem Canvas, bevor sein Inhalt gebaut wird
+         *                  (z. B. die Pakettiefe setzen)
+         * @param whenBuilt läuft, sobald der Tab seinen Inhalt zeigt
+         * @return der registrierte Tab; {@code null}, wenn es in dem Dokument
+         *         nichts gibt, was die Beschreibung meint
+         */
+        ArchitectureWfxView open(AnalysisDocument document, ViewDescriptor descriptor,
+                                 Consumer<ArchitectureCanvas> prepare,
+                                 Consumer<ArchitectureWfxView> whenBuilt);
+    }
+
     private final ProgressPublisher progress;
-    private final RefactoringPreviewState previewCuts;
+    private final Map<ViewDescriptor.Kind, ViewOpener> openers = new EnumMap<>(ViewDescriptor.Kind.class);
 
     private int viewCounter;
     private boolean propagatingArchitectureAnnotations;
 
-    // Dedicated tangle tabs keyed by the tangle's member set. Each tangle row
-    // gets one view instance and reopens/focuses that view on later requests.
-    private final Map<String, ArchitectureWfxView> tangleViews = new HashMap<>();
-    private final Map<ArchitectureCanvas, S202Project.Source> viewSources = new HashMap<>();
-    private final Map<ArchitectureCanvas, LayoutInvariantReport> viewInvariantReports = new HashMap<>();
-
     @jakarta.inject.Inject
-    public ArchitectureViewManager(ProgressPublisher progress, RefactoringPreviewState previewCuts) {
+    public ArchitectureViewManager(ProgressPublisher progress) {
         this.progress = progress;
-        this.previewCuts = previewCuts;
+        openers.put(ViewDescriptor.Kind.LAYERED, this::openTreeView);
+        openers.put(ViewDescriptor.Kind.COMPONENT, this::openTreeView);
+        openers.put(ViewDescriptor.Kind.HEXAGONAL, this::openTreeView);
+        openers.put(ViewDescriptor.Kind.SCOPE, this::openTreeView);
     }
 
     /* ----- Erzeugung & Registrierung --------------------------------------- */
@@ -70,8 +97,12 @@ public final class ArchitectureViewManager {
         return createArchitectureView(null);
     }
 
-    @SuppressWarnings("unchecked")
     public ArchitectureWfxView createArchitectureView(String title) {
+        return createArchitectureView(title, ViewDescriptor.layered());
+    }
+
+    @SuppressWarnings("unchecked")
+    private ArchitectureWfxView createArchitectureView(String title, ViewDescriptor descriptor) {
         viewCounter++;
         ArchitectureCanvas view = new ArchitectureCanvas();
         view.setStatusSink(progress::status);
@@ -87,7 +118,7 @@ public final class ArchitectureViewManager {
         return new ArchitectureWfxView(
                 ArchitectureWfxView.VIEW_ID_PREFIX + viewCounter,
                 title == null || title.isBlank() ? "Architecture " + viewCounter : title,
-                view);
+                view, descriptor);
     }
 
     /** Nächste View-Id für Sonder-Wrapper (Tangle-Tabs), gleiche Zählung wie hier. */
@@ -104,50 +135,182 @@ public final class ArchitectureViewManager {
     }
 
     /**
-     * Register an architecture wrapper with the {@link WindowManager} and,
-     * on first call, dock the What-If Dependencies panel under it. Every
+     * Register an architecture wrapper with the {@link WindowManager}. Every
      * code path that creates an architecture view (Open JAR, New Window,
-     * Open Scope, Open Tangle, Load Project) routes through here so the
-     * Dependencies panel reliably attaches to the first chart that
-     * appears.
+     * Open Scope, Open Tangle, Load Project) routes through here, so that
+     * each of them gets the same wiring.
      */
     public void registerArchitectureView(ArchitectureWfxView wrapper) {
         Lookup.lookup(WindowManager.class).register(wrapper);
         ArchitectureCanvas view = wrapper.getArchitectureView();
         view.architectureAnnotationsProperty().addListener((obs, oldValue, newValue) ->
-                propagateArchitectureAnnotations(view, newValue));
+                propagateArchitectureAnnotations(wrapper, newValue));
         // "Cut" / "Restore" on a dependency arrow of any architecture view goes
-        // onto the bus; the refactoring preview distributes it to all views.
+        // onto the bus; the refactoring preview distributes it to the views
+        // of that view's document.
         @SuppressWarnings("unchecked")
         EventBus<EventObject> bus = Lookup.lookup(EventBus.class);
         view.setOnDependencyEdgeCut((from, to) ->
                 bus.publish(new de.weigend.s202.ui.core.events.CutTangleEdgeEvent(from, to, view)));
         view.setOnDependencyEdgeRestore((from, to) ->
                 bus.publish(new de.weigend.s202.ui.core.events.RestoreTangleEdgeEvent(from, to, view)));
-        // Interessierte Module (z. B. What-If-Dependencies-Panel) docken sich
-        // selbst an — der Manager kennt keine Komponenten.
-        Lookup.lookup(io.softwareecg.wfx.platform.api.EventBus.class)
-                .publish(new de.weigend.s202.ui.core.events.ArchitectureViewRegisteredEvent(wrapper, this));
     }
 
-    private void propagateArchitectureAnnotations(ArchitectureCanvas source,
+    /* ----- Dokument und seine Tabs ------------------------------------------ */
+
+    /**
+     * Macht {@code wrapper} zu einem Tab von {@code document}: bringt die
+     * Daten des Dokuments in den Canvas und meldet das Dokument im Kontext
+     * des Tabs. Die einzige Stelle, an der Dokument-Daten in einen Canvas
+     * gelangen — Schichten-Sicht, Projektionen, Scope- und Tangle-Tabs gehen
+     * alle hier durch.
+     * <p>
+     * Den Architekturbaum setzt der Aufrufer selbst, weil jede Sicht einen
+     * anderen Ausschnitt zeigt.
+     */
+    public void attach(ArchitectureWfxView wrapper, AnalysisDocument document) {
+        ArchitectureCanvas canvas = wrapper.getArchitectureView();
+        // Jedes Setzen der Annotationen baut die Projektion neu; ein frischer
+        // Canvas und ein frisches Dokument sind sich schon einig.
+        if (!document.annotations().equals(canvas.getArchitectureAnnotations())) {
+            canvas.setArchitectureAnnotations(document.annotations());
+        }
+        // Raw model before domain model: setting the domain model builds the
+        // architecture projection, which reads the raw model.
+        canvas.setRawDependencyModel(document.rawModel());
+        canvas.setDomainModel(document.domainModel());
+        canvas.setCycleBreakEdges(document.cycleBreakEdges());
+        canvas.setAppliedCutEdges(document.previewCuts());
+        wrapper.setDocument(document);
+    }
+
+    /** Der Canvas des Tabs, in dem der Benutzer arbeitet; {@code null}, wenn keiner offen ist. */
+    public ArchitectureCanvas activeCanvas() {
+        return activeContext().lookup(ArchitectureCanvas.class);
+    }
+
+    /** Das Dokument, an dem der Benutzer arbeitet; {@code null}, wenn keines geladen ist. */
+    public AnalysisDocument activeDocument() {
+        return activeContext().lookup(AnalysisDocument.class);
+    }
+
+    private static LookupContext activeContext() {
+        return Lookup.lookup(WindowManager.class).getActiveLookup();
+    }
+
+    /** Das Dokument, zu dessen Tabs {@code canvas} gehört; {@code null}, wenn zu keinem. */
+    public AnalysisDocument documentOf(ArchitectureCanvas canvas) {
+        ArchitectureWfxView wrapper = wrapperOf(canvas);
+        return wrapper == null ? null : wrapper.getDocument();
+    }
+
+    /**
+     * Das Dokument, das ein Bus-Event meint: das des Canvas, von dem es
+     * stammt — sonst (Event aus einem Panel) das aktive.
+     */
+    public AnalysisDocument documentFor(Object eventSource) {
+        if (eventSource instanceof ArchitectureCanvas canvas) {
+            AnalysisDocument document = documentOf(canvas);
+            if (document != null) {
+                return document;
+            }
+        }
+        return activeDocument();
+    }
+
+    /** Der Tab, dem {@code canvas} gehört; {@code null}, wenn keinem offenen. */
+    public ArchitectureWfxView wrapperOf(ArchitectureCanvas canvas) {
+        if (canvas == null) {
+            return null;
+        }
+        for (ArchitectureWfxView wrapper : registeredArchitectureViews()) {
+            if (wrapper.getArchitectureView() == canvas) {
+                return wrapper;
+            }
+        }
+        return null;
+    }
+
+    /** Alle offenen Tabs, die {@code document} zeigen. */
+    public List<ArchitectureWfxView> viewsOf(AnalysisDocument document) {
+        if (document == null) {
+            return List.of();
+        }
+        return registeredArchitectureViews().stream()
+                .filter(wrapper -> wrapper.getDocument() == document)
+                .toList();
+    }
+
+    public List<ArchitectureWfxView> registeredArchitectureViews() {
+        return Lookup.lookup(WindowManager.class).getRegisteredViews().stream()
+                .filter(ArchitectureWfxView.class::isInstance)
+                .map(ArchitectureWfxView.class::cast)
+                .toList();
+    }
+
+    /**
+     * Der Baum, aus dem neue Tabs und Exporte des aktiven Dokuments entstehen:
+     * das, was der aktive Tab zeigt. Ein Tangle-Tab zeigt nur einen als Graph
+     * gezeichneten Ausschnitt — von ihm aus gilt der ganze Baum des Dokuments.
+     *
+     * @return {@code null}, wenn kein Dokument aktiv ist
+     */
+    public ArchitectureNode activeSourceRoot() {
+        AnalysisDocument document = activeDocument();
+        if (document == null) {
+            return null;
+        }
+        ArchitectureCanvas canvas = activeCanvas();
+        if (canvas == null || canvas.getTangleScope() != null || canvas.getArchitectureRoot() == null) {
+            return document.rootNode();
+        }
+        return canvas.getArchitectureRoot();
+    }
+
+    /**
+     * Ein Name für ein neues Dokument, der keinem offenen Tab gehört: Wer
+     * dasselbe JAR zweimal lädt, bekommt „name (2)“.
+     */
+    public String uniqueDocumentName(String base) {
+        String name = base == null || base.isBlank() ? "Architecture" : base;
+        String candidate = name;
+        for (int n = 2; isDocumentNameInUse(candidate); n++) {
+            candidate = name + " (" + n + ")";
+        }
+        return candidate;
+    }
+
+    private boolean isDocumentNameInUse(String name) {
+        for (ArchitectureWfxView wrapper : registeredArchitectureViews()) {
+            String title = wrapper.getTitle();
+            if (title.equals(name) || title.startsWith(name + TITLE_SEPARATOR)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /** Titel eines Tabs: „dokument“ für die Schichten-Sicht des Ganzen, sonst „dokument · sicht“. */
+    public String titleOf(AnalysisDocument document, String view) {
+        return view == null || view.isBlank() ? document.name() : document.name() + TITLE_SEPARATOR + view;
+    }
+
+    private void propagateArchitectureAnnotations(ArchitectureWfxView source,
                                                   ArchitectureAnnotations annotations) {
-        if (propagatingArchitectureAnnotations || source == null || source.getDomainModel() == null) {
+        AnalysisDocument document = source.getDocument();
+        if (propagatingArchitectureAnnotations || document == null) {
             return;
         }
         propagatingArchitectureAnnotations = true;
         try {
             ArchitectureAnnotations effective =
                     annotations == null ? ArchitectureAnnotations.empty() : annotations;
-            WindowManager wm = Lookup.lookup(WindowManager.class);
-            for (View registered : wm.getRegisteredViews()) {
-                if (!(registered instanceof ArchitectureWfxView wrapper)) {
+            document.setAnnotations(effective);
+            for (ArchitectureWfxView wrapper : viewsOf(document)) {
+                if (wrapper == source) {
                     continue;
                 }
                 ArchitectureCanvas target = wrapper.getArchitectureView();
-                if (target == source || target.getDomainModel() != source.getDomainModel()) {
-                    continue;
-                }
                 target.setArchitectureAnnotations(effective);
                 if ((target.getViewStyle() == ArchitectureKind.COMPONENT
                         || target.getViewStyle() == ArchitectureKind.HEXAGONAL)
@@ -160,89 +323,12 @@ public final class ArchitectureViewManager {
         }
     }
 
-    /* ----- Fokus-Auflösung -------------------------------------------------- */
-
-    public ArchitectureWfxView focusedArchitectureView() {
-        WindowManager wm = Lookup.lookup(WindowManager.class);
-        View focused = wm.getFocusedView();
-        if (focused instanceof ArchitectureWfxView a) {
-            return a;
-        }
-        // When a tool panel (Outline, Quality, …) is focused, fall back to the
-        // last architecture view that held focus rather than blindly picking the
-        // first registered one.  This keeps toolbar actions and node-selection
-        // events targeting the view the user was working in before switching to
-        // the side panel.
-        View last = wm.getLastFocusedView();
-        if (last instanceof ArchitectureWfxView a) {
-            return a;
-        }
-        return wm.getRegisteredViews().stream()
-                .filter(ArchitectureWfxView.class::isInstance)
-                .map(ArchitectureWfxView.class::cast)
-                .findFirst()
-                .orElse(null);
-    }
-
-    /** Pick a non-tangle architecture tab to use as the source for tangle filtering. */
-    public ArchitectureWfxView focusedSourceArchitectureView() {
-        WindowManager wm = Lookup.lookup(WindowManager.class);
-        View focused = wm.getFocusedView();
-        if (focused instanceof ArchitectureWfxView arch && !tangleViews.containsValue(arch)) {
-            return arch;
-        }
-        return wm.getRegisteredViews().stream()
-                .filter(ArchitectureWfxView.class::isInstance)
-                .map(ArchitectureWfxView.class::cast)
-                .filter(v -> !tangleViews.containsValue(v))
-                .findFirst()
-                .orElse(null);
-    }
-
-    public List<ArchitectureWfxView> registeredArchitectureViews() {
-        return Lookup.lookup(WindowManager.class).getRegisteredViews().stream()
-                .filter(ArchitectureWfxView.class::isInstance)
-                .map(ArchitectureWfxView.class::cast)
-                .toList();
-    }
-
-    /* ----- View-Kontext (Quelle, Invarianten) ------------------------------- */
-
-    public S202Project.Source sourceOf(ArchitectureCanvas view, S202Project.Source fallback) {
-        return viewSources.getOrDefault(view, fallback);
-    }
-
-    public void putSource(ArchitectureCanvas view, S202Project.Source source) {
-        viewSources.put(view, source);
-    }
-
-    public LayoutInvariantReport invariantsOf(ArchitectureCanvas view) {
-        return viewInvariantReports.get(view);
-    }
-
-    public void putInvariants(ArchitectureCanvas view, LayoutInvariantReport report) {
-        viewInvariantReports.put(view, report);
-    }
-
-    /* ----- Tangle-Tab-Registry ---------------------------------------------- */
-
-    public ArchitectureWfxView tangleViewFor(String key) {
-        return tangleViews.get(key);
-    }
-
-    public void putTangleView(String key, ArchitectureWfxView wrapper) {
-        tangleViews.put(key, wrapper);
-    }
-
     /* ----- Schließen & Zurücksetzen ------------------------------------------ */
 
     public void closeFocusedView() {
         WindowManager wm = Lookup.lookup(WindowManager.class);
         View focused = wm.getFocusedView();
         if (focused != null) {
-            if (focused instanceof ArchitectureWfxView a) {
-                forgetView(a);
-            }
             // closeView is kind-aware: TOOL is hidden (still in View menu);
             // DOCUMENT is fully unregistered. Old code called unregister
             // unconditionally, which forcibly removed Outline/Quality from
@@ -251,152 +337,173 @@ public final class ArchitectureViewManager {
         }
     }
 
+    /** Schließt {@code document}: alle Tabs, die es zeigen. Die anderen Dokumente bleiben offen. */
+    public void closeDocument(AnalysisDocument document) {
+        WindowManager wm = Lookup.lookup(WindowManager.class);
+        for (ArchitectureWfxView wrapper : viewsOf(document)) {
+            wm.closeView(wrapper);
+        }
+    }
+
     public void closeAllViews() {
         WindowManager wm = Lookup.lookup(WindowManager.class);
         // "Close All" means "close all open documents" — the user's analyses,
         // not the side panels. Filter to DOCUMENTs so TOOLs (Outline, Quality)
-        // stay alive.
-        for (View v : new ArrayList<>(wm.getVisibleViews())) {
-            if (v.getKind() == ViewKind.DOCUMENT) {
-                if (v instanceof ArchitectureWfxView a) {
-                    forgetView(a);
-                }
-                wm.closeView(v);
-            }
-        }
-    }
-
-    /** Schließt alle Dokumente (auch unsichtbare) und leert alle Registries. */
-    public void resetDocuments() {
-        WindowManager wm = Lookup.lookup(WindowManager.class);
+        // stay alive. All registered ones: the tabs behind the selected tab
+        // of a pane are open documents too.
         for (View v : new ArrayList<>(wm.getRegisteredViews())) {
             if (v.getKind() == ViewKind.DOCUMENT) {
-                if (v instanceof ArchitectureWfxView a) {
-                    forgetView(a);
-                }
                 wm.closeView(v);
             }
         }
-        tangleViews.clear();
-        viewSources.clear();
-        viewInvariantReports.clear();
     }
 
-    private void forgetView(ArchitectureWfxView wrapper) {
-        if (wrapper == null) {
-            return;
-        }
-        ArchitectureCanvas view = wrapper.getArchitectureView();
-        viewSources.remove(view);
-        viewInvariantReports.remove(view);
-        tangleViews.values().removeIf(wrapper::equals);
-    }
-
-    /* ----- Projektions-Views (Component / Hexagonal / Scope) ---------------- */
+    /* ----- Tabs aus ihrer Beschreibung öffnen ------------------------------- */
 
     public void newArchitectureWindow() {
         registerArchitectureView(createArchitectureView());
     }
 
+    /** Meldet an, wer Tabs der Art {@code kind} aufbaut. */
+    public void registerOpener(ViewDescriptor.Kind kind, ViewOpener opener) {
+        openers.put(kind, opener);
+    }
+
+    /** Öffnet in {@code document} den Tab, den {@code descriptor} beschreibt. */
+    public ArchitectureWfxView open(AnalysisDocument document, ViewDescriptor descriptor) {
+        return open(document, descriptor, canvas -> { }, wrapper -> { });
+    }
+
     /**
-     * Öffnet eine Stil-Projektion der fokussierten Analyse. Der Manager
-     * kennt keine konkreten Stile mehr — der Stil ist reiner Parameter,
-     * die Ansicht kommt über das StyleView-SPI des Canvas.
+     * Öffnet in {@code document} den Tab, den {@code descriptor} beschreibt.
+     * Der einzige Weg, auf dem ein Tab eines Dokuments entsteht — ob der
+     * Benutzer ihn über das Menü verlangt oder ein geladenes Projekt ihn
+     * mitbringt.
+     *
+     * @param prepare   läuft auf dem Canvas, bevor sein Inhalt gebaut wird
+     * @param whenBuilt läuft, sobald der Tab seinen Inhalt zeigt
+     * @return der Tab; {@code null}, wenn es in dem Dokument nichts gibt, was
+     *         die Beschreibung meint (ein Paket, das es nicht mehr gibt)
+     */
+    public ArchitectureWfxView open(AnalysisDocument document, ViewDescriptor descriptor,
+                                    Consumer<ArchitectureCanvas> prepare,
+                                    Consumer<ArchitectureWfxView> whenBuilt) {
+        ViewOpener opener = openers.get(descriptor.kind());
+        if (opener == null) {
+            throw new IllegalStateException("Nobody opens views of kind " + descriptor.kind());
+        }
+        return opener.open(document, descriptor, prepare, whenBuilt);
+    }
+
+    /**
+     * Der Baum, den ein Tab mit dieser Beschreibung zeigt oder aus dem er
+     * seinen Ausschnitt nimmt: das ganze Dokument oder, bei einem Scope, das
+     * Paket samt dem, was per „Add to Scope“ dazukam.
+     *
+     * @return {@code null}, wenn das Dokument das Paket nicht enthält
+     */
+    public ArchitectureNode rootFor(AnalysisDocument document, ViewDescriptor descriptor) {
+        if (descriptor.scope() == null) {
+            return document.rootNode();
+        }
+        ArchitectureNode root = filterPackageScope(document.rootNode(), descriptor.scope());
+        if (root == null) {
+            return null;
+        }
+        for (String extension : descriptor.scopeExtensions()) {
+            ScopeExtensionModel.addToScope(root, document.rootNode(), extension);
+        }
+        return root;
+    }
+
+    /**
+     * Die Beschreibung des aktiven Tabs — der Ausschnitt, von dem ein Tab
+     * ausgeht, den der Benutzer jetzt öffnet. Ohne aktiven Tab das ganze
+     * Dokument.
+     */
+    public ViewDescriptor activeDescriptor() {
+        ArchitectureWfxView active = wrapperOf(activeCanvas());
+        return active == null ? ViewDescriptor.layered() : active.getDescriptor();
+    }
+
+    /**
+     * Öffnet eine Stil-Projektion des aktiven Dokuments, auf dem Ausschnitt,
+     * den der aktive Tab zeigt. Der Manager kennt keine konkreten Stile mehr —
+     * der Stil ist reiner Parameter, die Ansicht kommt über das StyleView-SPI
+     * des Canvas.
      */
     public void openStyleView(ArchitectureKind style) {
-        String label = style.name().toLowerCase(java.util.Locale.ROOT);
-        String title = Character.toUpperCase(label.charAt(0)) + label.substring(1) + " View";
-        openProjectionView(title, style, label);
-    }
-
-    private void openProjectionView(String title, ArchitectureKind style, String label) {
-        ArchitectureWfxView sourceWrapper = focusedSourceArchitectureView();
-        if (sourceWrapper == null) {
-            progress.progress("No architecture view available for " + label + " projection", 1);
+        String name = style.name().toLowerCase(java.util.Locale.ROOT);
+        String label = Character.toUpperCase(name.charAt(0)) + name.substring(1) + " View";
+        AnalysisDocument document = activeDocument();
+        if (document == null) {
+            progress.progress("No architecture loaded for " + name + " projection", 1);
             return;
         }
-
-        ArchitectureCanvas sourceView = sourceWrapper.getArchitectureView();
-        ArchitectureNode sourceRoot = sourceView.getArchitectureRoot();
-        if (sourceRoot == null) {
-            progress.progress("No architecture loaded for " + label + " projection", 1);
-            return;
-        }
-
-        WindowManager wm = Lookup.lookup(WindowManager.class);
-        ArchitectureWfxView wrapper = createArchitectureView(title);
-        ArchitectureCanvas projectionView = wrapper.getArchitectureView();
-        projectionView.setViewStyle(style);
-        projectionView.setArchitectureAnnotations(sourceView.getArchitectureAnnotations());
-        projectionView.setRawDependencyModel(sourceView.getRawDependencyModel());
-        projectionView.setDomainModel(sourceView.getDomainModel());
-        projectionView.setCycleBreakEdges(sourceView.getCycleBreakEdges());
-        projectionView.setAppliedCutEdges(previewCuts.cuts());
-        viewSources.put(projectionView, viewSources.get(sourceView));
-        viewInvariantReports.put(projectionView, viewInvariantReports.get(sourceView));
-
-        registerArchitectureView(wrapper);
-        wm.showView(wrapper);
-
-        projectionView.setArchitectureRootAsync(
-                sourceRoot,
-                buildProgress -> progress.javaFxBuildProgress("Building JavaFX " + label + " view", buildProgress),
-                () -> {
-                    projectionView.setQualityMetrics(sourceView.getQualityMetrics());
-                    progress.progress("Opened " + label + " view", 1);
-                });
+        open(document, ViewDescriptor.projection(style, label, activeDescriptor()));
     }
 
+    /**
+     * Öffnet einen Scope-Tab für das Paket {@code scope}.
+     *
+     * @param requestedSourceView der Canvas, in dessen Dokument das Paket
+     *                            liegt; {@code null} für den aktiven
+     */
     public void openScopeView(String scope, ArchitectureCanvas requestedSourceView) {
         if (scope == null || scope.isBlank()) {
             return;
         }
-        ArchitectureCanvas sourceView = requestedSourceView;
-        if (sourceView == null) {
-            ArchitectureWfxView source = focusedSourceArchitectureView();
-            sourceView = source == null ? null : source.getArchitectureView();
-        }
-        if (sourceView == null) {
+        AnalysisDocument document = documentOf(requestedSourceView != null ? requestedSourceView : activeCanvas());
+        if (document == null) {
             return;
         }
-        ArchitectureCanvas finalSourceView = sourceView;
-        ArchitectureNode sourceRoot = sourceView.getScopeExtensionSourceRoot();
-        if (sourceRoot == null) {
-            sourceRoot = sourceView.getArchitectureRoot();
-        }
-        if (sourceRoot == null) {
-            return;
-        }
-        ArchitectureNode scopedRoot = filterPackageScope(sourceRoot, scope);
-        if (scopedRoot == null) {
+        ArchitectureWfxView opened = open(document, ViewDescriptor.scope("Scope " + simple(scope), scope));
+        if (opened == null) {
             Dialogs.showError("Open Scope", "Package scope was not found in the focused architecture: " + scope);
-            return;
         }
+    }
 
-        WindowManager wm = Lookup.lookup(WindowManager.class);
-        ArchitectureWfxView wrapper = createArchitectureView("Scope " + simple(scope));
-        ArchitectureCanvas scopeView = wrapper.getArchitectureView();
-        scopeView.setPreferredScope(scope);
-        scopeView.enableScopeExtensionFrom(sourceRoot);
-        scopeView.setArchitectureAnnotations(sourceView.getArchitectureAnnotations());
-        scopeView.setDomainModel(sourceView.getDomainModel());
-        scopeView.setRawDependencyModel(sourceView.getRawDependencyModel());
-        scopeView.setCycleBreakEdges(sourceView.getCycleBreakEdges());
-        scopeView.setAppliedCutEdges(previewCuts.cuts());
-        viewSources.put(scopeView, viewSources.get(sourceView));
-        viewInvariantReports.put(scopeView, viewInvariantReports.get(sourceView));
+    /**
+     * Baut einen Tab, der einen Baum zeigt: die Schichten-Sicht des ganzen
+     * Dokuments, eine Stil-Projektion oder einen Scope. Sie unterscheiden sich
+     * nur im Stil und im Ausschnitt.
+     */
+    private ArchitectureWfxView openTreeView(AnalysisDocument document, ViewDescriptor descriptor,
+                                             Consumer<ArchitectureCanvas> prepare,
+                                             Consumer<ArchitectureWfxView> whenBuilt) {
+        ArchitectureNode root = rootFor(document, descriptor);
+        if (root == null) {
+            return null;
+        }
+        boolean scopeView = descriptor.kind() == ViewDescriptor.Kind.SCOPE;
+        String what = descriptor.label() == null ? "architecture view" : descriptor.label();
+
+        ArchitectureWfxView wrapper = createArchitectureView(titleOf(document, descriptor.label()), descriptor);
+        ArchitectureCanvas canvas = wrapper.getArchitectureView();
+        canvas.setViewStyle(descriptor.style());
+        if (scopeView) {
+            canvas.setPreferredScope(descriptor.scope());
+            canvas.enableScopeExtensionFrom(document.rootNode());
+            canvas.setScopeExtensions(descriptor.scopeExtensions());
+        }
+        attach(wrapper, document);
+        prepare.accept(canvas);
 
         registerArchitectureView(wrapper);
-        wm.showView(wrapper);
+        Lookup.lookup(WindowManager.class).showView(wrapper);
 
-        scopeView.setArchitectureRootAsync(
-                scopedRoot,
-                buildProgress -> progress.javaFxBuildProgress("Building JavaFX scope view", buildProgress),
+        canvas.setArchitectureRootAsync(
+                root,
+                buildProgress -> progress.javaFxBuildProgress("Building JavaFX " + what, buildProgress),
                 () -> {
-                    scopeView.setQualityMetrics(finalSourceView.getQualityMetrics());
-                    scopeView.selectByFullName(scope);
-                    progress.progress("Opened scope " + scope, 1);
+                    canvas.setQualityMetrics(document.metrics());
+                    if (scopeView) {
+                        canvas.selectByFullName(descriptor.scope());
+                    }
+                    progress.progress("Opened " + what, 1);
+                    whenBuilt.accept(wrapper);
                 });
+        return wrapper;
     }
 
     private static ArchitectureNode filterPackageScope(ArchitectureNode sourceRoot, String scope) {

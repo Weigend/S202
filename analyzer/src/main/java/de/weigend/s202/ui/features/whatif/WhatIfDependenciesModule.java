@@ -17,8 +17,8 @@ package de.weigend.s202.ui.features.whatif;
 
 import de.weigend.s202.domain.architecture.Architecture;
 import de.weigend.s202.ui.core.canvas.ArchitectureCanvas;
-import de.weigend.s202.ui.core.platform.ArchitectureWfxView;
 import io.softwareecg.wfx.lookup.api.Lookup;
+import io.softwareecg.wfx.lookup.api.LookupContext;
 import io.softwareecg.wfx.platform.api.Module;
 import io.softwareecg.wfx.platform.api.exceptions.PlatformException;
 import io.softwareecg.wfx.windowmanager.api.WindowManager;
@@ -28,10 +28,10 @@ import javafx.beans.value.ChangeListener;
 
 /**
  * WFX module providing the What-If Dependencies panel. Auto-discovered by
- * Avaje, registered in the BOTTOM dock area under the architecture view.
+ * Avaje, registered under the editor area that holds the architecture tabs.
  * Loosely coupled to the chart: observes
- * {@link WindowManager#focusedViewProperty()}, rebinds the view to
- * whichever architecture is focused, and listens to that view's
+ * {@link WindowManager#getActiveLookup()}, rebinds the view to
+ * whichever architecture tab is the active one, and listens to that view's
  * {@link ArchitectureCanvas#redrawTickProperty()} so the panel refreshes
  * after every layout pulse — same trigger the orange-edge renderer uses.
  */
@@ -48,6 +48,7 @@ public class WhatIfDependenciesModule implements Module {
     private ChangeListener<Object> whatIfArchitectureListener;
     private ChangeListener<Number> redrawListener;
     private ChangeListener<String> selectionListener;
+    private LookupContext.Subscription activeViewSubscription;
 
     @Override
     public String getName() {
@@ -79,46 +80,26 @@ public class WhatIfDependenciesModule implements Module {
                 String.join("|", req.tangle().members()),
                 req.title(),
                 view)));
-        bus.subscribe(de.weigend.s202.ui.core.events.ArchitectureViewRegisteredEvent.class, ev -> {
-            dockUnder(ev.getWrapper());
-            return true;
-        });
-        // Don't auto-register. The view is docked manually by S202Module
-        // after the first architecture view is opened, via dockUnder(...)
-        // — that's the only point where we know which CENTER editor area
-        // to split. Focus tracking still drives the bind/refresh wiring.
+        // The view anchors itself to the editor area, so it is registered at
+        // startup like the other panels; the architecture tabs open above it.
         WindowManager wm = Lookup.lookup(WindowManager.class);
-        wm.focusedViewProperty().addListener((obs, was, isNow) -> rebindToFocusedView());
-        rebindToFocusedView();
-    }
-
-    /**
-     * Dock the Dependencies panel directly under the given architecture
-     * view, splitting the CENTER editor area vertically. No-op when the
-     * panel is already registered with the WindowManager — subsequent
-     * architecture views share the same panel via focus tracking. After
-     * "Close Project" tears the panel out of the WindowManager, the next
-     * dockUnder re-registers it.
-     */
-    public void dockUnder(ArchitectureWfxView anchor) {
-        if (anchor == null) {
-            return;
-        }
-        WindowManager wm = Lookup.lookup(WindowManager.class);
-        if (wm.hasRegisteredView(view)) {
-            return;
-        }
-        wm.register(view, anchor);
+        wm.register(view);
+        LookupContext active = wm.getActiveLookup();
+        activeViewSubscription = active.observe(ArchitectureCanvas.class,
+                canvases -> rebindTo(canvases.isEmpty() ? null : canvases.get(0)));
+        rebindTo(active.lookup(ArchitectureCanvas.class));
     }
 
     @Override
     public void stop() {
+        if (activeViewSubscription != null) {
+            activeViewSubscription.cancel();
+            activeViewSubscription = null;
+        }
         unbind();
     }
 
-    private void rebindToFocusedView() {
-        ArchitectureWfxView focused = focusedArchitectureView();
-        ArchitectureCanvas newBound = focused == null ? null : focused.getArchitectureView();
+    private void rebindTo(ArchitectureCanvas newBound) {
         if (newBound == boundView) {
             return;
         }
@@ -210,41 +191,5 @@ public class WhatIfDependenciesModule implements Module {
         for (de.weigend.s202.ui.core.model.ArchitectureNode child : node.getChildren()) {
             collectClasses(child, out);
         }
-    }
-
-    private ArchitectureWfxView focusedArchitectureView() {
-        WindowManager wm = Lookup.lookup(WindowManager.class);
-        ArchitectureWfxView focused = wm.getRegisteredViews().stream()
-                .filter(ArchitectureWfxView.class::isInstance)
-                .map(ArchitectureWfxView.class::cast)
-                .filter(v -> v == wm.getFocusedView())
-                .findFirst()
-                .orElse(null);
-        if (focused != null) {
-            return focused;
-        }
-
-        ArchitectureWfxView current = wrapperFor(boundView);
-        if (current != null) {
-            return current;
-        }
-
-        return wm.getRegisteredViews().stream()
-                .filter(ArchitectureWfxView.class::isInstance)
-                .map(ArchitectureWfxView.class::cast)
-                .findFirst()
-                .orElse(null);
-    }
-
-    private ArchitectureWfxView wrapperFor(ArchitectureCanvas view) {
-        if (view == null) {
-            return null;
-        }
-        return Lookup.lookup(WindowManager.class).getRegisteredViews().stream()
-                .filter(ArchitectureWfxView.class::isInstance)
-                .map(ArchitectureWfxView.class::cast)
-                .filter(wrapper -> wrapper.getArchitectureView() == view)
-                .findFirst()
-                .orElse(null);
     }
 }

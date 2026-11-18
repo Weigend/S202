@@ -18,7 +18,6 @@ package de.weigend.s202.ui.shell;
 import de.weigend.s202.ui.core.canvas.ArchitectureCanvas;
 import de.weigend.s202.ui.core.graph.ArchitectureViewSettings;
 import de.weigend.s202.ui.core.platform.ArchitectureViewManager;
-import de.weigend.s202.ui.core.platform.ArchitectureWfxView;
 import io.softwareecg.wfx.lookup.api.Lookup;
 import io.softwareecg.wfx.windowmanager.api.ApplicationWindow;
 import io.softwareecg.wfx.windowmanager.api.WindowManager;
@@ -47,9 +46,9 @@ import java.util.ArrayList;
 import java.util.List;
 
 /**
- * Baut die geteilte Toolbar und spiegelt sie auf die jeweils fokussierte
- * Architektur-View (Settings-Checkboxen, Undo/Redo, Zoom). Aus S202Module
- * extrahiert.
+ * Baut die geteilte Toolbar und spiegelt sie auf den aktiven Architektur-Tab
+ * (Settings-Checkboxen, Undo/Redo, Zoom) — den, in dem der Benutzer arbeitet,
+ * auch während der Fokus in einem Panel liegt. Aus S202Module extrahiert.
  */
 public final class ToolbarController {
 
@@ -104,11 +103,6 @@ public final class ToolbarController {
     /** Die aktuell gespiegelte View (oder {@code null}) — für Menü-Undo/Redo. */
     public ArchitectureCanvas boundView() {
         return boundView;
-    }
-
-    /** Löst die aktuelle Bindung und spiegelt die (neu) fokussierte View. */
-    public void rebind() {
-        bindToolbarToFocusedView();
     }
 
     public void install() {
@@ -237,9 +231,9 @@ public final class ToolbarController {
                 new Separator(),
                 zoomGroup, zoomResetButton);
 
-        // Track focus changes to retarget the toolbar.
-        Lookup.lookup(WindowManager.class).focusedViewProperty()
-                .addListener((obs, was, isNow) -> bindToolbarToFocusedView());
+        // Retarget the toolbar whenever another architecture tab becomes the active one.
+        Lookup.lookup(WindowManager.class).getActiveLookup()
+                .observe(ArchitectureCanvas.class, canvases -> bindToolbarToFocusedView());
         bindToolbarToFocusedView();
     }
 
@@ -255,8 +249,8 @@ public final class ToolbarController {
         boundView = null;
         zoomLabelListener = null;
 
-        ArchitectureWfxView focused = viewManager.focusedArchitectureView();
-        boolean enabled = focused != null;
+        ArchitectureCanvas view = viewManager.activeCanvas();
+        boolean enabled = view != null;
         for (Node n : viewDependentToolbarNodes) {
             n.setDisable(!enabled);
         }
@@ -274,7 +268,6 @@ public final class ToolbarController {
             return;
         }
 
-        ArchitectureCanvas view = focused.getArchitectureView();
         boundView = view;
         undoButton.disableProperty().bind(view.canUndoWhatIfProperty().not());
         redoButton.disableProperty().bind(view.canRedoWhatIfProperty().not());

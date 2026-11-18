@@ -16,12 +16,10 @@
 package de.weigend.s202.ui.features.report;
 
 import de.weigend.s202.domain.DependencyEdge;
-import de.weigend.s202.project.S202Project;
 import de.weigend.s202.report.quality.QualityReportExporter;
 import de.weigend.s202.report.quality.QualityReportInput;
 import de.weigend.s202.report.quality.QualityReportModel;
 import de.weigend.s202.report.quality.QualityReportOptions;
-import de.weigend.s202.ui.core.canvas.ArchitectureCanvas;
 import de.weigend.s202.ui.core.model.ArchitectureNode;
 import de.weigend.s202.ui.core.model.ArchitectureNodeCloner;
 import de.weigend.s202.ui.features.report.impl.JavaFxQualityReportImageRenderer;
@@ -29,8 +27,7 @@ import de.weigend.s202.ui.core.platform.ArchitectureViewManager;
 import de.weigend.s202.ui.core.platform.Dialogs;
 import de.weigend.s202.ui.core.platform.ProgressPublisher;
 import de.weigend.s202.ui.core.platform.RecentDirectories;
-import de.weigend.s202.ui.core.platform.RefactoringPreviewState;
-import de.weigend.s202.ui.core.platform.ArchitectureWfxView;
+import de.weigend.s202.ui.core.platform.AnalysisDocument;
 import io.softwareecg.wfx.lookup.api.Lookup;
 import io.softwareecg.wfx.windowmanager.api.WindowManager;
 import javafx.concurrent.Task;
@@ -66,7 +63,6 @@ public final class QualityReportController {
     private static final double REPORT_PROGRESS_HTML = 0.94;
 
     private final ArchitectureViewManager viewManager;
-    private final RefactoringPreviewState previewState;
     private final ProgressPublisher progress;
     private final RecentDirectories recentDirs;
     private final Supplier<Window> dialogOwner;
@@ -75,24 +71,22 @@ public final class QualityReportController {
     private int reportCounter;
 
     public QualityReportController(ArchitectureViewManager viewManager,
-                                   RefactoringPreviewState previewState,
                                    ProgressPublisher progress,
                                    RecentDirectories recentDirs,
                                    Supplier<Window> dialogOwner,
                                    Supplier<String> appVersion) {
         this.viewManager = viewManager;
-        this.previewState = previewState;
         this.progress = progress;
         this.recentDirs = recentDirs;
         this.dialogOwner = dialogOwner;
         this.appVersion = appVersion;
     }
 
+    /** Erzeugt den Report für das aktive Dokument. */
     public void exportQualityReport() {
-        ArchitectureWfxView focused = viewManager.focusedSourceArchitectureView();
-        if (focused == null || focused.getArchitectureView().getDomainModel() == null
-                || focused.getArchitectureView().getRawDependencyModel() == null
-                || focused.getArchitectureView().getArchitectureRoot() == null) {
+        AnalysisDocument document = viewManager.activeDocument();
+        ArchitectureNode sourceRoot = viewManager.activeSourceRoot();
+        if (document == null || sourceRoot == null) {
             Dialogs.showError("Quality Report", "There is no loaded analysis to report.");
             return;
         }
@@ -106,21 +100,18 @@ public final class QualityReportController {
             return;
         }
 
-        ArchitectureCanvas view = focused.getArchitectureView();
-        S202Project.Source source = viewManager.sourceOf(view,
-                new S202Project.Source("UNKNOWN", List.of(), null));
         QualityReportInput input = new QualityReportInput(
                 "S202 Quality Report",
                 appVersion.get(),
-                source,
-                view.getRawDependencyModel(),
-                view.getDomainModel(),
-                view.getArchitectureAnnotations(),
-                view.getQualityMetrics(),
-                viewManager.invariantsOf(view));
-        ArchitectureNode reportRoot = ArchitectureNodeCloner.cloneTree(view.getArchitectureRoot());
-        Set<DependencyEdge> reportCycleBreakEdges = Set.copyOf(view.getCycleBreakEdges());
-        Set<DependencyEdge> reportPreviewCuts = Set.copyOf(previewState.cuts());
+                document.source(),
+                document.rawModel(),
+                document.domainModel(),
+                document.annotations(),
+                document.metrics(),
+                document.invariants());
+        ArchitectureNode reportRoot = ArchitectureNodeCloner.cloneTree(sourceRoot);
+        Set<DependencyEdge> reportCycleBreakEdges = Set.copyOf(document.cycleBreakEdges());
+        Set<DependencyEdge> reportPreviewCuts = Set.copyOf(document.previewCuts());
         int scopeImageLimit = qualityReportScopeImageLimit(input);
 
         progress.progress(scopeImageLimit < 5

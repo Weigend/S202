@@ -26,8 +26,8 @@ import static org.junit.jupiter.api.Assertions.assertSame;
 /**
  * Sichert den DI-Vertrag der geteilten Plattform-Dienste ab: Nachdem die
  * wfx-Module in eigene Fachkomponenten-Pakete gewandert sind, teilen sich
- * mehrere Module denselben {@link ArchitectureViewManager} /
- * {@link ProgressPublisher} / {@link RefactoringPreviewState}. Das
+ * mehrere Module denselben {@link ArchitectureViewManager} und
+ * {@link ProgressPublisher}. Das
  * funktioniert nur, wenn diese als echte Singletons über {@link Lookup}
  * auflösbar sind — würde man sie (wie versehentlich geschehen) wieder als
  * {@code new …} oder als Feld-Initializer-Lookup verdrahten, driftet der
@@ -50,7 +50,6 @@ class PlatformServicesDiTest {
     void sharedPlatformServicesAreResolvableSingletons() {
         assertResolvableSingleton(ArchitectureViewManager.class);
         assertResolvableSingleton(ProgressPublisher.class);
-        assertResolvableSingleton(RefactoringPreviewState.class);
     }
 
     private static <T> void assertResolvableSingleton(Class<T> type) {

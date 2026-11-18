@@ -125,6 +125,17 @@ final class TangleLegendBar extends HBox {
         scope.setHighlight(Highlight.PACKAGE_CYCLE, packageCycle.isSelected());
     }
 
+    /**
+     * Switches the context on before the strip is bound — for a tab that is
+     * built to show the context from the start. Does not rebuild anything.
+     */
+    void preselectContext() {
+        TangleEdgeScope bound = scope;
+        scope = null;
+        context.setSelected(true);
+        scope = bound;
+    }
+
     void refreshCounts() {
         TangleEdgeScope.Stats stats = canvas.getTangleEdgeStats();
         backEdges.setText("Back-edges  " + stats.backEdges());

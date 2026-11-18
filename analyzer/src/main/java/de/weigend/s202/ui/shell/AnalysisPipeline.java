@@ -28,10 +28,10 @@ import de.weigend.s202.ui.core.canvas.ArchitectureCanvas;
 import de.weigend.s202.ui.core.layout.horizontal.HorizontalRowLayoutOptimizer;
 import de.weigend.s202.ui.core.model.ArchitectureNode;
 import de.weigend.s202.ui.core.model.ArchitectureNodeBuilder;
+import de.weigend.s202.ui.core.platform.AnalysisDocument;
 import de.weigend.s202.ui.core.platform.ArchitectureViewManager;
 import de.weigend.s202.ui.core.platform.Dialogs;
 import de.weigend.s202.ui.core.platform.ProgressPublisher;
-import de.weigend.s202.ui.core.platform.RefactoringPreviewState;
 import de.weigend.s202.ui.core.platform.ArchitectureWfxView;
 import io.softwareecg.wfx.lookup.api.Lookup;
 import javafx.animation.PauseTransition;
@@ -54,8 +54,9 @@ import java.util.stream.Collectors;
 /**
  * Die Analyse-Pipeline (raw analysis → levels → node tree → render): lädt
  * JARs oder Source-Roots auf einem Hintergrund-Thread, baut das Ergebnis
- * zusammen und wendet es auf einen frischen Architektur-Tab an. Aus
- * S202Module extrahiert.
+ * zu einem {@link AnalysisDocument} zusammen und zeigt es in einem frischen
+ * Architektur-Tab. Jeder Lauf ergibt ein eigenes Dokument; die schon offenen
+ * bleiben unberührt. Aus S202Module extrahiert.
  */
 public final class AnalysisPipeline {
 
@@ -66,16 +67,13 @@ public final class AnalysisPipeline {
     private final LayoutInvariantChecker invariantChecker = new LayoutInvariantChecker();
 
     private final ArchitectureViewManager viewManager;
-    private final RefactoringPreviewState previewState;
     private final ProgressPublisher progress;
     private final Supplier<Stage> dialogOwner;
 
     public AnalysisPipeline(ArchitectureViewManager viewManager,
-                            RefactoringPreviewState previewState,
                             ProgressPublisher progress,
                             Supplier<Stage> dialogOwner) {
         this.viewManager = viewManager;
-        this.previewState = previewState;
         this.progress = progress;
         this.dialogOwner = dialogOwner;
     }
@@ -92,6 +90,19 @@ public final class AnalysisPipeline {
                 kind.toUpperCase(),
                 jars.stream().map(File::getAbsolutePath).toList(),
                 root == null ? null : root.getAbsolutePath());
+    }
+
+    /**
+     * Der Name, unter dem eine Analyse in den Tab-Titeln erscheint: bei einem
+     * Maven-/Gradle-Projekt dessen Verzeichnis, sonst das JAR — bei mehreren
+     * das erste und die Zahl der übrigen.
+     */
+    static String documentName(S202Project.Source source, List<File> jars) {
+        if (source != null && source.projectRoot() != null && !source.projectRoot().isBlank()) {
+            return new File(source.projectRoot()).getName();
+        }
+        String first = jars.get(0).getName();
+        return jars.size() == 1 ? first : first + " +" + (jars.size() - 1);
     }
 
     static LanguageAnalyzer requireLanguageAnalyzer(String displayName) {
@@ -126,9 +137,9 @@ public final class AnalysisPipeline {
         if (jarFiles == null || jarFiles.isEmpty()) {
             return;
         }
-        ArchitectureWfxView target = viewManager.createArchitectureView();
+        final String documentName = viewManager.uniqueDocumentName(documentName(source, jarFiles));
+        final ArchitectureWfxView target = viewManager.createArchitectureView(documentName);
         viewManager.registerArchitectureView(target);
-        final ArchitectureCanvas view = target.getArchitectureView();
         final String fileNames = jarFiles.stream().map(File::getName).collect(Collectors.joining(", "));
         final List<String> jarPaths = jarFiles.stream().map(File::getAbsolutePath).toList();
         final List<Path> jarInputPaths = jarFiles.stream().map(File::toPath).toList();
@@ -156,7 +167,7 @@ public final class AnalysisPipeline {
 
             PauseTransition yieldToPulse = new PauseTransition(Duration.millis(50));
             AnalysisInputSummary summary = new AnalysisInputSummary("JAR(s)", jarFiles.size());
-            yieldToPulse.setOnFinished(event -> applyAnalysisResult(summary, view, source, result));
+            yieldToPulse.setOnFinished(event -> applyAnalysisResult(summary, target, documentName, source, result));
             yieldToPulse.play();
         });
         task.setOnFailed(e -> {
@@ -178,9 +189,9 @@ public final class AnalysisPipeline {
             return;
         }
         File rootFile = root.toFile();
-        ArchitectureWfxView target = viewManager.createArchitectureView(titlePrefix + ": " + rootFile.getName());
+        final String documentName = viewManager.uniqueDocumentName(titlePrefix + ": " + rootFile.getName());
+        final ArchitectureWfxView target = viewManager.createArchitectureView(documentName);
         viewManager.registerArchitectureView(target);
-        final ArchitectureCanvas view = target.getArchitectureView();
         final String rootPath = rootFile.getAbsolutePath();
         final S202Project.Source source = new S202Project.Source(sourceKind, List.of(rootPath), rootPath);
 
@@ -207,7 +218,7 @@ public final class AnalysisPipeline {
 
             PauseTransition yieldToPulse = new PauseTransition(Duration.millis(50));
             AnalysisInputSummary summary = new AnalysisInputSummary(analyzer.displayName() + " root(s)", 1);
-            yieldToPulse.setOnFinished(event -> applyAnalysisResult(summary, view, source, result));
+            yieldToPulse.setOnFinished(event -> applyAnalysisResult(summary, target, documentName, source, result));
             yieldToPulse.play();
         });
         task.setOnFailed(e -> {
@@ -249,25 +260,24 @@ public final class AnalysisPipeline {
         return new AnalysisResult(rawModel, root, metrics, calculated, invariants, cycleBreakEdges);
     }
 
-    private void applyAnalysisResult(AnalysisInputSummary summary, ArchitectureCanvas view,
-                                     S202Project.Source source, AnalysisResult result) {
-        previewState.clear();
-        // Domain model first so listeners on architectureRoot/metrics can
+    private void applyAnalysisResult(AnalysisInputSummary summary, ArchitectureWfxView target,
+                                     String documentName, S202Project.Source source, AnalysisResult result) {
+        AnalysisDocument document = new AnalysisDocument(
+                documentName, source, result.rawModel(), result.domainModel(), result.rootNode(),
+                result.metrics(), result.invariants(), result.cycleBreakEdges());
+        // The models first so listeners on architectureRoot/metrics can
         // already query scoped data (e.g. quality module on package select).
-        view.setDomainModel(result.domainModel());
-        view.setRawDependencyModel(result.rawModel());
-        view.setCycleBreakEdges(result.cycleBreakEdges());
+        viewManager.attach(target, document);
+        ArchitectureCanvas view = target.getArchitectureView();
         view.setArchitectureRootAsync(
                 result.rootNode(),
                 buildProgress -> progress.javaFxBuildProgress("Building JavaFX architecture view", buildProgress),
-                () -> finishAppliedAnalysisResult(summary, view, source, result));
+                () -> finishAppliedAnalysisResult(summary, view, result));
     }
 
     private void finishAppliedAnalysisResult(AnalysisInputSummary summary, ArchitectureCanvas view,
-                                             S202Project.Source source, AnalysisResult result) {
+                                             AnalysisResult result) {
         view.setQualityMetrics(result.metrics());
-        viewManager.putSource(view, source);
-        viewManager.putInvariants(view, result.invariants());
 
         LayoutInvariantReport invariants = result.invariants();
         String invariantSuffix = invariantSuffix(invariants);

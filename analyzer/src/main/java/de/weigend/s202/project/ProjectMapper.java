@@ -30,13 +30,21 @@ import java.util.Set;
  */
 public interface ProjectMapper {
 
+    /**
+     * @param previewCuts the edges cut in the refactoring preview
+     * @param views       the tabs of the analysis, already in their
+     *                    serialisable form — what a tab is, is the business
+     *                    of the UI, not of this mapper
+     */
     S202Project toProject(String appVersion,
                           S202Project.Source source,
                           DependencyModel rawModel,
                           DomainModel domainModel,
                           ArchitectureAnnotations annotations,
                           LayoutInvariantReport invariantReport,
-                          Set<DependencyEdge> cycleBreakEdges);
+                          Set<DependencyEdge> cycleBreakEdges,
+                          Set<DependencyEdge> previewCuts,
+                          List<S202Project.ViewDto> views);
 
     DependencyModel toDependencyModel(S202Project.DependencyModelDto dto);
 
@@ -47,4 +55,6 @@ public interface ProjectMapper {
     LayoutInvariantReport toLayoutInvariantReport(S202Project.LayoutInvariantReportDto dto);
 
     Set<DependencyEdge> toCycleBreakEdges(List<S202Project.CycleBreakEdgeDto> dtos);
+
+    Set<DependencyEdge> toPreviewCuts(List<S202Project.CycleBreakEdgeDto> dtos);
 }

@@ -19,7 +19,6 @@ import de.weigend.s202.ui.core.events.MenuRequestEvent;
 import de.weigend.s202.ui.core.platform.ArchitectureViewManager;
 import de.weigend.s202.ui.core.platform.ProgressPublisher;
 import de.weigend.s202.ui.core.platform.RecentDirectories;
-import de.weigend.s202.ui.core.platform.RefactoringPreviewState;
 import io.softwareecg.wfx.lookup.api.Lookup;
 import io.softwareecg.wfx.platform.api.EventBus;
 import io.softwareecg.wfx.platform.api.Module;
@@ -44,12 +43,11 @@ public final class QualityReportModule implements Module {
     @Inject
     QualityReportModule(ApplicationWindow applicationWindow,
                         ArchitectureViewManager viewManager,
-                        RefactoringPreviewState previewState,
                         ProgressPublisher progressPublisher,
                         RecentDirectories recentDirs) {
         this.applicationWindow = applicationWindow;
         this.controller = new QualityReportController(
-                viewManager, previewState, progressPublisher, recentDirs,
+                viewManager, progressPublisher, recentDirs,
                 () -> applicationWindow.getStage(), this::appVersion);
     }
 

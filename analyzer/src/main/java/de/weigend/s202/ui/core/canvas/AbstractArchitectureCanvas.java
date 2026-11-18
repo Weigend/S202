@@ -28,6 +28,8 @@ import javafx.beans.property.SimpleBooleanProperty;
 import javafx.beans.property.SimpleIntegerProperty;
 import javafx.scene.layout.BorderPane;
 
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Objects;
 import java.util.function.Consumer;
 
@@ -41,7 +43,10 @@ import java.util.function.Consumer;
 public abstract class AbstractArchitectureCanvas extends BorderPane {
 
     // Externally bindable settings.
-    final IntegerProperty packageDepth = new SimpleIntegerProperty(3);
+    /** The package nesting depth a view shows unless told otherwise. */
+    public static final int DEFAULT_PACKAGE_DEPTH = 3;
+
+    final IntegerProperty packageDepth = new SimpleIntegerProperty(DEFAULT_PACKAGE_DEPTH);
     final BooleanProperty showDependencies = new SimpleBooleanProperty(false);
     final BooleanProperty showScc = new SimpleBooleanProperty(false);
     final BooleanProperty showPackageScc = new SimpleBooleanProperty(false);
@@ -53,6 +58,7 @@ public abstract class AbstractArchitectureCanvas extends BorderPane {
     private Consumer<String> statusSink = msg -> { /* no-op default */ };
 
     private String preferredScope;
+    private final List<String> scopeExtensions = new ArrayList<>();
     private boolean scopeOwner = true;
     private boolean skipTransparentTopLevelPackages = true;
     private boolean plainNodes;
@@ -246,6 +252,27 @@ public abstract class AbstractArchitectureCanvas extends BorderPane {
 
     public ArchitectureNode getScopeExtensionSourceRoot() {
         return scopeExtensionSourceRoot;
+    }
+
+    /**
+     * What "Add to Scope" has added to this scope view, in the order it was
+     * added — together with the scope itself this says how the tree of the
+     * view came about, so that it can be built again.
+     */
+    public List<String> getScopeExtensions() {
+        return List.copyOf(scopeExtensions);
+    }
+
+    /** For a view whose tree was built with these extensions already in it. */
+    public void setScopeExtensions(List<String> extensions) {
+        scopeExtensions.clear();
+        if (extensions != null) {
+            scopeExtensions.addAll(extensions);
+        }
+    }
+
+    void scopeExtended(String fullName) {
+        scopeExtensions.add(fullName);
     }
 
     /**

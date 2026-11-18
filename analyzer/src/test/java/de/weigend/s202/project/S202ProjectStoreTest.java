@@ -139,6 +139,8 @@ class S202ProjectStoreTest {
                 null,
                 current.cycleBreakEdges(),
                 current.layoutInvariantReport(),
+                null,
+                null,
                 current.savedAt());
 
         Path file = tempDir.resolve("legacy.s202.json");

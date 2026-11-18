@@ -107,6 +107,17 @@ public class ArchitectureCanvas extends AbstractArchitectureCanvas {
 
     public record BuildProgress(int processedNodes, int totalNodes, String currentElement) {}
 
+    /**
+     * What the user did to the picture, as opposed to what the picture shows:
+     * zoom, scroll position and which packages are open. Taken with
+     * {@link #captureViewSnapshot()} and put back with
+     * {@link #restoreViewSnapshot(ViewSnapshot)} on a view that shows the same
+     * content — for example the same tab in a project that was saved and
+     * loaded again.
+     */
+    public record ViewSnapshot(double zoom, double horizontalScroll, double verticalScroll,
+                               Map<String, Boolean> packageExpansion) {}
+
     private ScrollPane scrollPane;
     private Pane dependencyPane;   // Container for dependency lines
     private Pane sccPane;          // Container for SCC lines
@@ -218,7 +229,8 @@ public class ArchitectureCanvas extends AbstractArchitectureCanvas {
                 this::getScopeExtensionSourceRoot,
                 () -> getScene() == null ? null : getScene().getWindow(),
                 this::setArchitectureRoot,
-                this::selectByFullName);
+                this::selectByFullName,
+                this::scopeExtended);
         wirePropertyListeners();
     }
 
@@ -411,6 +423,36 @@ public class ArchitectureCanvas extends AbstractArchitectureCanvas {
      */
     public void refreshStyleProjection() {
         refreshStyleProjection(null);
+    }
+
+    /** @return the current zoom, scroll position and open packages; {@code null} before anything is shown */
+    public ViewSnapshot captureViewSnapshot() {
+        if (whatIfRootContainer == null) {
+            return null;
+        }
+        StyleProjectionStateKeeper.ViewState state = stateKeeper.capture();
+        return new ViewSnapshot(state.zoomFactor(), state.horizontalScroll(), state.verticalScroll(),
+                state.packageExpansionByFqn());
+    }
+
+    /**
+     * Opens and closes the packages as in {@code snapshot} and goes back to its
+     * zoom and scroll position. Packages the snapshot does not know keep the
+     * state the build gave them. No-op before anything is shown.
+     */
+    public void restoreViewSnapshot(ViewSnapshot snapshot) {
+        if (snapshot == null || whatIfRootContainer == null) {
+            return;
+        }
+        Map<String, Boolean> expansion = snapshot.packageExpansion() == null ? Map.of() : snapshot.packageExpansion();
+        StyleProjectionStateKeeper.ViewState state = new StyleProjectionStateKeeper.ViewState(
+                snapshot.zoom() > 0 ? snapshot.zoom() : 1.0,
+                snapshot.horizontalScroll(), snapshot.verticalScroll(),
+                Map.of(), expansion, Map.of());
+        stateKeeper.restoreExpansionState(whatIfRootContainer, state);
+        stateKeeper.restoreViewportState(state);
+        stateKeeper.scheduleDeferredViewportRestore(state);
+        arrowsCoalescer.markDirty();
     }
 
 

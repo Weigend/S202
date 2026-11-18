@@ -25,6 +25,7 @@ import de.weigend.s202.domain.architecture.ViolationKind;
 import de.weigend.s202.reader.DependencyModel;
 import io.softwareecg.wfx.windowmanager.api.Position;
 import io.softwareecg.wfx.windowmanager.api.View;
+import io.softwareecg.wfx.windowmanager.api.ViewAnchor;
 import javafx.collections.FXCollections;
 import javafx.collections.ObservableList;
 import javafx.geometry.Insets;
@@ -636,6 +637,16 @@ public final class WhatIfDependenciesView implements View {
     @Override
     public Position getDefaultPosition() {
         return Position.BOTTOM;
+    }
+
+    /**
+     * Under the architecture tabs only, not under the panels beside them.
+     * The editor area is there before any analysis is open, so the panel is
+     * registered at startup and the layout of the last session can place it.
+     */
+    @Override
+    public ViewAnchor getDefaultAnchor() {
+        return ViewAnchor.EDITOR;
     }
 
     @Override

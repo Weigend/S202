@@ -22,6 +22,7 @@ import de.weigend.s202.ui.core.model.ArchitectureNode;
 import de.weigend.s202.ui.core.platform.ArchitectureWfxView;
 import de.weigend.s202.ui.core.events.NodeSelectionEvent;
 import io.softwareecg.wfx.lookup.api.Lookup;
+import io.softwareecg.wfx.lookup.api.LookupContext;
 import io.softwareecg.wfx.platform.api.EventBus;
 import io.softwareecg.wfx.platform.api.Module;
 import io.softwareecg.wfx.platform.api.exceptions.PlatformException;
@@ -59,6 +60,7 @@ public class Architecture3DModule implements Module {
     private ChangeListener<Number> redrawTickListener;
     private ChangeListener<Parent> activationListener;
     private Stage stage;
+    private LookupContext.Subscription activeViewSubscription;
 
     @Override
     public String getName() { return "3D Architecture View"; }
@@ -76,8 +78,10 @@ public class Architecture3DModule implements Module {
         WindowManager wm = Lookup.lookup(WindowManager.class);
         wm.register(view, false); // hidden at startup; visible via View menu on demand
         installActivationOnShow(wm);
-        wm.focusedViewProperty().addListener((obs, was, isNow) -> rebindToFocusedView());
-        rebindToFocusedView();
+        LookupContext active = wm.getActiveLookup();
+        activeViewSubscription = active.observe(ArchitectureCanvas.class,
+                canvases -> rebindTo(canvases.isEmpty() ? null : canvases.get(0)));
+        rebindTo(active.lookup(ArchitectureCanvas.class));
 
         EventBus<EventObject> bus = (EventBus<EventObject>) Lookup.lookup(EventBus.class);
         bus.subscribe(NodeSelectionEvent.class, ev -> {
@@ -94,14 +98,16 @@ public class Architecture3DModule implements Module {
             view.getRootNode().parentProperty().removeListener(activationListener);
             activationListener = null;
         }
+        if (activeViewSubscription != null) {
+            activeViewSubscription.cancel();
+            activeViewSubscription = null;
+        }
         unbind();
     }
 
     // -----------------------------------------------------------------------
 
-    private void rebindToFocusedView() {
-        ArchitectureWfxView focused = focusedArchitectureView();
-        ArchitectureCanvas newBound = focused == null ? null : focused.getArchitectureView();
+    private void rebindTo(ArchitectureCanvas newBound) {
         if (newBound == boundView) return;
 
         unbind();
@@ -203,30 +209,6 @@ public class Architecture3DModule implements Module {
         showSccListener = null;
         showViolationsListener = null;
         redrawTickListener = null;
-    }
-
-    private ArchitectureWfxView focusedArchitectureView() {
-        WindowManager wm = Lookup.lookup(WindowManager.class);
-        ArchitectureWfxView focused = wm.getRegisteredViews().stream()
-                .filter(ArchitectureWfxView.class::isInstance)
-                .map(ArchitectureWfxView.class::cast)
-                .filter(v -> v == wm.getFocusedView())
-                .findFirst()
-                .orElse(null);
-        if (focused != null) return focused;
-
-        if (boundView != null) {
-            ArchitectureWfxView current = wm.getRegisteredViews().stream()
-                    .filter(ArchitectureWfxView.class::isInstance)
-                    .map(ArchitectureWfxView.class::cast)
-                    .filter(w -> w.getArchitectureView() == boundView)
-                    .findFirst().orElse(null);
-            if (current != null) return current;
-        }
-        return wm.getRegisteredViews().stream()
-                .filter(ArchitectureWfxView.class::isInstance)
-                .map(ArchitectureWfxView.class::cast)
-                .findFirst().orElse(null);
     }
 
     @SuppressWarnings("unchecked")

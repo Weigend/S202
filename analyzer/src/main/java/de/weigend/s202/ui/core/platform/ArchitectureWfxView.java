@@ -16,16 +16,25 @@
 package de.weigend.s202.ui.core.platform;
 
 import de.weigend.s202.ui.core.canvas.ArchitectureCanvas;
+import io.softwareecg.wfx.lookup.api.LookupContext;
+import io.softwareecg.wfx.lookup.api.MutableLookupContext;
 import io.softwareecg.wfx.windowmanager.api.Position;
 import io.softwareecg.wfx.windowmanager.api.View;
 import io.softwareecg.wfx.windowmanager.api.ViewKind;
 import javafx.scene.Parent;
 
 import java.net.URL;
+import java.util.List;
 
 /**
  * WFX {@link View} wrapper around the programmatic {@link ArchitectureCanvas}.
  * Lets WFX dock the existing UI without forcing it into an FXML round-trip.
+ * <p>
+ * Über seinen {@linkplain #getLookup() Kontext} sagt der Tab, was er zeigt:
+ * immer seinen {@link ArchitectureCanvas}, und sobald die Analyse da ist, ihr
+ * {@link AnalysisDocument}. Panels, Toolbar und Menü-Aktionen fragen den
+ * aktiven Kontext des WindowManagers nach diesen beiden Typen und müssen
+ * keinen Tab kennen.
  */
 public class ArchitectureWfxView implements View {
 
@@ -34,15 +43,71 @@ public class ArchitectureWfxView implements View {
     private final String viewId;
     private final String title;
     private final ArchitectureCanvas architectureView;
+    private final ViewDescriptor descriptor;
+    private final MutableLookupContext context;
+    private AnalysisDocument document;
 
+    /** Ein Tab für die Schichten-Sicht eines ganzen Dokuments. */
     public ArchitectureWfxView(String viewId, String title, ArchitectureCanvas architectureView) {
+        this(viewId, title, architectureView, ViewDescriptor.layered());
+    }
+
+    /**
+     * @param descriptor was dieser Tab zeigt — daraus lässt er sich nach dem
+     *                   Laden eines Projekts wieder aufbauen
+     */
+    public ArchitectureWfxView(String viewId, String title, ArchitectureCanvas architectureView,
+                               ViewDescriptor descriptor) {
         this.viewId = viewId;
         this.title = title;
         this.architectureView = architectureView;
+        this.descriptor = descriptor;
+        this.context = new MutableLookupContext(architectureView);
     }
 
     public ArchitectureCanvas getArchitectureView() {
         return architectureView;
+    }
+
+    /** Das Dokument, das dieser Tab zeigt; {@code null}, solange noch keines geladen ist. */
+    public AnalysisDocument getDocument() {
+        return document;
+    }
+
+    /**
+     * Macht {@code document} zum Dokument dieses Tabs und meldet es im
+     * Kontext. Die Daten des Dokuments in den Canvas zu bringen ist Sache von
+     * {@link ArchitectureViewManager#attach}.
+     */
+    void setDocument(AnalysisDocument document) {
+        this.document = document;
+        context.set(document == null ? List.of(architectureView) : List.of(architectureView, document));
+    }
+
+    /**
+     * Was dieser Tab zeigt, mit dem Stand von jetzt: Was seit dem Öffnen per
+     * „Add to Scope“ hinzukam und ob ein Tangle-Tab gerade seinen Kontext
+     * zeigt, steht im Canvas.
+     */
+    public ViewDescriptor getDescriptor() {
+        boolean tangleContext = architectureView.getTangleScope() != null
+                ? architectureView.getTangleScope().isShowContext()
+                : descriptor.tangleContext();
+        return descriptor.withState(
+                descriptor.kind() == ViewDescriptor.Kind.SCOPE
+                        ? architectureView.getScopeExtensions()
+                        : descriptor.scopeExtensions(),
+                tangleContext);
+    }
+
+    /** Schlüssel des Tangles, den dieser Tab zeigt; {@code null}, wenn er kein Tangle-Tab ist. */
+    public String getTangleKey() {
+        return descriptor.tangleKey();
+    }
+
+    @Override
+    public LookupContext getLookup() {
+        return context;
     }
 
     @Override

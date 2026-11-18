@@ -28,12 +28,13 @@ import de.weigend.s202.ui.core.canvas.ArchitectureCanvas;
 import de.weigend.s202.ui.core.layout.horizontal.HorizontalRowLayoutOptimizer;
 import de.weigend.s202.ui.core.model.ArchitectureNode;
 import de.weigend.s202.ui.core.model.ArchitectureNodeBuilder;
+import de.weigend.s202.ui.core.platform.AnalysisDocument;
 import de.weigend.s202.ui.core.platform.ArchitectureViewManager;
 import de.weigend.s202.ui.core.platform.Dialogs;
 import de.weigend.s202.ui.core.platform.ProgressPublisher;
 import de.weigend.s202.ui.core.platform.RecentDirectories;
-import de.weigend.s202.ui.core.platform.RefactoringPreviewState;
 import de.weigend.s202.ui.core.platform.ArchitectureWfxView;
+import de.weigend.s202.ui.core.platform.ViewDescriptor;
 import io.softwareecg.wfx.lookup.api.Lookup;
 import io.softwareecg.wfx.windowmanager.api.WindowManager;
 import javafx.concurrent.Task;
@@ -45,58 +46,65 @@ import org.slf4j.LoggerFactory;
 import java.io.File;
 import java.io.IOException;
 import java.nio.file.Path;
+import java.util.Iterator;
+import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
+import java.util.TreeMap;
 import java.util.function.Supplier;
 
 /**
- * Projekt speichern / laden / schließen (.s202.json): Persistenz-IO auf
- * Hintergrund-Threads plus das Zurücksetzen der Dokument-Tabs. Aus
- * S202Module extrahiert.
+ * Projekt speichern / laden / schließen (.s202.json), Persistenz-IO auf
+ * Hintergrund-Threads. Eine Projektdatei ist die gespeicherte Form genau
+ * eines {@link AnalysisDocument}: Speichern schreibt das aktive Dokument,
+ * Laden öffnet ein weiteres neben den schon offenen — wie Open JAR —, und
+ * Schließen schließt das aktive mit allen seinen Tabs. Aus S202Module
+ * extrahiert.
+ * <p>
+ * Zum Dokument gehören seine Tabs: Gespeichert wird zu jedem, was er zeigt
+ * (seine {@link ViewDescriptor Beschreibung}) und wie der Benutzer ihn
+ * verlassen hat (Pakettiefe, Schalter, Zoom, aufgeklappte Pakete), dazu die
+ * Selektion des aktiven Tabs.
+ * Beim Laden entsteht jeder Tab auf demselben Weg wie durch die Menü-Aktion,
+ * einer nach dem anderen. Wo die Tabs im Fenster lagen, steht nicht in der
+ * Datei — die Anordnung gehört dem Fenster, nicht einem Dokument.
  */
 public final class ProjectPersistenceController {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(ProjectPersistenceController.class);
 
-    private final ProjectStore projectStore = Lookup.lookup(ProjectStore.class);
-    private final ProjectMapper projectMapper = Lookup.lookup(ProjectMapper.class);
     private final ArchitectureNodeBuilder architectureNodeBuilder = new ArchitectureNodeBuilder();
 
     private final ArchitectureViewManager viewManager;
-    private final RefactoringPreviewState previewState;
     private final ProgressPublisher progress;
     private final RecentDirectories recentDirs;
     private final Supplier<Window> dialogOwner;
     private final Supplier<String> appVersion;
-    /** Setzt UI-Zustand außerhalb dieses Controllers zurück (Toolbar-Bindung). */
-    private final Runnable afterReset;
 
     public ProjectPersistenceController(ArchitectureViewManager viewManager,
-                                        RefactoringPreviewState previewState,
                                         ProgressPublisher progress,
                                         RecentDirectories recentDirs,
                                         Supplier<Window> dialogOwner,
-                                        Supplier<String> appVersion,
-                                        Runnable afterReset) {
+                                        Supplier<String> appVersion) {
         this.viewManager = viewManager;
-        this.previewState = previewState;
         this.progress = progress;
         this.recentDirs = recentDirs;
         this.dialogOwner = dialogOwner;
         this.appVersion = appVersion;
-        this.afterReset = afterReset;
     }
 
     private record LoadedProject(S202Project project, DependencyModel rawModel,
                                  DomainModel domainModel, ArchitectureAnnotations annotations,
                                  ArchitectureNode rootNode,
                                  QualityMetrics metrics, LayoutInvariantReport invariants,
-                                 Set<DependencyEdge> cycleBreakEdges) {}
+                                 Set<DependencyEdge> cycleBreakEdges,
+                                 Set<DependencyEdge> previewCuts) {}
 
+    /** Speichert das aktive Dokument — das, an dem der Benutzer gerade arbeitet. */
     public void saveProject() {
-        ArchitectureWfxView focused = viewManager.focusedSourceArchitectureView();
-        if (focused == null || focused.getArchitectureView().getDomainModel() == null
-                || focused.getArchitectureView().getRawDependencyModel() == null) {
+        AnalysisDocument document = viewManager.activeDocument();
+        if (document == null) {
             Dialogs.showError("Save Project", "There is no loaded analysis to save.");
             return;
         }
@@ -108,22 +116,29 @@ public final class ProjectPersistenceController {
         }
         target = withDefaultProjectExtension(target);
         recentDirs.setLastProjectFileDirectory(target.getParentFile());
+        saveProject(document, target.toPath());
+    }
 
-        ArchitectureCanvas view = focused.getArchitectureView();
-        S202Project.Source source = viewManager.sourceOf(view,
-                new S202Project.Source("UNKNOWN", List.of(), null));
-        S202Project project = projectMapper.toProject(
+    /** Schreibt {@code document} mit seinen Tabs als Projektdatei nach {@code target}. */
+    public void saveProject(AnalysisDocument document, Path target) {
+        ArchitectureCanvas activeCanvas = viewManager.activeCanvas();
+        List<S202Project.ViewDto> views = viewManager.viewsOf(document).stream()
+                .map(wrapper -> toViewDto(wrapper, wrapper.getArchitectureView() == activeCanvas))
+                .toList();
+        S202Project project = projectMapper().toProject(
                 appVersion.get(),
-                source,
-                view.getRawDependencyModel(),
-                view.getDomainModel(),
-                view.getArchitectureAnnotations(),
-                viewManager.invariantsOf(view),
-                view.getCycleBreakEdges());
+                document.source(),
+                document.rawModel(),
+                document.domainModel(),
+                document.annotations(),
+                document.invariants(),
+                document.cycleBreakEdges(),
+                document.previewCuts(),
+                views);
 
         try {
-            projectStore.save(target.toPath(), project);
-            progress.progress("Saved project: " + target.getName(), 1);
+            projectStore().save(target, project);
+            progress.progress("Saved project: " + target.getFileName(), 1);
         } catch (IOException ex) {
             LOGGER.error("Could not save project {}", target, ex);
             Dialogs.showError("Save Project", "Could not save project:\n" + ex.getMessage());
@@ -137,12 +152,18 @@ public final class ProjectPersistenceController {
             return;
         }
         recentDirs.setLastProjectFileDirectory(file.getParentFile());
-        progress.progress("Loading project: " + file.getName() + "...", -1);
+        loadProject(file.toPath());
+    }
+
+    /** Lädt die Projektdatei als weiteres Dokument; die offenen bleiben. */
+    public void loadProject(Path file) {
+        progress.progress("Loading project: " + file.getFileName() + "...", -1);
 
         Task<LoadedProject> task = new Task<>() {
             @Override
             protected LoadedProject call() throws Exception {
-                S202Project project = projectStore.load(file.toPath());
+                ProjectMapper projectMapper = projectMapper();
+                S202Project project = projectStore().load(file);
                 DependencyModel rawModel = projectMapper.toDependencyModel(project.dependencyModel());
                 DomainModel domainModel = projectMapper.toDomainModel(project.domainModel());
                 ArchitectureAnnotations annotations =
@@ -155,10 +176,12 @@ public final class ProjectPersistenceController {
                 LayoutInvariantReport invariants = projectMapper.toLayoutInvariantReport(project.layoutInvariantReport());
                 Set<DependencyEdge> cycleBreakEdges =
                         projectMapper.toCycleBreakEdges(project.cycleBreakEdges());
-                return new LoadedProject(project, rawModel, domainModel, annotations, root, metrics, invariants, cycleBreakEdges);
+                Set<DependencyEdge> previewCuts = projectMapper.toPreviewCuts(project.previewCuts());
+                return new LoadedProject(project, rawModel, domainModel, annotations, root, metrics, invariants,
+                        cycleBreakEdges, previewCuts);
             }
         };
-        task.setOnSucceeded(e -> applyLoadedProject(file.toPath(), task.getValue()));
+        task.setOnSucceeded(e -> applyLoadedProject(file, task.getValue()));
         task.setOnFailed(e -> {
             Throwable t = task.getException();
             LOGGER.error("Could not load project {}", file, t);
@@ -173,42 +196,167 @@ public final class ProjectPersistenceController {
     }
 
     private void applyLoadedProject(Path path, LoadedProject loaded) {
-        resetProjectUi();
+        AnalysisDocument document = new AnalysisDocument(
+                viewManager.uniqueDocumentName(documentName(path)),
+                loaded.project().source(), loaded.rawModel(), loaded.domainModel(), loaded.rootNode(),
+                loaded.metrics(), loaded.invariants(), loaded.cycleBreakEdges());
+        document.setAnnotations(loaded.annotations());
+        document.addPreviewCuts(loaded.previewCuts());
 
-        ArchitectureWfxView target = viewManager.createArchitectureView();
-        viewManager.registerArchitectureView(target);
-        ArchitectureCanvas view = target.getArchitectureView();
-        view.setArchitectureAnnotations(loaded.annotations());
-        view.setDomainModel(loaded.domainModel());
-        view.setRawDependencyModel(loaded.rawModel());
-        view.setCycleBreakEdges(loaded.cycleBreakEdges());
-        view.setArchitectureRootAsync(
-                loaded.rootNode(),
-                buildProgress -> progress.javaFxBuildProgress("Building JavaFX project view", buildProgress),
-                () -> {
-                    view.setQualityMetrics(loaded.metrics());
-                    viewManager.putSource(view, loaded.project().source());
-                    viewManager.putInvariants(view, loaded.invariants());
-
-                    progress.progress(String.format(
-                            "Loaded project %s | %d classes | %d levels | Max level %d",
-                            path.getFileName(),
-                            loaded.rawModel().getAllClasses().size(),
-                            loaded.rootNode().getLevelCount(),
-                            loaded.rootNode().getMaxLevel()), 1);
-                });
+        List<S202Project.ViewDto> views = loaded.project().views();
+        if (views == null || views.isEmpty()) {
+            // A file that names no tabs: the analysis opens the way a freshly analysed one does.
+            views = List.of(layeredViewOfTheWholeAnalysis());
+        }
+        int expected = views.size();
+        String selected = views.stream().filter(S202Project.ViewDto::active)
+                .findFirst().map(S202Project.ViewDto::selected).orElse(null);
+        ArchitectureWfxView[] active = new ArchitectureWfxView[1];
+        int[] opened = new int[1];
+        openViews(document, views.iterator(), active, opened, () -> {
+            WindowManager wm = Lookup.lookup(WindowManager.class);
+            if (active[0] != null && wm.hasRegisteredView(active[0])) {
+                wm.showView(active[0]);
+                // There is one selection for all tabs, and every tab that is
+                // built takes it. It goes back to where the user left it once
+                // all tabs are there.
+                if (selected != null && !selected.isBlank()) {
+                    active[0].getArchitectureView().selectByFullName(selected);
+                }
+            }
+            progress.progress(String.format(
+                    "Loaded project %s | %d classes | %d levels | Max level %d | %d of %d tab%s",
+                    path.getFileName(),
+                    loaded.rawModel().getAllClasses().size(),
+                    loaded.rootNode().getLevelCount(),
+                    loaded.rootNode().getMaxLevel(),
+                    opened[0], expected, expected == 1 ? "" : "s"), 1);
+        });
     }
 
+    /**
+     * Öffnet die Tabs eines geladenen Dokuments nacheinander: Der nächste
+     * beginnt, wenn der vorige seinen Inhalt zeigt. So entsteht jeder unter
+     * denselben Bedingungen wie durch die Menü-Aktion, und die Reihenfolge
+     * der Tabs ist die gespeicherte.
+     */
+    private void openViews(AnalysisDocument document, Iterator<S202Project.ViewDto> remaining,
+                           ArchitectureWfxView[] active, int[] opened, Runnable done) {
+        if (!remaining.hasNext()) {
+            done.run();
+            return;
+        }
+        S202Project.ViewDto dto = remaining.next();
+        ArchitectureWfxView wrapper = null;
+        try {
+            wrapper = viewManager.open(document, toDescriptor(dto),
+                    canvas -> canvas.setPackageDepth(dto.packageDepth()),
+                    built -> {
+                        restoreState(built.getArchitectureView(), dto);
+                        opened[0]++;
+                        if (dto.active()) {
+                            active[0] = built;
+                        }
+                        openViews(document, remaining, active, opened, done);
+                    });
+        } catch (RuntimeException ex) {
+            LOGGER.warn("Could not reopen the tab '{}' ({}) of {}", dto.label(), dto.kind(), document.name(), ex);
+        }
+        if (wrapper == null) {
+            // What the tab showed is not in the analysis (any more), or nobody
+            // builds tabs of its kind: go on with the others.
+            LOGGER.warn("Tab '{}' ({}) of {} was not reopened", dto.label(), dto.kind(), document.name());
+            openViews(document, remaining, active, opened, done);
+        }
+    }
+
+    private static S202Project.ViewDto toViewDto(ArchitectureWfxView wrapper, boolean active) {
+        ViewDescriptor descriptor = wrapper.getDescriptor();
+        ArchitectureCanvas canvas = wrapper.getArchitectureView();
+        ArchitectureCanvas.ViewSnapshot snapshot = canvas.captureViewSnapshot();
+        return new S202Project.ViewDto(
+                descriptor.kind().name(),
+                descriptor.label(),
+                descriptor.scope(),
+                descriptor.scopeExtensions(),
+                descriptor.tangleMembers().stream().sorted().toList(),
+                descriptor.tangleKey(),
+                descriptor.tangleContext(),
+                canvas.getPackageDepth(),
+                canvas.isShowDependencies(),
+                canvas.isShowScc(),
+                canvas.isShowPackageScc(),
+                canvas.isShowWhatIfViolations(),
+                snapshot == null ? 1.0 : snapshot.zoom(),
+                snapshot == null ? 0.0 : snapshot.horizontalScroll(),
+                snapshot == null ? 0.0 : snapshot.verticalScroll(),
+                snapshot == null ? Map.of() : new TreeMap<>(snapshot.packageExpansion()),
+                canvas.getSelectedFullName(),
+                active);
+    }
+
+    private static ViewDescriptor toDescriptor(S202Project.ViewDto dto) {
+        return new ViewDescriptor(
+                ViewDescriptor.Kind.valueOf(dto.kind()),
+                dto.label(),
+                dto.scope(),
+                dto.scopeExtensions(),
+                dto.tangleMembers() == null ? Set.of() : new LinkedHashSet<>(dto.tangleMembers()),
+                dto.tangleKey(),
+                dto.tangleContext());
+    }
+
+    /** Bringt einen frisch gebauten Tab in den Zustand, in dem er gespeichert wurde. */
+    private static void restoreState(ArchitectureCanvas canvas, S202Project.ViewDto dto) {
+        canvas.setShowDependencies(dto.showDependencies());
+        canvas.setShowScc(dto.showClassCycles());
+        canvas.setShowPackageScc(dto.showPackageCycles());
+        canvas.setShowWhatIfViolations(dto.showViolations());
+        canvas.restoreViewSnapshot(new ArchitectureCanvas.ViewSnapshot(
+                dto.zoom(), dto.horizontalScroll(), dto.verticalScroll(), dto.expandedPackages()));
+    }
+
+    private static S202Project.ViewDto layeredViewOfTheWholeAnalysis() {
+        return new S202Project.ViewDto(
+                ViewDescriptor.Kind.LAYERED.name(), null, null, List.of(), List.of(), null, false,
+                ArchitectureCanvas.DEFAULT_PACKAGE_DEPTH, false, false, false, false,
+                1.0, 0.0, 0.0, Map.of(), null, true);
+    }
+
+    /** Schließt das aktive Dokument mit allen seinen Tabs; die anderen bleiben offen. */
     public void closeProject() {
-        resetProjectUi();
-        progress.progress("Ready to analyze code. Open JARs, Python source roots, or C source roots to begin.", 0);
+        AnalysisDocument document = viewManager.activeDocument();
+        if (document == null) {
+            return;
+        }
+        viewManager.closeDocument(document);
+        if (viewManager.activeDocument() == null) {
+            progress.progress("Ready to analyze code. Open JARs, Python source roots, or C source roots to begin.", 0);
+        } else {
+            progress.progress("Closed " + document.name(), 1);
+        }
     }
 
-    private void resetProjectUi() {
-        viewManager.resetDocuments();
-        previewState.clear();
-        Lookup.lookup(WindowManager.class).restoreDefaultLayout();
-        afterReset.run();
+    // Looked up when needed, not in a field initializer: this controller is
+    // created inside S202Module's constructor, while the bean scope is still
+    // being built and Lookup answers null.
+    private static ProjectStore projectStore() {
+        return Lookup.require(ProjectStore.class);
+    }
+
+    private static ProjectMapper projectMapper() {
+        return Lookup.require(ProjectMapper.class);
+    }
+
+    /** Der Dateiname ohne die Projekt-Endung. */
+    private static String documentName(Path projectFile) {
+        String name = projectFile.getFileName().toString();
+        for (String suffix : List.of(".s202.json", ".json")) {
+            if (name.toLowerCase().endsWith(suffix) && name.length() > suffix.length()) {
+                return name.substring(0, name.length() - suffix.length());
+            }
+        }
+        return name;
     }
 
     private FileChooser projectFileChooser(String title) {

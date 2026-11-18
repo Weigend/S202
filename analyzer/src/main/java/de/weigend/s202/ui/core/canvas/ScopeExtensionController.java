@@ -64,19 +64,23 @@ final class ScopeExtensionController {
     private final Supplier<Window> dialogOwner;
     private final Consumer<ArchitectureNode> setArchitectureRoot;
     private final Consumer<String> selectByFullName;
+    /** Wird über jede geglückte Erweiterung informiert (der Canvas merkt sie sich). */
+    private final Consumer<String> extended;
 
     ScopeExtensionController(Consumer<String> status,
                              Supplier<ArchitectureNode> currentRoot,
                              Supplier<ArchitectureNode> scopeSource,
                              Supplier<Window> dialogOwner,
                              Consumer<ArchitectureNode> setArchitectureRoot,
-                             Consumer<String> selectByFullName) {
+                             Consumer<String> selectByFullName,
+                             Consumer<String> extended) {
         this.status = status;
         this.currentRoot = currentRoot;
         this.scopeSource = scopeSource;
         this.dialogOwner = dialogOwner;
         this.setArchitectureRoot = setArchitectureRoot;
         this.selectByFullName = selectByFullName;
+        this.extended = extended;
     }
 
     /** Menü-Eintrag „Add to Scope…“ — der Canvas hängt ihn in sein Kontextmenü. */
@@ -173,6 +177,7 @@ final class ScopeExtensionController {
         }
 
         setArchitectureRoot.accept(extendedRoot);
+        extended.accept(candidate.fullName());
         selectByFullName.accept(candidate.fullName());
         status.accept("Scope extended: " + candidate.fullName());
     }

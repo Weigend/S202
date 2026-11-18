@@ -17,9 +17,10 @@ package de.weigend.s202.ui.views.city3d;
 
 import de.weigend.s202.ui.core.canvas.ArchitectureCanvas;
 import de.weigend.s202.ui.core.events.NodeSelectionEvent;
+import de.weigend.s202.ui.core.model.ArchitectureNode;
+import de.weigend.s202.ui.core.platform.AnalysisDocument;
 import de.weigend.s202.ui.core.platform.ArchitectureViewManager;
 import de.weigend.s202.ui.core.platform.Dialogs;
-import de.weigend.s202.ui.core.platform.ArchitectureWfxView;
 import io.softwareecg.wfx.lookup.api.Lookup;
 import io.softwareecg.wfx.platform.api.EventBus;
 import javafx.application.Platform;
@@ -93,14 +94,14 @@ public final class City3DModule implements io.softwareecg.wfx.platform.api.Modul
     }
 
     /**
-     * Serialise the focused analysis into the loopback City3D server and return it, or {@code null}
+     * Serialise the active document into the loopback City3D server and return it, or {@code null}
      * (after showing an error) when there is nothing to show or the web bundle is missing.
      */
     private CityView3DServer prepareCity3DServer() {
-        ArchitectureWfxView focused = viewManager.focusedSourceArchitectureView();
-        ArchitectureCanvas view = focused == null ? null : focused.getArchitectureView();
-        if (view == null || view.getArchitectureRoot() == null
-                || view.getDomainModel() == null || view.getRawDependencyModel() == null) {
+        AnalysisDocument document = viewManager.activeDocument();
+        ArchitectureNode sourceRoot = viewManager.activeSourceRoot();
+        ArchitectureCanvas view = viewManager.activeCanvas();
+        if (document == null || sourceRoot == null || view == null) {
             Dialogs.showError("City3D View", "There is no loaded analysis to show.");
             return null;
         }
@@ -114,8 +115,8 @@ public final class City3DModule implements io.softwareecg.wfx.platform.api.Modul
         try {
             CityModelSerializer serializer = new CityModelSerializer();
             CityModelSerializer.Metrics metrics =
-                    CityModelSerializer.metricsFrom(view.getRawDependencyModel(), view.getDomainModel());
-            String json = serializer.toJson(view.getArchitectureRoot(), null, metrics);
+                    CityModelSerializer.metricsFrom(document.rawModel(), document.domainModel());
+            String json = serializer.toJson(sourceRoot, null, metrics);
 
             CityView3DServer server = CityView3DServer.getOrStart(distDir);
             server.setCityJson(json);

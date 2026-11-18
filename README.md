@@ -57,7 +57,27 @@ A JavaFX-based tool for analyzing code across multiple languages and visualizing
 <tr><td><small><b>Analysis: Layout invariants</b></small></td><td><small>Five plausibility alerts for the layout pipeline</small></td><td><small><b>Beta</b></small></td></tr>
 </table>
 
+## Download
+
+Each [release](https://github.com/Weigend/S202/releases) carries a ready-to-run program for Linux, Windows and macOS. It brings its own Java runtime, so nothing has to be installed first.
+
+| System | File | Start |
+|---|---|---|
+| Linux x64 | `S202-<version>-linux-x64.tar.gz` | unpack, run `S202/bin/S202` |
+| Windows x64 | `S202-<version>-windows-x64.zip` | unpack, run `S202\S202.exe` |
+| macOS, Apple Silicon | `S202-<version>-macos-arm64.zip` | unpack, open `S202.app` |
+| macOS, Intel | `S202-<version>-macos-x64.zip` | unpack, open `S202.app` |
+
+The programs are not signed with a vendor certificate, so the system asks once before the first start:
+
+- **macOS** refuses a downloaded app it cannot verify. Remove the download mark once in a terminal, then open the app as usual: `xattr -dr com.apple.quarantine S202.app`
+- **Windows** may show "Windows protected your PC". Choose *More info*, then *Run anyway*.
+
+Python and Go source analysis still need `python3` or `go` on the machine; everything else is included.
+
 ## Quick Start
+
+To build from source instead:
 
 **First time setup** — WFX (the UI platform dependency) is not on Maven Central.
 Run the bootstrap script once; it clones WFX, builds it, then builds S202:
@@ -84,6 +104,12 @@ mvn clean install        # build
 mvn javafx:run -pl analyzer  # start
 mvn test                 # tests
 ```
+
+To package the program for the system you are on, as it is offered for download:
+```bash
+./package-app.sh         # after build-all; needs a JDK that ships JavaFX, see the script header
+```
+The `Package` workflow under `.github/workflows` does this for every system and attaches the archives to a release when it is published.
 
 Then use the **File** menu:
 
@@ -251,6 +277,10 @@ The bundled Python AST helper (`s202_py_ast.py`) lives in `analyzer/src/main/res
 3. **Navigate**: Expand and collapse packages or component boxes, inspect dependencies
 4. **Change views**: Open **View -> Component View** to inspect API-vs-implementation boundaries
 5. **Violations**: Bold dashed arrows show architectural problems (package aggregates use a filled circle to bundle the call count); for pipeline bugs, a reproducer dialog opens with a copy button
+
+**Several analyses at once.** Every `Open …` and `Load Project…` adds an analysis in a tab of its own; the ones already open stay. `Close Project` closes the analysis you are working on with all its tabs, `Windows -> Close All` closes every analysis. All tabs of an analysis carry its name — `app.jar`, `app.jar · Component View`, `app.jar · Tangle …` — and the window title names the analysis you are working on. Outline, Top Tangles, Quality and the Dependencies panel show that analysis, also while you work in one of them, and the View menu, Save Project and the Quality Report act on it. Preview cuts and API annotations stay with the analysis they were made in.
+
+**What is remembered.** A project file (`Save Project…`) holds an analysis together with its tabs — the Component, Scope and Tangle views opened on it, their package depth, zoom and open packages — and its preview cuts, so `Load Project…` brings the analysis back the way you left it. The window is remembered separately: its size and position, where the panels sit and how the areas are divided are saved on exit and restored on the next start (in `~/.s202`). `Windows -> Default Layout` goes back to the original arrangement.
 
 ## VS Code Integration
 

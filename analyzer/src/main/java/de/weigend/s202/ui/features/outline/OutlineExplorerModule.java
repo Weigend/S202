@@ -18,11 +18,11 @@ package de.weigend.s202.ui.features.outline;
 import de.weigend.s202.reader.DependencyModel;
 import de.weigend.s202.ui.core.canvas.ArchitectureCanvas;
 import de.weigend.s202.ui.core.model.ArchitectureNode;
-import de.weigend.s202.ui.core.platform.ArchitectureWfxView;
 import de.weigend.s202.ui.core.events.MethodSelectionEvent;
 import de.weigend.s202.ui.core.events.NodeSelectionEvent;
 import de.weigend.s202.ui.core.events.OpenScopeEvent;
 import io.softwareecg.wfx.lookup.api.Lookup;
+import io.softwareecg.wfx.lookup.api.LookupContext;
 import io.softwareecg.wfx.platform.api.EventBus;
 import io.softwareecg.wfx.platform.api.Module;
 import io.softwareecg.wfx.platform.api.exceptions.PlatformException;
@@ -37,11 +37,11 @@ import java.util.EventObject;
  * WFX module providing the Outline Explorer side panel. Auto-discovered by
  * Avaje as a {@link Module} bean, registered LEFT of the central docking area.
  * <p>
- * Tracks {@link WindowManager#focusedViewProperty()}: when an
- * {@link ArchitectureWfxView} gains focus, the outline mirrors its
- * architecture root and stays in sync via the focused view's
- * {@link ArchitectureCanvas#architectureRootProperty()}. When focus moves
- * elsewhere or all views close, the outline clears.
+ * Follows {@link WindowManager#getActiveLookup()}: the outline mirrors the
+ * architecture root of the tab the user works in and stays in sync via that
+ * tab's {@link ArchitectureCanvas#architectureRootProperty()}. It keeps
+ * showing that tab while the focus is in a panel; when all tabs close, the
+ * outline clears.
  * <p>
  * Node selection (class or package) is exchanged with the chart purely through
  * {@link NodeSelectionEvent} on the bus — the outline neither calls into the
@@ -59,6 +59,7 @@ public class OutlineExplorerModule implements Module {
     private ChangeListener<ArchitectureNode> rootListener;
     /** Listener attached to {@link #boundView}'s raw dependency model property. */
     private ChangeListener<DependencyModel> rawModelListener;
+    private LookupContext.Subscription activeViewSubscription;
 
     @Override
     public String getName() {
@@ -93,8 +94,10 @@ public class OutlineExplorerModule implements Module {
         WindowManager wm = Lookup.lookup(WindowManager.class);
         wm.register(outlineView);
 
-        wm.focusedViewProperty().addListener((obs, was, isNow) -> rebindToFocusedView());
-        rebindToFocusedView();
+        LookupContext active = wm.getActiveLookup();
+        activeViewSubscription = active.observe(ArchitectureCanvas.class,
+                canvases -> rebindTo(canvases.isEmpty() ? null : canvases.get(0)));
+        rebindTo(active.lookup(ArchitectureCanvas.class));
 
         EventBus<EventObject> bus = Lookup.lookup(EventBus.class);
         bus.subscribe(NodeSelectionEvent.class, ev -> {
@@ -118,18 +121,17 @@ public class OutlineExplorerModule implements Module {
 
     @Override
     public void stop() {
+        if (activeViewSubscription != null) {
+            activeViewSubscription.cancel();
+            activeViewSubscription = null;
+        }
         unbind();
     }
 
-    private void rebindToFocusedView() {
-        ArchitectureWfxView focused = focusedArchitectureView();
-        ArchitectureCanvas newBound = focused == null ? null : focused.getArchitectureView();
-
-        // Idempotent: every focus change (including focus moving onto the
-        // outline panel itself or onto the quality view) lands here, but if
-        // we're still bound to the same chart there's nothing to do.
-        // Rebuilding the TreeView would silently drop the user's expansion
-        // and selection state.
+    private void rebindTo(ArchitectureCanvas newBound) {
+        // Idempotent: if we're still bound to the same chart there's nothing
+        // to do. Rebuilding the TreeView would silently drop the user's
+        // expansion and selection state.
         if (newBound == boundView) {
             return;
         }
@@ -170,41 +172,5 @@ public class OutlineExplorerModule implements Module {
             return;
         }
         outlineView.setArchitectureRoot(boundView.getArchitectureRoot(), boundView.getRawDependencyModel());
-    }
-
-    private ArchitectureWfxView focusedArchitectureView() {
-        WindowManager wm = Lookup.lookup(WindowManager.class);
-        ArchitectureWfxView focused = wm.getRegisteredViews().stream()
-                .filter(ArchitectureWfxView.class::isInstance)
-                .map(ArchitectureWfxView.class::cast)
-                .filter(v -> v == wm.getFocusedView())
-                .findFirst()
-                .orElse(null);
-        if (focused != null) {
-            return focused;
-        }
-
-        ArchitectureWfxView current = wrapperFor(boundView);
-        if (current != null) {
-            return current;
-        }
-
-        return wm.getRegisteredViews().stream()
-                .filter(ArchitectureWfxView.class::isInstance)
-                .map(ArchitectureWfxView.class::cast)
-                .findFirst()
-                .orElse(null);
-    }
-
-    private ArchitectureWfxView wrapperFor(ArchitectureCanvas view) {
-        if (view == null) {
-            return null;
-        }
-        return Lookup.lookup(WindowManager.class).getRegisteredViews().stream()
-                .filter(ArchitectureWfxView.class::isInstance)
-                .map(ArchitectureWfxView.class::cast)
-                .filter(wrapper -> wrapper.getArchitectureView() == view)
-                .findFirst()
-                .orElse(null);
     }
 }

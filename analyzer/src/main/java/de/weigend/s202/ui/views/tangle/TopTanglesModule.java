@@ -24,13 +24,17 @@ import de.weigend.s202.reader.DependencyModel;
 import de.weigend.s202.reader.EdgeKind;
 import de.weigend.s202.ui.core.canvas.ArchitectureCanvas;
 import de.weigend.s202.ui.core.model.ArchitectureNode;
-import de.weigend.s202.ui.core.platform.ArchitectureWfxView;
+import de.weigend.s202.ui.core.platform.AnalysisDocument;
+import de.weigend.s202.ui.core.platform.ArchitectureViewManager;
+import de.weigend.s202.ui.core.platform.ProgressPublisher;
+import de.weigend.s202.ui.core.platform.ViewDescriptor;
 import de.weigend.s202.ui.core.events.CutTangleEdgeEvent;
 import de.weigend.s202.ui.core.events.CutTangleEdgesEvent;
 import de.weigend.s202.ui.core.events.OpenTangleEvent;
 import de.weigend.s202.ui.core.events.RestoreTangleEdgeEvent;
 import de.weigend.s202.ui.features.outline.OutlineExplorerView;
 import io.softwareecg.wfx.lookup.api.Lookup;
+import io.softwareecg.wfx.lookup.api.LookupContext;
 import io.softwareecg.wfx.platform.api.EventBus;
 import io.softwareecg.wfx.platform.api.Module;
 import io.softwareecg.wfx.platform.api.exceptions.PlatformException;
@@ -55,11 +59,11 @@ import java.util.stream.Collectors;
  * WFX module for the {@link TopTanglesView}. Sits between the outline
  * explorer and the quality view in the LEFT dock.
  * <p>
- * Tracks {@link WindowManager#focusedViewProperty()}: when an
- * {@link ArchitectureWfxView} gains focus, the view recomputes the top
- * tangles from that view's domain model, scoped to the current selection
- * (class → enclosing package's subtree, package → its subtree, none → all
- * classes).
+ * Follows {@link WindowManager#getActiveLookup()}: when another architecture
+ * tab becomes the active one, the view recomputes the top tangles from that
+ * tab's domain model, scoped to the current selection (class → enclosing
+ * package's subtree, package → its subtree, none → all classes). The preview
+ * cuts it takes into account are those of the tab's {@link AnalysisDocument}.
  */
 // Priority 25 (after Quality at 20) so we register last and our
 // register-with-outline-sibling slot lands directly under outline,
@@ -71,6 +75,10 @@ public class TopTanglesModule implements Module {
     private static final int TOP_N = 5;
 
     private TopTanglesView tanglesView;
+
+    private ArchitectureViewManager viewManager;
+    private TangleTabController tangleTabs;
+    private LookupContext.Subscription activeViewSubscription;
 
     private ArchitectureCanvas boundView;
     private ChangeListener<ArchitectureNode> rootListener;
@@ -84,8 +92,7 @@ public class TopTanglesModule implements Module {
     private boolean currentScopeInitialized;
     private List<TopTanglesView.Tangle> lastTangles;
     private List<TopTanglesView.RefactoringPreviewEdge> lastPreviewEdges;
-    private final Set<DependencyEdge> appliedCutEdges = new HashSet<>();
-    private DomainModel lastCutDataset;
+    private DomainModel lastDataset;
 
     @Override
     public String getName() {
@@ -110,7 +117,9 @@ public class TopTanglesModule implements Module {
     @Override
     @SuppressWarnings("unchecked")
     public void start() {
-        installTangleTabWiring();
+        viewManager = Lookup.lookup(ArchitectureViewManager.class);
+        tangleTabs = new TangleTabController(viewManager, Lookup.lookup(ProgressPublisher.class));
+        viewManager.registerOpener(ViewDescriptor.Kind.TANGLE, tangleTabs::open);
         WindowManager wm = Lookup.lookup(WindowManager.class);
 
         // Stack into the LEFT split alongside the outline; OutlineExplorerModule
@@ -143,72 +152,54 @@ public class TopTanglesModule implements Module {
             }
             bus.publish(new CutTangleEdgesEvent(candidates, tanglesView));
         });
+        // Tangle tabs and preview cuts. A cut belongs to the document of the
+        // view it was made in (or, made in this panel, to the active one): it
+        // is recorded there and shown in that document's tabs only.
+        bus.subscribe(OpenTangleEvent.class, ev -> {
+            tangleTabs.openTangleView(ev.getMembers(), ev.getTangleKey(), ev.getTitle());
+            return true;
+        });
         bus.subscribe(CutTangleEdgeEvent.class, ev -> {
-            DependencyEdge edge = new DependencyEdge(ev.getFrom(), ev.getTo());
-            if (appliedCutEdges.add(edge)) {
+            if (tangleTabs.applyPreviewCut(viewManager.documentFor(ev.getSource()), ev.getFrom(), ev.getTo())) {
                 requestScopeRefresh();
             }
             return true;
         });
         bus.subscribe(CutTangleEdgesEvent.class, ev -> {
-            if (appliedCutEdges.addAll(ev.getEdges())) {
+            if (tangleTabs.applyPreviewCuts(viewManager.documentFor(ev.getSource()), ev.getEdges())) {
                 requestScopeRefresh();
             }
             return true;
         });
         bus.subscribe(RestoreTangleEdgeEvent.class, ev -> {
-            DependencyEdge edge = new DependencyEdge(ev.getFrom(), ev.getTo());
-            if (appliedCutEdges.remove(edge)) {
+            if (tangleTabs.restorePreviewCut(viewManager.documentFor(ev.getSource()), ev.getFrom(), ev.getTo())) {
                 requestScopeRefresh();
             }
             return true;
         });
 
-        wm.focusedViewProperty().addListener((obs, was, isNow) -> rebindToFocusedView());
-        rebindToFocusedView();
-    }
-
-    /**
-     * Verdrahtet die Tangle-Tabs dieser Komponente: Öffnen per
-     * OpenTangleEvent und die Verteilung der Preview-Cuts — vorher lag
-     * dieses Wiring in S202Module.
-     */
-    @SuppressWarnings("unchecked")
-    private void installTangleTabWiring() {
-        de.weigend.s202.ui.views.tangle.TangleTabController tangleTabs =
-                new de.weigend.s202.ui.views.tangle.TangleTabController(
-                        Lookup.lookup(de.weigend.s202.ui.core.platform.ArchitectureViewManager.class),
-                        Lookup.lookup(de.weigend.s202.ui.core.platform.RefactoringPreviewState.class),
-                        Lookup.lookup(de.weigend.s202.ui.core.platform.ProgressPublisher.class));
-        io.softwareecg.wfx.platform.api.EventBus<java.util.EventObject> bus =
-                Lookup.lookup(io.softwareecg.wfx.platform.api.EventBus.class);
-        bus.subscribe(de.weigend.s202.ui.core.events.OpenTangleEvent.class, ev -> {
-            tangleTabs.openTangleView(ev.getMembers(), ev.getTangleKey(), ev.getTitle());
-            return true;
-        });
-        bus.subscribe(de.weigend.s202.ui.core.events.CutTangleEdgeEvent.class, ev -> {
-            tangleTabs.applyPreviewCutToViews(ev.getFrom(), ev.getTo());
-            return true;
-        });
-        bus.subscribe(de.weigend.s202.ui.core.events.CutTangleEdgesEvent.class, ev -> {
-            tangleTabs.applyPreviewCutsToViews(ev.getEdges());
-            return true;
-        });
-        bus.subscribe(de.weigend.s202.ui.core.events.RestoreTangleEdgeEvent.class, ev -> {
-            tangleTabs.restorePreviewCutInViews(ev.getFrom(), ev.getTo());
-            return true;
-        });
+        LookupContext active = wm.getActiveLookup();
+        activeViewSubscription = active.observe(ArchitectureCanvas.class,
+                canvases -> rebindTo(canvases.isEmpty() ? null : canvases.get(0)));
+        rebindTo(active.lookup(ArchitectureCanvas.class));
     }
 
     @Override
     public void stop() {
+        if (activeViewSubscription != null) {
+            activeViewSubscription.cancel();
+            activeViewSubscription = null;
+        }
         unbind();
     }
 
-    private void rebindToFocusedView() {
-        ArchitectureWfxView focused = focusedArchitectureView();
-        ArchitectureCanvas newBound = focused == null ? null : focused.getArchitectureView();
+    /** The preview cuts of the document the bound view shows. */
+    private Set<DependencyEdge> boundCuts() {
+        AnalysisDocument document = viewManager.documentOf(boundView);
+        return document == null ? Set.of() : document.previewCuts();
+    }
 
+    private void rebindTo(ArchitectureCanvas newBound) {
         // Focus moving onto a side panel should not retrigger work for the
         // same chart — the tangle list and selection are still current.
         if (newBound == boundView) {
@@ -234,8 +225,7 @@ public class TopTanglesModule implements Module {
 
         if (newBound == null) {
             tanglesView.clear();
-            appliedCutEdges.clear();
-            lastCutDataset = null;
+            lastDataset = null;
             currentScope = null;
             currentScopeInitialized = false;
             return;
@@ -282,9 +272,8 @@ public class TopTanglesModule implements Module {
             // the architectureRoot listener.
             return;
         }
-        if (model != lastCutDataset) {
-            appliedCutEdges.clear();
-            lastCutDataset = model;
+        if (model != lastDataset) {
+            lastDataset = model;
             currentScope = null;
             currentScopeInitialized = false;
         }
@@ -296,6 +285,7 @@ public class TopTanglesModule implements Module {
 
         String scope = currentScope;
         String scopeLabel = scope == null ? "All classes" : scope;
+        Set<DependencyEdge> appliedCutEdges = boundCuts();
 
         List<TopTanglesView.Tangle> tangles = computeTopTangles(
                 model, boundView.getRawDependencyModel(), boundView.getCycleBreakEdges(), appliedCutEdges, scope, TOP_N);
@@ -608,41 +598,5 @@ public class TopTanglesModule implements Module {
             return true;
         }
         return fqn.equals(scope) || fqn.startsWith(scope + ".");
-    }
-
-    private ArchitectureWfxView focusedArchitectureView() {
-        WindowManager wm = Lookup.lookup(WindowManager.class);
-        ArchitectureWfxView focused = wm.getRegisteredViews().stream()
-                .filter(ArchitectureWfxView.class::isInstance)
-                .map(ArchitectureWfxView.class::cast)
-                .filter(v -> v == wm.getFocusedView())
-                .findFirst()
-                .orElse(null);
-        if (focused != null) {
-            return focused;
-        }
-
-        ArchitectureWfxView current = wrapperFor(boundView);
-        if (current != null) {
-            return current;
-        }
-
-        return wm.getRegisteredViews().stream()
-                .filter(ArchitectureWfxView.class::isInstance)
-                .map(ArchitectureWfxView.class::cast)
-                .findFirst()
-                .orElse(null);
-    }
-
-    private ArchitectureWfxView wrapperFor(ArchitectureCanvas view) {
-        if (view == null) {
-            return null;
-        }
-        return Lookup.lookup(WindowManager.class).getRegisteredViews().stream()
-                .filter(ArchitectureWfxView.class::isInstance)
-                .map(ArchitectureWfxView.class::cast)
-                .filter(wrapper -> wrapper.getArchitectureView() == view)
-                .findFirst()
-                .orElse(null);
     }
 }
