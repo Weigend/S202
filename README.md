@@ -66,7 +66,8 @@ Each [release](https://github.com/Weigend/S202/releases) carries a ready-to-run 
 | Linux x64 | `S202-<version>-linux-x64.tar.gz` | unpack, run `S202/bin/S202` |
 | Windows x64 | `S202-<version>-windows-x64.zip` | unpack, run `S202\S202.exe` |
 | macOS, Apple Silicon | `S202-<version>-macos-arm64.zip` | unpack, open `S202.app` |
-| macOS, Intel | `S202-<version>-macos-x64.zip` | unpack, open `S202.app` |
+
+Macs with an Intel processor are no longer supported; 1.2.0 was the last release with a program for them.
 
 The programs are not signed with a vendor certificate, so the system asks once before the first start:
 

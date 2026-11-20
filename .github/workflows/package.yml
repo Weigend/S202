@@ -30,10 +30,9 @@ jobs:
             os: ubuntu-latest
           - name: Windows x64
             os: windows-latest
+          # Apple Silicon only: Macs with an Intel processor are no longer supported.
           - name: macOS arm64 (Apple Silicon)
             os: macos-latest
-          - name: macOS x64 (Intel)
-            os: macos-15-intel
 
     defaults:
       run:
