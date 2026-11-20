@@ -58,7 +58,7 @@ in your browser. Re-run the menu after analysing another jar to update it.
 cd analyzer
 mvn -q org.codehaus.mojo:exec-maven-plugin:3.1.0:java \
   -Dexec.mainClass=de.weigend.s202.ui.views.city3d.CityModelExporter \
-  -Dexec.args="../test-example/target/test-example-1.2.0.jar ../city3d/public/city.json"
+  -Dexec.args="../test-example/target/test-example-1.3.0.jar ../city3d/public/city.json"
 ```
 
 **2. Run the view** (Vite dev server):

@@ -13,10 +13,10 @@
 ## Example
 
 ```bash
-./run-ui.sh test-example/target/test-example-1.2.0.jar
+./run-ui.sh test-example/target/test-example-1.3.0.jar
 ```
 
 ## Requirements
 
 - Maven 3.9+
-- Java 21+
+- Java 25+

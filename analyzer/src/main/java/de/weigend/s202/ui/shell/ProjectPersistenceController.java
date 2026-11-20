@@ -287,6 +287,7 @@ public final class ProjectPersistenceController {
                 canvas.isShowScc(),
                 canvas.isShowPackageScc(),
                 canvas.isShowWhatIfViolations(),
+                canvas.isLimitBoxWidth(),
                 snapshot == null ? 1.0 : snapshot.zoom(),
                 snapshot == null ? 0.0 : snapshot.horizontalScroll(),
                 snapshot == null ? 0.0 : snapshot.verticalScroll(),
@@ -312,6 +313,7 @@ public final class ProjectPersistenceController {
         canvas.setShowScc(dto.showClassCycles());
         canvas.setShowPackageScc(dto.showPackageCycles());
         canvas.setShowWhatIfViolations(dto.showViolations());
+        canvas.setLimitBoxWidth(dto.limitBoxWidth());
         canvas.restoreViewSnapshot(new ArchitectureCanvas.ViewSnapshot(
                 dto.zoom(), dto.horizontalScroll(), dto.verticalScroll(), dto.expandedPackages()));
     }
@@ -319,7 +321,7 @@ public final class ProjectPersistenceController {
     private static S202Project.ViewDto layeredViewOfTheWholeAnalysis() {
         return new S202Project.ViewDto(
                 ViewDescriptor.Kind.LAYERED.name(), null, null, List.of(), List.of(), null, false,
-                ArchitectureCanvas.DEFAULT_PACKAGE_DEPTH, false, false, false, false,
+                ArchitectureCanvas.DEFAULT_PACKAGE_DEPTH, false, false, false, false, false,
                 1.0, 0.0, 0.0, Map.of(), null, true);
     }
 

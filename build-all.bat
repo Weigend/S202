@@ -4,7 +4,7 @@
 :: Bootstraps all dependencies and builds S202 from scratch (Windows).
 ::
 :: What it does:
-::   1. Checks for git, Java 21+, and Maven
+::   1. Checks for git, Java 25+, and Maven
 ::   2. Installs WFX into the local Maven cache (%USERPROFILE%\.m2) if not present
 ::      (clones the matching release tag of https://github.com/Weigend/wfx and
 ::       runs mvn install -DskipTests)
@@ -55,22 +55,22 @@ echo   [build-all] git  OK
 where java >nul 2>&1
 if errorlevel 1 (
     echo   [build-all] ERROR: 'java' not found.
-    echo   Install Java 21+ and add it to PATH.
+    echo   Install Java 25+ and add it to PATH.
     goto :fail
 )
 
 for /f "tokens=3" %%v in ('java -version 2^>^&1 ^| findstr /i "version"') do (
     set RAW_VER=%%v
 )
-:: strip quotes and extract major version (handles "21.0.1" and "1.8.0_xxx")
+:: strip quotes and extract major version (handles "25.0.1" and "1.8.0_xxx")
 set RAW_VER=%RAW_VER:"=%
 for /f "delims=." %%m in ("%RAW_VER%") do set JAVA_MAJOR=%%m
 :: old-style 1.x versioning
 if "%JAVA_MAJOR%"=="1" (
     for /f "tokens=2 delims=." %%m in ("%RAW_VER%") do set JAVA_MAJOR=%%m
 )
-if %JAVA_MAJOR% LSS 21 (
-    echo   [build-all] ERROR: Java 21+ required. Detected version %JAVA_MAJOR%.
+if %JAVA_MAJOR% LSS 25 (
+    echo   [build-all] ERROR: Java 25+ required. Detected version %JAVA_MAJOR%.
     goto :fail
 )
 echo   [build-all] Java %JAVA_MAJOR%  OK

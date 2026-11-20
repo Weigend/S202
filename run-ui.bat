@@ -9,7 +9,7 @@ set S202_DIR=%~dp0
 
 where java >nul 2>&1
 if errorlevel 1 (
-    echo ERROR: 'java' not found. Install Java 21+ and add it to PATH.
+    echo ERROR: 'java' not found. Install Java 25+ and add it to PATH.
     pause
     exit /b 1
 )

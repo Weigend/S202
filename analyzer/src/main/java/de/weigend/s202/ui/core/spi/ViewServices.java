@@ -45,6 +45,7 @@ import java.util.function.Supplier;
  * @param markArrowsDirty     Kanten-Overlay zum Neuzeichnen anstoßen
  * @param skipTransparentTopLevelPackages Namespace-Wrapper oben überspringen?
  * @param plainNodes          Pakete und Klassen als Graph-Knoten (Symbol und Name, ohne Box)?
+ * @param limitBoxWidth       Paket-Boxen auf eine Maximalbreite begrenzen, statt die Zeile bündig zu füllen?
  * @param dialogOwner         Fenster für Dialoge der Ansicht (kann null sein)
  * @param status              Statuszeilen-Senke
  * @param refreshView         Stil-Projektion neu aufbauen (Statusmeldung optional)
@@ -61,6 +62,7 @@ public record ViewServices(
         Runnable markArrowsDirty,
         Supplier<Boolean> skipTransparentTopLevelPackages,
         Supplier<Boolean> plainNodes,
+        Supplier<Boolean> limitBoxWidth,
         Supplier<Window> dialogOwner,
         Consumer<String> status,
         Consumer<String> refreshView,

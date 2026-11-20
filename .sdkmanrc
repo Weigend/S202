@@ -1,0 +1,2 @@
+# Enable with: sdk env   (Liberica Full JDK: JDK 25 with JavaFX 25 bundled)
+java=25.0.5.1-fx+5-librca

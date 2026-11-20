@@ -81,7 +81,8 @@ final class ComponentStyleView implements StyleView {
                 services.annotations().get(),
                 services.rawDependencyModel().get(),
                 services.architecture().get() instanceof ComponentArchitecture component ? component : null,
-                services.annotationsChanged());
+                services.annotationsChanged())
+                .limitBoxWidth(services.limitBoxWidth()::get);
     }
 
     @Override

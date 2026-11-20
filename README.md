@@ -20,7 +20,7 @@ A JavaFX-based tool for analyzing code across multiple languages and visualizing
 
 ## Features
 
-- **Readers**: Java bytecode (ASM 9.6), Maven and Gradle multi-module projects, Python source (CPython AST), C source (PoC), Go source (Alpha); TypeScript, Rust planned
+- **Readers**: Java bytecode (ASM 9.11.1), Maven and Gradle multi-module projects, Python source (CPython AST), C source (PoC), Go source (Alpha); TypeScript, Rust planned
 - **Dependency detection**: Class/module and package dependencies — imports, calls, inheritance, type annotations
 - **Class cycle detection**: SCCs at class level (red overlay)
 - **Package tangle detection**: Mutual package dependencies (orange overlay); both overlays are independently togglable
@@ -36,7 +36,7 @@ A JavaFX-based tool for analyzing code across multiple languages and visualizing
 
 <table>
 <tr><th>Feature</th><th>Description</th><th>Status</th></tr>
-<tr><td><small><b>Reader: Java (JAR)</b></small></td><td><small>Bytecode analysis via ASM 9.6</small></td><td><small><b>Stable</b></small></td></tr>
+<tr><td><small><b>Reader: Java (JAR)</b></small></td><td><small>Bytecode analysis via ASM 9.11.1</small></td><td><small><b>Stable</b></small></td></tr>
 <tr><td><small><b>Reader: Maven</b></small></td><td><small>Multi-module via <code>pom.xml</code></small></td><td><small><b>Stable</b></small></td></tr>
 <tr><td><small><b>Reader: Gradle</b></small></td><td><small>Multi-module via <code>settings.gradle(.kts)</code></small></td><td><small><b>Beta</b></small></td></tr>
 <tr><td><small><b>Reader: Python</b></small></td><td><small>Source analysis via CPython <code>ast</code></small></td><td><small><b>Alpha</b></small></td></tr>
@@ -209,7 +209,7 @@ The screenshot shows the bundled **test-hexagon** example (the *paperwhale* book
 To try it, build and load the example project under [`test-hexagon`](test-hexagon):
 
 ```bash
-mvn -pl test-hexagon -am install    # produces test-hexagon/target/test-hexagon-1.2.0.jar
+mvn -pl test-hexagon -am install    # produces test-hexagon/target/test-hexagon-1.3.0.jar
 ```
 
 Then **File → Open Maven Project…** on `test-hexagon/pom.xml` (or **Open JAR…** on the produced JAR) and switch to **View → Hexagonal View**.
@@ -252,9 +252,9 @@ Use **File → Open Python Source…** to load a Python project. S202 discovers 
 
 ## Requirements
 
-- **Java 21+**
-- **Maven 3.9+**
-- **JavaFX 21.0.5** (loaded automatically via Maven)
+- **Java 25+** — `.sdkmanrc` names the JDK the project is developed with (Liberica Full JDK 25, JavaFX included); with SDKMAN: `sdk env install` once, then `sdk env`
+- **Maven 3.9+** — `.mvn/jvm.config` passes two JVM options to Maven so that Java 25 does not warn on every call about libraries Maven itself ships
+- **JavaFX 25.0.5.1** (loaded automatically via Maven)
 - **Python 3** (optional — only required for Python source analysis)
 
 ## Project Structure

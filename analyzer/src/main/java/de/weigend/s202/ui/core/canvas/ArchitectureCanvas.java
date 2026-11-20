@@ -218,6 +218,7 @@ public class ArchitectureCanvas extends AbstractArchitectureCanvas {
                 arrowsCoalescer::markDirty,
                 this::isSkipTransparentTopLevelPackages,
                 this::isPlainNodes,
+                this::isLimitBoxWidth,
                 () -> getScene() == null ? null : getScene().getWindow(),
                 this::setStatus,
                 this::refreshStyleProjection,
@@ -348,6 +349,30 @@ public class ArchitectureCanvas extends AbstractArchitectureCanvas {
         showScc.addListener((obs, was, isNow) -> overlay.applyShowScc(isNow));
         showPackageScc.addListener((obs, was, isNow) -> overlay.applyShowPackageScc(isNow));
         showWhatIfViolations.addListener((obs, was, isNow) -> overlay.applyShowWhatIfViolations(isNow));
+        limitBoxWidth.addListener((obs, was, isNow) -> applyLimitBoxWidth(isNow));
+    }
+
+    /**
+     * Hands the box width setting to every package box that exists. Boxes of
+     * packages not yet filled ask for it when they are created.
+     */
+    private void applyLimitBoxWidth(boolean limit) {
+        if (whatIfRootContainer == null) {
+            return;
+        }
+        applyLimitBoxWidth(whatIfRootContainer, limit);
+        arrowsCoalescer.markDirty();
+    }
+
+    private static void applyLimitBoxWidth(javafx.scene.Parent parent, boolean limit) {
+        if (parent instanceof LevelPackageBox box) {
+            box.setLimitRowWidth(limit);
+        }
+        for (javafx.scene.Node child : parent.getChildrenUnmodifiable()) {
+            if (child instanceof javafx.scene.Parent childParent) {
+                applyLimitBoxWidth(childParent, limit);
+            }
+        }
     }
 
     /**

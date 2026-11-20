@@ -39,7 +39,7 @@ import static org.junit.jupiter.api.Assumptions.assumeTrue;
  */
 class HexagonalPaperWhaleIntegrationTest {
 
-    private static final String JAR = "../test-hexagon/target/test-hexagon-1.2.0.jar";
+    private static final String JAR = "../test-hexagon/target/test-hexagon-1.3.0.jar";
 
     @Test
     void paperWhaleProjectsFourBusinessThemes() throws Exception {

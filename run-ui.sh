@@ -1,7 +1,7 @@
 #!/bin/bash
 # Starte die S202 Code Analyzer App mit JavaFX
 # Optional: JAR-Datei als Parameter angeben
-# Beispiel: ./run-ui.sh test-example/target/test-example-1.2.0.jar
+# Beispiel: ./run-ui.sh test-example/target/test-example-1.3.0.jar
 # Beispiel: ./run-ui.sh /absolute/path/to/file.jar
 
 # Bestimme das absolute Root-Verzeichnis des Projekts

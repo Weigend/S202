@@ -153,6 +153,50 @@ class S202ProjectStoreTest {
                 mapper.toArchitectureAnnotations(loaded.architectureAnnotations()));
     }
 
+    /** A tab saved before version 5 has no box width setting: it comes back with flush boxes. */
+    @Test
+    void viewSavedBeforeTheBoxWidthSettingLoadsUnlimited() throws Exception {
+        S202ProjectMapper mapper = new S202ProjectMapper();
+        S202ProjectStore store = new S202ProjectStore();
+        S202Project current = mapper.toProject(
+                "test",
+                new S202Project.Source("JAR", List.of("/tmp/example.jar"), null),
+                rawModel(),
+                domainModel(),
+                null,
+                Set.of());
+        S202Project.ViewDto view = new S202Project.ViewDto(
+                "LAYERED", null, null, List.of(), List.of(), null, false,
+                3, true, false, false, false, true,
+                1.0, 0.0, 0.0, java.util.Map.of(), null, true);
+        S202Project versionFour = new S202Project(
+                S202Project.FORMAT,
+                4,
+                current.createdWith(),
+                current.source(),
+                current.dependencyModel(),
+                current.domainModel(),
+                current.architectureAnnotations(),
+                current.cycleBreakEdges(),
+                current.layoutInvariantReport(),
+                List.of(),
+                List.of(view),
+                current.savedAt());
+
+        Path file = tempDir.resolve("version-four.s202.json");
+        store.save(file, versionFour);
+        assertTrue(store.load(file).views().get(0).limitBoxWidth(), "the setting is saved with the tab");
+
+        String json = java.nio.file.Files.readString(file);
+        String withoutSetting = json.replaceAll("\\s*\"limitBoxWidth\"\\s*:\\s*true,", "");
+        assertFalse(withoutSetting.contains("limitBoxWidth"));
+        java.nio.file.Files.writeString(file, withoutSetting);
+
+        S202Project.ViewDto loaded = store.load(file).views().get(0);
+        assertFalse(loaded.limitBoxWidth());
+        assertTrue(loaded.showDependencies(), "the rest of the tab is read as before");
+    }
+
     private static DependencyModel rawModel() {
         DependencyModel model = new DependencyModel();
         DependencyModel.ClassInfo classInfo = new DependencyModel.ClassInfo(

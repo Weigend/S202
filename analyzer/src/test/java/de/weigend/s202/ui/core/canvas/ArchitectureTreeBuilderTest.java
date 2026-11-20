@@ -584,8 +584,181 @@ public class ArchitectureTreeBuilderTest {
             new ArchitectureTreeBuilder(boxed).buildTree(root, 3, false);
             LevelPackageBox boxedP = (LevelPackageBox) boxed.get("root.p");
             assertFalse(((LevelClassBox) boxed.get("root.Top")).getStyleClass().contains("plain-node"));
-            assertEquals(Double.MAX_VALUE, boxedP.getMaxWidth());
+            assertEquals(javafx.scene.layout.Region.USE_COMPUTED_SIZE, boxedP.getMaxWidth());
             assertEquals(javafx.scene.layout.Priority.ALWAYS, HBox.getHgrow(boxedP));
+        });
+    }
+
+    /** One package alone on level 1 above four packages sharing level 0. */
+    private static ArchitectureNode singleAboveFour() {
+        ArchitectureNode root = new ArchitectureNode("root", "root", NodeType.PACKAGE, true, 0);
+        root.addChild(new ArchitectureNode("root.single", "single", NodeType.PACKAGE, true, 1));
+        for (int i = 0; i < 4; i++) {
+            root.addChild(new ArchitectureNode("root.p" + i, "p" + i, NodeType.PACKAGE, true, 0));
+        }
+        return root;
+    }
+
+    /**
+     * Without a width limit — the default — the boxes of a row share its whole
+     * width and end flush with their container.
+     */
+    @Test
+    public void testPackageBoxesFillTheirRowFlushByDefault() {
+        runOnFxThread(() -> {
+            Map<String, Node> registry = new HashMap<>();
+            VBox topLevel = new ArchitectureTreeBuilder(registry).buildTree(singleAboveFour(), 3, false);
+            topLevel.resize(3000, 400);
+            topLevel.layout();
+
+            LevelPackageBox single = (LevelPackageBox) registry.get("root.single");
+            HBox row = (HBox) single.getParent();
+            row.layout();
+            assertFalse(single.isLimitRowWidth());
+            assertEquals(row.getWidth(), single.getWidth(), 0.5, "alone in its row: as wide as the row");
+
+            LevelPackageBox first = (LevelPackageBox) registry.get("root.p0");
+            HBox lower = (HBox) first.getParent();
+            lower.layout();
+            double left = Double.MAX_VALUE;
+            double right = -Double.MAX_VALUE;
+            for (int i = 0; i < 4; i++) {
+                LevelPackageBox box = (LevelPackageBox) registry.get("root.p" + i);
+                assertEquals(first.getWidth(), box.getWidth(), 0.5, "siblings share the row evenly");
+                left = Math.min(left, box.getBoundsInParent().getMinX());
+                right = Math.max(right, box.getBoundsInParent().getMaxX());
+            }
+            assertEquals(0, left, 0.5, "flush left");
+            assertEquals(lower.getWidth(), right, 0.5, "flush right");
+        });
+    }
+
+    /**
+     * With the width limit on, a package box alone in its row grows only up
+     * to the cap and is centred, however wide a sibling row makes the canvas.
+     */
+    @Test
+    public void testPackageBoxFillsItsRowOnlyUpToTheCap() {
+        runOnFxThread(() -> {
+            Map<String, Node> registry = new HashMap<>();
+            VBox topLevel = new ArchitectureTreeBuilder(registry)
+                    .limitBoxWidth(() -> true)
+                    .buildTree(singleAboveFour(), 3, false);
+            topLevel.resize(3000, 400);
+            topLevel.layout();
+
+            LevelPackageBox single = (LevelPackageBox) registry.get("root.single");
+            HBox row = (HBox) single.getParent();
+            row.layout();
+            assertEquals(LevelPackageBox.MAX_ROW_FILL_WIDTH, single.getWidth(), 0.5);
+            assertEquals(row.getWidth() / 2, single.getBoundsInParent().getCenterX(), 1.0, "centred in its row");
+            for (int i = 0; i < 4; i++) {
+                assertEquals(LevelPackageBox.MAX_ROW_FILL_WIDTH,
+                        ((LevelPackageBox) registry.get("root.p" + i)).getWidth(), 0.5, "siblings share the cap");
+            }
+        });
+    }
+
+    /** The limit can be switched on a tree that is already built: the next layout pass applies it. */
+    @Test
+    public void testWidthLimitTakesEffectWithoutRebuild() {
+        runOnFxThread(() -> {
+            Map<String, Node> registry = new HashMap<>();
+            VBox topLevel = new ArchitectureTreeBuilder(registry).buildTree(singleAboveFour(), 3, false);
+            topLevel.resize(3000, 400);
+            topLevel.layout();
+
+            LevelPackageBox single = (LevelPackageBox) registry.get("root.single");
+            HBox row = (HBox) single.getParent();
+            assertEquals(row.getWidth(), single.getWidth(), 0.5);
+
+            single.setLimitRowWidth(true);
+            assertTrue(row.isNeedsLayout(), "the row lays its boxes out again");
+            topLevel.layout();
+            assertEquals(LevelPackageBox.MAX_ROW_FILL_WIDTH, single.getWidth(), 0.5);
+
+            single.setLimitRowWidth(false);
+            topLevel.layout();
+            assertEquals(row.getWidth(), single.getWidth(), 0.5);
+        });
+    }
+
+    /**
+     * A package filled only when it is expanded asks for the limit then, not
+     * when the tree was built.
+     */
+    @Test
+    public void testLazilyBuiltPackagesFollowTheCurrentWidthLimit() {
+        runOnFxThread(() -> {
+            boolean[] limit = {false};
+            Map<String, Node> registry = new HashMap<>();
+            new ArchitectureTreeBuilder(registry)
+                    .lazyCollapsedPackages(true)
+                    .limitBoxWidth(() -> limit[0])
+                    .buildTree(lazySourceRoot(), 1);
+            LevelPackageBox ab = (LevelPackageBox) registry.get("a.b");
+            assertFalse(ab.isLimitRowWidth());
+            assertFalse(registry.containsKey("a.b.c"), "not built yet");
+
+            limit[0] = true;
+            ab.setExpanded(true);
+            assertTrue(((LevelPackageBox) registry.get("a.b.c")).isLimitRowWidth());
+            assertFalse(ab.isLimitRowWidth(), "a box that exists is switched by its view, not by the builder");
+        });
+    }
+
+    /**
+     * The width limit belongs to one view: switching it reaches the boxes that
+     * are there, a rebuild keeps it, and another view is not touched — in the
+     * layered and in the component style alike.
+     */
+    @Test
+    public void testWidthLimitIsASettingOfTheView() {
+        runOnFxThread(() -> {
+            for (ArchitectureKind style : List.of(ArchitectureKind.LAYERED, ArchitectureKind.COMPONENT)) {
+                ArchitectureCanvas view = new ArchitectureCanvas();
+                view.setViewStyle(style);
+                view.setArchitectureRoot(componentSourceRoot());
+                ArchitectureCanvas other = new ArchitectureCanvas();
+                other.setViewStyle(style);
+                other.setArchitectureRoot(componentSourceRoot());
+
+                assertFalse(view.isLimitBoxWidth(), "flush is the default");
+                assertFalse(findPackage(view, "com.acme.billing", false).isLimitRowWidth());
+
+                view.setLimitBoxWidth(true);
+                assertTrue(findPackage(view, "com.acme.billing", false).isLimitRowWidth(), style + ": live");
+                assertFalse(findPackage(other, "com.acme.billing", false).isLimitRowWidth(), style + ": per view");
+
+                view.refreshLayout();
+                assertTrue(view.isLimitBoxWidth());
+                assertTrue(findPackage(view, "com.acme.billing", false).isLimitRowWidth(), style + ": rebuilt");
+
+                view.setLimitBoxWidth(false);
+                assertFalse(findPackage(view, "com.acme.billing", false).isLimitRowWidth());
+            }
+        });
+    }
+
+    /** Content wider than the cap is never squeezed: the box keeps the width of its content. */
+    @Test
+    public void testPackageBoxWithWideContentKeepsItsContentWidth() {
+        runOnFxThread(() -> {
+            LevelPackageBox wide = new LevelPackageBox("wide", 0, false, "root.wide");
+            javafx.scene.layout.Region content = new javafx.scene.layout.Region();
+            content.setMinWidth(600);
+            content.setPrefWidth(600);
+            wide.addToLevel(0, content);
+            wide.setLimitRowWidth(true);
+            wide.fillRow();
+
+            HBox row = new HBox(wide);
+            row.setAlignment(javafx.geometry.Pos.CENTER);
+            row.resize(2000, 200);
+            row.layout();
+
+            assertTrue(wide.getWidth() > 600, "wider than the cap because the content needs it");
+            assertEquals(wide.prefWidth(-1), wide.getWidth(), 0.5);
         });
     }
 

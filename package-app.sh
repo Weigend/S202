@@ -17,8 +17,8 @@
 #   ./package-app.sh            # package
 #   ./package-app.sh --smoke    # package, then start the program once to prove it launches
 #
-# Requirements: bash, Maven, and a JDK 21+ that ships the JavaFX jmods, for example
-# Liberica "Full JDK" (sdk install java 21.0.6.fx-librca) or Azul Zulu FX.
+# Requirements: bash, Maven, and a JDK 25+ that ships the JavaFX jmods, for example
+# Liberica "Full JDK" (the one .sdkmanrc names: sdk env install) or Azul Zulu FX.
 # With a plain JDK, download the JavaFX jmods from https://gluonhq.com/products/javafx/
 # and point JAVAFX_JMODS at the unpacked directory.
 #
@@ -80,7 +80,13 @@ MAIN_JAR="s202-code-analyzer-${VERSION}.jar"
 [ -f "city3d/dist/index.html" ] \
     || error "city3d/dist not found. Run ./build-all.sh with Node.js 18+ installed (or: cd city3d && npm install && npm run build)."
 
-command -v jpackage >/dev/null 2>&1 || error "'jpackage' not found. Put the bin directory of a JDK 21+ on PATH."
+command -v jpackage >/dev/null 2>&1 || error "'jpackage' not found. Put the bin directory of a JDK 25+ on PATH."
+# The bundled runtime is cut from this JDK and has to run classes compiled for Java 25.
+JAVA_MAJOR="$(java -version 2>&1 | head -1 | sed 's/[^"]*"\([0-9]*\).*/\1/')"
+case "$JAVA_MAJOR" in
+    ''|*[!0-9]*) error "Could not read the Java version from: $(java -version 2>&1 | head -1)" ;;
+esac
+[ "$JAVA_MAJOR" -ge 25 ] || error "JDK 25+ required for packaging. Found Java $JAVA_MAJOR."
 command -v mvn >/dev/null 2>&1      || error "'mvn' not found. Install Maven 3.9+."
 
 MODULE_PATH_ARGS=()
@@ -144,6 +150,7 @@ jpackage \
     --add-modules "$RUNTIME_MODULES" \
     --java-options '-Ds202.city3d.dist=$APPDIR/city3d' \
     --java-options '-Ds202.excludedPrefixes=$APPDIR/excluded-prefixes.txt' \
+    --java-options '--enable-native-access=javafx.graphics,javafx.web' \
     --dest "$IMAGE" \
     ${MODULE_PATH_ARGS[@]+"${MODULE_PATH_ARGS[@]}"} \
     ${PLATFORM_ARGS[@]+"${PLATFORM_ARGS[@]}"} \

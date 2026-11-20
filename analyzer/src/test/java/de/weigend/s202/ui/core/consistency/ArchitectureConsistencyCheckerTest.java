@@ -41,7 +41,7 @@ import static org.junit.jupiter.api.Assertions.fail;
  */
 class ArchitectureConsistencyCheckerTest {
 
-    private static final String TEST_JAR = "../test-example/target/test-example-1.2.0.jar";
+    private static final String TEST_JAR = "../test-example/target/test-example-1.3.0.jar";
 
     @Test
     void newArchitectureMatchesArchitectureNodeTreeForTestExampleJar() throws Exception {

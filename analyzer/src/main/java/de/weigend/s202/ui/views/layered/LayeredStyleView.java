@@ -64,7 +64,8 @@ final class LayeredStyleView implements StyleView {
         // large code bases would otherwise put every hidden box into the scene.
         return new ArchitectureTreeBuilder(services.elementRegistry(), services.selectionSink())
                 .lazyCollapsedPackages(true)
-                .plainNodes(services.plainNodes().get());
+                .plainNodes(services.plainNodes().get())
+                .limitBoxWidth(services.limitBoxWidth()::get);
     }
 
     @Override

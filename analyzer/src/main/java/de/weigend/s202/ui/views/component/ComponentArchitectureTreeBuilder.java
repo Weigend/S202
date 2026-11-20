@@ -39,6 +39,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
+import java.util.function.BooleanSupplier;
 import java.util.function.Consumer;
 
 /**
@@ -53,6 +54,7 @@ public class ComponentArchitectureTreeBuilder {
     private final DependencyModel rawModel;
     private final ComponentArchitecture componentArchitecture;
     private final ComponentProjection projection;
+    private BooleanSupplier limitBoxWidth = () -> false;
 
     public ComponentArchitectureTreeBuilder(Map<String, Node> elementRegistry,
                                             Consumer<String> selectionChangeSink) {
@@ -89,6 +91,12 @@ public class ComponentArchitectureTreeBuilder {
                 annotations == null ? ArchitectureAnnotations.empty() : annotations,
                 rawModel == null ? Set.of() : Set.copyOf(rawModel.getExportedPackageNames()),
                 apiChangeSink != null ? apiChangeSink : (next, message) -> {});
+    }
+
+    /** Passed on to the builders of the package trees inside the components. */
+    public ComponentArchitectureTreeBuilder limitBoxWidth(BooleanSupplier limit) {
+        this.limitBoxWidth = Objects.requireNonNull(limit, "limit cannot be null");
+        return this;
     }
 
     public VBox buildTree(ArchitectureNode rootNode, int maxDepth) {
@@ -223,7 +231,8 @@ public class ComponentArchitectureTreeBuilder {
         fakeRoot.addChild(child);
 
         Map<String, Node> nestedRegistry = new HashMap<>();
-        ArchitectureTreeBuilder nestedBuilder = new ArchitectureTreeBuilder(nestedRegistry, selectionChangeSink);
+        ArchitectureTreeBuilder nestedBuilder = new ArchitectureTreeBuilder(nestedRegistry, selectionChangeSink)
+                .limitBoxWidth(limitBoxWidth);
         VBox nestedTree = nestedBuilder.buildTree(fakeRoot, maxDepth, false);
         projection.installApiMenus(nestedRegistry);
         elementRegistry.putAll(nestedRegistry);
@@ -302,7 +311,8 @@ public class ComponentArchitectureTreeBuilder {
         fakeRoot.addChild(apiRoot);
 
         Map<String, Node> nestedRegistry = new HashMap<>();
-        ArchitectureTreeBuilder nestedBuilder = new ArchitectureTreeBuilder(nestedRegistry, selectionChangeSink);
+        ArchitectureTreeBuilder nestedBuilder = new ArchitectureTreeBuilder(nestedRegistry, selectionChangeSink)
+                .limitBoxWidth(limitBoxWidth);
         VBox nestedTree = nestedBuilder.buildTree(fakeRoot, maxDepth, false);
 
         Node componentPackageNode = nestedRegistry.remove(componentRootFqn);
@@ -328,7 +338,8 @@ public class ComponentArchitectureTreeBuilder {
         fakeRoot.addChild(implementationRoot);
 
         Map<String, Node> nestedRegistry = new HashMap<>();
-        ArchitectureTreeBuilder nestedBuilder = new ArchitectureTreeBuilder(nestedRegistry, selectionChangeSink);
+        ArchitectureTreeBuilder nestedBuilder = new ArchitectureTreeBuilder(nestedRegistry, selectionChangeSink)
+                .limitBoxWidth(limitBoxWidth);
         VBox nestedTree = nestedBuilder.buildTree(fakeRoot, maxDepth, false);
         projection.installApiMenus(nestedRegistry);
 

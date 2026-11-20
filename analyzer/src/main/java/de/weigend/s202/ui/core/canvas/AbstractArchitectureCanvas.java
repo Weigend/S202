@@ -51,6 +51,7 @@ public abstract class AbstractArchitectureCanvas extends BorderPane {
     final BooleanProperty showScc = new SimpleBooleanProperty(false);
     final BooleanProperty showPackageScc = new SimpleBooleanProperty(false);
     final BooleanProperty showWhatIfViolations = new SimpleBooleanProperty(false);
+    final BooleanProperty limitBoxWidth = new SimpleBooleanProperty(false);
     final ReadOnlyDoubleWrapper zoomFactor = new ReadOnlyDoubleWrapper(1.0);
     final ReadOnlyObjectWrapper<ArchitectureNode> architectureRoot = new ReadOnlyObjectWrapper<>(null);
     final ReadOnlyObjectWrapper<QualityMetrics> qualityMetrics = new ReadOnlyObjectWrapper<>(null);
@@ -193,6 +194,26 @@ public abstract class AbstractArchitectureCanvas extends BorderPane {
 
     public void setShowWhatIfViolations(boolean show) {
         showWhatIfViolations.set(show);
+    }
+
+    /**
+     * Whether the package boxes of this view stop growing at a maximum width
+     * instead of filling their level row. Off, the boxes end flush with their
+     * container, which reads best for a small architecture; on, a wide
+     * subtree no longer stretches its neighbours into bars, which a large
+     * system needs. Unlike the overlay toggles this is part of how the view
+     * is set up and survives a new root.
+     */
+    public BooleanProperty limitBoxWidthProperty() {
+        return limitBoxWidth;
+    }
+
+    public boolean isLimitBoxWidth() {
+        return limitBoxWidth.get();
+    }
+
+    public void setLimitBoxWidth(boolean limit) {
+        limitBoxWidth.set(limit);
     }
 
     /* ----- View-Konfiguration --------------------------------------------------- */

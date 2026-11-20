@@ -35,6 +35,7 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Queue;
 import java.util.Set;
+import java.util.function.BooleanSupplier;
 import java.util.function.Consumer;
 
 /**
@@ -57,6 +58,7 @@ public class ArchitectureTreeBuilder {
     private final Consumer<String> selectionChangeSink;
     private boolean lazyCollapsedPackages;
     private boolean plainNodes;
+    private BooleanSupplier limitBoxWidth = () -> false;
 
     /**
      * Creates a new ArchitectureTreeBuilder.
@@ -97,6 +99,17 @@ public class ArchitectureTreeBuilder {
      */
     public ArchitectureTreeBuilder plainNodes(boolean plain) {
         this.plainNodes = plain;
+        return this;
+    }
+
+    /**
+     * Whether package boxes stop growing with their level row at
+     * {@link LevelPackageBox#MAX_ROW_FILL_WIDTH} instead of filling it. Asked
+     * for every box as it is created — a lazily built package is filled long
+     * after the build, and the view may have changed its mind by then.
+     */
+    public ArchitectureTreeBuilder limitBoxWidth(BooleanSupplier limit) {
+        this.limitBoxWidth = Objects.requireNonNull(limit, "limit cannot be null");
         return this;
     }
 
@@ -500,6 +513,7 @@ public class ArchitectureTreeBuilder {
         LevelPackageBox packageBox = new LevelPackageBox(simpleName, level, false, fullName, architectureLevel);
         packageBox.setSelectionChangeSink(selectionChangeSink);
         packageBox.setPlain(plainNodes);
+        packageBox.setLimitRowWidth(limitBoxWidth.getAsBoolean());
         return packageBox;
     }
 

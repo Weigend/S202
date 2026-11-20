@@ -44,8 +44,11 @@ public record S202Project(
 
     public static final String FORMAT = "structure202-project";
     public static final int MIN_SUPPORTED_FORMAT_VERSION = 1;
-    /** Version 4 added {@link #previewCuts()} and {@link #views()}. */
-    public static final int FORMAT_VERSION = 4;
+    /**
+     * Version 4 added {@link #previewCuts()} and {@link #views()}, version 5
+     * {@link ViewDto#limitBoxWidth()}.
+     */
+    public static final int FORMAT_VERSION = 5;
 
     public record CreatedWith(String app, String version) {}
 
@@ -141,6 +144,9 @@ public record S202Project(
      * @param tangleMembers    the members of the tangle (TANGLE only)
      * @param tangleKey        the key the tangle tab is reused under
      * @param tangleContext    whether the tangle tab shows the members' context
+     * @param limitBoxWidth    whether package boxes stop at a maximum width
+     *                         instead of filling their row; files older than
+     *                         version 5 do not have it and read as false
      * @param expandedPackages package FQN to open (true) or closed (false)
      * @param active           whether this was the tab the user worked in
      */
@@ -157,6 +163,7 @@ public record S202Project(
             boolean showClassCycles,
             boolean showPackageCycles,
             boolean showViolations,
+            boolean limitBoxWidth,
             double zoom,
             double horizontalScroll,
             double verticalScroll,

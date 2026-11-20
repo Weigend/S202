@@ -64,6 +64,12 @@ public class LevelPackageBox extends VBox implements GraphSelection.Selectable, 
     public static final double PLAIN_SIBLING_GAP = 26.0;
     private static final double LEVEL_GAP = 6.0;
     private static final double SIBLING_GAP = 10.0;
+    /**
+     * Width up to which a box grows to fill its level row while its width is
+     * limited ({@link #setLimitRowWidth(boolean)}). A box whose content is
+     * wider keeps the width of its content; the row centres what is left.
+     */
+    public static final double MAX_ROW_FILL_WIDTH = 240.0;
     private static final Color PACKAGE_COLOR = Color.web("#e6c46a");
 
     private Label toggleIcon;
@@ -79,6 +85,7 @@ public class LevelPackageBox extends VBox implements GraphSelection.Selectable, 
     private final Map<Integer, HBox> levelRows;
     private final boolean transparent;
     private boolean plain;
+    private boolean limitRowWidth;
     private boolean selected;
     private boolean virtuallyMoved;
     private Consumer<String> selectionChangeSink;
@@ -140,7 +147,6 @@ public class LevelPackageBox extends VBox implements GraphSelection.Selectable, 
         // Apply styles directly - CSS doesn't override VBox defaults reliably
         applyBaseStyle();
         this.setPadding(new Insets(0));
-        this.setMaxWidth(Double.MAX_VALUE);
 
         this.levelRows = new TreeMap<>();
 
@@ -207,22 +213,57 @@ public class LevelPackageBox extends VBox implements GraphSelection.Selectable, 
         this.plain = plain;
         contentContainer.setSpacing(plain ? PLAIN_LEVEL_GAP : LEVEL_GAP);
         contentContainer.setPadding(plain ? new Insets(8, 12, 10, 12) : new Insets(6, 6, 6, 20));
-        setMaxWidth(plain ? Region.USE_PREF_SIZE : Double.MAX_VALUE);
+        setMaxWidth(plain ? Region.USE_PREF_SIZE : Region.USE_COMPUTED_SIZE);
         setMaxHeight(plain ? Region.USE_PREF_SIZE : Double.MAX_VALUE);
         applyBaseStyle();
     }
 
     /**
-     * Lets this box share the width and height of the level row it was added
-     * to. A plain box keeps the size of its content.
+     * Lets this box share the height and the width of the level row it was
+     * added to — the width only up to {@link #MAX_ROW_FILL_WIDTH} while it is
+     * limited. A plain box keeps the size of its content.
      */
     public void fillRow() {
         if (plain) {
             return;
         }
-        setMaxWidth(Double.MAX_VALUE);
+        setMaxWidth(Region.USE_COMPUTED_SIZE);
         setMaxHeight(Double.MAX_VALUE);
         HBox.setHgrow(this, Priority.ALWAYS);
+    }
+
+    /**
+     * Chooses how far this box grows with its level row. Unlimited (the
+     * default), the boxes of a row share its whole width and end flush with
+     * their container — the tidy picture for a small architecture. Limited,
+     * a box grows only up to {@link #MAX_ROW_FILL_WIDTH}, so a wide sibling
+     * subtree does not stretch it into a bar — what a large system needs.
+     * Takes effect with the next layout pass, no rebuild required.
+     */
+    public void setLimitRowWidth(boolean limit) {
+        if (limitRowWidth == limit) {
+            return;
+        }
+        limitRowWidth = limit;
+        requestLayout();
+    }
+
+    public boolean isLimitRowWidth() {
+        return limitRowWidth;
+    }
+
+    /**
+     * Unlimited, a box takes whatever width its row offers. Limited, it stops
+     * at {@link #MAX_ROW_FILL_WIDTH}; content that needs more keeps its own
+     * width. A transparent box is an invisible wrapper and always passes the
+     * full width on to its children.
+     */
+    @Override
+    protected double computeMaxWidth(double height) {
+        if (transparent || !limitRowWidth) {
+            return Double.MAX_VALUE;
+        }
+        return Math.max(prefWidth(height), MAX_ROW_FILL_WIDTH);
     }
 
     private void handleSelectionClick(int clickCount) {

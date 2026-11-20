@@ -4,7 +4,7 @@
 # Bootstraps all dependencies and builds S202 from scratch.
 #
 # What it does:
-#   1. Checks for git, Java 21+, and Maven
+#   1. Checks for git, Java 25+, and Maven
 #   2. Installs WFX into the local Maven cache (~/.m2) if not already present
 #      (clones the matching release tag of https://github.com/Weigend/wfx and
 #       runs mvn install -DskipTests)
@@ -16,7 +16,7 @@
 #   chmod +x build-all.sh
 #   ./build-all.sh
 #
-# Requirements: bash, git, java 21+, maven 3.9+
+# Requirements: bash, git, java 25+, maven 3.9+
 #
 # Windows: use WSL or Git Bash — native cmd/PowerShell is not supported.
 
@@ -52,16 +52,16 @@ check_cmd() {
 }
 
 check_java() {
-    check_cmd java "Install Java 21+ and make sure it is on PATH."
+    check_cmd java "Install Java 25+ and make sure it is on PATH."
     local raw ver
     raw=$(java -version 2>&1 | head -1)
-    # handles: 'java version "21.0.1"', 'openjdk version "21"', etc.
+    # handles: 'java version "25.0.1"', 'openjdk version "25"', etc.
     ver=$(echo "$raw" | sed 's/[^"]*"\([0-9]*\).*/\1/')
     if ! [[ "$ver" =~ ^[0-9]+$ ]]; then
         error "Could not parse Java version from: $raw"
     fi
-    if [ "$ver" -lt 21 ]; then
-        error "Java 21+ required. Detected version $ver from: $raw"
+    if [ "$ver" -lt 25 ]; then
+        error "Java 25+ required. Detected version $ver from: $raw"
     fi
     info "Java $ver  OK"
 }

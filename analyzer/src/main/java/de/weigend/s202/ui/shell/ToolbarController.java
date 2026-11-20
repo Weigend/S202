@@ -63,6 +63,7 @@ public final class ToolbarController {
     private CheckBox showDependenciesCheckbox;
     private CheckBox showSccCheckbox;
     private CheckBox showPackageSccCheckbox;
+    private CheckBox limitBoxWidthCheckbox;
     private CheckBox showWhatIfViolationsCheckbox;
     private CheckBox showIconsCheckbox;
     private CheckBox showArchLevelCheckbox;
@@ -192,6 +193,15 @@ public final class ToolbarController {
             }
         });
 
+        limitBoxWidthCheckbox = new CheckBox("Limit Box Width");
+        limitBoxWidthCheckbox.setTooltip(new Tooltip(
+                "Keep package boxes compact instead of stretching them across their row.\n"
+                        + "Off: boxes end flush with their container (small architectures).\n"
+                        + "On: boxes stop at a maximum width (large systems)."));
+        limitBoxWidthCheckbox.selectedProperty().addListener((obs, was, isNow) -> {
+            if (boundView != null) boundView.setLimitBoxWidth(isNow);
+        });
+
         zoomOutButton = new Button("−");
         zoomOutButton.getStyleClass().add("toolbar-zoom-button");
         zoomOutButton.setTooltip(new Tooltip("Zoom Out (Ctrl+Scroll Down)"));
@@ -218,6 +228,7 @@ public final class ToolbarController {
                 depthLabel, depthSpinner, refreshButton,
                 showDependenciesCheckbox, showSccCheckbox, showPackageSccCheckbox,
                 showWhatIfViolationsCheckbox, showIconsCheckbox, showArchLevelCheckbox,
+                limitBoxWidthCheckbox,
                 zoomOutButton, zoomLabel, zoomInButton, zoomResetButton));
 
         applicationWindow.getToolbarItems().setAll(
@@ -228,6 +239,7 @@ public final class ToolbarController {
                 new Separator(),
                 showDependenciesCheckbox, showSccCheckbox, showPackageSccCheckbox,
                 showWhatIfViolationsCheckbox, showIconsCheckbox, showArchLevelCheckbox,
+                limitBoxWidthCheckbox,
                 new Separator(),
                 zoomGroup, zoomResetButton);
 
@@ -286,6 +298,9 @@ public final class ToolbarController {
         showSccCheckbox.setDisable(tangleView);
         showPackageSccCheckbox.setDisable(tangleView);
         showWhatIfViolationsCheckbox.setDisable(tangleView);
+        // ... and its nodes are plain: icon and name, no box that could grow.
+        limitBoxWidthCheckbox.setSelected(view.isLimitBoxWidth());
+        limitBoxWidthCheckbox.setDisable(tangleView);
         showIconsCheckbox.setSelected(ArchitectureViewSettings.isShowIcons());
         showArchLevelCheckbox.setSelected(ArchitectureViewSettings.isShowArchitectureLevel());
 
