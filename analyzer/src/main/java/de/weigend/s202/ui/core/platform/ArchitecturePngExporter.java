@@ -19,6 +19,7 @@ import javafx.scene.SnapshotParameters;
 import javafx.scene.image.PixelReader;
 import javafx.scene.image.WritableImage;
 import javafx.scene.paint.Color;
+import javafx.scene.transform.NonInvertibleTransformException;
 import javafx.scene.transform.Transform;
 
 import javax.imageio.ImageIO;
@@ -60,10 +61,24 @@ public final class ArchitecturePngExporter {
 
         SnapshotParameters parameters = new SnapshotParameters();
         parameters.setFill(Color.WHITE);
-        parameters.setViewport(new Rectangle2D(bounds.getMinX(), bounds.getMinY(), width, height));
-        parameters.setTransform(Transform.scale(scale, scale));
+        parameters.setViewport(new Rectangle2D(
+                bounds.getMinX() * scale, bounds.getMinY() * scale, imageWidth, imageHeight));
+        parameters.setTransform(withoutZoom(content, scale));
 
         write(content.snapshot(parameters, new WritableImage(imageWidth, imageHeight)), target);
+    }
+
+    /**
+     * A snapshot includes the node's own transforms, and the zoom of a view is
+     * one: take it back, so the graphic fills the image at every zoom.
+     */
+    private static Transform withoutZoom(Node content, double scale) throws IOException {
+        try {
+            return Transform.scale(scale, scale)
+                    .createConcatenation(content.getLocalToParentTransform().createInverse());
+        } catch (NonInvertibleTransformException exception) {
+            throw new IOException("The current architecture graphic has no exportable size", exception);
+        }
     }
 
     /** Writes an image a view took of itself. */

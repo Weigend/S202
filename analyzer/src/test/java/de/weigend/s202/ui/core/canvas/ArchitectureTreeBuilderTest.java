@@ -629,6 +629,70 @@ public class ArchitectureTreeBuilderTest {
         });
     }
 
+    /** The image shows the whole graphic at 100%, whatever the zoom of the view is. */
+    @Test
+    public void testImageExportDoesNotDependOnTheZoom() {
+        runOnFxThread(() -> {
+            ArchitectureCanvas view = componentCanvas();
+            view.setShowDependencies(true);
+            export(view); // a view that was never shown settles with its first snapshot
+            java.awt.image.BufferedImage expected = export(view);
+            assertTrue(colored(expected, 0.5) > 0, "the graphic reaches the lower right half");
+
+            for (double zoom : new double[] {0.5, 0.1, 2.0}) {
+                view.setZoom(zoom);
+                view.applyCss();
+                view.layout();
+                java.awt.image.BufferedImage image = export(view);
+                assertEquals(expected.getWidth(), image.getWidth(), "at " + zoom);
+                assertEquals(expected.getHeight(), image.getHeight(), "at " + zoom);
+                assertEquals(0, differingPixels(expected, image), expected.getWidth() * expected.getHeight() / 500.0,
+                        "same picture at " + zoom);
+                assertEquals(zoom, view.zoomFactorProperty().get(), 0.0001, "the view keeps its zoom");
+            }
+        });
+    }
+
+    private static java.awt.image.BufferedImage export(ArchitectureCanvas view) {
+        try {
+            java.nio.file.Path file = java.nio.file.Files.createTempFile("s202-export", ".png");
+            try {
+                new de.weigend.s202.ui.core.platform.ArchitecturePngExporter().export(view, file);
+                return javax.imageio.ImageIO.read(file.toFile());
+            } finally {
+                java.nio.file.Files.deleteIfExists(file);
+            }
+        } catch (java.io.IOException ex) {
+            throw new AssertionError(ex);
+        }
+    }
+
+    /** Pixels that are not white, right of and below the given part of the image. */
+    private static int colored(java.awt.image.BufferedImage image, double from) {
+        int count = 0;
+        for (int y = (int) (image.getHeight() * from); y < image.getHeight(); y++) {
+            for (int x = (int) (image.getWidth() * from); x < image.getWidth(); x++) {
+                count += (image.getRGB(x, y) & 0xffffff) == 0xffffff ? 0 : 1;
+            }
+        }
+        return count;
+    }
+
+    /** Pixels that differ visibly; text may be smoothed a little differently. */
+    private static int differingPixels(java.awt.image.BufferedImage a, java.awt.image.BufferedImage b) {
+        int count = 0;
+        for (int y = 0; y < a.getHeight(); y++) {
+            for (int x = 0; x < a.getWidth(); x++) {
+                int p = a.getRGB(x, y);
+                int q = b.getRGB(x, y);
+                int distance = Math.abs((p >> 16 & 255) - (q >> 16 & 255))
+                        + Math.abs((p >> 8 & 255) - (q >> 8 & 255)) + Math.abs((p & 255) - (q & 255));
+                count += distance > 60 ? 1 : 0;
+            }
+        }
+        return count;
+    }
+
     private static ArchitectureNode nodeOf(ArchitectureNode node, String fqn) {
         return node.getFullName().equals(fqn) ? node : node.getChildren().stream()
                 .filter(child -> fqn.equals(child.getFullName()) || fqn.startsWith(child.getFullName() + "."))
