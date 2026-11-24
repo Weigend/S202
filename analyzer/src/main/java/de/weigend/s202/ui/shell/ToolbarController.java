@@ -38,6 +38,7 @@ import javafx.scene.layout.HBox;
 import javafx.scene.paint.Color;
 import org.kordamp.ikonli.Ikon;
 import org.kordamp.ikonli.javafx.FontIcon;
+import org.kordamp.ikonli.materialdesign2.MaterialDesignC;
 import org.kordamp.ikonli.materialdesign2.MaterialDesignF;
 import org.kordamp.ikonli.materialdesign2.MaterialDesignR;
 import org.kordamp.ikonli.materialdesign2.MaterialDesignU;
@@ -55,6 +56,8 @@ public final class ToolbarController {
     private final ApplicationWindow applicationWindow;
     private final ArchitectureViewManager viewManager;
     private final Runnable openAction;
+    private final Runnable exportImageAction;
+    private final Runnable resetRefactoringsAction;
 
     // Toolbar widgets — shared across all ArchitectureWfxView tabs.
     private Button openJarButton;
@@ -69,6 +72,8 @@ public final class ToolbarController {
     private CheckBox showArchLevelCheckbox;
     private Button undoButton;
     private Button redoButton;
+    private Button resetRefactoringsButton;
+    private Button exportImageButton;
     private Button zoomOutButton;
     private Label zoomLabel;
     private Button zoomInButton;
@@ -86,10 +91,14 @@ public final class ToolbarController {
 
     public ToolbarController(ApplicationWindow applicationWindow,
                              ArchitectureViewManager viewManager,
-                             Runnable openAction) {
+                             Runnable openAction,
+                             Runnable exportImageAction,
+                             Runnable resetRefactoringsAction) {
         this.applicationWindow = applicationWindow;
         this.viewManager = viewManager;
         this.openAction = openAction;
+        this.exportImageAction = exportImageAction;
+        this.resetRefactoringsAction = resetRefactoringsAction;
     }
 
     /** Undo/Redo-Fähigkeit der fokussierten View — fürs Edit-Menü. */
@@ -146,6 +155,21 @@ public final class ToolbarController {
         redoButton.setGraphic(toolbarIcon(MaterialDesignR.REDO));
         redoButton.setTooltip(new Tooltip("Redo What-If move (Ctrl+Shift+Z)"));
         redoButton.setOnAction(e -> { if (boundView != null) boundView.redoWhatIf(); });
+
+        resetRefactoringsButton = new Button();
+        resetRefactoringsButton.setId("toolbar.resetRefactorings");
+        resetRefactoringsButton.getStyleClass().add("toolbar-button");
+        resetRefactoringsButton.setGraphic(toolbarIcon(MaterialDesignR.RESTORE));
+        resetRefactoringsButton.setTooltip(new Tooltip(
+                "Reset all refactorings of this analysis: moves, API mapping, cuts"));
+        resetRefactoringsButton.setOnAction(e -> resetRefactoringsAction.run());
+
+        exportImageButton = new Button();
+        exportImageButton.setId("toolbar.exportImage");
+        exportImageButton.getStyleClass().add("toolbar-button");
+        exportImageButton.setGraphic(toolbarIcon(MaterialDesignC.CAMERA_OUTLINE));
+        exportImageButton.setTooltip(new Tooltip("Save this view as an image (Ctrl+E)"));
+        exportImageButton.setOnAction(e -> exportImageAction.run());
 
         showDependenciesCheckbox = new CheckBox("Show Dependencies");
         showDependenciesCheckbox.setTooltip(new Tooltip("Toggle dependency arrows"));
@@ -229,19 +253,22 @@ public final class ToolbarController {
                 showDependenciesCheckbox, showSccCheckbox, showPackageSccCheckbox,
                 showWhatIfViolationsCheckbox, showIconsCheckbox, showArchLevelCheckbox,
                 limitBoxWidthCheckbox,
-                zoomOutButton, zoomLabel, zoomInButton, zoomResetButton));
+                zoomOutButton, zoomLabel, zoomInButton, zoomResetButton,
+                resetRefactoringsButton, exportImageButton));
 
         applicationWindow.getToolbarItems().setAll(
                 openJarButton, new Separator(),
                 depthLabel, depthSpinner, refreshButton,
                 new Separator(),
-                undoButton, redoButton,
+                undoButton, redoButton, resetRefactoringsButton,
                 new Separator(),
                 showDependenciesCheckbox, showSccCheckbox, showPackageSccCheckbox,
                 showWhatIfViolationsCheckbox, showIconsCheckbox, showArchLevelCheckbox,
                 limitBoxWidthCheckbox,
                 new Separator(),
-                zoomGroup, zoomResetButton);
+                zoomGroup, zoomResetButton,
+                new Separator(),
+                exportImageButton);
 
         // Retarget the toolbar whenever another architecture tab becomes the active one.
         Lookup.lookup(WindowManager.class).getActiveLookup()

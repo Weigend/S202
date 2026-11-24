@@ -23,7 +23,7 @@ import io.softwareecg.wfx.lookup.api.Lookup;
 import de.weigend.s202.domain.SCCFinder;
 import de.weigend.s202.ui.core.model.ArchitectureNode;
 import io.softwareecg.wfx.windowmanager.api.Position;
-import io.softwareecg.wfx.windowmanager.api.View;
+import de.weigend.s202.ui.core.platform.SnapshotView;
 import io.softwareecg.wfx.windowmanager.api.ViewKind;
 import javafx.animation.AnimationTimer;
 import javafx.geometry.Bounds;
@@ -70,7 +70,7 @@ import java.util.function.Consumer;
  * to look around, CTRL+scroll to zoom, ESC to release. Without CTRL the pointer
  * selects classes and packages.
  */
-public class ArchitectureView3D implements View {
+public class ArchitectureView3D implements SnapshotView {
 
     public static final String VIEW_ID = "s202-3d-view";
 
@@ -279,6 +279,11 @@ public class ArchitectureView3D implements View {
     // -----------------------------------------------------------------------
 
     @Override public String getViewId()            { return VIEW_ID; }
+    @Override
+    public javafx.scene.image.WritableImage snapshot() {
+        return subScene.snapshot(null, null);
+    }
+
     @Override public String getTitle()             { return "3D Architecture"; }
     @Override public String getToolTipInfo()       {
         return "3D view — click to focus, hover/click to select, CTRL+mouse to look, CTRL+scroll to zoom, ESC to release";

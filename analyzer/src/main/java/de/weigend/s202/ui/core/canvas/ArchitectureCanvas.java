@@ -20,6 +20,7 @@ import de.weigend.s202.ui.core.canvas.WhatIfUndoManager;
 import de.weigend.s202.ui.core.graph.ArchitectureDragController;
 import de.weigend.s202.ui.core.graph.GraphSelection;
 import de.weigend.s202.ui.core.graph.LevelClassBox;
+import de.weigend.s202.ui.core.graph.ContainerBox;
 import de.weigend.s202.ui.core.graph.LevelPackageBox;
 import de.weigend.s202.ui.core.graph.PulseCoalescer;
 import de.weigend.s202.analysis.quality.QualityMetrics;
@@ -29,6 +30,7 @@ import de.weigend.s202.domain.architecture.Architecture;
 import de.weigend.s202.domain.architecture.ArchitectureAnnotations;
 import de.weigend.s202.domain.architecture.ArchitectureContext;
 import de.weigend.s202.domain.architecture.ArchitectureKind;
+import de.weigend.s202.domain.architecture.ComponentMoves;
 import de.weigend.s202.domain.architecture.ArchitectureStyle;
 import de.weigend.s202.domain.architecture.ComponentArchitecture;
 import de.weigend.s202.domain.architecture.HexagonalArchitecture;
@@ -160,7 +162,8 @@ public class ArchitectureCanvas extends AbstractArchitectureCanvas {
     private final Consumer<String> graphSelectionSink;
 
     private final ArchitectureProjectionModel projection =
-            new ArchitectureProjectionModel(this::getViewStyle, this::updateSccRendererTangles);
+            new ArchitectureProjectionModel(
+                    this::getViewStyle, this::componentMoves, this::updateSccRendererTangles);
     private final ElementBoundsExporter boundsExporter =
             new ElementBoundsExporter(elementRegistry, () -> zoomableContent, this::getScene);
 
@@ -192,9 +195,15 @@ public class ArchitectureCanvas extends AbstractArchitectureCanvas {
                         setArchitectureAnnotations(getArchitectureAnnotations().withComponentApiExcluded(fqn));
                         refreshStyleProjection("Removed from API: " + fqn);
                     }
+
+                    @Override
+                    public String componentOf(String fqn) {
+                        return projection.componentOf(fqn);
+                    }
                 },
                 this::resetVisualLayout,
                 showWhatIfViolations);
+        whatIfEdit.undoManager().setOnChange(this::componentMovesChanged);
         overlay = new OverlayRenderCoordinator(
                 dependencyPane, sccPane, whatIfPane,
                 elementRegistry,
@@ -330,6 +339,22 @@ public class ArchitectureCanvas extends AbstractArchitectureCanvas {
                         .create(viewServices));
     }
 
+    private ComponentMoves componentMoves() {
+        return new ComponentMoves(
+                getWhatIfMoves().stream()
+                        .map(move -> new ComponentMoves.Move(move.fqn(), move.containerFqn(), move.api()))
+                        .toList(),
+                getPlannedPackages().keySet());
+    }
+
+    /** Verschieben, Undo und Redo ändern in der Component-Ansicht die Verstöße — ohne Neuaufbau der Szene. */
+    private void componentMovesChanged() {
+        if (viewStyle == ArchitectureKind.COMPONENT) {
+            projection.rebuildArchitectureProjection();
+            arrowsCoalescer.markDirty();
+        }
+    }
+
     /** Gemeinsamer Handler für Annotations-Änderungen aus den Stil-Buildern. */
     private void handleProjectionAnnotationsChanged(ArchitectureAnnotations nextAnnotations, String message) {
         setArchitectureAnnotations(nextAnnotations);
@@ -365,7 +390,7 @@ public class ArchitectureCanvas extends AbstractArchitectureCanvas {
     }
 
     private static void applyLimitBoxWidth(javafx.scene.Parent parent, boolean limit) {
-        if (parent instanceof LevelPackageBox box) {
+        if (parent instanceof ContainerBox box) {
             box.setLimitRowWidth(limit);
         }
         for (javafx.scene.Node child : parent.getChildrenUnmodifiable()) {
@@ -423,12 +448,17 @@ public class ArchitectureCanvas extends AbstractArchitectureCanvas {
             return;
         }
         StyleProjectionStateKeeper.ViewState viewState = stateKeeper.capture();
+        // A planned package may have been added or deleted, with moves into it.
+        componentMovesChanged();
         String selected = selection.getSelectedFullName();
         boolean depsSave = showDependencies.get();
         boolean sccSave = showScc.get();
         boolean pkgSccSave = showPackageScc.get();
         boolean wifSave = showWhatIfViolations.get();
         setArchitectureRoot(currentRootNode, viewState);
+        if (viewStyle == ArchitectureKind.COMPONENT) {
+            whatIfEdit.replayMoves();
+        }
         showDependencies.set(depsSave);
         showScc.set(sccSave);
         showPackageScc.set(pkgSccSave);
@@ -786,6 +816,30 @@ public class ArchitectureCanvas extends AbstractArchitectureCanvas {
         showScc.set(sccSave);
         showPackageScc.set(pkgSccSave2);
         showWhatIfViolations.set(wifSave);
+    }
+
+    /** The moves made in this view, in order, without the undone ones. */
+    public List<WhatIfUndoManager.Move> getWhatIfMoves() {
+        return whatIfEdit.undoManager().effectiveMoves();
+    }
+
+    /** Packages the user planned in this view, id to name. */
+    public Map<String, String> getPlannedPackages() {
+        return styleView().plannedPackages();
+    }
+
+    /**
+     * Discards what was planned in this view and shows {@code annotations} and
+     * {@code cuts} instead — zoom, position and open packages stay.
+     */
+    public void resetRefactorings(ArchitectureAnnotations annotations, Set<DependencyEdge> cuts) {
+        whatIfEdit.undoManager().clear();
+        whatIfEdit.clearMovedFqns();
+        styleView().resetPlanned();
+        setAppliedCutEdges(cuts);
+        // rebuilds the what-if model along with the projection
+        setArchitectureAnnotations(annotations);
+        refreshStyleProjection("Refactorings reset");
     }
 
     public void undoWhatIf() {

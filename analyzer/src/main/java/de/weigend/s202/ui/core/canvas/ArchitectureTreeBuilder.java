@@ -59,6 +59,7 @@ public class ArchitectureTreeBuilder {
     private boolean lazyCollapsedPackages;
     private boolean plainNodes;
     private BooleanSupplier limitBoxWidth = () -> false;
+    private PackageNodeFactory packageNodes = (node, remainingDepth) -> null;
 
     /**
      * Creates a new ArchitectureTreeBuilder.
@@ -111,6 +112,28 @@ public class ArchitectureTreeBuilder {
     public ArchitectureTreeBuilder limitBoxWidth(BooleanSupplier limit) {
         this.limitBoxWidth = Objects.requireNonNull(limit, "limit cannot be null");
         return this;
+    }
+
+    /**
+     * Lets a view draw certain nested packages with a box of its own. Such a
+     * package is placed like any other, its content is up to the factory.
+     */
+    public ArchitectureTreeBuilder packageNodes(PackageNodeFactory factory) {
+        this.packageNodes = Objects.requireNonNull(factory, "factory cannot be null");
+        return this;
+    }
+
+    /** Creates the box of a nested package together with its content. */
+    @FunctionalInterface
+    public interface PackageNodeFactory {
+
+        /**
+         * @param remainingDepth levels that start expanded, counted from this package;
+         *                       0 or less when the package itself starts collapsed
+         * @return the box, already registered along with its content, or {@code null}
+         *         to draw a regular package box
+         */
+        Node create(ArchitectureNode packageNode, int remainingDepth);
     }
 
     /**
@@ -354,6 +377,14 @@ public class ArchitectureTreeBuilder {
 
         if (child.getType() == NodeType.PACKAGE) {
             if (!packageContainers.containsKey(child.getFullName())) {
+                Node ownBox = packageNodes.create(child, maxDepth - currentDepth);
+                if (ownBox != null) {
+                    parentContainer.addToLevel(child.getLevel(), ownBox);
+                    counter.processed += child.getTotalNodeCount() - 1;
+                    elementsAddedToParent.add(child.getFullName());
+                    reportProgress(counter, child, progressSink);
+                    return;
+                }
                 LevelPackageBox packageBox = createPackageBox(child);
                 packageContainers.put(child.getFullName(), packageBox);
                 elementRegistry.put(child.getFullName(), packageBox);
@@ -444,6 +475,12 @@ public class ArchitectureTreeBuilder {
             if (child.getType() == NodeType.PACKAGE) {
                 // Create package container if not already created
                 if (!packageContainers.containsKey(child.getFullName())) {
+                    Node ownBox = packageNodes.create(child, maxDepth - currentDepth);
+                    if (ownBox != null) {
+                        parentContainer.addToLevel(child.getLevel(), ownBox);
+                        elementsAddedToParent.add(child.getFullName());
+                        continue;
+                    }
                     LevelPackageBox packageBox = createPackageBox(child);
                     packageContainers.put(child.getFullName(), packageBox);
                     elementRegistry.put(child.getFullName(), packageBox);

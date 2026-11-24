@@ -22,6 +22,7 @@ import de.weigend.s202.domain.architecture.Architecture;
 import de.weigend.s202.domain.architecture.ArchitectureAnnotations;
 import de.weigend.s202.domain.architecture.ArchitectureInsightsProvider;
 import de.weigend.s202.domain.architecture.ComponentArchitecture;
+import de.weigend.s202.domain.architecture.ComponentMoves;
 import de.weigend.s202.reader.DependencyModel;
 import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
@@ -63,6 +64,14 @@ public final class DefaultArchitectureInsightsProvider implements ArchitectureIn
                                            ArchitectureAnnotations annotations,
                                            DependencyModel rawModel) {
         return componentBuilder.build(domain, annotations, rawModel);
+    }
+
+    @Override
+    public ComponentArchitecture component(DomainModel domain,
+                                           ArchitectureAnnotations annotations,
+                                           DependencyModel rawModel,
+                                           ComponentMoves moves) {
+        return componentBuilder.build(domain, annotations, rawModel, moves);
     }
 
     @Override

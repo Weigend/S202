@@ -145,6 +145,10 @@ public final class AnalysisDocument {
         return previewCuts.remove(edge);
     }
 
+    public void clearPreviewCuts() {
+        previewCuts.clear();
+    }
+
     @Override
     public String toString() {
         return "AnalysisDocument[" + name + "]";

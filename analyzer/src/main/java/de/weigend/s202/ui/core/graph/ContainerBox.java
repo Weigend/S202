@@ -15,6 +15,8 @@
  */
 package de.weigend.s202.ui.core.graph;
 
+import javafx.scene.layout.VBox;
+
 /**
  * Kollabierbarer Paket-/Komponenten-Container im Architektur-Graphen.
  * Die Kanten-Renderer im Kern behandeln solche Container als Aggregations-
@@ -24,5 +26,32 @@ package de.weigend.s202.ui.core.graph;
  */
 public interface ContainerBox {
 
+    /**
+     * Breite, bis zu der ein begrenzter Container seine Zeile füllt
+     * ({@link #setLimitRowWidth(boolean)}). Breiterer Inhalt behält seine
+     * Breite; die Zeile zentriert, was übrig bleibt.
+     */
+    double MAX_ROW_FILL_WIDTH = 240.0;
+
     String getFullName();
+
+    /**
+     * Der Zeilenstapel, der die Kinder aufnimmt. Was noch nicht gebaut ist
+     * (zugeklappte Pakete), wird dafür gebaut.
+     *
+     * @param api der Stapel des API-Bereichs; Pakete haben nur den einen
+     */
+    VBox rowStack(boolean api);
+
+    /** Lässt den Container Höhe und Breite der Zeile mitnutzen, in die er gesetzt wurde. */
+    void fillRow();
+
+    /**
+     * Begrenzt, wie weit der Container mit seiner Zeile wächst; ohne Grenze —
+     * der Vorgabe — füllen die Container einer Zeile deren ganze Breite.
+     * Wirkt mit dem nächsten Layout-Durchlauf, ohne Neuaufbau.
+     */
+    void setLimitRowWidth(boolean limit);
+
+    boolean isLimitRowWidth();
 }

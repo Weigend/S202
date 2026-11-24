@@ -34,6 +34,7 @@ import de.weigend.s202.ui.core.model.ArchitectureNodeBuilder;
 import de.weigend.s202.ui.core.platform.AnalysisDocument;
 import de.weigend.s202.ui.core.platform.ArchitectureViewManager;
 import de.weigend.s202.ui.core.platform.ArchitectureWfxView;
+import de.weigend.s202.ui.core.platform.Refactorings;
 import de.weigend.s202.ui.core.platform.ViewDescriptor;
 import de.weigend.s202.ui.features.outline.OutlineExplorerModule;
 import de.weigend.s202.ui.features.outline.OutlineExplorerView;
@@ -281,6 +282,39 @@ class MultiDocumentTest {
             assertEquals(1, viewManager.viewsOf(example).size(), "the other document got no tab");
             assertSame(hexagon.rootNode(), projection.get().getArchitectureView().getArchitectureRoot(),
                     "from a tangle tab the projection shows the whole document, not the excerpt");
+        });
+    }
+
+    @Test
+    void resettingTheRefactoringsOfADocumentLeavesTheOthersAlone() {
+        AtomicReference<ArchitectureWfxView> projection = new AtomicReference<>();
+        onFx(() -> {
+            windowManager.setFocusedView(hexagonView);
+            viewManager.openStyleView(ArchitectureKind.COMPONENT);
+            projection.set(newestViewOf(hexagon));
+        });
+        awaitRoot(projection.get());
+        onFx(() -> {
+            Refactorings refactorings = Lookup.lookup(Refactorings.class);
+            ArchitectureCanvas component = projection.get().getArchitectureView();
+            component.setArchitectureAnnotations(
+                    component.getArchitectureAnnotations().withComponentApiIncluded("com.paperwhale.domain"));
+            DependencyEdge cut = new DependencyEdge("com.paperwhale.a.A", "com.paperwhale.b.B");
+            hexagon.addPreviewCut(cut);
+            example.addPreviewCut(cut);
+            assertEquals(new Refactorings.Counts(0, 0, 1, 1), refactorings.count(hexagon));
+            assertEquals(Set.of("com.paperwhale.domain"),
+                    refactorings.reportInput(hexagon).annotations().componentApiIncludes());
+            DomainModel analyzed = hexagon.domainModel();
+
+            refactorings.reset(hexagon);
+
+            assertTrue(refactorings.count(hexagon).isEmpty());
+            assertTrue(component.getArchitectureAnnotations().componentApiIncludes().isEmpty());
+            assertTrue(hexagonView.getArchitectureView().getArchitectureAnnotations()
+                    .componentApiIncludes().isEmpty(), "in all tabs of the document");
+            assertSame(analyzed, component.getDomainModel(), "nothing was analyzed again");
+            assertEquals(1, refactorings.count(example).cuts(), "the other document keeps its own");
         });
     }
 

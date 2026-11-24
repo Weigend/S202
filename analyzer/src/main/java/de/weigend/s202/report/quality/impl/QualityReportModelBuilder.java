@@ -676,7 +676,7 @@ final class QualityReportModelBuilder {
                                                                    DomainModel domain,
                                                                    ArchitectureAnnotations annotations) {
         ComponentArchitecture architecture = architectureInsights.component(domain, annotations, rawModel);
-        List<ComponentArchitecture.ComponentElement> components = architecture.components();
+        List<ComponentArchitecture.ComponentElement> components = architecture.allComponents();
         Set<String> coveredClasses = new TreeSet<>();
         List<QualityReportModel.ComponentStat> stats = new ArrayList<>();
         int apiClassCount = 0;
@@ -684,7 +684,7 @@ final class QualityReportModelBuilder {
         for (ComponentArchitecture.ComponentElement component : components) {
             Set<String> componentClasses = classesUnder(domain, component.rootPackageFqn());
             coveredClasses.addAll(componentClasses);
-            int apiCount = component.api().size();
+            int apiCount = component.apiClassCount();
             int implCount = countElements(component.implementationRows());
             apiClassCount += apiCount;
             implementationElementCount += implCount;

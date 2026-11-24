@@ -58,5 +58,6 @@ mvn javafx:run       # Start UI
 - [README.md](README.md) - Project overview
 - [docs/VS_CODE_SETUP.md](docs/VS_CODE_SETUP.md) - VS Code Integration
 
-**Q: Can I export a specific package structure?**
-- Not yet - an export feature is on the TODO list (PlantUML, SVG, etc.)
+**Q: Can I export the current architecture graphic?**
+- Yes. Choose **File → Export Image...** (Ctrl+E, or the camera in the toolbar) to save the active view as a PNG. The export includes content outside the visible scroll viewport.
+- Structured PlantUML and SVG exports are still future options.

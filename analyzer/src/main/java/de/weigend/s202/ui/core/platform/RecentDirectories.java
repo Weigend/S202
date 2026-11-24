@@ -32,6 +32,7 @@ public final class RecentDirectories {
     private File lastProjectDirectory;     // last Maven/Gradle/source root
     private File lastProjectFileDirectory; // last .s202.json location
     private File lastReportDirectory;      // last quality-report export target
+    private File lastImageDirectory;       // last architecture-image export target
 
     public File lastDirectory() {
         return lastDirectory;
@@ -51,6 +52,10 @@ public final class RecentDirectories {
 
     public void setLastReportDirectory(File dir) {
         this.lastReportDirectory = dir;
+    }
+
+    public void setLastImageDirectory(File dir) {
+        this.lastImageDirectory = dir;
     }
 
     /** JAR chooser: plain last directory. */
@@ -87,6 +92,12 @@ public final class RecentDirectories {
             return projectFile;
         }
         return initialSourceDirectory();
+    }
+
+    /** Graphic export: image → report → project/source locations. */
+    public File initialImageDirectory() {
+        File image = existing(lastImageDirectory);
+        return image != null ? image : initialReportDirectory();
     }
 
     private static File existing(File dir) {

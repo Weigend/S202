@@ -304,9 +304,14 @@ Spaeter:
 ### Semantik
 
 Eine Komponente ist ein semantischer Container, typischerweise ein
-Root-Paket oder ein Teilbaum. Innerhalb einer Komponente werden einzelne
-Klassen als API markiert. Die Sicht ordnet die API sichtbar ueber der
-Implementierung an.
+Root-Paket oder ein Teilbaum. Ein Paket ist eine Komponente, wenn es ein
+direktes Unterpaket `api` oder `spi` hat: Alles darunter ist public, alles
+andere privat. Komponenten duerfen verschachtelt sein; eine innere Komponente
+gehoert zum privaten Teil der aeusseren, und ein Zugriff muss den Vertrag jeder
+Komponente passieren, in die er eintritt. Einzelne Klassen und Pakete koennen
+zusaetzlich explizit als API markiert werden. Interfaces und Klassennamen
+entscheiden nichts (siehe `ComponentStructure`). Die Sicht ordnet die API
+sichtbar ueber der Implementierung an.
 
 Das erzeugt bewusst eine Abweichung von der Schichtenlogik:
 

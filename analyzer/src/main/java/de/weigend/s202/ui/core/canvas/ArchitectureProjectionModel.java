@@ -21,6 +21,8 @@ import de.weigend.s202.domain.architecture.ArchitectureAnnotations;
 import de.weigend.s202.domain.architecture.ArchitectureContext;
 import de.weigend.s202.domain.architecture.ArchitectureKind;
 import de.weigend.s202.domain.architecture.ArchitectureStyle;
+import de.weigend.s202.domain.architecture.ComponentArchitecture;
+import de.weigend.s202.domain.architecture.ComponentMoves;
 import de.weigend.s202.domain.architecture.LayeredArchitecture;
 import de.weigend.s202.domain.architecture.WhatIfArchitecture;
 import de.weigend.s202.reader.DependencyModel;
@@ -50,11 +52,16 @@ final class ArchitectureProjectionModel {
     private final ReadOnlyObjectWrapper<WhatIfArchitecture> whatIfArchitecture = new ReadOnlyObjectWrapper<>(null);
 
     private final Supplier<ArchitectureKind> viewStyle;
+    /** Die Verschiebungen der Component-Ansicht; sie ändern deren Verstöße. */
+    private final Supplier<ComponentMoves> componentMoves;
     /** Läuft nach jedem Projektion-Rebuild (SCC-Renderer-Tangles nachziehen). */
     private final Runnable afterRebuild;
 
-    ArchitectureProjectionModel(Supplier<ArchitectureKind> viewStyle, Runnable afterRebuild) {
+    ArchitectureProjectionModel(Supplier<ArchitectureKind> viewStyle,
+                                Supplier<ComponentMoves> componentMoves,
+                                Runnable afterRebuild) {
         this.viewStyle = viewStyle;
+        this.componentMoves = componentMoves;
         this.afterRebuild = afterRebuild;
     }
 
@@ -130,11 +137,12 @@ final class ArchitectureProjectionModel {
             return;
         }
         Architecture original;
+        ArchitectureKind style = viewStyle.get();
         ArchitectureContext context = new ArchitectureContext(
                 rawDependencyModel.get(),
                 model,
-                getArchitectureAnnotations());
-        ArchitectureKind style = viewStyle.get();
+                getArchitectureAnnotations(),
+                style == ArchitectureKind.COMPONENT ? componentMoves.get() : ComponentMoves.none());
         if (style == ArchitectureKind.COMPONENT) {
             original = requireArchitectureStyle(ArchitectureKind.COMPONENT).build(context);
         } else if (style == ArchitectureKind.HEXAGONAL) {
@@ -147,6 +155,22 @@ final class ArchitectureProjectionModel {
                 ? la.toWhatIf(model)
                 : null);
         afterRebuild.run();
+    }
+
+    /** Wurzel der innersten Komponente, die {@code fqn} ist oder enthält; {@code null}, wenn keine. */
+    String componentOf(String fqn) {
+        if (!(architecture.get() instanceof ComponentArchitecture components) || fqn == null) {
+            return null;
+        }
+        String innermost = null;
+        for (ComponentArchitecture.ComponentElement component : components.allComponents()) {
+            String root = component.rootPackageFqn();
+            if ((fqn.equals(root) || fqn.startsWith(root + "."))
+                    && (innermost == null || root.length() > innermost.length())) {
+                innermost = root;
+            }
+        }
+        return innermost;
     }
 
     /** Die für Paket-Zyklen maßgebliche Architektur: What-If, sonst Original. */

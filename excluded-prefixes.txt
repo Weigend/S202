@@ -49,3 +49,4 @@ groovy.
 *$DI
 de.weigend.s202.S202Module
 *.WfxModule
+*.AwbModule

@@ -182,16 +182,27 @@ The screenshot below shows S202 analyzing its own codebase — four components (
 
 ![Component View showing S202 components](docs/10-component-architecture-final-all-deps.png)
 
-Component roots are top-level packages that contain API classes. Components are not nested into other components; packages inside the implementation area remain collapsible and use the same local hierarchy as the normal architecture view.
+A package is a component when it has a direct sub-package named `api` (called by others) or `spi` (implemented by others). Everything below `api` and `spi` is public, everything else is private. Whether a type is an interface or how a class is named plays no role.
 
-API membership is determined in this order:
+Components can be nested to any depth, with the same rule on every level. An inner component belongs to the private part of the outer one: its API is visible inside the outer component only, and an access has to pass the API of *every* component it enters. Inside `api` and `spi` nothing nests; they are public as a whole. A package without `api` or `spi` is a plain package, which may contain components.
 
-- Manual markings from the context menu: **Add To Api** and **Remove From Api**
-- JPMS `exports` from `module-info.class`
-- Packages named `api`, `apis`, `port`, or `ports`
-- Interfaces and classes whose name ends in `Api` or `API`
+Explicit declarations complement the convention or override it, the first match decides:
 
-You can also drag packages or classes between the API area and the implementation area. These manual API decisions are stored with the project and are reapplied when the project is loaded again.
+- Manual markings from the context menu: **Add To Api** and **Remove From Api**. A marking belongs to the innermost component around the marked element; marking an inner component publishes it in the outer one.
+- JPMS `exports` from `module-info.class`, public across all enclosing components
+- `@S202Api` in `package-info.java`: the package with its sub-packages — or, on the root package of a component, the classes of exactly this package (for components that keep their API at the root and hide the rest, e.g. in `impl`)
+- Packages named `api` or `spi`
+
+`@S202Component` declares a component that has no `api` or `spi`, `@S202Package` keeps a package from becoming one.
+
+You can also drag packages or classes between the API area and the implementation area of their component. These manual API decisions are stored with the project and are reapplied when the project is loaded again. Dragging an element into another package or component is recorded as a move: it stays visible, can be undone and appears in the refactoring report. The component violations follow every move at once: the moved element belongs to the component it was dropped into, public if dropped into its API area and private otherwise. Moves are not stored with the project.
+
+**Reports and reset.** These act on the analysis you are working on, across all of its tabs:
+
+- **File -> Export Violations...** writes the violations as a text file, e.g. to hand them to an AI: accesses past a component API, API leaks, package and class cycles, dependencies against the layers — each with the rule it breaks and the methods involved.
+- **File -> Export Refactoring Report...** writes what you planned as a text file: moves, new packages, the changed API mapping with its effect, and the dependencies to remove.
+- **Edit -> Reset Refactorings...** discards all of that and goes back to the analyzed code without loading it again.
+- **File -> Export Image...** (Ctrl+E) saves the active view as a PNG, the focused 3D view included.
 
 Component-specific findings are shown in the dependencies side view under **Component violations** while the Component View is active. The current checks flag calls from outside a component into its implementation and API classes that depend on implementation classes. Regular package-layer violations and package tangles are still shown separately, because the Component View does not change the underlying dependency graph or level calculation.
 

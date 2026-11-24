@@ -17,16 +17,35 @@ package de.weigend.s202.ui.core.platform;
 
 import javafx.application.Platform;
 import javafx.scene.control.Alert;
+import javafx.scene.control.ButtonBar;
+import javafx.scene.control.ButtonType;
 
-/** FX-thread-safe error dialog, shared by all S202 controllers. */
+/** FX-thread-safe dialogs, shared by all S202 controllers. */
 public final class Dialogs {
 
     private Dialogs() {
     }
 
+    /** Asks on the FX thread; {@code true} only when the user agrees. */
+    public static boolean confirm(String title, String header, String message, String agree) {
+        ButtonType agreeButton = new ButtonType(agree, ButtonBar.ButtonData.OK_DONE);
+        Alert alert = new Alert(Alert.AlertType.CONFIRMATION, message, agreeButton, ButtonType.CANCEL);
+        alert.setTitle(title);
+        alert.setHeaderText(header);
+        return alert.showAndWait().filter(agreeButton::equals).isPresent();
+    }
+
     public static void showError(String title, String message) {
+        show(Alert.AlertType.ERROR, title, message);
+    }
+
+    public static void showInfo(String title, String message) {
+        show(Alert.AlertType.INFORMATION, title, message);
+    }
+
+    private static void show(Alert.AlertType type, String title, String message) {
         Platform.runLater(() -> {
-            Alert alert = new Alert(Alert.AlertType.ERROR);
+            Alert alert = new Alert(type);
             alert.setTitle(title);
             alert.setHeaderText(null);
             alert.setContentText(message);

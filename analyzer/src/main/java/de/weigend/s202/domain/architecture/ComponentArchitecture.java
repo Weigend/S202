@@ -20,19 +20,36 @@ import java.util.List;
 
 /**
  * Architecture style that organises elements as named components with an
- * explicit API surface and an implementation body. Accesses from outside a
- * component that bypass the API are reported as violations.
+ * explicit API surface and an implementation body. Components may be nested:
+ * an inner component belongs to the body of the outer one. Accesses that enter
+ * a component past its API are reported as violations.
  */
 public interface ComponentArchitecture extends Architecture {
 
+    /** The outermost components; the ones inside are in {@link ComponentElement#components()}. */
     List<ComponentElement> components();
 
+    /** All components with the ones nested in them, every component before those inside it. */
+    default List<ComponentElement> allComponents() {
+        List<ComponentElement> all = new ArrayList<>();
+        components().forEach(component -> component.collectInto(all));
+        return List.copyOf(all);
+    }
+
+    /**
+     * @param api                the public classes, without those of inner components
+     * @param implementationRows everything else; an inner component is a
+     *                           {@link Element.PackageElement} with its whole content. An inner
+     *                           component that is itself public is in {@code api} instead.
+     * @param components         the components directly inside this one
+     */
     record ComponentElement(
             String id,
             String displayName,
             String rootPackageFqn,
             List<Element> api,
-            List<List<Element>> implementationRows) {
+            List<List<Element>> implementationRows,
+            List<ComponentElement> components) {
 
         public ComponentElement {
             if (id == null || id.isBlank()) {
@@ -44,6 +61,25 @@ public interface ComponentArchitecture extends Architecture {
             displayName = displayName == null || displayName.isBlank() ? id : displayName;
             api = api == null ? List.of() : List.copyOf(api);
             implementationRows = copyDeepImmutable(implementationRows);
+            components = components == null ? List.of() : List.copyOf(components);
+        }
+
+        public ComponentElement(String id,
+                                String displayName,
+                                String rootPackageFqn,
+                                List<Element> api,
+                                List<List<Element>> implementationRows) {
+            this(id, displayName, rootPackageFqn, api, implementationRows, List.of());
+        }
+
+        /** Number of classes in the API, without those of inner components. */
+        public int apiClassCount() {
+            return (int) api.stream().filter(Element.ClassElement.class::isInstance).count();
+        }
+
+        private void collectInto(List<ComponentElement> all) {
+            all.add(this);
+            components.forEach(component -> component.collectInto(all));
         }
 
         private static List<List<Element>> copyDeepImmutable(List<List<Element>> rows) {

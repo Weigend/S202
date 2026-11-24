@@ -33,5 +33,11 @@ public interface ArchitectureInsightsProvider {
                                     ArchitectureAnnotations annotations,
                                     DependencyModel rawModel);
 
+    /** The components of the analyzed code, with the violations after {@code moves}. */
+    ComponentArchitecture component(DomainModel domain,
+                                    ArchitectureAnnotations annotations,
+                                    DependencyModel rawModel,
+                                    ComponentMoves moves);
+
     List<StronglyConnectedComponent> classSccs(DomainModel domain);
 }

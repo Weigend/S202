@@ -32,13 +32,16 @@ public final class WhatIfUndoManager {
         String fqn();
         String containerFqn();
         int rowIndex();
+        /** Dropped into the API area of a component. */
+        boolean api();
 
-        record InRow(String fqn, String containerFqn, int rowIndex, int colIndex) implements Move {}
-        record AsNewRow(String fqn, String containerFqn, int rowIndex) implements Move {}
+        record InRow(String fqn, String containerFqn, int rowIndex, int colIndex, boolean api) implements Move {}
+        record AsNewRow(String fqn, String containerFqn, int rowIndex, boolean api) implements Move {}
     }
 
     private final List<Move> history = new ArrayList<>();
     private int cursor = 0;
+    private Runnable onChange = () -> {};
     private final BooleanProperty canUndo = new SimpleBooleanProperty(false);
     private final BooleanProperty canRedo = new SimpleBooleanProperty(false);
 
@@ -69,6 +72,9 @@ public final class WhatIfUndoManager {
     }
 
     public void clear() {
+        if (history.isEmpty()) {
+            return;
+        }
         history.clear();
         cursor = 0;
         sync();
@@ -82,8 +88,14 @@ public final class WhatIfUndoManager {
         return List.copyOf(history.subList(0, cursor));
     }
 
+    /** Runs after every change of {@link #effectiveMoves()}. */
+    public void setOnChange(Runnable onChange) {
+        this.onChange = onChange == null ? () -> {} : onChange;
+    }
+
     private void sync() {
         canUndo.set(cursor > 0);
         canRedo.set(cursor < history.size());
+        onChange.run();
     }
 }

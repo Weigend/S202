@@ -18,14 +18,18 @@ package de.weigend.s202.ui.views.component;
 import de.weigend.s202.domain.DependencyEdge;
 import de.weigend.s202.domain.architecture.ArchitectureAnnotations;
 import de.weigend.s202.ui.core.canvas.WhatIfUndoManager;
+import de.weigend.s202.ui.core.events.MenuRequestEvent;
 import de.weigend.s202.ui.core.graph.ArchitectureDragController;
 import de.weigend.s202.ui.core.spi.ViewServices;
+import io.softwareecg.wfx.lookup.api.Lookup;
+import io.softwareecg.wfx.platform.api.EventBus;
 import javafx.scene.control.ContextMenu;
 import javafx.scene.control.MenuItem;
 import javafx.scene.layout.HBox;
 import javafx.scene.layout.Priority;
 import javafx.scene.layout.VBox;
 
+import java.util.EventObject;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -50,12 +54,27 @@ final class ComponentRefactoringPlanner {
         return !plannedPackageNames.isEmpty();
     }
 
+    Map<String, String> plannedPackages() {
+        return Map.copyOf(plannedPackageNames);
+    }
+
+    void reset() {
+        plannedPackageNames.clear();
+    }
+
     List<MenuItem> contextMenuItems() {
         MenuItem addPkg = new MenuItem("Add Planned Package...");
         addPkg.setOnAction(action -> showAddPlannedPackageDialog());
-        MenuItem reportItem = new MenuItem("Refactoring Report...");
+        MenuItem reportItem = new MenuItem("Refactoring Report as JSON...");
         reportItem.setOnAction(action -> showRefactoringReport());
-        return List.of(addPkg, reportItem);
+        MenuItem exportItem = new MenuItem("Export Refactoring Report...");
+        exportItem.setOnAction(action -> publish(new MenuRequestEvent.ExportRefactoringReport(this)));
+        return List.of(addPkg, exportItem, reportItem);
+    }
+
+    @SuppressWarnings("unchecked")
+    private static void publish(EventObject event) {
+        ((EventBus<EventObject>) Lookup.lookup(EventBus.class)).publish(event);
     }
 
     /* ----- Geplante Pakete ----------------------------------------------------- */
@@ -115,6 +134,7 @@ final class ComponentRefactoringPlanner {
             String displayName = entry.getValue();
             ComponentBox box = new ComponentBox(displayName, fqn, 0);
             box.setSelectionChangeSink(services.selectionSink());
+            box.setLimitRowWidth(services.limitBoxWidth().get());
             box.setCustomStyles(
                     "-fx-background-color: #f0f7e8; -fx-border-color: #4a8a3a; -fx-border-width: 2;"
                   + " -fx-border-style: dashed; -fx-background-radius: 7; -fx-border-radius: 7;",
@@ -214,7 +234,7 @@ final class ComponentRefactoringPlanner {
 
         for (WhatIfUndoManager.Move m : lastMove.values()) {
             String dest = m.containerFqn() == null || m.containerFqn().isEmpty()
-                    ? "(top-level)" : m.containerFqn();
+                    ? "(top-level)" : plannedPackageNames.getOrDefault(m.containerFqn(), m.containerFqn());
             entries.add("    {\n"
                     + "      \"action\": \"MOVE\",\n"
                     + "      \"element\": " + jsonStr(m.fqn()) + ",\n"

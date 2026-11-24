@@ -17,6 +17,7 @@ package de.weigend.s202.ui.core.canvas;
 
 import de.weigend.s202.ui.core.graph.ElementLookup;
 import de.weigend.s202.ui.views.component.ComponentArchitectureTreeBuilder;
+import de.weigend.s202.domain.DomainModel;
 import de.weigend.s202.domain.architecture.ArchitectureAnnotations;
 import de.weigend.s202.domain.architecture.ComponentArchitecture;
 import de.weigend.s202.domain.impl.ComponentArchitectureModel;
@@ -315,7 +316,19 @@ public class ArchitectureTreeBuilderTest {
             ComponentArchitectureTreeBuilder builder = new ComponentArchitectureTreeBuilder(
                     registry,
                     null,
-                    ArchitectureAnnotations.empty().withComponentApiIncluded(contract.getFullName()),
+                    ArchitectureAnnotations.empty(),
+                    null,
+                    new ComponentArchitectureModel(
+                            List.of(new ComponentArchitecture.ComponentElement(
+                                    "payment",
+                                    "Payment",
+                                    payment.getFullName(),
+                                    List.of(new Element.ClassElement(high.getFullName(), 7, 7),
+                                            new Element.ClassElement(low.getFullName(), 7, 7)),
+                                    List.of(List.of(
+                                            new Element.ClassElement(implementation.getFullName(), 0, 0))))),
+                            List.of(),
+                            List.of()),
                     null);
             builder.buildTree(root, 3);
 
@@ -341,6 +354,7 @@ public class ArchitectureTreeBuilderTest {
             ArchitectureNode root = componentSourceRoot();
             ArchitectureCanvas view = new ArchitectureCanvas();
             view.setViewStyle(ArchitectureKind.COMPONENT);
+            view.setDomainModel(domainModelOf(root));
             view.setArchitectureRoot(root);
 
             ComponentBox component = findComponent(view, "com.acme.payment");
@@ -426,6 +440,289 @@ public class ArchitectureTreeBuilderTest {
             assertSame(registry.get(payment.getFullName()), rows.get(0).getChildren().get(0));
             assertSame(registry.get(shipping.getFullName()), rows.get(1).getChildren().get(0));
         });
+    }
+
+    /**
+     * A component is drawn as a component wherever its package is: at top level,
+     * inside another component, inside a plain package.
+     */
+    @Test
+    public void testComponentsAreRenderedNested() {
+        runOnFxThread(() -> {
+            ArchitectureNode root = new ArchitectureNode("root", "root", NodeType.PACKAGE, true, 0);
+            for (String cls : List.of(
+                    "com.acme.repo.api.Repo",
+                    "com.acme.repo.adapter.solr.api.Solr",
+                    "com.acme.repo.adapter.solr.SolrClient",
+                    "com.acme.toolkit.tree.api.Tree",
+                    "com.acme.toolkit.tree.TreeModel",
+                    "com.acme.toolkit.chart.Chart")) {
+                addClass(root, cls);
+            }
+            ComponentArchitecture architecture = new de.weigend.s202.domain.impl.ComponentArchitectureBuilder()
+                    .build(domainModelOf(root), ArchitectureAnnotations.empty());
+            Map<String, Node> registry = new HashMap<>();
+            new ComponentArchitectureTreeBuilder(
+                    registry, null, ArchitectureAnnotations.empty(), null, architecture, null)
+                    .buildTree(root, 2);
+
+            ComponentBox repo = assertInstanceOf(ComponentBox.class, registry.get("com.acme.repo"));
+            ComponentBox solr = assertInstanceOf(ComponentBox.class, registry.get("com.acme.repo.adapter.solr"));
+            ComponentBox tree = assertInstanceOf(ComponentBox.class, registry.get("com.acme.toolkit.tree"));
+            assertInstanceOf(LevelPackageBox.class, registry.get("com.acme.repo.adapter"));
+            assertInstanceOf(LevelPackageBox.class, registry.get("com.acme.toolkit"));
+            assertTrue(isDescendantOf(solr, registry.get("com.acme.repo.adapter")));
+            assertTrue(isDescendantOf(solr, repo));
+            assertTrue(isDescendantOf(tree, registry.get("com.acme.toolkit")));
+            assertTrue(isDescendantOf(registry.get("com.acme.repo.adapter.solr.SolrClient"), solr));
+            assertTrue(isDescendantOf(registry.get("com.acme.repo.adapter.solr.api.Solr"), solr));
+            assertTrue(ComponentBox.isApiElement(registry.get("com.acme.repo.adapter.solr.api.Solr")));
+            assertTrue(ComponentBox.isApiElement(registry.get("com.acme.toolkit.tree.api.Tree")));
+            assertFalse(ComponentBox.isApiElement(registry.get("com.acme.toolkit.tree.TreeModel")));
+            assertTrue(tree.isExpanded(), "on the second level, like a package there");
+            assertFalse(solr.isExpanded(), "beyond the depth, like a package there");
+        });
+    }
+
+    /** The only package of its parent is a component: it is drawn, not skipped as a name prefix. */
+    @Test
+    public void testASingleComponentIsNotSkippedAsTransparent() {
+        runOnFxThread(() -> {
+            ArchitectureNode root = new ArchitectureNode("root", "root", NodeType.PACKAGE, true, 0);
+            addClass(root, "com.acme.repo.api.Repo");
+            addClass(root, "com.acme.repo.store.Store");
+            ComponentArchitecture architecture = new de.weigend.s202.domain.impl.ComponentArchitectureBuilder()
+                    .build(domainModelOf(root), ArchitectureAnnotations.empty());
+            Map<String, Node> registry = new HashMap<>();
+            VBox topLevel = new ComponentArchitectureTreeBuilder(
+                    registry, null, ArchitectureAnnotations.empty(), null, architecture, null)
+                    .buildTree(root, 3);
+
+            ComponentBox repo = assertInstanceOf(ComponentBox.class, registry.get("com.acme.repo"));
+            assertSame(repo, rows(topLevel).get(0).getChildren().get(0));
+            assertSame(topLevel, registry.get("com.acme"));
+        });
+    }
+
+    /** Component boxes are as wide as package boxes are: flush by default, up to the cap when limited. */
+    @Test
+    public void testComponentBoxesFollowTheWidthLimitLikePackages() {
+        runOnFxThread(() -> {
+            ArchitectureNode root = new ArchitectureNode("root", "root", NodeType.PACKAGE, true, 0);
+            addClass(root, "com.acme.single.api.A");
+            addClass(root, "com.acme.plain.tree.api.Tree");
+            addClass(root, "com.acme.wide.api.W");
+            ArchitectureNode acme = root.getChildren().get(0).getChildren().get(0);
+            acme.getChildren().get(0).setLevel(2);
+            acme.getChildren().get(1).setLevel(1);
+
+            ArchitectureCanvas view = new ArchitectureCanvas();
+            view.setViewStyle(ArchitectureKind.COMPONENT);
+            view.setPackageDepth(3);
+            view.setDomainModel(domainModelOf(root));
+            view.setArchitectureRoot(root);
+
+            ComponentBox single = findComponent(view, "com.acme.single");
+            ComponentBox tree = findComponent(view, "com.acme.plain.tree");
+            assertEquals(javafx.scene.layout.Priority.ALWAYS, HBox.getHgrow(tree), "nested ones grow as well");
+            assertEquals(1500, widthInRow(single, 1500), 0.5, "flush is the default");
+
+            view.setLimitBoxWidth(true);
+            assertTrue(single.isLimitRowWidth(), "live");
+            assertTrue(tree.isLimitRowWidth(), "nested ones, too");
+            assertEquals(Math.max(single.prefWidth(-1), LevelPackageBox.MAX_ROW_FILL_WIDTH),
+                    widthInRow(single, 1500), 0.5);
+            assertEquals(Math.max(tree.prefWidth(-1), LevelPackageBox.MAX_ROW_FILL_WIDTH),
+                    tree.maxWidth(-1), 0.5);
+
+            view.refreshLayout();
+            assertTrue(findComponent(view, "com.acme.single").isLimitRowWidth(), "rebuilt");
+            assertTrue(findComponent(view, "com.acme.plain.tree").isLimitRowWidth(), "rebuilt");
+
+            view.setLimitBoxWidth(false);
+            assertEquals(1500, widthInRow(findComponent(view, "com.acme.single"), 1500), 0.5);
+        });
+    }
+
+    /** In the component view a move is recorded, survives a rebuild and can be undone and reset. */
+    @Test
+    public void testComponentViewRecordsMoves() {
+        runOnFxThread(() -> {
+            ArchitectureCanvas view = componentCanvas();
+            Node store = find(view, LevelClassBox.class, "com.acme.repo.store.Store");
+
+            drop(store, findComponent(view, "com.acme.ship").rowStack(false));
+            assertEquals(1, view.getWhatIfMoves().size());
+            WhatIfUndoManager.Move move = view.getWhatIfMoves().get(0);
+            assertEquals("com.acme.repo.store.Store", move.fqn());
+            assertEquals("com.acme.ship", move.containerFqn());
+            assertFalse(move.api());
+
+            view.refreshStyleProjection();
+            assertTrue(isDescendantOf(find(view, LevelClassBox.class, "com.acme.repo.store.Store"),
+                    findComponent(view, "com.acme.ship")), "drawn again after a rebuild");
+
+            view.undoWhatIf();
+            assertTrue(view.getWhatIfMoves().isEmpty());
+            assertTrue(isDescendantOf(find(view, LevelClassBox.class, "com.acme.repo.store.Store"),
+                    findComponent(view, "com.acme.repo")), "back after undo");
+
+            drop(find(view, LevelClassBox.class, "com.acme.repo.store.Store"),
+                    findComponent(view, "com.acme.ship").rowStack(true));
+            assertTrue(view.getWhatIfMoves().get(0).api(), "into the API of another component is a move");
+            assertTrue(view.getArchitectureAnnotations().componentApiIncludes().isEmpty());
+
+            view.setShowDependencies(true);
+            view.setZoom(0.7);
+            view.resetRefactorings(ArchitectureAnnotations.empty(), Set.of());
+            assertTrue(view.getWhatIfMoves().isEmpty());
+            assertTrue(isDescendantOf(find(view, LevelClassBox.class, "com.acme.repo.store.Store"),
+                    findComponent(view, "com.acme.repo")));
+            assertEquals(0.7, view.zoomFactorProperty().get(), 0.0001, "reset keeps the zoom");
+            assertTrue(view.isShowDependencies(), "and what is shown");
+        });
+    }
+
+    /** Moving, undoing, redoing and resetting update the violations without a rebuild. */
+    @Test
+    public void testComponentViewUpdatesItsViolationsOnMoves() {
+        runOnFxThread(() -> {
+            ArchitectureCanvas view = componentCanvas();
+            assertEquals(2, view.getArchitecture().violations().size(),
+                    "ship.api.Ship uses repo.store.Store: a bypass, and a leak of ship's api");
+            Node store = find(view, LevelClassBox.class, "com.acme.repo.store.Store");
+
+            // Same component, same side: nothing changes.
+            drop(store, findComponent(view, "com.acme.repo").rowStack(false));
+            assertEquals(2, view.getArchitecture().violations().size());
+
+            drop(store, findComponent(view, "com.acme.ship").rowStack(true));
+            assertTrue(view.getArchitecture().violations().isEmpty(), "both public in ship");
+            assertSame(store, find(view, LevelClassBox.class, "com.acme.repo.store.Store"), "no rebuild");
+
+            view.undoWhatIf();
+            assertEquals(2, view.getArchitecture().violations().size());
+            view.redoWhatIf();
+            assertTrue(view.getArchitecture().violations().isEmpty());
+
+            view.resetRefactorings(ArchitectureAnnotations.empty(), Set.of());
+            assertEquals(2, view.getArchitecture().violations().size());
+        });
+    }
+
+    /** Inside its component an element that crosses the line to the API changes the mapping, nothing is moved. */
+    @Test
+    public void testDropAcrossTheApiLineChangesTheMapping() {
+        runOnFxThread(() -> {
+            ArchitectureCanvas view = componentCanvas();
+
+            drop(find(view, LevelClassBox.class, "com.acme.repo.store.Store"),
+                    findComponent(view, "com.acme.repo").rowStack(true));
+
+            assertTrue(view.getWhatIfMoves().isEmpty());
+            assertEquals(Set.of("com.acme.repo.store.Store"),
+                    view.getArchitectureAnnotations().componentApiIncludes());
+            assertTrue(ComponentBox.isApiElement(find(view, LevelClassBox.class, "com.acme.repo.store.Store")));
+
+            view.resetRefactorings(ArchitectureAnnotations.empty(), Set.of());
+            assertFalse(ComponentBox.isApiElement(find(view, LevelClassBox.class, "com.acme.repo.store.Store")));
+        });
+    }
+
+    private static ArchitectureNode nodeOf(ArchitectureNode node, String fqn) {
+        return node.getFullName().equals(fqn) ? node : node.getChildren().stream()
+                .filter(child -> fqn.equals(child.getFullName()) || fqn.startsWith(child.getFullName() + "."))
+                .findFirst()
+                .map(child -> nodeOf(child, fqn))
+                .orElseThrow();
+    }
+
+    private static ArchitectureCanvas componentCanvas() {
+        ArchitectureNode root = new ArchitectureNode("root", "root", NodeType.PACKAGE, true, 0);
+        addClass(root, "com.acme.repo.api.Repo");
+        addClass(root, "com.acme.repo.store.Store");
+        addClass(root, "com.acme.ship.api.Ship");
+        nodeOf(root, "com.acme.ship.api.Ship").setDependencies(Set.of("com.acme.repo.store.Store"));
+        ArchitectureCanvas view = new ArchitectureCanvas();
+        view.setViewStyle(ArchitectureKind.COMPONENT);
+        view.setPackageDepth(4);
+        view.setRawDependencyModel(new de.weigend.s202.reader.DependencyModel());
+        view.setDomainModel(domainModelOf(root));
+        view.setArchitectureRoot(root);
+        // the content hangs below the canvas once the scroll pane has its skin
+        new javafx.scene.Scene(view, 800, 600);
+        view.applyCss();
+        view.layout();
+        return view;
+    }
+
+    private static <T extends Node> T find(ArchitectureCanvas view, Class<T> type, String fqn) {
+        view.applyCss();
+        view.layout();
+        return findNode(view, type, node -> node instanceof de.weigend.s202.ui.core.graph.GraphSelection.Selectable s
+                && fqn.equals(s.getFullName()));
+    }
+
+    /** What the drag controller does when the mouse is released over a gap between rows. */
+    private static void drop(Node node, VBox stack) {
+        ((HBox) node.getParent()).getChildren().remove(node);
+        HBox row = new HBox(node);
+        stack.getChildren().add(row);
+        try {
+            java.lang.reflect.Method fireDrop = de.weigend.s202.ui.core.graph.ArchitectureDragController.class
+                    .getDeclaredMethod("fireDrop", Node.class, HBox.class, boolean.class);
+            fireDrop.setAccessible(true);
+            fireDrop.invoke(null, node, row, true);
+        } catch (ReflectiveOperationException ex) {
+            throw new AssertionError(ex);
+        }
+    }
+
+    private static double widthInRow(ComponentBox box, double rowWidth) {
+        HBox row = (HBox) box.getParent();
+        row.resize(rowWidth, 400);
+        row.layout();
+        return box.getWidth();
+    }
+
+    private static void addClass(ArchitectureNode root, String fqn) {
+        ArchitectureNode current = root;
+        for (int dot = fqn.indexOf('.'); dot >= 0; dot = fqn.indexOf('.', dot + 1)) {
+            String pkg = fqn.substring(0, dot);
+            ArchitectureNode parent = current;
+            current = parent.getChildren().stream()
+                    .filter(child -> child.getFullName().equals(pkg))
+                    .findFirst()
+                    .orElseGet(() -> {
+                        ArchitectureNode created = new ArchitectureNode(
+                                pkg, pkg.substring(pkg.lastIndexOf('.') + 1), NodeType.PACKAGE, true, 0);
+                        parent.addChild(created);
+                        return created;
+                    });
+        }
+        current.addChild(new ArchitectureNode(
+                fqn, fqn.substring(fqn.lastIndexOf('.') + 1), NodeType.CLASS, true, 0));
+    }
+
+    private static DomainModel domainModelOf(ArchitectureNode root) {
+        DomainModel model = new DomainModel();
+        addToModel(root, model);
+        return model;
+    }
+
+    private static void addToModel(ArchitectureNode node, DomainModel model) {
+        for (ArchitectureNode child : node.getChildren()) {
+            boolean cls = child.getType() == NodeType.CLASS;
+            DomainModel.CalculatedElementInfo info = new DomainModel.CalculatedElementInfo(
+                    child.getFullName(), child.getSimpleName(), cls ? "CLASS" : "PACKAGE", child.getLevel(),
+                    child.getDependencies() == null ? Set.of() : child.getDependencies());
+            if (cls) {
+                model.addClass(child.getFullName(), info);
+            } else {
+                model.addPackage(child.getFullName(), info);
+            }
+            addToModel(child, model);
+        }
     }
 
     /**

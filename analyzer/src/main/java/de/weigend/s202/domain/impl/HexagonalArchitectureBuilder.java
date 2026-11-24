@@ -33,6 +33,7 @@ import jakarta.inject.Singleton;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -81,7 +82,12 @@ public final class HexagonalArchitectureBuilder implements ArchitectureStyle {
         ArchitectureAnnotations effectiveAnnotations =
                 annotations == null ? ArchitectureAnnotations.empty() : annotations;
         ModelIndex index = ModelIndex.of(domain);
-        ComponentApiClassifier apiClassifier = new ComponentApiClassifier(effectiveAnnotations, rawModel);
+        PortCandidateClassifier portClassifier = new PortCandidateClassifier(effectiveAnnotations, rawModel);
+        ComponentStructure componentStructure = ComponentStructure.of(
+                index.packages().keySet(),
+                skipTransparentPassthroughs(index),
+                effectiveAnnotations,
+                ComponentStructure.Declarations.of(rawModel));
 
         Map<String, PackageProjection> packagesByFqn = projectPackages(index, effectiveAnnotations, rawModel);
 
@@ -135,13 +141,14 @@ public final class HexagonalArchitectureBuilder implements ArchitectureStyle {
             if (segmentId == null) {
                 continue;
             }
-            boolean componentApi = isComponentApiCandidate(cls, index, apiClassifier);
+            ComponentStructure.Component component = componentStructure.componentOf(cls.fullName);
+            boolean componentApi = component != null && componentStructure.isInContract(component, cls.fullName);
             ArchitectureAnnotations.PortSpec explicitPort = effectiveAnnotations.explicitPort(cls.fullName);
             ArchitectureAnnotations.ElementRole elementRole = effectiveAnnotations.explicitElementRole(cls.fullName);
             PackageProjection parentPackage = packagesByFqn.get(parentOf(cls.fullName));
             HexagonalArchitecture.RingRole ringRole =
                     ringForClass(elementRole, explicitPort, parentPackage);
-            boolean portCandidate = componentApi || explicitPort != null;
+            boolean portCandidate = explicitPort != null || isPortCandidate(cls, index, portClassifier);
             boolean explicitPortElement = explicitPort != null;
 
             projectionByClass.put(cls.fullName, new ElementProjection(
@@ -209,7 +216,19 @@ public final class HexagonalArchitectureBuilder implements ArchitectureStyle {
         Map<String, SegmentRoot> roots = new LinkedHashMap<>();
         ComponentArchitecture componentArchitecture =
                 new ComponentArchitectureBuilder().build(domain, annotations, rawModel);
+        Set<String> declaredRoots = new HashSet<>();
+        annotations.components().forEach(spec -> declaredRoots.add(spec.rootPackageFqn()));
+        if (rawModel != null) {
+            declaredRoots.addAll(rawModel.getComponentAnnotatedPackages());
+        }
+        String effectiveRoot = skipTransparentPassthroughs(index);
         for (ComponentArchitecture.ComponentElement component : componentArchitecture.components()) {
+            // A component found deeper down by convention must not replace the
+            // top-level segment around it, nor one above split the segments apart.
+            if (!parentOf(component.rootPackageFqn()).equals(effectiveRoot)
+                    && !declaredRoots.contains(component.rootPackageFqn())) {
+                continue;
+            }
             roots.put(component.rootPackageFqn(), new SegmentRoot(
                     component.id(),
                     component.displayName(),
@@ -217,7 +236,6 @@ public final class HexagonalArchitectureBuilder implements ArchitectureStyle {
                     true));
         }
 
-        String effectiveRoot = skipTransparentPassthroughs(index);
         for (CalculatedElementInfo child : sortedChildren(index, effectiveRoot)) {
             if (!"PACKAGE".equals(child.type)) {
                 continue;
@@ -595,10 +613,10 @@ public final class HexagonalArchitectureBuilder implements ArchitectureStyle {
                 : parentPackage.ringRole();
     }
 
-    private static boolean isComponentApiCandidate(CalculatedElementInfo cls,
-                                                   ModelIndex index,
-                                                   ComponentApiClassifier classifier) {
-        return classifier.isSelectedApiClass(
+    private static boolean isPortCandidate(CalculatedElementInfo cls,
+                                           ModelIndex index,
+                                           PortCandidateClassifier classifier) {
+        return classifier.isPortCandidate(
                 cls.fullName,
                 cls.simpleName,
                 cls.interfaceType,
@@ -619,8 +637,8 @@ public final class HexagonalArchitectureBuilder implements ArchitectureStyle {
         while (current != null && !current.isEmpty()) {
             CalculatedElementInfo pkg = index.packages().get(current);
             if (pkg != null && (apiPackage
-                    ? ComponentApiClassifier.isApiPackageName(pkg.simpleName)
-                    : ComponentApiClassifier.isImplementationPackageName(pkg.simpleName))) {
+                    ? PortCandidateClassifier.isApiPackageName(pkg.simpleName)
+                    : PortCandidateClassifier.isImplementationPackageName(pkg.simpleName))) {
                 return true;
             }
             current = parentOf(current);

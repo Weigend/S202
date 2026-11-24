@@ -24,9 +24,9 @@ import java.lang.annotation.Target;
  * Marks a Java package as a component root in S202's component architecture view.
  * Place this annotation in the package's {@code package-info.java}.
  *
- * <p>The S202 bytecode reader detects this annotation and registers the package
- * as a component root, bypassing heuristic detection. This avoids manual
- * corrections in the UI whenever the heuristic would map the package differently.
+ * <p>A package with a direct sub-package {@code api} or {@code spi} is a component
+ * without it. Use it for a component that has no such package: all of its classes
+ * are private then, unless {@link S202Api} says otherwise. Components may be nested.
  *
  * <pre>{@code
  * // de/weigend/s202/reader/package-info.java

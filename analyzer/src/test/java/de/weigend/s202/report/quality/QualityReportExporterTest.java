@@ -90,18 +90,20 @@ class QualityReportExporterTest {
         pkg(domain, "com", 0);
         pkg(domain, "com.acme", 0);
         pkg(domain, "com.acme.payment", 1);
+        pkg(domain, "com.acme.payment.api", 1);
         pkg(domain, "com.acme.payment.impl", 0);
         pkg(domain, "com.acme.shipping", 1);
+        pkg(domain, "com.acme.shipping.api", 1);
         pkg(domain, "com.acme.shipping.impl", 0);
         pkg(domain, "com.acme.web", 2);
 
-        cls(domain, "com.acme.payment.PaymentApi", true, 1,
+        cls(domain, "com.acme.payment.api.PaymentApi", true, 1,
                 Set.of("com.acme.payment.impl.PaymentService"));
         cls(domain, "com.acme.payment.impl.PaymentService", false, 0, Set.of());
-        cls(domain, "com.acme.shipping.ShippingApi", true, 1,
+        cls(domain, "com.acme.shipping.api.ShippingApi", true, 1,
                 Set.of("com.acme.payment.impl.PaymentService"));
         cls(domain, "com.acme.shipping.impl.ShippingService", false, 0,
-                Set.of("com.acme.payment.PaymentApi"));
+                Set.of("com.acme.payment.api.PaymentApi"));
         cls(domain, "com.acme.web.Controller", false, 2,
                 Set.of("com.acme.payment.impl.PaymentService"));
         return domain;
@@ -109,17 +111,17 @@ class QualityReportExporterTest {
 
     private static DependencyModel rawModel() {
         DependencyModel raw = new DependencyModel();
-        raw.addClass("com.acme.payment.PaymentApi",
-                rawClass("com.acme.payment.PaymentApi", true,
+        raw.addClass("com.acme.payment.api.PaymentApi",
+                rawClass("com.acme.payment.api.PaymentApi", true,
                         "com.acme.payment.impl.PaymentService"));
         raw.addClass("com.acme.payment.impl.PaymentService",
                 rawClass("com.acme.payment.impl.PaymentService", false));
-        raw.addClass("com.acme.shipping.ShippingApi",
-                rawClass("com.acme.shipping.ShippingApi", true,
+        raw.addClass("com.acme.shipping.api.ShippingApi",
+                rawClass("com.acme.shipping.api.ShippingApi", true,
                         "com.acme.payment.impl.PaymentService"));
         raw.addClass("com.acme.shipping.impl.ShippingService",
                 rawClass("com.acme.shipping.impl.ShippingService", false,
-                        "com.acme.payment.PaymentApi"));
+                        "com.acme.payment.api.PaymentApi"));
         raw.addClass("com.acme.web.Controller",
                 rawClass("com.acme.web.Controller", false,
                         "com.acme.payment.impl.PaymentService"));

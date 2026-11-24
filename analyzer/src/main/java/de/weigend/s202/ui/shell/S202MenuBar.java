@@ -109,7 +109,10 @@ public class S202MenuBar {
         redoItem.disableProperty().bind(canRedo.not());
 
         Menu editMenu = MenuUtil.createMenu("edit", "Edit");
-        editMenu.getItems().addAll(undoItem, redoItem);
+        MenuItem resetItem = MenuUtil.createMenuItem(
+                "edit.resetRefactorings", "Reset Refactorings...",
+                e -> publish(new MenuRequestEvent.ResetRefactorings(this)));
+        editMenu.getItems().addAll(undoItem, redoItem, new SeparatorMenuItem(), resetItem);
         applicationWindow.getMenu().add(1, editMenu);
     }
 
@@ -126,6 +129,19 @@ public class S202MenuBar {
         MenuItem exportQualityReportItem = MenuUtil.createMenuItem(
                 "file.exportQualityReport", "Analyze Quality",
                 e -> publish(new MenuRequestEvent.ExportQualityReport(this)));
+
+        MenuItem exportGraphicItem = MenuUtil.createMenuItem(
+                "file.exportCurrentGraphic", "Export Image...",
+                e -> publish(new MenuRequestEvent.ExportCurrentGraphic(this)));
+        exportGraphicItem.setAccelerator(new KeyCodeCombination(KeyCode.E, KeyCombination.SHORTCUT_DOWN));
+
+        MenuItem exportViolationsItem = MenuUtil.createMenuItem(
+                "file.exportViolations", "Export Violations...",
+                e -> publish(new MenuRequestEvent.ExportViolations(this)));
+
+        MenuItem exportRefactoringItem = MenuUtil.createMenuItem(
+                "file.exportRefactoringReport", "Export Refactoring Report...",
+                e -> publish(new MenuRequestEvent.ExportRefactoringReport(this)));
 
         MenuItem openCity3DItem = MenuUtil.createMenuItem(
                 "file.city3d", "Show City3D View",
@@ -178,6 +194,8 @@ public class S202MenuBar {
                 openItem, openMavenItem, openGradleItem,
                 new SeparatorMenuItem(),
                 openSourceMenu,
+                new SeparatorMenuItem(),
+                exportGraphicItem, exportViolationsItem, exportRefactoringItem,
                 new SeparatorMenuItem(),
                 exportQualityReportItem, openCity3DItem,
                 new SeparatorMenuItem(),

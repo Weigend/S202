@@ -21,14 +21,16 @@ import java.lang.annotation.RetentionPolicy;
 import java.lang.annotation.Target;
 
 /**
- * Marks a Java package as part of the public API of its enclosing
- * {@link S202Component}. Place this annotation in the package's
- * {@code package-info.java}.
+ * Marks a Java package as part of the public API of the component around it.
+ * Place this annotation in the package's {@code package-info.java}.
  *
- * <p>Use this when a component's API lives in named sub-packages
- * that the heuristics would not automatically promote — e.g. when
- * the sub-package is neither named {@code api}/{@code ports} nor
- * contains interfaces at the top level.
+ * <p>Packages named {@code api} or {@code spi} are public without it. Use it for
+ * a contract package with another name, sub-packages included. Without a component
+ * around the package, its parent package becomes one.
+ *
+ * <p>On the root package of a component it makes the classes of exactly this
+ * package public, sub-packages remain private — for components that keep their
+ * API at the root and hide the rest, e.g. in {@code impl}.
  *
  * <pre>{@code
  * // com/acme/payment/contract/package-info.java

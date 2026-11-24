@@ -21,6 +21,7 @@ import de.weigend.s202.domain.impl.ComponentArchitectureBuilder;
 import de.weigend.s202.reader.DependencyModel;
 import org.junit.jupiter.api.Test;
 
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -34,86 +35,194 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 class ComponentArchitectureBuilderTest {
 
     @Test
-    void detectsComponentApiBypassAndApiImplementationLeaks() {
-        DomainModel domain = domainModel();
+    void apiAndSpiArePublicAndTheRestIsPrivate() {
+        DomainModel domain = new DomainModel();
+        pkgs(domain, "com", "com.acme", "com.acme.payment", "com.acme.payment.api", "com.acme.payment.api.events",
+                "com.acme.payment.spi", "com.acme.payment.store", "com.acme.util");
+        cls(domain, "com.acme.payment.PaymentModule", false, 0, Set.of());
+        cls(domain, "com.acme.payment.api.PaymentDto", false, 0, Set.of());
+        cls(domain, "com.acme.payment.api.events.Paid", false, 0, Set.of());
+        cls(domain, "com.acme.payment.spi.Gateway", true, 0, Set.of());
+        // neither being an interface nor its name makes a class public
+        cls(domain, "com.acme.payment.store.Store", true, 0, Set.of());
+        cls(domain, "com.acme.payment.store.StoreApi", false, 0, Set.of());
+        cls(domain, "com.acme.util.Strings", true, 0, Set.of());
 
-        ComponentArchitecture architecture = new ComponentArchitectureBuilder()
-                .build(domain, ArchitectureAnnotations.empty());
+        ComponentArchitecture architecture = build(domain);
 
-        assertEquals(List.of("com.acme.payment", "com.acme.shipping"),
-                architecture.components().stream()
-                        .map(ComponentArchitecture.ComponentElement::rootPackageFqn)
-                        .toList());
-
-        assertViolation(architecture,
-                "com.acme.web.Controller",
-                "com.acme.payment.internal.PaymentService",
-                ViolationKind.COMPONENT_API_BYPASS);
-        assertViolation(architecture,
-                "com.acme.shipping.ShippingService",
-                "com.acme.payment.internal.PaymentService",
-                ViolationKind.COMPONENT_API_BYPASS);
-        assertViolation(architecture,
-                "com.acme.payment.PaymentApi",
-                "com.acme.payment.internal.PaymentService",
-                ViolationKind.COMPONENT_API_LEAKS_IMPLEMENTATION);
-        assertViolation(architecture,
-                "com.acme.shipping.ShippingApi",
-                "com.acme.payment.internal.PaymentService",
-                ViolationKind.COMPONENT_API_BYPASS);
-        assertViolation(architecture,
-                "com.acme.shipping.ShippingApi",
-                "com.acme.payment.internal.PaymentService",
-                ViolationKind.COMPONENT_API_LEAKS_IMPLEMENTATION);
-
-        assertFalse(hasViolation(architecture,
-                "com.acme.payment.internal.PaymentService",
-                "com.acme.payment.PaymentApi",
-                ViolationKind.COMPONENT_API_LEAKS_IMPLEMENTATION));
-        assertFalse(hasViolation(architecture,
-                "com.acme.shipping.ShippingService",
-                "com.acme.payment.PaymentApi",
-                ViolationKind.COMPONENT_API_BYPASS));
+        assertEquals(List.of("com.acme.payment"), roots(architecture.components()),
+                "a package without api or spi is not a component, even with interfaces");
+        assertEquals(Set.of(
+                "com.acme.payment.api.PaymentDto",
+                "com.acme.payment.api.events.Paid",
+                "com.acme.payment.spi.Gateway"), apiFqns(architecture, "com.acme.payment"));
+        assertEquals(Set.of(
+                "com.acme.payment.PaymentModule",
+                "com.acme.payment.store.Store",
+                "com.acme.payment.store.StoreApi"), implementationClasses(architecture, "com.acme.payment"));
     }
 
     @Test
-    void manualAnnotationsOverrideApiHeuristics() {
-        DomainModel domain = domainModel();
-        ArchitectureAnnotations annotations = new ArchitectureAnnotations(
-                List.of(),
-                Set.of("com.acme.payment.PaymentFacade"),
-                Set.of("com.acme.payment.PaymentApi"),
-                List.of(),
-                List.of());
+    void spiAloneMakesAComponent() {
+        DomainModel domain = new DomainModel();
+        pkgs(domain, "com", "com.acme", "com.acme.importer", "com.acme.importer.spi", "com.acme.importer.csv",
+                "com.acme.util");
+        cls(domain, "com.acme.importer.spi.Format", true, 0, Set.of());
+        cls(domain, "com.acme.importer.csv.CsvFormat", false, 0, Set.of());
 
-        ComponentArchitecture architecture = new ComponentArchitectureBuilder()
-                .build(domain, annotations);
+        assertEquals(Set.of("com.acme.importer.spi.Format"), apiFqns(build(domain), "com.acme.importer"));
+    }
 
-        ComponentArchitecture.ComponentElement payment = architecture.components().stream()
-                .filter(component -> component.rootPackageFqn().equals("com.acme.payment"))
-                .findFirst()
-                .orElseThrow();
-        Set<String> apiFqns = payment.api().stream()
-                .map(Element::fqn)
-                .collect(Collectors.toSet());
+    @Test
+    void accessPastTheContractIsABypassAndAnApiThatUsesTheImplementationLeaksIt() {
+        DomainModel domain = new DomainModel();
+        pkgs(domain, "com", "com.acme", "com.acme.payment", "com.acme.payment.api", "com.acme.payment.store",
+                "com.acme.shipping", "com.acme.shipping.api", "com.acme.web");
+        cls(domain, "com.acme.payment.api.Payment", true, 0, Set.of("com.acme.payment.store.Store"));
+        cls(domain, "com.acme.payment.store.Store", false, 0, Set.of("com.acme.payment.api.Payment"));
+        cls(domain, "com.acme.shipping.api.Shipping", true, 0, Set.of("com.acme.payment.store.Store"));
+        cls(domain, "com.acme.shipping.Shipper", false, 0, Set.of("com.acme.payment.api.Payment"));
+        cls(domain, "com.acme.web.Controller", false, 0,
+                Set.of("com.acme.payment.api.Payment", "com.acme.payment.store.Store"));
 
-        assertTrue(apiFqns.contains("com.acme.payment.PaymentFacade"));
-        assertFalse(apiFqns.contains("com.acme.payment.PaymentApi"));
+        assertEquals(Set.of(
+                "LEAKS com.acme.payment.api.Payment -> com.acme.payment.store.Store",
+                "BYPASS com.acme.shipping.api.Shipping -> com.acme.payment.store.Store",
+                "LEAKS com.acme.shipping.api.Shipping -> com.acme.payment.store.Store",
+                "BYPASS com.acme.web.Controller -> com.acme.payment.store.Store"),
+                violations(build(domain)));
+    }
+
+    @Test
+    void componentsNestToAnyDepth() {
+        ComponentArchitecture architecture = build(nestedModel());
+
+        assertEquals(List.of("com.acme.repo"), roots(architecture.components()));
+        ComponentArchitecture.ComponentElement repo = architecture.components().get(0);
+        assertEquals(List.of("com.acme.repo.adapter.solr"), roots(repo.components()),
+                "the plain package adapter in between does not matter");
+        ComponentArchitecture.ComponentElement solr = repo.components().get(0);
+        assertEquals(List.of("com.acme.repo.adapter.solr.embedded"), roots(solr.components()));
+        assertEquals(List.of("com.acme.repo", "com.acme.repo.adapter.solr", "com.acme.repo.adapter.solr.embedded"),
+                roots(architecture.allComponents()));
+
+        assertEquals(Set.of("com.acme.repo.api.Repo"), apiFqns(architecture, "com.acme.repo"),
+                "the api of an inner component is private in the outer one");
+        assertEquals(Set.of("com.acme.repo.adapter.solr.api.Solr"),
+                apiFqns(architecture, "com.acme.repo.adapter.solr"));
+        assertTrue(implementationClasses(architecture, "com.acme.repo").containsAll(Set.of(
+                "com.acme.repo.adapter.solr.api.Solr", "com.acme.repo.adapter.solr.SolrClient")),
+                "an inner component is part of the body with all of its content");
+    }
+
+    @Test
+    void everyBoundaryOnTheWayInIsChecked() {
+        assertEquals(Set.of(
+                // outside: the api of an inner component is as private as the rest of repo
+                "BYPASS com.acme.web.Controller -> com.acme.repo.adapter.solr.api.Solr",
+                "BYPASS com.acme.web.Controller -> com.acme.repo.RepoService",
+                // inside repo: its neighbours reach solr through its api only
+                "BYPASS com.acme.repo.RepoService -> com.acme.repo.adapter.solr.SolrClient",
+                // two boundaries at once
+                "BYPASS com.acme.repo.RepoService -> com.acme.repo.adapter.solr.embedded.api.Embedded",
+                // repo's api must not show what only repo may see
+                "LEAKS com.acme.repo.api.Repo -> com.acme.repo.adapter.solr.api.Solr"),
+                violations(build(nestedModel())));
+    }
+
+    @Test
+    void aContractPackageIsPublicAsAWhole() {
+        DomainModel domain = new DomainModel();
+        pkgs(domain, "com", "com.acme", "com.acme.log", "com.acme.log.api", "com.acme.log.api.spi",
+                "com.acme.log.api.format", "com.acme.log.api.format.api", "com.acme.util");
+        cls(domain, "com.acme.log.api.Logger", true, 0, Set.of());
+        cls(domain, "com.acme.log.api.spi.Provider", true, 0, Set.of());
+        cls(domain, "com.acme.log.api.format.Format", true, 0, Set.of());
+        cls(domain, "com.acme.log.api.format.api.Layout", true, 0, Set.of());
+
+        ComponentArchitecture architecture = build(domain);
+
+        assertEquals(List.of("com.acme.log"), roots(architecture.allComponents()));
+        assertEquals(4, apiFqns(architecture, "com.acme.log").size());
+    }
+
+    @Test
+    void aComponentInsideAPlainPackageIsAnOutermostOne() {
+        DomainModel domain = new DomainModel();
+        pkgs(domain, "com", "com.acme", "com.acme.toolkit", "com.acme.toolkit.tree", "com.acme.toolkit.tree.api",
+                "com.acme.toolkit.chart", "com.acme.web");
+        cls(domain, "com.acme.toolkit.tree.api.Tree", true, 0, Set.of());
+        cls(domain, "com.acme.toolkit.tree.TreeModel", false, 0, Set.of());
+        cls(domain, "com.acme.toolkit.chart.Chart", false, 0, Set.of());
+        cls(domain, "com.acme.web.Controller", false, 0, Set.of(
+                "com.acme.toolkit.tree.api.Tree", "com.acme.toolkit.tree.TreeModel", "com.acme.toolkit.chart.Chart"));
+
+        ComponentArchitecture architecture = build(domain);
+
+        assertEquals(List.of("com.acme.toolkit.tree"), roots(architecture.components()));
+        assertEquals(Set.of("BYPASS com.acme.web.Controller -> com.acme.toolkit.tree.TreeModel"),
+                violations(architecture));
+    }
+
+    @Test
+    void manualMarksOverrideTheConvention() {
+        DomainModel domain = new DomainModel();
+        pkgs(domain, "com", "com.acme", "com.acme.payment", "com.acme.payment.api", "com.acme.payment.store",
+                "com.acme.util");
+        cls(domain, "com.acme.payment.api.Payment", true, 0, Set.of());
+        cls(domain, "com.acme.payment.api.Internal", true, 0, Set.of());
+        cls(domain, "com.acme.payment.store.Store", false, 0, Set.of());
+
+        ComponentArchitecture architecture = new ComponentArchitectureBuilder().build(domain,
+                ArchitectureAnnotations.empty()
+                        .withComponentApiIncluded("com.acme.payment.store")
+                        .withComponentApiExcluded("com.acme.payment.api.Internal"));
+
+        assertEquals(Set.of("com.acme.payment.api.Payment", "com.acme.payment.store.Store"),
+                apiFqns(architecture, "com.acme.payment"));
+    }
+
+    @Test
+    void aManualMarkBelongsToTheInnermostComponentAroundTheMarkedElement() {
+        ComponentArchitecture marksClass = new ComponentArchitectureBuilder().build(nestedModel(),
+                ArchitectureAnnotations.empty().withComponentApiIncluded("com.acme.repo.adapter.solr.SolrClient"));
+        assertEquals(Set.of("com.acme.repo.adapter.solr.SolrClient", "com.acme.repo.adapter.solr.api.Solr"),
+                apiFqns(marksClass, "com.acme.repo.adapter.solr"));
+        assertEquals(Set.of("com.acme.repo.api.Repo"), apiFqns(marksClass, "com.acme.repo"));
+
+        // Marking an inner component publishes it in the outer one — with its own api, not its internals.
+        ComponentArchitecture marksComponent = new ComponentArchitectureBuilder().build(nestedModel(),
+                ArchitectureAnnotations.empty().withComponentApiIncluded("com.acme.repo.adapter.solr"));
+        assertEquals(Set.of("com.acme.repo.api.Repo", "com.acme.repo.adapter.solr"),
+                apiFqns(marksComponent, "com.acme.repo"));
+        assertEquals(Set.of("com.acme.repo.adapter.solr.api.Solr"),
+                apiFqns(marksComponent, "com.acme.repo.adapter.solr"));
+        assertFalse(violations(marksComponent)
+                .contains("BYPASS com.acme.web.Controller -> com.acme.repo.adapter.solr.api.Solr"));
+        assertEquals(Set.of("com.acme.repo.RepoService"), implementationClasses(marksComponent, "com.acme.repo"));
+    }
+
+    @Test
+    void manualIncludeMakesAPackageWithoutContractAComponent() {
+        DomainModel domain = new DomainModel();
+        pkgs(domain, "com", "com.acme", "com.acme.payment", "com.acme.payment.impl", "com.acme.util");
+        cls(domain, "com.acme.payment.PaymentFacade", false, 0, Set.of());
+        cls(domain, "com.acme.payment.impl.PaymentService", true, 0, Set.of());
+        assertTrue(build(domain).components().isEmpty(), "impl alone is no contract");
+
+        ComponentArchitecture architecture = new ComponentArchitectureBuilder().build(domain,
+                ArchitectureAnnotations.empty().withComponentApiIncluded("com.acme.payment.PaymentFacade"));
+
+        assertEquals(List.of("com.acme.payment"), roots(architecture.components()));
+        assertEquals(Set.of("com.acme.payment.PaymentFacade"), apiFqns(architecture, "com.acme.payment"));
     }
 
     @Test
     void jpmsExportsMarkExactPackageClassesAsApi() {
-        DomainModel domain = jpmsDomainModel();
-        DependencyModel rawModel = jpmsRawModel();
-
         ComponentArchitecture architecture = new ComponentArchitectureBuilder()
-                .build(new ArchitectureContext(rawModel, domain, ArchitectureAnnotations.empty()));
+                .build(new ArchitectureContext(jpmsRawModel(), jpmsDomainModel(), ArchitectureAnnotations.empty()));
 
-        Set<String> apiFqns = apiFqns(architecture, "com.acme.payment");
-        assertTrue(apiFqns.contains("com.acme.payment.contract.PaymentFacade"));
-        assertTrue(apiFqns.contains("com.acme.payment.PaymentApi"));
-        assertFalse(apiFqns.contains("com.acme.payment.contract.internal.InternalDto"));
-        assertFalse(apiFqns.contains("com.acme.payment.reflect.ReflectionHook"));
+        assertEquals(Set.of("com.acme.payment.contract.PaymentFacade"), apiFqns(architecture, "com.acme.payment"));
     }
 
     @Test
@@ -144,139 +253,36 @@ class ComponentArchitectureBuilderTest {
     }
 
     @Test
+    void s202ApiOnTheRootPackageMakesExactlyThisPackagePublic() {
+        DomainModel domain = new DomainModel();
+        pkgs(domain, "com", "com.acme", "com.acme.payment", "com.acme.payment.impl", "com.acme.util");
+        cls(domain, "com.acme.payment.PaymentFacade", false, 0, Set.of());
+        cls(domain, "com.acme.payment.impl.PaymentService", true, 0, Set.of());
+        DependencyModel rawModel = new DependencyModel();
+        rawModel.addComponentAnnotatedPackage("com.acme.payment");
+        assertEquals(Set.of(), apiFqns(build(domain, rawModel), "com.acme.payment"));
+
+        rawModel.addApiAnnotatedPackage("com.acme.payment");
+
+        assertEquals(Set.of("com.acme.payment.PaymentFacade"), apiFqns(build(domain, rawModel), "com.acme.payment"));
+    }
+
+    @Test
     void s202PackageAnnotationPreventsComponentDetection() {
         DomainModel domain = new DomainModel();
-        pkg(domain, "com", 0);
-        pkg(domain, "com.acme", 0);
-        pkg(domain, "com.acme.ui", 1);
-        pkg(domain, "com.acme.payment", 1);
-        pkg(domain, "com.acme.payment.impl", 0);
-        cls(domain, "com.acme.ui.MainView", true, 1, Set.of());
-        cls(domain, "com.acme.payment.impl.PaymentService", false, 1, Set.of());
-
+        pkgs(domain, "com", "com.acme", "com.acme.ui", "com.acme.ui.spi", "com.acme.payment", "com.acme.payment.api");
+        cls(domain, "com.acme.ui.spi.View", true, 0, Set.of());
+        cls(domain, "com.acme.payment.api.Payment", true, 0, Set.of());
         DependencyModel rawModel = new DependencyModel();
         rawModel.addPlainPackage("com.acme.ui");
 
-        ComponentArchitecture architecture = new ComponentArchitectureBuilder()
-                .build(new ArchitectureContext(rawModel, domain, ArchitectureAnnotations.empty()));
-
-        List<String> roots = architecture.components().stream()
-                .map(ComponentArchitecture.ComponentElement::rootPackageFqn)
-                .toList();
-        assertFalse(roots.contains("com.acme.ui"),
-                "@S202Package must prevent heuristic component detection");
-        assertTrue(roots.contains("com.acme.payment"),
-                "non-excluded package with impl sub-package should still be detected");
-    }
-
-    @Test
-    void packageWithImplSubPackageIsDetectedAsComponentRoot() {
-        DomainModel domain = new DomainModel();
-        pkg(domain, "com", 0);
-        pkg(domain, "com.acme", 0);
-        pkg(domain, "com.acme.payment", 1);
-        pkg(domain, "com.acme.payment.impl", 0);
-        pkg(domain, "com.acme.catalog", 1);
-        // payment has only an impl sub-package — no interfaces, no *Api classes
-        cls(domain, "com.acme.payment.impl.PaymentService", false, 1, Set.of());
-        cls(domain, "com.acme.catalog.CatalogService", false, 1, Set.of());
-
-        ComponentArchitecture architecture = new ComponentArchitectureBuilder()
-                .build(domain, ArchitectureAnnotations.empty());
-
-        List<String> roots = architecture.components().stream()
-                .map(ComponentArchitecture.ComponentElement::rootPackageFqn)
-                .toList();
-        assertTrue(roots.contains("com.acme.payment"),
-                "package with impl sub-package should be detected as component root");
-    }
-
-    @Test
-    void nonInterfaceClassesArePromotedToApiWhenPackageHasImplSubPackage() {
-        DomainModel domain = new DomainModel();
-        pkg(domain, "com", 0);
-        pkg(domain, "com.acme", 0);
-        pkg(domain, "com.acme.payment", 1);
-        pkg(domain, "com.acme.payment.impl", 0);
-        pkg(domain, "com.acme.catalog", 1);
-        // Money is not an interface, but co-located with an impl sub-package → becomes API
-        cls(domain, "com.acme.payment.Money", false, 1, Set.of());
-        cls(domain, "com.acme.payment.impl.PaymentService", false, 1, Set.of());
-        cls(domain, "com.acme.catalog.CatalogService", false, 1, Set.of());
-
-        ComponentArchitecture architecture = new ComponentArchitectureBuilder()
-                .build(domain, ArchitectureAnnotations.empty());
-
-        Set<String> apiFqns = apiFqns(architecture, "com.acme.payment");
-        assertTrue(apiFqns.contains("com.acme.payment.Money"),
-                "non-interface class alongside impl sub-package should be promoted to API");
-        assertFalse(apiFqns.contains("com.acme.payment.impl.PaymentService"));
-    }
-
-    @Test
-    void nonInterfaceClassesArePromotedToApiWhenPackageContainsInterface() {
-        DomainModel domain = new DomainModel();
-        pkg(domain, "com", 0);
-        pkg(domain, "com.acme", 0);
-        pkg(domain, "com.acme.payment", 1);
-        pkg(domain, "com.acme.payment.internal", 0);
-        pkg(domain, "com.acme.catalog", 1);
-        // PaymentPort is an interface → all siblings at this level become API
-        cls(domain, "com.acme.payment.PaymentPort", true, 2, Set.of());
-        cls(domain, "com.acme.payment.Money", false, 1, Set.of());
-        // Sub-package class is NOT promoted — each package is evaluated independently
-        cls(domain, "com.acme.payment.internal.PaymentService", false, 1, Set.of());
-        cls(domain, "com.acme.catalog.CatalogService", false, 1, Set.of());
-
-        ComponentArchitecture architecture = new ComponentArchitectureBuilder()
-                .build(domain, ArchitectureAnnotations.empty());
-
-        Set<String> apiFqns = apiFqns(architecture, "com.acme.payment");
-        assertTrue(apiFqns.contains("com.acme.payment.PaymentPort"));
-        assertTrue(apiFqns.contains("com.acme.payment.Money"));
-        assertFalse(apiFqns.contains("com.acme.payment.internal.PaymentService"));
-    }
-
-    @Test
-    void implementationPackageInterfacesAreNotPromotedToApiByHeuristic() {
-        DomainModel domain = jpmsDomainModel();
-        cls(domain, "com.acme.payment.impl.MultiWindowManager", true, 1, Set.of());
-        cls(domain, "com.acme.payment.impl.DragNDropManager", true, 1, Set.of());
-        cls(domain, "com.acme.payment.impl.ViewContainerAreaFactory", true, 1, Set.of());
-        DependencyModel rawModel = jpmsRawModel();
-
-        ComponentArchitecture architecture = new ComponentArchitectureBuilder()
-                .build(new ArchitectureContext(rawModel, domain, ArchitectureAnnotations.empty()));
-
-        Set<String> apiFqns = apiFqns(architecture, "com.acme.payment");
-        assertFalse(apiFqns.contains("com.acme.payment.impl.MultiWindowManager"));
-        assertFalse(apiFqns.contains("com.acme.payment.impl.DragNDropManager"));
-        assertFalse(apiFqns.contains("com.acme.payment.impl.ViewContainerAreaFactory"));
-        assertTrue(apiFqns.contains("com.acme.payment.contract.PaymentFacade"));
-    }
-
-    @Test
-    void manualIncludeCanStillPromoteImplementationPackageInterface() {
-        DomainModel domain = jpmsDomainModel();
-        cls(domain, "com.acme.payment.impl.ExtensionPoint", true, 1, Set.of());
-        DependencyModel rawModel = jpmsRawModel();
-        ArchitectureAnnotations annotations = new ArchitectureAnnotations(
-                List.of(),
-                Set.of("com.acme.payment.impl.ExtensionPoint"),
-                Set.of(),
-                List.of(),
-                List.of());
-
-        ComponentArchitecture architecture = new ComponentArchitectureBuilder()
-                .build(new ArchitectureContext(rawModel, domain, annotations));
-
-        Set<String> apiFqns = apiFqns(architecture, "com.acme.payment");
-        assertTrue(apiFqns.contains("com.acme.payment.impl.ExtensionPoint"));
+        assertEquals(List.of("com.acme.payment"), roots(build(domain, rawModel).allComponents()));
     }
 
     @Test
     void manualApiExcludesOverrideJpmsExports() {
         DomainModel domain = jpmsDomainModel();
+        cls(domain, "com.acme.payment.contract.PaymentDto", false, 1, Set.of());
         DependencyModel rawModel = jpmsRawModel();
         ArchitectureAnnotations annotations = new ArchitectureAnnotations(
                 List.of(),
@@ -290,12 +296,123 @@ class ComponentArchitectureBuilderTest {
 
         Set<String> apiFqns = apiFqns(architecture, "com.acme.payment");
         assertFalse(apiFqns.contains("com.acme.payment.contract.PaymentFacade"));
-        assertTrue(apiFqns.contains("com.acme.payment.PaymentApi"));
+        assertTrue(apiFqns.contains("com.acme.payment.contract.PaymentDto"));
+    }
+
+    /* ----- what-if moves ------------------------------------------------------ */
+
+    @Test
+    void movesChangeTheViolationsButNotTheComponents() {
+        ComponentArchitecture moved = moved(move("com.acme.web.Controller", "com.acme.repo", false));
+
+        assertEquals(Set.of(), bypassesOf(moved, "com.acme.web.Controller", "com.acme.repo.RepoService"),
+                "inside repo it may use what is private there");
+        assertEquals(apiFqns(build(nestedModel()), "com.acme.repo"), apiFqns(moved, "com.acme.repo"));
+        assertEquals(implementationClasses(build(nestedModel()), "com.acme.repo"),
+                implementationClasses(moved, "com.acme.repo"));
+    }
+
+    @Test
+    void aMovedClassIsWhereItWasDropped() {
+        // private class of repo, dropped into the api of the inner component: solr's code may use it ...
+        ComponentArchitecture api = moved(move("com.acme.repo.RepoService", "com.acme.repo.adapter.solr", true));
+        assertEquals(Set.of(), bypassesOf(api, "com.acme.repo.adapter.solr.SolrClient", "com.acme.repo.RepoService"));
+        // ... and it may use solr's internals, but not those of the component inside
+        assertEquals(Set.of(), bypassesOf(api, "com.acme.repo.RepoService", "com.acme.repo.adapter.solr.SolrClient"));
+        assertTrue(violations(api).contains(
+                "LEAKS com.acme.repo.RepoService -> com.acme.repo.adapter.solr.SolrClient"));
+
+        // out of the component into a plain package: free to use, but a stranger to repo
+        ComponentArchitecture out = moved(move("com.acme.repo.RepoService", "com.acme.web", false));
+        assertEquals(Set.of(), bypassesOf(out, "com.acme.web.Controller", "com.acme.repo.RepoService"));
+        assertEquals(Set.of("BYPASS com.acme.repo.RepoService -> com.acme.repo.adapter.solr.api.Solr"),
+                bypassesOf(out, "com.acme.repo.RepoService", "com.acme.repo.adapter.solr.api.Solr"));
+    }
+
+    @Test
+    void theLastMoveCountsAndMovingBackRestoresTheViolations() {
+        ComponentArchitecture back = moved(
+                move("com.acme.web.Controller", "com.acme.repo", false),
+                move("com.acme.web.Controller", "com.acme.web", false));
+
+        assertEquals(violations(build(nestedModel())), violations(back));
+    }
+
+    @Test
+    void aMoveInsideItsComponentKeepsTheSideOfTheElement() {
+        // an api class shown in the api package stays public, a private class stays private
+        ComponentArchitecture moved = moved(
+                move("com.acme.repo.RepoService", "com.acme.repo.adapter", false));
+
+        assertTrue(violations(moved).contains("BYPASS com.acme.web.Controller -> com.acme.repo.RepoService"));
+    }
+
+    @Test
+    void aMovedPackageTakesItsClassesAndComponentsAlong() {
+        // solr leaves repo: its own api is what the rest of the world may use now
+        ComponentArchitecture moved = moved(move("com.acme.repo.adapter.solr", "com.acme.web", false));
+
+        assertEquals(Set.of(), bypassesOf(moved, "com.acme.web.Controller", "com.acme.repo.adapter.solr.api.Solr"));
+        assertEquals(Set.of("BYPASS com.acme.repo.adapter.solr.SolrClient -> com.acme.repo.RepoService"),
+                bypassesOf(moved, "com.acme.repo.adapter.solr.SolrClient", "com.acme.repo.RepoService"));
+    }
+
+    @Test
+    void aPlannedPackageIsAComponentOfItsOwn() {
+        ComponentMoves hidden = new ComponentMoves(
+                List.of(move("com.acme.repo.RepoService", "virtual-1", false)), Set.of("virtual-1"));
+        assertEquals(Set.of("BYPASS com.acme.web.Controller -> com.acme.repo.RepoService"),
+                bypassesOf(moved(hidden), "com.acme.web.Controller", "com.acme.repo.RepoService"));
+
+        ComponentMoves published = new ComponentMoves(
+                List.of(move("com.acme.repo.RepoService", "virtual-1", true)), Set.of("virtual-1"));
+        assertEquals(Set.of(),
+                bypassesOf(moved(published), "com.acme.web.Controller", "com.acme.repo.RepoService"));
+
+        ComponentMoves deleted = new ComponentMoves(
+                List.of(move("com.acme.repo.RepoService", "virtual-1", true)), Set.of());
+        assertEquals(violations(build(nestedModel())), violations(moved(deleted)),
+                "a move into a package that is gone is void");
+    }
+
+    @Test
+    void aNameThatExistsAtTheDestinationDoesNotMixUpTheElements() {
+        DomainModel domain = new DomainModel();
+        pkgs(domain, "com", "com.acme", "com.acme.a", "com.acme.a.api", "com.acme.b", "com.acme.b.api", "com.acme.c");
+        cls(domain, "com.acme.a.api.Service", false, 0, Set.of());
+        cls(domain, "com.acme.b.api.Service", false, 0, Set.of());
+        cls(domain, "com.acme.c.Client", false, 0, Set.of("com.acme.a.api.Service", "com.acme.b.api.Service"));
+
+        // the api package of a becomes private in b, next to the api package b has
+        ComponentArchitecture moved = new ComponentArchitectureBuilder().build(
+                domain, ArchitectureAnnotations.empty(), null,
+                new ComponentMoves(List.of(move("com.acme.a.api", "com.acme.b", false)), Set.of()));
+
+        assertEquals(Set.of("BYPASS com.acme.c.Client -> com.acme.a.api.Service"), violations(moved));
+    }
+
+    private static ComponentMoves.Move move(String element, String container, boolean api) {
+        return new ComponentMoves.Move(element, container, api);
+    }
+
+    private static ComponentArchitecture moved(ComponentMoves.Move... moves) {
+        return moved(new ComponentMoves(List.of(moves), Set.of()));
+    }
+
+    private static ComponentArchitecture moved(ComponentMoves moves) {
+        return new ComponentArchitectureBuilder().build(
+                nestedModel(), ArchitectureAnnotations.empty(), null, moves);
+    }
+
+    private static Set<String> bypassesOf(ComponentArchitecture architecture, String source, String target) {
+        return violations(architecture).stream()
+                .filter(("BYPASS " + source + " -> " + target)::equals)
+                .collect(Collectors.toSet());
     }
 
     @Test
     void componentProjectionDoesNotMutateCalculatedLevels() {
-        DomainModel domain = domainModel();
+        DomainModel domain = nestedModel();
         Map<String, Integer> before = classLevels(domain);
 
         new ComponentArchitectureBuilder().build(domain, ArchitectureAnnotations.empty());
@@ -303,32 +420,55 @@ class ComponentArchitectureBuilderTest {
         assertEquals(before, classLevels(domain));
     }
 
-    private static void assertViolation(ComponentArchitecture architecture,
-                                        String source,
-                                        String target,
-                                        ViolationKind kind) {
-        assertTrue(hasViolation(architecture, source, target, kind),
-                () -> "Missing " + kind + " violation: " + source + " -> " + target);
+    private static ComponentArchitecture build(DomainModel domain) {
+        return new ComponentArchitectureBuilder().build(domain, ArchitectureAnnotations.empty());
     }
 
-    private static boolean hasViolation(ComponentArchitecture architecture,
-                                        String source,
-                                        String target,
-                                        ViolationKind kind) {
+    private static ComponentArchitecture build(DomainModel domain, DependencyModel rawModel) {
+        return new ComponentArchitectureBuilder().build(domain, ArchitectureAnnotations.empty(), rawModel);
+    }
+
+    private static List<String> roots(List<ComponentArchitecture.ComponentElement> components) {
+        return components.stream().map(ComponentArchitecture.ComponentElement::rootPackageFqn).toList();
+    }
+
+    private static Set<String> violations(ComponentArchitecture architecture) {
         return architecture.violations().stream()
-                .anyMatch(v -> v.sourceFqn().equals(source)
-                        && v.targetFqn().equals(target)
-                        && v.kind() == kind);
+                .map(v -> (v.kind() == ViolationKind.COMPONENT_API_BYPASS ? "BYPASS " : "LEAKS ")
+                        + v.sourceFqn() + " -> " + v.targetFqn())
+                .collect(Collectors.toSet());
     }
 
-    private static Set<String> apiFqns(ComponentArchitecture architecture, String rootPackageFqn) {
-        ComponentArchitecture.ComponentElement component = architecture.components().stream()
+    private static ComponentArchitecture.ComponentElement component(ComponentArchitecture architecture,
+                                                                    String rootPackageFqn) {
+        return architecture.allComponents().stream()
                 .filter(c -> c.rootPackageFqn().equals(rootPackageFqn))
                 .findFirst()
                 .orElseThrow();
-        return component.api().stream()
+    }
+
+    private static Set<String> apiFqns(ComponentArchitecture architecture, String rootPackageFqn) {
+        return component(architecture, rootPackageFqn).api().stream()
                 .map(Element::fqn)
                 .collect(Collectors.toSet());
+    }
+
+    private static Set<String> implementationClasses(ComponentArchitecture architecture, String rootPackageFqn) {
+        Set<String> classes = new HashSet<>();
+        collectClasses(component(architecture, rootPackageFqn).implementationRows(), classes);
+        return classes;
+    }
+
+    private static void collectClasses(List<List<Element>> rows, Set<String> classes) {
+        for (List<Element> row : rows) {
+            for (Element element : row) {
+                if (element instanceof Element.PackageElement pkg) {
+                    collectClasses(pkg.rows(), classes);
+                } else {
+                    classes.add(element.fqn());
+                }
+            }
+        }
     }
 
     private static Map<String, Integer> classLevels(DomainModel domain) {
@@ -339,28 +479,29 @@ class ComponentArchitectureBuilderTest {
         return result;
     }
 
-    private static DomainModel domainModel() {
+    /** repo contains solr, solr contains embedded. */
+    private static DomainModel nestedModel() {
         DomainModel model = new DomainModel();
-
-        pkg(model, "com", 0);
-        pkg(model, "com.acme", 0);
-        pkg(model, "com.acme.payment", 1);
-        pkg(model, "com.acme.payment.internal", 0);
-        pkg(model, "com.acme.shipping", 1);
-        pkg(model, "com.acme.web", 2);
-
-        cls(model, "com.acme.payment.PaymentApi", true, 2,
-                Set.of("com.acme.payment.internal.PaymentService"));
-        cls(model, "com.acme.payment.PaymentFacade", false, 2, Set.of());
-        cls(model, "com.acme.payment.internal.PaymentService", false, 1,
-                Set.of("com.acme.payment.PaymentApi"));
-        cls(model, "com.acme.shipping.ShippingApi", true, 2,
-                Set.of("com.acme.payment.internal.PaymentService"));
-        cls(model, "com.acme.shipping.ShippingService", false, 1,
-                Set.of("com.acme.payment.PaymentApi", "com.acme.payment.internal.PaymentService"));
-        cls(model, "com.acme.web.Controller", false, 3,
-                Set.of("com.acme.payment.internal.PaymentService"));
-
+        pkgs(model, "com", "com.acme", "com.acme.repo", "com.acme.repo.api", "com.acme.repo.adapter",
+                "com.acme.repo.adapter.solr", "com.acme.repo.adapter.solr.api",
+                "com.acme.repo.adapter.solr.embedded", "com.acme.repo.adapter.solr.embedded.api", "com.acme.web");
+        cls(model, "com.acme.repo.api.Repo", true, 0, Set.of("com.acme.repo.adapter.solr.api.Solr"));
+        cls(model, "com.acme.repo.RepoService", false, 0, Set.of(
+                "com.acme.repo.api.Repo",
+                "com.acme.repo.adapter.solr.api.Solr",
+                "com.acme.repo.adapter.solr.SolrClient",
+                "com.acme.repo.adapter.solr.embedded.api.Embedded"));
+        cls(model, "com.acme.repo.adapter.solr.api.Solr", true, 0, Set.of());
+        // inner code sees the private part of the components around it
+        cls(model, "com.acme.repo.adapter.solr.SolrClient", false, 0, Set.of(
+                "com.acme.repo.RepoService",
+                "com.acme.repo.adapter.solr.embedded.api.Embedded"));
+        cls(model, "com.acme.repo.adapter.solr.embedded.api.Embedded", true, 0,
+                Set.of("com.acme.repo.adapter.solr.SolrClient"));
+        cls(model, "com.acme.web.Controller", false, 0, Set.of(
+                "com.acme.repo.api.Repo",
+                "com.acme.repo.RepoService",
+                "com.acme.repo.adapter.solr.api.Solr"));
         return model;
     }
 
@@ -392,6 +533,12 @@ class ComponentArchitectureBuilderTest {
         module.addOpenedPackage("com.acme.payment.reflect", Set.of());
         model.addModule(module);
         return model;
+    }
+
+    private static void pkgs(DomainModel model, String... fqns) {
+        for (String fqn : fqns) {
+            pkg(model, fqn, 0);
+        }
     }
 
     private static void pkg(DomainModel model, String fqn, int level) {

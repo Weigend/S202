@@ -98,6 +98,16 @@ final class ComponentStyleView implements StyleView {
     }
 
     @Override
+    public Map<String, String> plannedPackages() {
+        return planner.plannedPackages();
+    }
+
+    @Override
+    public void resetPlanned() {
+        planner.reset();
+    }
+
+    @Override
     public List<MenuItem> contextMenuItems() {
         return planner.contextMenuItems();
     }

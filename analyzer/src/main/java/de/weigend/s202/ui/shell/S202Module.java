@@ -39,9 +39,11 @@ import de.weigend.s202.ui.core.model.ArchitectureNodeBuilder;
 import de.weigend.s202.ui.core.model.ArchitectureNodeCloner;
 import de.weigend.s202.ui.core.platform.AnalysisDocument;
 import de.weigend.s202.ui.core.platform.ArchitectureViewManager;
+import de.weigend.s202.ui.core.platform.ArchitecturePngExporter;
 import de.weigend.s202.ui.core.platform.Dialogs;
 import de.weigend.s202.ui.core.platform.ProgressPublisher;
 import de.weigend.s202.ui.core.platform.RecentDirectories;
+import de.weigend.s202.ui.core.platform.Refactorings;
 import de.weigend.s202.ui.core.platform.ArchitectureWfxView;
 import de.weigend.s202.ui.core.events.CutTangleEdgeEvent;
 import de.weigend.s202.ui.core.events.CutTangleEdgesEvent;
@@ -149,13 +151,17 @@ public class S202Module implements Module {
     private final AnalysisPipeline pipeline;
     private final SourceOpenController sourceOpen;
     private final ProjectPersistenceController persistence;
+    private final ArchitectureImageExportController imageExport;
+    private final RefactoringController refactoring;
     private final SessionLayout sessionLayout = new SessionLayout();
 
     @jakarta.inject.Inject
     public S202Module(ApplicationWindow applicationWindow,
                       ProgressPublisher progressPublisher,
                       ArchitectureViewManager viewManager,
-                      RecentDirectories recentDirs) {
+                      RecentDirectories recentDirs,
+                      ArchitecturePngExporter pngExporter,
+                      Refactorings refactorings) {
         this.applicationWindow = applicationWindow;
         this.progressPublisher = progressPublisher;
         this.viewManager = viewManager;
@@ -165,10 +171,16 @@ public class S202Module implements Module {
         this.sourceOpen = new SourceOpenController(
                 pipeline, progressPublisher, recentDirs, () -> applicationWindow.getStage());
         this.toolbar = new ToolbarController(
-                applicationWindow, viewManager, () -> sourceOpen.openAnyChooser());
+                applicationWindow, viewManager, () -> sourceOpen.openAnyChooser(),
+                () -> publish(new MenuRequestEvent.ExportCurrentGraphic(this)),
+                () -> publish(new MenuRequestEvent.ResetRefactorings(this)));
         this.persistence = new ProjectPersistenceController(
                 viewManager, progressPublisher, recentDirs,
                 () -> applicationWindow.getStage(), this::appVersion);
+        this.imageExport = new ArchitectureImageExportController(
+                viewManager, pngExporter, recentDirs, progressPublisher, () -> applicationWindow.getStage());
+        this.refactoring = new RefactoringController(
+                viewManager, refactorings, recentDirs, progressPublisher, () -> applicationWindow.getStage());
     }
 
     @Override
@@ -196,6 +208,11 @@ public class S202Module implements Module {
             Thread.currentThread().interrupt();
             throw new PlatformException("Interrupted while delaying S202 preload", e);
         }
+    }
+
+    @SuppressWarnings("unchecked")
+    private static void publish(EventObject event) {
+        ((EventBus<EventObject>) Lookup.lookup(EventBus.class)).publish(event);
     }
 
     private void publishStatus(String message) {
@@ -260,6 +277,10 @@ public class S202Module implements Module {
         bus.subscribe(MenuRequestEvent.SaveProject.class, ev -> { persistence.saveProject(); return true; });
         bus.subscribe(MenuRequestEvent.LoadProject.class, ev -> { persistence.loadProject(); return true; });
         bus.subscribe(MenuRequestEvent.CloseProject.class, ev -> { persistence.closeProject(); return true; });
+        bus.subscribe(MenuRequestEvent.ExportCurrentGraphic.class, ev -> { imageExport.exportCurrentGraphic(); return true; });
+        bus.subscribe(MenuRequestEvent.ExportRefactoringReport.class, ev -> { refactoring.exportRefactoringReport(); return true; });
+        bus.subscribe(MenuRequestEvent.ExportViolations.class, ev -> { refactoring.exportViolations(); return true; });
+        bus.subscribe(MenuRequestEvent.ResetRefactorings.class, ev -> { refactoring.resetRefactorings(); return true; });
         bus.subscribe(MenuRequestEvent.Exit.class, ev -> { Platform.exit(); return true; });
         bus.subscribe(MenuRequestEvent.NewView.class, ev -> { viewManager.newArchitectureWindow(); return true; });
         bus.subscribe(MenuRequestEvent.OpenComponentView.class, ev -> { viewManager.openStyleView(ArchitectureKind.COMPONENT); return true; });

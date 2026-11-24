@@ -65,6 +65,22 @@ public abstract class MenuRequestEvent extends EventObject {
         public ExportQualityReport(Object source) { super(source); }
     }
 
+    public static final class ExportCurrentGraphic extends MenuRequestEvent {
+        public ExportCurrentGraphic(Object source) { super(source); }
+    }
+
+    public static final class ExportRefactoringReport extends MenuRequestEvent {
+        public ExportRefactoringReport(Object source) { super(source); }
+    }
+
+    public static final class ExportViolations extends MenuRequestEvent {
+        public ExportViolations(Object source) { super(source); }
+    }
+
+    public static final class ResetRefactorings extends MenuRequestEvent {
+        public ResetRefactorings(Object source) { super(source); }
+    }
+
     public static final class OpenCity3DView extends MenuRequestEvent {
         public OpenCity3DView(Object source) { super(source); }
     }

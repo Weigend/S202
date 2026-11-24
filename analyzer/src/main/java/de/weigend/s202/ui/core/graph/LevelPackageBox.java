@@ -64,12 +64,6 @@ public class LevelPackageBox extends VBox implements GraphSelection.Selectable, 
     public static final double PLAIN_SIBLING_GAP = 26.0;
     private static final double LEVEL_GAP = 6.0;
     private static final double SIBLING_GAP = 10.0;
-    /**
-     * Width up to which a box grows to fill its level row while its width is
-     * limited ({@link #setLimitRowWidth(boolean)}). A box whose content is
-     * wider keeps the width of its content; the row centres what is left.
-     */
-    public static final double MAX_ROW_FILL_WIDTH = 240.0;
     private static final Color PACKAGE_COLOR = Color.web("#e6c46a");
 
     private Label toggleIcon;
@@ -180,6 +174,14 @@ public class LevelPackageBox extends VBox implements GraphSelection.Selectable, 
         }
     }
 
+    @Override
+    public VBox rowStack(boolean api) {
+        // Rows may be about to be inserted: the package's own content must
+        // exist first, or a later lazy build would land on top of them.
+        materialize();
+        return contentContainer;
+    }
+
     /** Returns the VBox row-stack that holds this package's child rows. */
     public VBox getContentContainer() {
         return contentContainer;
@@ -223,6 +225,7 @@ public class LevelPackageBox extends VBox implements GraphSelection.Selectable, 
      * added to — the width only up to {@link #MAX_ROW_FILL_WIDTH} while it is
      * limited. A plain box keeps the size of its content.
      */
+    @Override
     public void fillRow() {
         if (plain) {
             return;
@@ -240,6 +243,7 @@ public class LevelPackageBox extends VBox implements GraphSelection.Selectable, 
      * subtree does not stretch it into a bar — what a large system needs.
      * Takes effect with the next layout pass, no rebuild required.
      */
+    @Override
     public void setLimitRowWidth(boolean limit) {
         if (limitRowWidth == limit) {
             return;
@@ -248,6 +252,7 @@ public class LevelPackageBox extends VBox implements GraphSelection.Selectable, 
         requestLayout();
     }
 
+    @Override
     public boolean isLimitRowWidth() {
         return limitRowWidth;
     }
@@ -416,7 +421,7 @@ public class LevelPackageBox extends VBox implements GraphSelection.Selectable, 
             return hbox;
         });
 
-        if (node instanceof LevelPackageBox box) {
+        if (node instanceof ContainerBox box) {
             box.fillRow();
         }
         levelRow.getChildren().add(node);

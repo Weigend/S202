@@ -22,6 +22,7 @@ import de.weigend.s202.domain.architecture.ArchitectureContext;
 import de.weigend.s202.domain.architecture.ArchitectureKind;
 import de.weigend.s202.domain.architecture.ArchitectureStyle;
 import de.weigend.s202.domain.architecture.ComponentArchitecture;
+import de.weigend.s202.domain.architecture.ComponentMoves;
 import de.weigend.s202.domain.architecture.Element;
 import de.weigend.s202.domain.architecture.Tangle;
 import de.weigend.s202.domain.architecture.Violation;
@@ -33,12 +34,11 @@ import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashMap;
 import java.util.HashSet;
-import java.util.LinkedHashMap;
-import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
+import java.util.function.UnaryOperator;
 
 /**
  * Builds the component architecture projection and its policy findings from
@@ -57,7 +57,7 @@ public final class ComponentArchitectureBuilder implements ArchitectureStyle {
     @Override
     public ComponentArchitecture build(ArchitectureContext context) {
         Objects.requireNonNull(context, "context cannot be null");
-        return build(context.domainModel(), context.annotations(), context.rawModel());
+        return build(context.domainModel(), context.annotations(), context.rawModel(), context.componentMoves());
     }
 
     public ComponentArchitecture build(DomainModel domain, ArchitectureAnnotations annotations) {
@@ -67,168 +67,137 @@ public final class ComponentArchitectureBuilder implements ArchitectureStyle {
     public ComponentArchitecture build(DomainModel domain,
                                        ArchitectureAnnotations annotations,
                                        DependencyModel rawModel) {
+        return build(domain, annotations, rawModel, ComponentMoves.none());
+    }
+
+    /** The components of the analyzed code; the violations are those after {@code moves}. */
+    public ComponentArchitecture build(DomainModel domain,
+                                       ArchitectureAnnotations annotations,
+                                       DependencyModel rawModel,
+                                       ComponentMoves moves) {
         Objects.requireNonNull(domain, "domain cannot be null");
         ArchitectureAnnotations effectiveAnnotations =
                 annotations == null ? ArchitectureAnnotations.empty() : annotations;
-        ComponentApiClassifier classifier = new ComponentApiClassifier(effectiveAnnotations, rawModel);
         ModelIndex index = ModelIndex.of(domain);
+        ComponentStructure structure = ComponentStructure.of(
+                index.packages().keySet(),
+                skipTransparentPassthroughs(index),
+                effectiveAnnotations,
+                ComponentStructure.Declarations.of(rawModel));
 
-        List<ComponentRoot> roots = componentRoots(index, effectiveAnnotations, classifier, rawModel);
-        List<ComponentArchitecture.ComponentElement> components = new ArrayList<>();
-        Map<String, Membership> membershipByClass = new LinkedHashMap<>();
-
-        for (ComponentRoot root : roots) {
-            List<CalculatedElementInfo> apiClasses = selectedApiClasses(root.rootPackageFqn(), index, classifier);
-            Set<String> apiFqns = new LinkedHashSet<>();
-            List<Element> api = new ArrayList<>(apiClasses.size());
-            for (CalculatedElementInfo cls : apiClasses) {
-                apiFqns.add(cls.fullName);
-                api.add(new Element.ClassElement(cls.fullName, cls.architectureLevel, cls.localLevel));
+        Map<String, List<ComponentStructure.Component>> innerComponents = new HashMap<>();
+        List<ComponentStructure.Component> outermost = new ArrayList<>();
+        for (ComponentStructure.Component component : structure.components()) {
+            if (component.parent() == null) {
+                outermost.add(component);
+            } else {
+                innerComponents.computeIfAbsent(component.parent().rootFqn(), k -> new ArrayList<>())
+                        .add(component);
             }
-            List<List<Element>> implementationRows =
-                    buildImplementationRows(root.rootPackageFqn(), index, apiFqns);
-            components.add(new ComponentArchitecture.ComponentElement(
-                    root.id(), root.displayName(), root.rootPackageFqn(), api, implementationRows));
-            registerMembership(root.rootPackageFqn(), index, apiFqns, membershipByClass);
         }
+        Map<String, List<CalculatedElementInfo>> classesByComponent = new HashMap<>();
+        for (CalculatedElementInfo cls : index.classes().values()) {
+            ComponentStructure.Component component = structure.componentOf(cls.fullName);
+            if (component != null) {
+                classesByComponent.computeIfAbsent(component.rootFqn(), k -> new ArrayList<>()).add(cls);
+            }
+        }
+
+        // Rows first, then names: the order the packages have in the other projections.
+        outermost.sort(Comparator
+                .comparingInt((ComponentStructure.Component c) -> localLevel(c, index)).reversed()
+                .thenComparing(ComponentStructure.Component::rootFqn));
+        List<ComponentArchitecture.ComponentElement> components = outermost.stream()
+                .map(component -> toComponentElement(
+                        component, structure, index, innerComponents, classesByComponent))
+                .toList();
 
         return new ComponentArchitectureModel(
                 components,
-                detectViolations(domain, membershipByClass),
+                detectViolations(domain, index, structure, effectiveAnnotations, rawModel, moves),
                 detectTangles(domain));
     }
 
-    private List<ComponentRoot> componentRoots(ModelIndex index,
-                                               ArchitectureAnnotations annotations,
-                                               ComponentApiClassifier classifier,
-                                               DependencyModel rawModel) {
-        Map<String, ComponentRoot> roots = new LinkedHashMap<>();
-        String effectiveRoot = skipTransparentPassthroughs(index);
-        Set<String> plainPackages = rawModel != null ? rawModel.getPlainPackages() : Set.of();
-        for (CalculatedElementInfo child : sortedChildren(index, effectiveRoot)) {
-            if (!"PACKAGE".equals(child.type)) {
-                continue;
-            }
-            if (plainPackages.contains(child.fullName)) {
-                continue;
-            }
-            boolean hasApiClasses = !selectedApiClasses(child.fullName, index, classifier).isEmpty();
-            boolean hasImplSubPackage = hasDirectImplSubPackage(child.fullName, index);
-            if (hasApiClasses || hasImplSubPackage) {
-                roots.put(child.fullName, new ComponentRoot(
-                        child.fullName, child.simpleName, child.fullName));
-            }
-        }
-        if (rawModel != null) {
-            for (String packageFqn : rawModel.getComponentAnnotatedPackages()) {
-                CalculatedElementInfo pkg = index.packages().get(packageFqn);
-                if (pkg != null) {
-                    roots.putIfAbsent(packageFqn, new ComponentRoot(
-                            pkg.simpleName, pkg.simpleName, packageFqn));
-                }
-            }
-        }
-        for (ArchitectureAnnotations.ComponentSpec spec : annotations.components()) {
-            CalculatedElementInfo pkg = index.packages().get(spec.rootPackageFqn());
-            if (pkg != null) {
-                roots.putIfAbsent(spec.rootPackageFqn(), new ComponentRoot(
-                        spec.id(), spec.displayName(), spec.rootPackageFqn()));
-            }
-        }
-        return List.copyOf(roots.values());
+    private static int localLevel(ComponentStructure.Component component, ModelIndex index) {
+        return index.packages().get(component.rootFqn()).localLevel;
     }
 
-    private static List<CalculatedElementInfo> selectedApiClasses(String rootPackageFqn,
-                                                                  ModelIndex index,
-                                                                  ComponentApiClassifier classifier) {
-        List<CalculatedElementInfo> api = new ArrayList<>();
-        collectSelectedApiClasses(rootPackageFqn, index, classifier, false, false, api);
-        api.sort(Comparator.comparing(c -> c.fullName, String.CASE_INSENSITIVE_ORDER));
-        return api;
-    }
-
-    private static void collectSelectedApiClasses(String parentFqn,
-                                                  ModelIndex index,
-                                                  ComponentApiClassifier classifier,
-                                                  boolean inheritedApiPackage,
-                                                  boolean inheritedImplementationPackage,
-                                                  List<CalculatedElementInfo> api) {
-        List<CalculatedElementInfo> children = sortedChildren(index, parentFqn);
-        // Promote all direct classes to API if the package signals it is a component:
-        // either by containing interfaces (public contract) or by having an impl sub-package
-        // (explicit API/impl split). Neither signal propagates into sub-packages.
-        boolean packageHasInterfaces = !inheritedImplementationPackage
-                && children.stream().anyMatch(c -> "CLASS".equals(c.type) && c.interfaceType);
-        boolean packageHasImplSubPackage = !inheritedImplementationPackage
-                && children.stream().anyMatch(c -> "PACKAGE".equals(c.type)
-                && ComponentApiClassifier.isImplementationPackageName(c.simpleName));
-        boolean promoteToApi = packageHasInterfaces || packageHasImplSubPackage;
-        for (CalculatedElementInfo child : children) {
-            boolean inApiPackage = inheritedApiPackage
-                    || ("PACKAGE".equals(child.type)
-                    && (ComponentApiClassifier.isApiPackageName(child.simpleName)
-                        || classifier.isApiAnnotatedPackage(child.fullName)));
-            boolean inImplementationPackage = inheritedImplementationPackage
-                    || ("PACKAGE".equals(child.type)
-                    && ComponentApiClassifier.isImplementationPackageName(child.simpleName));
-            if ("CLASS".equals(child.type)) {
-                if (classifier.isSelectedApiClass(
-                        child.fullName,
-                        child.simpleName,
-                        child.interfaceType,
-                        inApiPackage || promoteToApi,
-                        inImplementationPackage)) {
-                    api.add(child);
-                }
-            } else {
-                collectSelectedApiClasses(
-                        child.fullName,
-                        index,
-                        classifier,
-                        inApiPackage,
-                        inImplementationPackage,
-                        api);
+    private static ComponentArchitecture.ComponentElement toComponentElement(
+            ComponentStructure.Component component,
+            ComponentStructure structure,
+            ModelIndex index,
+            Map<String, List<ComponentStructure.Component>> innerComponents,
+            Map<String, List<CalculatedElementInfo>> classesByComponent) {
+        List<ComponentStructure.Component> inner =
+                innerComponents.getOrDefault(component.rootFqn(), List.of());
+        List<Element> api = new ArrayList<>();
+        for (CalculatedElementInfo cls : classesByComponent.getOrDefault(component.rootFqn(), List.of())) {
+            if (structure.isInContract(component, cls.fullName)) {
+                api.add(classElement(cls));
             }
         }
-    }
+        for (ComponentStructure.Component child : inner) {
+            if (structure.isPackageInContract(component, child.rootFqn())) {
+                api.add(wholePackage(index.packages().get(child.rootFqn()), index));
+            }
+        }
+        api.sort(Comparator.comparing(Element::fqn, String.CASE_INSENSITIVE_ORDER));
 
-    private static List<List<Element>> buildImplementationRows(String rootPackageFqn,
-                                                               ModelIndex index,
-                                                               Set<String> apiFqns) {
-        List<Element> sortedElements = new ArrayList<>();
-        for (CalculatedElementInfo child : sortedChildren(index, rootPackageFqn)) {
-            Element element = toImplementationElement(child, index, apiFqns);
+        List<Element> implementation = new ArrayList<>();
+        for (CalculatedElementInfo child : sortedChildren(index, component.rootFqn())) {
+            Element element = toImplementationElement(child, component, structure, index);
             if (element != null) {
-                sortedElements.add(element);
+                implementation.add(element);
             }
         }
-        return groupByLocalLevel(sortedElements);
+        return new ComponentArchitecture.ComponentElement(
+                component.id(),
+                component.displayName(),
+                component.rootFqn(),
+                api,
+                groupByLocalLevel(implementation),
+                inner.stream()
+                        .map(child -> toComponentElement(
+                                child, structure, index, innerComponents, classesByComponent))
+                        .toList());
     }
 
+    /** The private part of {@code info} in {@code component}, {@code null} when all of it is public. */
     private static Element toImplementationElement(CalculatedElementInfo info,
-                                                   ModelIndex index,
-                                                   Set<String> apiFqns) {
+                                                   ComponentStructure.Component component,
+                                                   ComponentStructure structure,
+                                                   ModelIndex index) {
         if ("CLASS".equals(info.type)) {
-            return apiFqns.contains(info.fullName)
-                    ? null
-                    : new Element.ClassElement(info.fullName, info.architectureLevel, info.localLevel);
+            return structure.isInContract(component, info.fullName) ? null : classElement(info);
         }
-
+        if (structure.componentWithRoot(info.fullName) != null) {
+            return structure.isPackageInContract(component, info.fullName) ? null : wholePackage(info, index);
+        }
         List<Element> children = new ArrayList<>();
         for (CalculatedElementInfo child : sortedChildren(index, info.fullName)) {
-            Element childElement = toImplementationElement(child, index, apiFqns);
+            Element childElement = toImplementationElement(child, component, structure, index);
             if (childElement != null) {
                 children.add(childElement);
             }
         }
-        if (children.isEmpty()) {
-            return null;
+        return children.isEmpty() ? null : packageElement(info, children);
+    }
+
+    private static Element wholePackage(CalculatedElementInfo info, ModelIndex index) {
+        List<Element> children = new ArrayList<>();
+        for (CalculatedElementInfo child : sortedChildren(index, info.fullName)) {
+            children.add("CLASS".equals(child.type) ? classElement(child) : wholePackage(child, index));
         }
+        return packageElement(info, children);
+    }
+
+    private static Element classElement(CalculatedElementInfo info) {
+        return new Element.ClassElement(info.fullName, info.architectureLevel, info.localLevel);
+    }
+
+    private static Element packageElement(CalculatedElementInfo info, List<Element> children) {
         return new Element.PackageElement(
-                info.fullName,
-                info.architectureLevel,
-                info.localLevel,
-                groupByLocalLevel(children));
+                info.fullName, info.architectureLevel, info.localLevel, groupByLocalLevel(children));
     }
 
     private static List<List<Element>> groupByLocalLevel(List<Element> elements) {
@@ -254,73 +223,83 @@ public final class ComponentArchitectureBuilder implements ArchitectureStyle {
         return rows;
     }
 
-    private static void registerMembership(String rootPackageFqn,
-                                           ModelIndex index,
-                                           Set<String> apiFqns,
-                                           Map<String, Membership> membershipByClass) {
-        for (CalculatedElementInfo cls : index.classes().values()) {
-            if (isInPackage(cls.fullName, rootPackageFqn)) {
-                Membership membership = new Membership(rootPackageFqn, apiFqns.contains(cls.fullName));
-                Membership previous = membershipByClass.putIfAbsent(cls.fullName, membership);
-                if (previous != null && !previous.componentRootFqn().equals(rootPackageFqn)) {
-                    throw new IllegalArgumentException(
-                            "Class belongs to overlapping components: " + cls.fullName);
-                }
-            }
+    private static List<Violation> detectViolations(DomainModel domain,
+                                                    ModelIndex index,
+                                                    ComponentStructure structure,
+                                                    ArchitectureAnnotations annotations,
+                                                    DependencyModel rawModel,
+                                                    ComponentMoves moves) {
+        if (moves == null || moves.moves().isEmpty()) {
+            return detectViolations(domain, structure, fqn -> fqn);
         }
+        MovedComponents moved = new MovedComponents(
+                structure,
+                index.packages().keySet(),
+                index.classes().keySet(),
+                topLevelPackage(index, structure),
+                annotations,
+                ComponentStructure.Declarations.of(rawModel),
+                moves);
+        return detectViolations(domain, moved.structure(), moved::nameOf);
     }
 
+    /** The package whose children the view shows at top level: it does not look into a component. */
+    private static String topLevelPackage(ModelIndex index, ComponentStructure structure) {
+        String current = skipTransparentPassthroughs(index);
+        for (String fqn = current; !fqn.isEmpty(); fqn = parentOf(fqn)) {
+            if (structure.componentWithRoot(fqn) != null) {
+                current = parentOf(fqn);
+            }
+        }
+        return current;
+    }
+
+    /** @param nameOf the name of an element in {@code structure} */
     private static List<Violation> detectViolations(DomainModel domain,
-                                                    Map<String, Membership> membershipByClass) {
+                                                    ComponentStructure structure,
+                                                    UnaryOperator<String> nameOf) {
         List<Violation> violations = new ArrayList<>();
         for (CalculatedElementInfo source : domain.getAllClasses().values()) {
-            Membership sourceMembership = membershipByClass.get(source.fullName);
+            String sourceName = nameOf.apply(source.fullName);
+            ComponentStructure.Component sourceComponent = structure.componentOf(sourceName);
+            boolean sourceIsApi = sourceComponent != null
+                    && structure.isInContract(sourceComponent, sourceName);
             for (String dep : source.dependencies) {
-                Membership targetMembership = membershipByClass.get(dep);
-                if (targetMembership == null) {
+                if (domain.getClass(dep) == null) {
                     continue;
                 }
-                CalculatedElementInfo target = domain.getClass(dep);
-                int targetLevel = target == null ? -1 : target.architectureLevel;
-                boolean sourceIsApi = sourceMembership != null && sourceMembership.api();
-                boolean targetIsImplementation = !targetMembership.api();
-
-                if (sourceIsApi && targetIsImplementation) {
-                    violations.add(new Violation(
-                            source.fullName,
-                            dep,
-                            ViolationKind.COMPONENT_API_LEAKS_IMPLEMENTATION,
-                            source.architectureLevel,
-                            targetLevel,
-                            domain.isClassBackEdge(source.fullName, dep)));
+                boolean bypass = structure.bypassesContract(sourceName, nameOf.apply(dep));
+                // An API that reaches into a foreign implementation exposes that one.
+                if (structure.leaksImplementation(sourceName, nameOf.apply(dep)) || (sourceIsApi && bypass)) {
+                    violations.add(violation(
+                            domain, source, dep, ViolationKind.COMPONENT_API_LEAKS_IMPLEMENTATION));
                 }
-
-                boolean foreignTarget = sourceMembership == null
-                        || !sourceMembership.componentRootFqn().equals(targetMembership.componentRootFqn());
-                if (foreignTarget && targetIsImplementation) {
-                    violations.add(new Violation(
-                            source.fullName,
-                            dep,
-                            ViolationKind.COMPONENT_API_BYPASS,
-                            source.architectureLevel,
-                            targetLevel,
-                            domain.isClassBackEdge(source.fullName, dep)));
+                if (bypass) {
+                    violations.add(violation(domain, source, dep, ViolationKind.COMPONENT_API_BYPASS));
                 }
             }
         }
         return violations;
     }
 
+    private static Violation violation(DomainModel domain,
+                                       CalculatedElementInfo source,
+                                       String targetFqn,
+                                       ViolationKind kind) {
+        CalculatedElementInfo target = domain.getClass(targetFqn);
+        return new Violation(
+                source.fullName,
+                targetFqn,
+                kind,
+                source.architectureLevel,
+                target == null ? -1 : target.architectureLevel,
+                domain.isClassBackEdge(source.fullName, targetFqn));
+    }
+
     private static List<Tangle> detectTangles(DomainModel domain) {
         return domain.getPackageTangles().stream()
                 .map(Tangle::new)
                 .toList();
-    }
-
-    private static boolean hasDirectImplSubPackage(String packageFqn, ModelIndex index) {
-        return sortedChildren(index, packageFqn).stream()
-                .anyMatch(c -> "PACKAGE".equals(c.type)
-                        && ComponentApiClassifier.isImplementationPackageName(c.simpleName));
     }
 
     private static String skipTransparentPassthroughs(ModelIndex index) {
@@ -345,22 +324,12 @@ public final class ComponentArchitectureBuilder implements ArchitectureStyle {
         return children;
     }
 
-    private static boolean isInPackage(String classFqn, String packageFqn) {
-        return classFqn != null
-                && packageFqn != null
-                && classFqn.startsWith(packageFqn + ".");
-    }
-
     private static String parentOf(String fqn) {
         if (fqn == null || !fqn.contains(".")) {
             return "";
         }
         return fqn.substring(0, fqn.lastIndexOf('.'));
     }
-
-    private record ComponentRoot(String id, String displayName, String rootPackageFqn) {}
-
-    private record Membership(String componentRootFqn, boolean api) {}
 
     private record ModelIndex(
             Map<String, CalculatedElementInfo> classes,

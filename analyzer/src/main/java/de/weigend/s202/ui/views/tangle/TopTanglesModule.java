@@ -31,6 +31,7 @@ import de.weigend.s202.ui.core.platform.ViewDescriptor;
 import de.weigend.s202.ui.core.events.CutTangleEdgeEvent;
 import de.weigend.s202.ui.core.events.CutTangleEdgesEvent;
 import de.weigend.s202.ui.core.events.OpenTangleEvent;
+import de.weigend.s202.ui.core.events.RefactoringsResetEvent;
 import de.weigend.s202.ui.core.events.RestoreTangleEdgeEvent;
 import de.weigend.s202.ui.features.outline.OutlineExplorerView;
 import io.softwareecg.wfx.lookup.api.Lookup;
@@ -175,6 +176,11 @@ public class TopTanglesModule implements Module {
             if (tangleTabs.restorePreviewCut(viewManager.documentFor(ev.getSource()), ev.getFrom(), ev.getTo())) {
                 requestScopeRefresh();
             }
+            return true;
+        });
+
+        bus.subscribe(RefactoringsResetEvent.class, ev -> {
+            requestScopeRefresh();
             return true;
         });
 

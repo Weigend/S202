@@ -19,6 +19,7 @@ import de.weigend.s202.ui.core.graph.ElementLookup;
 import de.weigend.s202.domain.architecture.ArchitectureKind;
 import de.weigend.s202.domain.architecture.WhatIfArchitecture;
 import de.weigend.s202.ui.core.graph.ArchitectureDragController;
+import de.weigend.s202.ui.core.graph.ContainerBox;
 import de.weigend.s202.ui.core.graph.GraphSelection;
 import de.weigend.s202.ui.core.graph.LevelClassBox;
 import de.weigend.s202.ui.core.graph.LevelPackageBox;
@@ -63,6 +64,9 @@ public final class WhatIfEditController {
         void addToApi(String fqn);
 
         void removeFromApi(String fqn);
+
+        /** Root of the innermost component {@code fqn} is the root of or lies in; {@code null} if none. */
+        String componentOf(String fqn);
     }
 
     // What-If layer: drives the orange "moved" glow on the affected boxes.
@@ -123,16 +127,21 @@ public final class WhatIfEditController {
         if (movedFqcn == null || movedFqcn.isEmpty()) {
             return;
         }
-        if (viewStyle.get() == ArchitectureKind.COMPONENT
-                && handleComponentApiDrop(movedSource, movedFqcn, destinationRow)) {
-            return;
-        }
         String destinationContainerFqcn = resolveDestinationContainer(destinationRow);
         if (destinationContainerFqcn == null) {
             return;
         }
+        boolean componentView = viewStyle.get() == ArchitectureKind.COMPONENT;
+        boolean api = componentView && de.weigend.s202.ui.core.graph.BoxTags.isApiDropTarget(destinationRow);
+        if (componentView
+                && staysInItsComponent(movedFqcn, destinationContainerFqcn)
+                && handleComponentApiDrop(movedSource, movedFqcn, destinationRow)) {
+            return;
+        }
+        // The component view has no what-if model: recording the move is what
+        // updates its violations.
         WhatIfArchitecture wif = whatIf.get();
-        if (wif == null) {
+        if (wif == null && !componentView) {
             return;
         }
         if (!(destinationRow.getParent() instanceof VBox stack)) {
@@ -143,19 +152,42 @@ public final class WhatIfEditController {
             return;
         }
         if (wasNewRow) {
-            undoManager.record(new WhatIfUndoManager.Move.AsNewRow(movedFqcn, destinationContainerFqcn, rowIndex));
-            wif.moveElementAsNewRow(movedFqcn, destinationContainerFqcn, rowIndex);
+            undoManager.record(new WhatIfUndoManager.Move.AsNewRow(
+                    movedFqcn, destinationContainerFqcn, rowIndex, api));
+            if (wif != null) {
+                wif.moveElementAsNewRow(movedFqcn, destinationContainerFqcn, rowIndex);
+            }
         } else {
             int colIndex = destinationRow.getChildren().indexOf(movedSource);
             if (colIndex < 0) {
                 return;
             }
-            undoManager.record(new WhatIfUndoManager.Move.InRow(movedFqcn, destinationContainerFqcn, rowIndex, colIndex));
-            wif.moveElement(movedFqcn, destinationContainerFqcn, rowIndex, colIndex);
+            undoManager.record(new WhatIfUndoManager.Move.InRow(
+                    movedFqcn, destinationContainerFqcn, rowIndex, colIndex, api));
+            if (wif != null) {
+                wif.moveElement(movedFqcn, destinationContainerFqcn, rowIndex, colIndex);
+            }
         }
         movedFqns.add(movedFqcn);
         arrowsCoalescer.markDirty();
         status.accept(buildWhatIfStatusMessage(movedFqcn, destinationContainerFqcn));
+    }
+
+    /**
+     * Whether the drop leaves the element in the component it belongs to. Only
+     * then crossing the line between API and implementation changes what the
+     * component publishes; anything else moves the element somewhere else.
+     */
+    private boolean staysInItsComponent(String movedFqcn, String destinationContainerFqcn) {
+        String current = undoManager.effectiveMoves().stream()
+                .filter(move -> move.fqn().equals(movedFqcn))
+                .reduce((first, second) -> second)
+                .map(WhatIfUndoManager.Move::containerFqn)
+                .orElse(movedFqcn);
+        String home = apiAnnotator.componentOf(movedFqcn);
+        return home != null
+                && home.equals(apiAnnotator.componentOf(current))
+                && home.equals(apiAnnotator.componentOf(destinationContainerFqcn));
     }
 
     private boolean handleComponentApiDrop(Node movedSource, String movedFqcn, HBox destinationRow) {
@@ -165,8 +197,8 @@ public final class WhatIfEditController {
             return false;
         }
         if (apiDestination && apiSource) {
-            arrowsCoalescer.markDirty();
-            return true;
+            // Stays public; at most it changes its place or its package.
+            return false;
         }
         if (apiDestination) {
             apiAnnotator.addToApi(movedFqcn);
@@ -199,8 +231,8 @@ public final class WhatIfEditController {
     private static String resolveDestinationContainer(Node row) {
         Node n = row == null ? null : row.getParent();
         while (n != null) {
-            if (n instanceof LevelPackageBox lpb) {
-                String fqcn = lpb.getFullName();
+            if (n instanceof ContainerBox box) {
+                String fqcn = box.getFullName();
                 return fqcn == null ? "" : fqcn;
             }
             if (n.getProperties().get("s202.whatif.rootFqcn") instanceof String) {
@@ -219,7 +251,7 @@ public final class WhatIfEditController {
     /* ----- Undo / Redo ------------------------------------------------------ */
 
     public void undo() {
-        if (whatIf.get() == null) return;
+        if (!canEdit()) return;
         List<WhatIfUndoManager.Move> remaining = undoManager.decrement();
         if (remaining == null) return;
         boolean violations = showWhatIfViolations.get();
@@ -230,34 +262,37 @@ public final class WhatIfEditController {
     }
 
     public void redo() {
-        if (whatIf.get() == null) return;
+        if (!canEdit()) return;
         WhatIfUndoManager.Move m = undoManager.increment();
         if (m == null) return;
         applyMoveToScene(m);
         arrowsCoalescer.markDirty();
     }
 
-    private VBox findRowStack(String containerFqn) {
+    private boolean canEdit() {
+        return whatIf.get() != null || viewStyle.get() == ArchitectureKind.COMPONENT;
+    }
+
+    /** Draws the recorded moves again after the component view was rebuilt. */
+    public void replayMoves() {
+        undoManager.effectiveMoves().forEach(this::applyMoveToScene);
+    }
+
+    private VBox findRowStack(String containerFqn, boolean api) {
         if (containerFqn == null || containerFqn.isEmpty()) {
             return rootContainer.get();
         }
         Node container = ElementLookup.materialize(elementRegistry, containerFqn);
-        if (container instanceof LevelPackageBox lpb) {
-            // Rows are about to be inserted: the package's own content must
-            // exist first, or a later lazy build would land on top of them.
-            lpb.materialize();
-            return lpb.getContentContainer();
-        }
-        return null;
+        return container instanceof ContainerBox box ? box.rowStack(api) : null;
     }
 
     private void applyMoveToScene(WhatIfUndoManager.Move move) {
         Node node = ElementLookup.materialize(elementRegistry, move.fqn());
         if (node == null) return;
-        VBox stack = findRowStack(move.containerFqn());
+        VBox stack = findRowStack(move.containerFqn(), move.api());
         if (stack == null) return;
         WhatIfArchitecture wif = whatIf.get();
-        if (wif == null) return;
+        if (wif == null && !canEdit()) return;
 
         if (node.getParent() instanceof HBox srcRow) {
             srcRow.getChildren().remove(node);
@@ -277,17 +312,21 @@ public final class WhatIfEditController {
             int idx = Math.max(0, Math.min(asNewRow.rowIndex(), stack.getChildren().size()));
             stack.getChildren().add(idx, newRow);
             newRow.getChildren().add(node);
-            wif.moveElementAsNewRow(move.fqn(), move.containerFqn(), asNewRow.rowIndex());
+            if (wif != null) {
+                wif.moveElementAsNewRow(move.fqn(), move.containerFqn(), asNewRow.rowIndex());
+            }
         } else if (move instanceof WhatIfUndoManager.Move.InRow inRow) {
             while (stack.getChildren().size() <= inRow.rowIndex()) {
                 HBox gap = new HBox(8);
                 ArchitectureDragController.markAsRow(gap);
                 stack.getChildren().add(gap);
             }
-            HBox targetRow = (HBox) stack.getChildren().get(inRow.rowIndex());
+            if (!(stack.getChildren().get(inRow.rowIndex()) instanceof HBox targetRow)) return;
             int col = Math.max(0, Math.min(inRow.colIndex(), targetRow.getChildren().size()));
             targetRow.getChildren().add(col, node);
-            wif.moveElement(move.fqn(), move.containerFqn(), inRow.rowIndex(), inRow.colIndex());
+            if (wif != null) {
+                wif.moveElement(move.fqn(), move.containerFqn(), inRow.rowIndex(), inRow.colIndex());
+            }
         }
 
         movedFqns.add(move.fqn());

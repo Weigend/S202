@@ -23,15 +23,24 @@ import java.util.Objects;
 /**
  * Immutable input bundle for architecture-style builders. The calculated
  * {@link DomainModel} is the source of levels and dependencies; annotations
- * add user-controlled architectural roles without changing the level model.
+ * add user-controlled architectural roles without changing the level model,
+ * and so do the what-if moves of the component view.
  */
 public record ArchitectureContext(
         DependencyModel rawModel,
         DomainModel domainModel,
-        ArchitectureAnnotations annotations) {
+        ArchitectureAnnotations annotations,
+        ComponentMoves componentMoves) {
+
+    public ArchitectureContext(DependencyModel rawModel,
+                               DomainModel domainModel,
+                               ArchitectureAnnotations annotations) {
+        this(rawModel, domainModel, annotations, ComponentMoves.none());
+    }
 
     public ArchitectureContext {
         Objects.requireNonNull(domainModel, "domainModel cannot be null");
         annotations = annotations == null ? ArchitectureAnnotations.empty() : annotations;
+        componentMoves = componentMoves == null ? ComponentMoves.none() : componentMoves;
     }
 }

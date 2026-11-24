@@ -36,8 +36,8 @@ import javafx.scene.shape.Line;
 import java.util.function.Consumer;
 
 /**
- * Top-level component container for the component architecture projection.
- * Components are not nested; packages remain nested inside the implementation area.
+ * Component container for the component architecture projection.
+ * Packages and further components are nested inside the implementation area.
  */
 public class ComponentBox extends VBox implements GraphSelection.Selectable, de.weigend.s202.ui.core.graph.ContainerBox {
 
@@ -66,6 +66,7 @@ public class ComponentBox extends VBox implements GraphSelection.Selectable, de.
     private final ApiSurfaceBox apiContainer;
     private final VBox apiRowsContainer = new VBox(6);
     private final VBox implementationContainer = new VBox(6);
+    private boolean limitRowWidth;
     private boolean componentExpanded = true;
     private boolean apiExpanded = true;
     private Consumer<String> selectionChangeSink;
@@ -84,7 +85,6 @@ public class ComponentBox extends VBox implements GraphSelection.Selectable, de.
 
         setSpacing(8);
         setPadding(new Insets(8));
-        setMaxWidth(Double.MAX_VALUE);
         setMaxHeight(Double.MAX_VALUE);
         setStyle(STYLE_NORMAL);
         setCursor(Cursor.HAND);
@@ -134,6 +134,11 @@ public class ComponentBox extends VBox implements GraphSelection.Selectable, de.
         apiContainer.getChildren().addAll(apiHeader, apiRowsContainer);
 
         implementationContainer.setPadding(new Insets(4, 0, 0, 0));
+        // Until there is content: room to drop a first private element.
+        VBox emptyImplementation = new VBox(6);
+        emptyImplementation.setMinHeight(16);
+        ArchitectureDragController.markAsRowStack(emptyImplementation);
+        implementationContainer.getChildren().add(emptyImplementation);
 
         componentContentContainer.getChildren().addAll(apiContainer, implementationContainer);
 
@@ -203,6 +208,42 @@ public class ComponentBox extends VBox implements GraphSelection.Selectable, de.
     @Override
     public String getFullName() {
         return fullName;
+    }
+
+    @Override
+    public VBox rowStack(boolean api) {
+        VBox container = api ? apiRowsContainer : implementationContainer;
+        // The content brings its own stack; an empty API area is one itself.
+        return container.getChildren().stream()
+                .filter(VBox.class::isInstance)
+                .map(VBox.class::cast)
+                .findFirst()
+                .orElse(container);
+    }
+
+    @Override
+    public void fillRow() {
+        HBox.setHgrow(this, Priority.ALWAYS);
+    }
+
+    @Override
+    public void setLimitRowWidth(boolean limit) {
+        if (limitRowWidth == limit) {
+            return;
+        }
+        limitRowWidth = limit;
+        requestLayout();
+    }
+
+    @Override
+    public boolean isLimitRowWidth() {
+        return limitRowWidth;
+    }
+
+    /** Grows with its row exactly like a package box. */
+    @Override
+    protected double computeMaxWidth(double height) {
+        return limitRowWidth ? Math.max(prefWidth(height), MAX_ROW_FILL_WIDTH) : Double.MAX_VALUE;
     }
 
     public void setCustomStyles(String normalStyle, String selectedStyle) {

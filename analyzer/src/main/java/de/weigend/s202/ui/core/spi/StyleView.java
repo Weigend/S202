@@ -90,6 +90,15 @@ public interface StyleView {
     default void afterContentBuilt(VBox topLevelContainer) {
     }
 
+    /** Pakete, die der Benutzer in dieser Ansicht geplant hat: Id → Name. */
+    default Map<String, String> plannedPackages() {
+        return Map.of();
+    }
+
+    /** Verwirft, was der Benutzer in dieser Ansicht geplant hat. */
+    default void resetPlanned() {
+    }
+
     /**
      * Stil-spezifische Einträge fürs Kontextmenü des Canvas — pro Öffnen
      * frisch erzeugt. Leer = kein Beitrag.
