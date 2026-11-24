@@ -50,7 +50,7 @@ class InputAnalyzerTest {
     void setUp() {
         analyzer = new InputAnalyzer();
         // Use the test-example JAR file - resolve relative to project root
-        testJarPath = "../test-example/target/test-example-1.3.0.jar";
+        testJarPath = "../test-example/target/test-example-1.4.0.jar";
     }
 
     @Test

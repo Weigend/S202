@@ -26,7 +26,7 @@ Prerequisite for Maven/Gradle projects: `mvn package` or `gradle build` must alr
 ```bash
 mvn clean package -DskipTests
 mvn javafx:run
-# In the UI: File -> Open JAR... -> analyzer/target/s202-code-analyzer-1.3.0.jar
+# In the UI: File -> Open JAR... -> analyzer/target/s202-code-analyzer-1.4.0.jar
 ```
 
 ## Main Features

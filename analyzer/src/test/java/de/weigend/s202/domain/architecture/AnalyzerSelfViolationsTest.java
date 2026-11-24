@@ -48,7 +48,7 @@ import static org.junit.jupiter.api.Assumptions.assumeTrue;
  */
 class AnalyzerSelfViolationsTest {
 
-    private static final String DEFAULT_JAR = "target/s202-code-analyzer-1.3.0.jar";
+    private static final String DEFAULT_JAR = "target/s202-code-analyzer-1.4.0.jar";
 
     @Test
     @EnabledIfSystemProperty(named = "skip.self.violations", matches = "false|FALSE", disabledReason = "set -Dskip.self.violations=false to opt in (default skipped on CI)")
