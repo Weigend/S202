@@ -15,10 +15,11 @@
  */
 package de.weigend.s202.ui.views.tangle;
 
-import de.weigend.s202.ui.views.tangle.TangleEdgeMethodResolver;
 import de.weigend.s202.ui.core.model.TangleFilter;
+import de.weigend.s202.domain.DependencyDetails;
 import de.weigend.s202.domain.DependencyEdge;
 import de.weigend.s202.reader.DependencyModel;
+import de.weigend.s202.ui.core.arrows.DependencySelection;
 import de.weigend.s202.ui.core.arrows.TangleEdgeScope;
 import de.weigend.s202.ui.core.canvas.ArchitectureCanvas;
 import de.weigend.s202.ui.core.model.ArchitectureNode;
@@ -226,8 +227,6 @@ public final class TangleTabController {
         tangleView.setStatusSink(progress::status);
         EventBus<EventObject> bus = Lookup.lookup(EventBus.class);
         tangleView.setOnNodeSelected(fqn -> bus.publish(new NodeSelectionEvent(fqn, tangleView)));
-        tangleView.setOnDependencyEdgeClicked((from, to) ->
-                publishTangleEdgeSelection(bus, tangleView, from, to));
         viewManager.applyStylesheet(tangleView);
         String viewTitle = viewManager.titleOf(document, descriptor.label());
         ArchitectureWfxView wrapper = new ArchitectureWfxView(viewId, viewTitle, tangleView, descriptor);
@@ -273,24 +272,36 @@ public final class TangleTabController {
         return true;
     }
 
-    /* ----- Kanten-Selektion & Kanten-Sammlung -------------------------------- */
+    /* ----- Kanten-Selektion -------------------------------------------------- */
 
-    private void publishTangleEdgeSelection(EventBus<EventObject> bus,
-                                            ArchitectureCanvas tangleView,
-                                            String from,
-                                            String to) {
-        if (from == null) {
+    /**
+     * Shows in the outline what a class arrow selected in a tangle tab calls.
+     * An arrow between packages stands for many classes; the outline has no
+     * single place for it.
+     */
+    @SuppressWarnings("unchecked")
+    public void revealInOutline(DependencySelection selection, ArchitectureCanvas tangleView) {
+        ArchitectureWfxView wrapper = viewManager.wrapperOf(tangleView);
+        if (wrapper == null || wrapper.getTangleKey() == null) {
+            return;
+        }
+        EventBus<EventObject> bus = Lookup.lookup(EventBus.class);
+        if (selection.isEmpty()) {
             bus.publish(new MethodSelectionEvent(null, null, null, tangleView));
             return;
         }
-        TangleEdgeMethodResolver.TargetMethod targetMethod =
-                TangleEdgeMethodResolver.firstTargetMethodCalledByDependency(
-                        tangleView.getRawDependencyModel(), from, to);
-        if (targetMethod != null) {
-            bus.publish(new MethodSelectionEvent(
-                    targetMethod.className(), targetMethod.methodName(), targetMethod.descriptor(), tangleView));
+        if (!selection.isClassDependency()) {
             return;
         }
-        bus.publish(new NodeSelectionEvent(to != null ? to : from, tangleView));
+        String to = selection.to();
+        DependencyDetails.Call call = DependencyDetails.of(
+                tangleView.getRawDependencyModel(), selection.from(), to).mainCall().orElse(null);
+        if (call == null) {
+            bus.publish(new NodeSelectionEvent(to, tangleView));
+            return;
+        }
+        // A descriptor the model does not know would find nothing; the name may.
+        String descriptor = call.declaringClass() == null ? null : call.descriptor();
+        bus.publish(new MethodSelectionEvent(to, call.member(), descriptor, tangleView));
     }
 }

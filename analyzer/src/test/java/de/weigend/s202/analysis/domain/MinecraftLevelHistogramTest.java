@@ -74,7 +74,6 @@ public class MinecraftLevelHistogramTest {
         // Only classes that the level-calc also knows about (same universe).
         Set<String> knownClasses = classes.keySet();
         int totalDeps = 0;
-        // Structural deps only (non-USES) — what LevelCalculator actually uses
         try (PrintWriter pw = new PrintWriter(CSV_DEP)) {
             pw.println("className;depCount;deps");
             for (String name : new TreeSet<>(knownClasses)) {
@@ -82,11 +81,7 @@ public class MinecraftLevelHistogramTest {
                 List<String> deps = new ArrayList<>();
                 if (ci != null) {
                     for (String d : ci.dependencies) {
-                        if (!knownClasses.contains(d)) continue;
-                        // structural = at least one kind that is not USES
-                        java.util.Set<de.weigend.s202.reader.EdgeKind> kinds = ci.getKinds(d);
-                        boolean structural = kinds.stream().anyMatch(k -> k != de.weigend.s202.reader.EdgeKind.USES);
-                        if (structural) deps.add(d);
+                        if (knownClasses.contains(d)) deps.add(d);
                     }
                 }
                 Collections.sort(deps);
@@ -94,8 +89,8 @@ public class MinecraftLevelHistogramTest {
                 pw.println(name + ";" + deps.size() + ";" + String.join("|", deps));
             }
         }
-        System.out.println("Dep  CSV: " + CSV_DEP + " (structural only)");
-        System.out.printf("Total structural edges: %d  (avg %.1f per class)%n",
+        System.out.println("Dep  CSV: " + CSV_DEP);
+        System.out.printf("Total edges: %d  (avg %.1f per class)%n",
                 totalDeps, (double) totalDeps / total);
     }
 }

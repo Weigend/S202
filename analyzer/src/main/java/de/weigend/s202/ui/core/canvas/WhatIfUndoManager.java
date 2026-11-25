@@ -15,6 +15,7 @@
  */
 package de.weigend.s202.ui.core.canvas;
 
+import de.weigend.s202.ui.core.model.WhatIfMove;
 import javafx.beans.property.BooleanProperty;
 import javafx.beans.property.SimpleBooleanProperty;
 
@@ -28,24 +29,13 @@ import java.util.List;
  */
 public final class WhatIfUndoManager {
 
-    public sealed interface Move permits Move.InRow, Move.AsNewRow {
-        String fqn();
-        String containerFqn();
-        int rowIndex();
-        /** Dropped into the API area of a component. */
-        boolean api();
-
-        record InRow(String fqn, String containerFqn, int rowIndex, int colIndex, boolean api) implements Move {}
-        record AsNewRow(String fqn, String containerFqn, int rowIndex, boolean api) implements Move {}
-    }
-
-    private final List<Move> history = new ArrayList<>();
+    private final List<WhatIfMove> history = new ArrayList<>();
     private int cursor = 0;
     private Runnable onChange = () -> {};
     private final BooleanProperty canUndo = new SimpleBooleanProperty(false);
     private final BooleanProperty canRedo = new SimpleBooleanProperty(false);
 
-    public void record(Move move) {
+    public void record(WhatIfMove move) {
         while (history.size() > cursor) {
             history.remove(history.size() - 1);
         }
@@ -55,7 +45,7 @@ public final class WhatIfUndoManager {
     }
 
     /** Decrements the cursor and returns the moves to replay, or null if nothing to undo. */
-    public List<Move> decrement() {
+    public List<WhatIfMove> decrement() {
         if (cursor == 0) return null;
         cursor--;
         sync();
@@ -63,9 +53,9 @@ public final class WhatIfUndoManager {
     }
 
     /** Returns the move to apply for redo, or null if nothing to redo. */
-    public Move increment() {
+    public WhatIfMove increment() {
         if (cursor >= history.size()) return null;
-        Move m = history.get(cursor);
+        WhatIfMove m = history.get(cursor);
         cursor++;
         sync();
         return m;
@@ -84,7 +74,7 @@ public final class WhatIfUndoManager {
     public BooleanProperty canRedoProperty() { return canRedo; }
 
     /** Returns the effective move history up to the current cursor position. */
-    public List<Move> effectiveMoves() {
+    public List<WhatIfMove> effectiveMoves() {
         return List.copyOf(history.subList(0, cursor));
     }
 

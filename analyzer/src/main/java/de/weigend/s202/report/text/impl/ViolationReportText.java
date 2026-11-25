@@ -15,6 +15,7 @@
  */
 package de.weigend.s202.report.text.impl;
 
+import de.weigend.s202.domain.DependencyDetails;
 import de.weigend.s202.domain.DependencyEdge;
 import de.weigend.s202.domain.DomainModel;
 import de.weigend.s202.domain.StronglyConnectedComponent;
@@ -222,7 +223,7 @@ final class ViolationReportText {
             return "";
         }
         List<String> parts = new ArrayList<>();
-        Set<String> methods = calledMethods(info, target);
+        Set<String> methods = calledMethods(source, target);
         Set<EdgeKind> kinds = info.dependencyKinds.get(target);
         if (kinds != null) {
             for (EdgeKind kind : kinds) {
@@ -233,14 +234,11 @@ final class ViolationReportText {
         return String.join("; ", parts);
     }
 
-    private static Set<String> calledMethods(DependencyModel.ClassInfo info, String target) {
+    private Set<String> calledMethods(String source, String target) {
         Set<String> methods = new TreeSet<>();
-        for (DependencyModel.MethodInfo method : info.methods.values()) {
-            for (String call : method.methodCalls.keySet()) {
-                int dot = call.lastIndexOf('.');
-                if (dot > 0 && call.substring(0, dot).equals(target) && !call.endsWith(".<init>")) {
-                    methods.add(call.substring(dot + 1));
-                }
+        for (DependencyDetails.Call call : DependencyDetails.of(input.rawModel(), source, target).calls()) {
+            if (!call.isConstructor()) {
+                methods.add(call.methodName());
             }
         }
         return methods;

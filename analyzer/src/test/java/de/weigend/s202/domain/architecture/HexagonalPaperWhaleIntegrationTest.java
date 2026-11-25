@@ -39,7 +39,25 @@ import static org.junit.jupiter.api.Assumptions.assumeTrue;
  */
 class HexagonalPaperWhaleIntegrationTest {
 
-    private static final String JAR = "../test-hexagon/target/test-hexagon-1.4.0.jar";
+    private static final String JAR = "../test-hexagon/target/test-hexagon-1.5.0.jar";
+
+    /** The levels the README of test-hexagon gives for its packages. */
+    @Test
+    void packageLevelsAreTheOnesOfTheHexagon() throws Exception {
+        assumeTrue(Files.exists(Path.of(JAR)), "test-hexagon jar not built");
+
+        DomainModel domain = new LevelCalculator().calculate(new InputAnalyzer().analyze(JAR));
+
+        Map<String, Integer> expected = Map.ofEntries(
+                Map.entry("domain.publisher", 0), Map.entry("domain.book", 1),
+                Map.entry("domain.inventory", 2), Map.entry("domain.logistics", 2),
+                Map.entry("application.api", 3), Map.entry("application.spi", 3),
+                Map.entry("application.service", 4), Map.entry("platform", 4),
+                Map.entry("persistence", 4), Map.entry("rest", 5), Map.entry("ui", 5),
+                Map.entry("shipping", 5), Map.entry("bootstrap", 6));
+        expected.forEach((name, level) -> assertEquals(level,
+                domain.getPackage("com.paperwhale." + name).architectureLevel, name));
+    }
 
     @Test
     void paperWhaleProjectsFourBusinessThemes() throws Exception {
@@ -74,14 +92,13 @@ class HexagonalPaperWhaleIntegrationTest {
         assertEquals("com.paperwhale.domain.logistics",
                 classes.get("com.paperwhale.rest.TrackingResource").segmentId());
 
-        // Rings stay package-based. Note the level semantics: contract
-        // interfaces (api/spi) sit at architecture level 0 BY DESIGN — they are
-        // the contracts everything rests on — so their packages classify as
-        // CORE here; the view renders them as sockets on the application
-        // boundary regardless of ring.
+        // Rings stay package-based. The contract interfaces (api/spi) name
+        // domain types in their signatures, so they sit above the domain and
+        // classify as APPLICATION; the view renders them as sockets on the
+        // application boundary regardless of ring.
         assertEquals(HexagonalArchitecture.RingRole.CORE,
                 classes.get("com.paperwhale.domain.book.Book").ringRole());
-        assertEquals(HexagonalArchitecture.RingRole.CORE,
+        assertEquals(HexagonalArchitecture.RingRole.APPLICATION,
                 classes.get("com.paperwhale.application.api.SellBookUseCase").ringRole());
         assertEquals(HexagonalArchitecture.RingRole.APPLICATION,
                 classes.get("com.paperwhale.application.service.SalesService").ringRole());
@@ -100,6 +117,14 @@ class HexagonalPaperWhaleIntegrationTest {
                         .noneMatch(violation -> violation.sourceFqn().startsWith("com.paperwhale.persistence.")
                                 && violation.targetFqn().startsWith("com.paperwhale.domain.")),
                 "adapter use of domain model types must not be flagged as port bypass");
+
+        // The packages api and spi are the ports without being marked; what is
+        // left is the composition root, which knows the services it wires.
+        assertTrue(architecture.violations().stream()
+                        .allMatch(violation -> violation.sourceFqn().startsWith("com.paperwhale.bootstrap.")
+                                && violation.targetFqn().startsWith("com.paperwhale.application.service.")),
+                () -> "unexpected violations: " + architecture.violations());
+        assertEquals(4, architecture.violations().size());
 
         assertEquals(HexagonalArchitecture.RingRole.ADAPTER,
                 classes.get("com.paperwhale.persistence.JdbcBookRepository").ringRole());

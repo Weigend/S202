@@ -28,17 +28,24 @@ public enum EdgeKind {
     EXTENDS,
     /** {@code class A implements B} (or interface extension) */
     IMPLEMENTS,
+    /**
+     * Inheritance with a nested class at one end: a class nested in the source
+     * extends or implements the target, or the source inherits from a class
+     * nested in the target. Couples the two, but does not make one a subtype
+     * of the other.
+     */
+    NESTED_INHERITANCE,
     /** Source-level module import — especially relevant for Python module dependencies. */
     IMPORTS,
     /** Constructor invocation — {@code new T(...)} (INVOKESPECIAL on {@code <init>}). */
     INSTANTIATES,
     /** Method invocation on the target class (excluding constructor calls). */
     CALLS,
-    /** Structural reference: field type, method parameter/return type, cast target, or field owner. */
+    /** Any other reference by name: field, parameter or return type, cast, annotation, caught exception … */
     USES;
 
     /** Lower-case label suitable for compact UI rendering ("calls", "extends", …). */
     public String label() {
-        return name().toLowerCase();
+        return name().toLowerCase().replace('_', ' ');
     }
 }

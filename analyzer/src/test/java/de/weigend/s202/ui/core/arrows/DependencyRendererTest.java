@@ -15,11 +15,11 @@
  */
 package de.weigend.s202.ui.core.arrows;
 
+import de.weigend.s202.domain.DependencyEdge;
 import de.weigend.s202.domain.DomainModel;
 import de.weigend.s202.domain.EdgeCycleClassifier;
 import de.weigend.s202.domain.SCCFinder;
 import de.weigend.s202.ui.core.model.ArchitectureNode;
-import de.weigend.s202.ui.core.canvas.ZoomController;
 import io.softwareecg.wfx.lookup.api.Lookup;
 import javafx.scene.input.MouseButton;
 import javafx.scene.input.MouseEvent;
@@ -112,6 +112,70 @@ class DependencyRendererTest {
         arrow.getOnMouseClicked().handle(click(MouseButton.PRIMARY));
 
         assertEquals(List.of("pkg.A>pkg.B", "null>null"), actions.clicks);
+        assertTrue(actions.selections.get(0).isClassDependency());
+        assertTrue(actions.selections.get(1).isEmpty());
+    }
+
+    @Test
+    void selectingTheArrowOfACollapsedPackageReportsTheClassDependenciesBehindIt() {
+        Fixture fixture = fixture();
+        collapsedPackage(fixture);
+        RecordingActions actions = new RecordingActions();
+        fixture.renderer.setEdgeActions(actions);
+        fixture.renderer.drawDependencyArrows(fixture.root);
+
+        aggregateArrow(fixture).getOnMouseClicked().handle(click(MouseButton.PRIMARY));
+
+        DependencySelection selection = actions.selections.get(0);
+        assertEquals("p", selection.from());
+        assertEquals(Set.of(new DependencyEdge("p.X", "pkg.B"), new DependencyEdge("p.Y", "pkg.B")),
+                Set.copyOf(selection.edges()));
+        assertTrue(!selection.isClassDependency(), "nothing to cut as a whole");
+    }
+
+    @Test
+    void dependenciesTheFilterRejectsAreNotDrawn() {
+        Fixture fixture = fixture();
+        fixture.renderer.setEdgeFilter((from, to) -> !from.equals("pkg.A"));
+
+        fixture.renderer.drawDependencyArrows(fixture.root);
+
+        assertEquals(1, arrows(fixture).size(), "pkg.C -> pkg.B remains");
+    }
+
+    @Test
+    void anAggregateLeavesOutWhatTheFilterRejects() {
+        Fixture fixture = fixture();
+        collapsedPackage(fixture);
+        fixture.renderer.setEdgeFilter((from, to) -> !from.equals("p.X"));
+        RecordingActions actions = new RecordingActions();
+        fixture.renderer.setEdgeActions(actions);
+
+        fixture.renderer.drawDependencyArrows(fixture.root);
+        aggregateArrow(fixture).getOnMouseClicked().handle(click(MouseButton.PRIMARY));
+
+        assertEquals(List.of(new DependencyEdge("p.Y", "pkg.B")), actions.selections.get(0).edges());
+    }
+
+    /** Adds the collapsed package p with p.X -> pkg.B and p.Y -> pkg.B. */
+    private static void collapsedPackage(Fixture fixture) {
+        ArchitectureNode p = new ArchitectureNode("p", "p", ArchitectureNode.NodeType.PACKAGE, true);
+        for (String name : List.of("p.X", "p.Y")) {
+            ArchitectureNode cls = new ArchitectureNode(name, name, ArchitectureNode.NodeType.CLASS, true);
+            cls.setDependencies(Set.of("pkg.B"));
+            p.addChild(cls);
+        }
+        fixture.root.addChild(p);
+        Rectangle box = new Rectangle(40, 200, 20, 20);
+        box.getProperties().put("s202.aggregateEndpoint", Boolean.TRUE);
+        box.getProperties().put("s202.collapsed", Boolean.TRUE);
+        ((Pane) fixture.dependencyPane.getParent().getParent()).getChildren().add(box);
+        fixture.registry.put("p", box);
+    }
+
+    /** The only arrow that cannot be cut. */
+    private static Line aggregateArrow(Fixture fixture) {
+        return arrows(fixture).stream().filter(l -> l.getOnContextMenuRequested() == null).findFirst().orElseThrow();
     }
 
     @Test
@@ -199,6 +263,78 @@ class DependencyRendererTest {
     }
 
     @Test
+    void tangleArrowsCatchTheMouseBesideTheirLineAndAtTheirNumber() {
+        Fixture fixture = tangleFixture();
+        RecordingActions actions = new RecordingActions();
+        fixture.renderer.setEdgeActions(actions);
+        fixture.renderer.drawDependencyArrows(fixture.root);
+
+        List<Line> areas = hitAreas(fixture);
+        assertEquals(arrows(fixture).size(), areas.size());
+        Line line = arrows(fixture).stream().filter(l -> !l.getStrokeDashArray().isEmpty()).findFirst().orElseThrow();
+        Line area = areas.stream().filter(l -> l.getStartX() == line.getStartX() && l.getEndX() == line.getEndX())
+                .findFirst().orElseThrow();
+        double middleX = (line.getStartX() + line.getEndX()) / 2;
+        double middleY = (line.getStartY() + line.getEndY()) / 2;
+        assertTrue(!line.contains(middleX, middleY + 4) && area.contains(middleX, middleY + 4), "4 px off the line");
+        assertNotNull(area.getOnContextMenuRequested(), "the menu opens there too");
+
+        area.getOnMouseClicked().handle(click(MouseButton.PRIMARY));
+        assertEquals(List.of("q.C>p.D"), actions.clicks);
+        assertEquals(ArrowStyle.SELECTED_COLOR, line.getStroke(), "the visible line shows the selection");
+
+        long clickableNumbers = fixture.dependencyPane.getChildren().stream()
+                .filter(node -> node instanceof javafx.scene.Group && node.getOnMouseClicked() != null
+                        && !node.isMouseTransparent()).count();
+        assertEquals(3, clickableNumbers);
+    }
+
+    @Test
+    void theMouseAreasLieBelowTheLinesAndAreReplacedOnRedraw() {
+        Fixture fixture = tangleFixture();
+        fixture.renderer.drawDependencyArrows(fixture.root);
+        fixture.renderer.drawDependencyArrows(fixture.root);
+
+        assertEquals(3, hitAreas(fixture).size());
+        assertTrue(fixture.dependencyPane.getChildren().get(0) instanceof javafx.scene.Group);
+    }
+
+    @Test
+    void arrowsInTheBackgroundAndRegularViewsGetNoMouseArea() {
+        Fixture highlighted = tangleFixture();
+        highlighted.scope.setHighlight(TangleEdgeScope.Highlight.BACK_EDGE, true);
+        highlighted.renderer.drawDependencyArrows(highlighted.root);
+        assertEquals(2, hitAreas(highlighted).size(), "only the two back-edges");
+
+        Fixture regular = fixture();
+        regular.renderer.drawDependencyArrows(regular.root);
+        assertTrue(hitAreas(regular).isEmpty());
+    }
+
+    @Test
+    void theArrowUnderTheMouseGetsThickerAndKeepsItsColour() {
+        Fixture fixture = tangleFixture();
+        fixture.renderer.drawDependencyArrows(fixture.root);
+        Line line = arrows(fixture).stream().filter(l -> ArrowStyle.FORWARD_COLOR.equals(l.getStroke()))
+                .findFirst().orElseThrow();
+
+        line.getOnMouseEntered().handle(null);
+        assertTrue(line.getStrokeWidth() > ArrowStyle.FORWARD_WIDTH);
+        assertEquals(ArrowStyle.FORWARD_COLOR, line.getStroke());
+
+        line.getOnMouseExited().handle(null);
+        assertEquals(ArrowStyle.FORWARD_WIDTH, line.getStrokeWidth());
+    }
+
+    private static List<Line> hitAreas(Fixture fixture) {
+        return fixture.dependencyPane.getChildren().stream()
+                .filter(javafx.scene.Group.class::isInstance)
+                .flatMap(group -> ((javafx.scene.Group) group).getChildren().stream())
+                .filter(Line.class::isInstance).map(Line.class::cast)
+                .toList();
+    }
+
+    @Test
     void contextArrowsAndRegularViewsCarryNoWeight() {
         Fixture tangle = tangleFixture();
         tangle.scope.setShowContext(true);
@@ -269,6 +405,7 @@ class DependencyRendererTest {
     private static final class RecordingActions implements DependencyEdgeActions {
         final Set<String> cuts = new HashSet<>();
         final List<String> clicks = new ArrayList<>();
+        final List<DependencySelection> selections = new ArrayList<>();
 
         @Override
         public boolean isCut(String from, String to) {
@@ -286,8 +423,9 @@ class DependencyRendererTest {
         }
 
         @Override
-        public void clicked(String from, String to) {
-            clicks.add(from + ">" + to);
+        public void selected(DependencySelection selection) {
+            selections.add(selection);
+            clicks.add(selection.from() + ">" + selection.to());
         }
     }
 
@@ -317,10 +455,9 @@ class DependencyRendererTest {
         DependencyRenderer renderer = new DependencyRenderer(
                 dependencyPane,
                 registry,
-                new ZoomController(zoomableContent, null),
                 ignored -> {});
         renderer.setCoordinateContext(zoomableContent, overlayPane, null);
-        return new Fixture(root, dependencyPane, renderer, null);
+        return new Fixture(root, dependencyPane, renderer, null, registry);
     }
 
     /**
@@ -352,12 +489,12 @@ class DependencyRendererTest {
         }
 
         DependencyRenderer renderer = new DependencyRenderer(
-                dependencyPane, registry, new ZoomController(zoomableContent, null), ignored -> {});
+                dependencyPane, registry, ignored -> {});
         renderer.setCoordinateContext(zoomableContent, overlayPane, null);
         renderer.setEdgeCycles(EdgeCycleClassifier.of(model, Set.of(), Lookup.lookup(SCCFinder.class)), true);
         TangleEdgeScope scope = new TangleEdgeScope(Set.of("p", "q"));
         renderer.setTangleScope(scope);
-        return new Fixture(root, dependencyPane, renderer, scope);
+        return new Fixture(root, dependencyPane, renderer, scope, registry);
     }
 
     private static DomainModel tangleModel() {
@@ -377,5 +514,5 @@ class DependencyRendererTest {
     }
 
     private record Fixture(ArchitectureNode root, Pane dependencyPane, DependencyRenderer renderer,
-                           TangleEdgeScope scope) {}
+                           TangleEdgeScope scope, Map<String, javafx.scene.Node> registry) {}
 }

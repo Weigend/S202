@@ -15,6 +15,7 @@
  */
 package de.weigend.s202.ui.core.arrows;
 
+import de.weigend.s202.domain.DependencyEdge;
 import javafx.geometry.Bounds;
 import javafx.geometry.VPos;
 import javafx.scene.Group;
@@ -28,6 +29,7 @@ import javafx.scene.shape.Circle;
 import javafx.scene.shape.Line;
 import javafx.scene.shape.Rectangle;
 import javafx.scene.shape.Shape;
+import javafx.scene.shape.StrokeLineCap;
 import javafx.scene.text.Font;
 import javafx.scene.text.FontWeight;
 import javafx.scene.text.Text;
@@ -53,6 +55,7 @@ final class DependencyArrowPainter {
      * @param classEdge the arrow stands for exactly one class dependency, so
      *                  it can be cut and restored via its context menu; a cut
      *                  arrow is drawn dashed
+     * @param edges     the class dependencies the arrow stands for
      * @param badge     shown in a filled circle beside the line — usually the
      *                  number of underlying class dependencies; {@code null}
      *                  for none. It turns to the violation colour only when
@@ -64,7 +67,7 @@ final class DependencyArrowPainter {
      *                  {@code null} for the regular look
      */
     record Arrow(Node source, Node target, String sourceName, String targetName, boolean incoming,
-                 boolean classEdge, String badge, boolean containsWrongDirection,
+                 boolean classEdge, List<DependencyEdge> edges, String badge, boolean containsWrongDirection,
                  String weight, ArrowStyle style) {
     }
 
@@ -83,6 +86,15 @@ final class DependencyArrowPainter {
     private static final double STYLE_DASH_ON = 4.0;
     private static final double STYLE_DASH_OFF = 2.5;
 
+    /**
+     * How wide the invisible area is that catches the mouse for an arrow of a
+     * tangle view, in pixels on the screen — and at most in the view's own
+     * units, so that zoomed out the areas do not cover everything.
+     */
+    private static final double HIT_WIDTH = 12.0;
+    private static final double MAX_HIT_WIDTH = 16.0;
+    private static final double HOVER_WIDTH_FACTOR = 2.0;
+
     /** Distance between the two arrows of a mutual dependency. */
     private static final double OPPOSED_GAP = 6.0;
     /** How far along its line an arrow carries its weight; opposed arrows keep theirs near the source. */
@@ -97,6 +109,8 @@ final class DependencyArrowPainter {
     private final Consumer<String> statusCallback;
 
     private final List<Shape> dependencyLines = new ArrayList<>();
+    /** The mouse areas of the arrows, below all lines: a line hit directly wins over a neighbour's area. */
+    private final Group hitAreas = new Group();
     private Shape selectedLine = null;
     private DependencyEdgeActions edgeActions;
 
@@ -105,7 +119,7 @@ final class DependencyArrowPainter {
         this.statusCallback = Objects.requireNonNull(statusCallback, "statusCallback cannot be null");
     }
 
-    /** Cut, restore and click handling for class-to-class arrows; {@code null} disables it. */
+    /** Selection handling for all arrows, cut and restore for class-to-class ones; {@code null} disables it. */
     void setEdgeActions(DependencyEdgeActions edgeActions) {
         this.edgeActions = edgeActions;
     }
@@ -115,6 +129,7 @@ final class DependencyArrowPainter {
      */
     void clear() {
         dependencyPane.getChildren().clear();
+        hitAreas.getChildren().clear();
         dependencyLines.clear();
         selectedLine = null;
     }
@@ -205,38 +220,11 @@ final class DependencyArrowPainter {
                 line.getStrokeDashArray().setAll(STYLE_DASH_ON, STYLE_DASH_OFF);
             }
 
-            // Store original color for hover restore
-            final Color originalColor = lineColor;
-
-            // Hover effects
-            line.setOnMouseEntered(e -> {
-                if (line != selectedLine) {
-                    line.setStroke(Color.GRAY);
-                }
-                line.setCursor(javafx.scene.Cursor.HAND);
-            });
-
-            line.setOnMouseExited(e -> {
-                if (line != selectedLine) {
-                    line.setStroke(originalColor);
-                }
-                line.setCursor(javafx.scene.Cursor.DEFAULT);
-            });
-
-            // Click handler for selection (primary button; the secondary one opens the menu)
-            line.setOnMouseClicked(e -> {
-                if (e.getButton() != MouseButton.PRIMARY) {
-                    return;
-                }
-                selectShape(line, sourceName, targetName);
-                if (actions != null) {
-                    boolean selected = selectedLine == line;
-                    actions.clicked(selected ? sourceName : null, selected ? targetName : null);
-                }
-                e.consume();
-            });
-            if (actions != null) {
-                installCutMenu(line, actions, sourceName, targetName, cut);
+            installInteraction(line, line, arrow, cut);
+            // A highlight pushes the others back; those must not be in the way of the mouse.
+            boolean easyToHit = style != null && style.opacity() == 1.0;
+            if (easyToHit) {
+                addHitArea(route.toShape(), line, arrow, cut);
             }
 
             // Create arrowhead
@@ -288,6 +276,10 @@ final class DependencyArrowPainter {
                 double[] at = route.at(opposed ? OPPOSED_WEIGHT_POSITION : WEIGHT_POSITION);
                 Group weightNode = buildWeight(arrow.weight(), at[0], at[1], lineColor);
                 weightNode.setOpacity(opacity);
+                if (easyToHit) {
+                    weightNode.setMouseTransparent(false);
+                    installInteraction(weightNode, line, arrow, cut);
+                }
                 dependencyPane.getChildren().add(weightNode);
             }
 
@@ -298,8 +290,68 @@ final class DependencyArrowPainter {
         }
     }
 
+    /** Lets {@code target} — the line itself or what stands for it — react to the mouse for the arrow. */
+    private void installInteraction(Node target, Shape line, Arrow arrow, boolean cut) {
+        target.setOnMouseEntered(e -> {
+            setHovered(line, arrow.style() != null, true);
+            target.setCursor(javafx.scene.Cursor.HAND);
+        });
+        target.setOnMouseExited(e -> {
+            setHovered(line, arrow.style() != null, false);
+            target.setCursor(javafx.scene.Cursor.DEFAULT);
+        });
+        // Click handler for selection (primary button; the secondary one opens the menu)
+        target.setOnMouseClicked(e -> {
+            if (e.getButton() != MouseButton.PRIMARY) {
+                return;
+            }
+            selectShape(line, arrow.sourceName(), arrow.targetName());
+            if (edgeActions != null) {
+                edgeActions.selected(selectedLine == line
+                        ? new DependencySelection(arrow.sourceName(), arrow.targetName(), arrow.edges())
+                        : DependencySelection.NONE);
+            }
+            e.consume();
+        });
+        if (arrow.classEdge() && edgeActions != null) {
+            installCutMenu(target, edgeActions, arrow.sourceName(), arrow.targetName(), cut);
+        }
+    }
+
+    /** A tangle view thickens the arrow under the mouse — its colours have a meaning; others turn grey. */
+    private void setHovered(Shape line, boolean styled, boolean hovered) {
+        if (line == selectedLine) {
+            return;
+        }
+        Object[] userData = (Object[]) line.getUserData();
+        Color color = (Color) userData[2];
+        if (styled) {
+            applyStroke(line, userData, color, baseWidth(userData) * (hovered ? HOVER_WIDTH_FACTOR : 1.0));
+        } else {
+            line.setStroke(hovered ? Color.GRAY : color);
+        }
+    }
+
+    private void addHitArea(Shape area, Shape line, Arrow arrow, boolean cut) {
+        area.setStroke(Color.TRANSPARENT);
+        area.setStrokeWidth(hitWidth());
+        // The area ends with the arrow; it must not reach over the boxes.
+        area.setStrokeLineCap(StrokeLineCap.BUTT);
+        installInteraction(area, line, arrow, cut);
+        if (hitAreas.getParent() != dependencyPane) {
+            hitAreas.getChildren().clear();
+            dependencyPane.getChildren().add(0, hitAreas);
+        }
+        hitAreas.getChildren().add(area);
+    }
+
+    private double hitWidth() {
+        double scale = dependencyPane.getLocalToSceneTransform().getMxx();
+        return scale > 0 ? Math.min(MAX_HIT_WIDTH, HIT_WIDTH / scale) : HIT_WIDTH;
+    }
+
     /** Context menu of a class-to-class arrow: "Cut", or "Restore" once it is cut. */
-    private static void installCutMenu(Shape line, DependencyEdgeActions actions,
+    private static void installCutMenu(Node line, DependencyEdgeActions actions,
                                        String sourceClass, String targetClass, boolean cut) {
         line.setOnContextMenuRequested(e -> {
             MenuItem item = new MenuItem(cut ? "Restore" : "Cut");

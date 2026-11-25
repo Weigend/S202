@@ -31,7 +31,7 @@ import java.util.*;
  */
 public class DebugPackageLevels {
     public static void main(String[] args) throws Exception {
-        String jarPath = args.length > 0 ? args[0] : "../test-example/target/test-example-1.4.0.jar";
+        String jarPath = args.length > 0 ? args[0] : "../test-example/target/test-example-1.5.0.jar";
         
         System.out.println("=== ANALYZING JAR: " + jarPath + " ===\n");
         

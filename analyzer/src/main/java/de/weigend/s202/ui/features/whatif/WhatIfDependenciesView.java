@@ -15,6 +15,7 @@
  */
 package de.weigend.s202.ui.features.whatif;
 
+import de.weigend.s202.domain.DependencyDetails;
 import de.weigend.s202.domain.architecture.Architecture;
 import de.weigend.s202.domain.architecture.ComponentArchitecture;
 import de.weigend.s202.domain.architecture.EndpointPair;
@@ -438,22 +439,9 @@ public final class WhatIfDependenciesView implements View {
         if (rawDepModel == null) {
             return;
         }
-        DependencyModel.ClassInfo srcInfo = rawDepModel.getClass(sourceFqn);
-        if (srcInfo == null) {
-            return;
-        }
-        String prefix = targetFqn + ".";
         Map<String, Integer> totals = new LinkedHashMap<>();
-        for (DependencyModel.MethodInfo srcMethod : srcInfo.methods.values()) {
-            for (Map.Entry<String, Integer> call : srcMethod.methodCalls.entrySet()) {
-                String key = call.getKey();
-                if (!key.startsWith(prefix)) {
-                    continue;
-                }
-                String targetMethodName = key.substring(prefix.length());
-                String entryLabel = srcMethod.name + "() → " + targetMethodName + "()";
-                totals.merge(entryLabel, call.getValue(), Integer::sum);
-            }
+        for (DependencyDetails.Call call : DependencyDetails.of(rawDepModel, sourceFqn, targetFqn).calls()) {
+            totals.merge(call.callerName() + "() → " + call.member() + "()", call.count(), Integer::sum);
         }
         for (Map.Entry<String, Integer> entry : totals.entrySet()) {
             classItem.getChildren().add(new TreeItem<>(entry.getKey() + "  ×" + entry.getValue()));

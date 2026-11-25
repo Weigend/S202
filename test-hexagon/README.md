@@ -56,14 +56,13 @@ Ring assignment per package:
 | Ring        | Packages (out of the box)                                   |
 |-------------|-------------------------------------------------------------|
 | Core        | domain.publisher, domain.book, domain.inventory, domain.logistics |
-| Application | application.service (implements the API contracts)          |
+| Application | application.api, application.spi (the contracts), application.service (implements the API contracts) |
 | Adapters    | persistence, shipping (implement SPI contracts), rest, ui, platform (use API contracts), bootstrap |
 
 The contracts themselves — `application.api` and `application.spi` — appear
 as two separately expandable API/SPI sockets on the application-ring
-boundary of each theme sector. Contract interfaces carry no bytecode
-dependencies, so they sit at architecture level 0 by design: everything
-rests on them.
+boundary of each theme sector. Their signatures name domain types, so they
+sit one level above the domain packages they refer to.
 
 The service/adapter separation comes from the CONTRACT SIGNAL, not from
 levels (both sit one step above the ports): a package implementing an SPI

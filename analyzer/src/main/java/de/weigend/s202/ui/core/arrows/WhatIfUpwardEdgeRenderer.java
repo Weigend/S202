@@ -44,6 +44,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
+import java.util.function.BiPredicate;
 
 /**
  * Renderer for style-specific dependency violations in the architecture view.
@@ -80,6 +81,7 @@ public final class WhatIfUpwardEdgeRenderer {
 
     private Pane zoomableContent;
     private Pane overlayPane;
+    private BiPredicate<String, String> edgeFilter = (from, to) -> true;
 
     public WhatIfUpwardEdgeRenderer(Pane pane, Map<String, Node> elementRegistry) {
         this.pane = Objects.requireNonNull(pane, "pane");
@@ -89,6 +91,11 @@ public final class WhatIfUpwardEdgeRenderer {
     public void setCoordinateContext(Pane zoomableContent, Pane overlayPane) {
         this.zoomableContent = zoomableContent;
         this.overlayPane = overlayPane;
+    }
+
+    /** The class dependencies to draw at all; the others are left out of the picture. */
+    public void setEdgeFilter(BiPredicate<String, String> edgeFilter) {
+        this.edgeFilter = edgeFilter == null ? (from, to) -> true : edgeFilter;
     }
 
     public void clear() {
@@ -146,8 +153,13 @@ public final class WhatIfUpwardEdgeRenderer {
             List<ClassEdge> edges = new ArrayList<>(entry.getValue().size());
             boolean containsBackEdge = false;
             for (de.weigend.s202.domain.architecture.Violation v : entry.getValue()) {
-                edges.add(new ClassEdge(v.sourceFqn(), v.targetFqn(), 1));
-                containsBackEdge |= v.backEdge();
+                if (edgeFilter.test(v.sourceFqn(), v.targetFqn())) {
+                    edges.add(new ClassEdge(v.sourceFqn(), v.targetFqn(), 1));
+                    containsBackEdge |= v.backEdge();
+                }
+            }
+            if (edges.isEmpty()) {
+                continue;
             }
             result.add(new Violation(src, tgt, Collections.unmodifiableList(edges), containsBackEdge));
         }

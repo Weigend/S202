@@ -8,10 +8,9 @@
 #   - Glob pattern (contains `*` or `?`): matches against the full class FQN.
 #       `*` matches zero or more chars, `?` matches exactly one.
 #       Example: `*.WfxModule`  matches any class named WfxModule in any pkg.
-#       Example: `*$DI`         matches Avaje-generated *$DI inner classes
-#                              (note: inner classes are already filtered by the
-#                              outer-class strip, so this only matters for full
-#                              FQN patterns).
+#       Example: `*$DI`         matches Avaje-generated *$DI classes.
+#       Example: `*$Builder`    leaves the nested Builder classes out of what
+#                              their outer classes depend on.
 #
 # Java Standard Library
 java.

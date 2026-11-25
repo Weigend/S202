@@ -15,11 +15,11 @@
  */
 package de.weigend.s202.ui.core.spi;
 
+import de.weigend.s202.ui.core.model.WhatIfMove;
 import de.weigend.s202.domain.architecture.Architecture;
 import de.weigend.s202.domain.architecture.ArchitectureAnnotations;
 import de.weigend.s202.domain.DependencyEdge;
 import de.weigend.s202.reader.DependencyModel;
-import de.weigend.s202.ui.core.canvas.WhatIfUndoManager;
 import javafx.scene.Node;
 import javafx.stage.Window;
 
@@ -66,6 +66,6 @@ public record ViewServices(
         Supplier<Window> dialogOwner,
         Consumer<String> status,
         Consumer<String> refreshView,
-        Supplier<List<WhatIfUndoManager.Move>> whatIfMoves,
+        Supplier<List<WhatIfMove>> whatIfMoves,
         Supplier<Set<DependencyEdge>> appliedCutEdges) {
 }

@@ -31,7 +31,9 @@ public class DependencyModel {
     private final Set<String> plainPackages = new LinkedHashSet<>();
 
     /**
-     * Information about a single Java class.
+     * Information about a single Java class. Classes nested in it, anonymous
+     * ones included, are no classes of their own: what they depend on counts
+     * for this one, and their methods appear here as {@code Inner.run}.
      */
     public static class ClassInfo {
         public final String fullName;
@@ -42,6 +44,11 @@ public class DependencyModel {
         /** Kinds per dependency target. Same keys as {@link #dependencies}. */
         public final Map<String, EnumSet<EdgeKind>> dependencyKinds = new HashMap<>();
         public final Map<String, MethodInfo> methods = new HashMap<>();
+        /**
+         * Where this class refers to other types without calling them, per
+         * type. Not every reader records it.
+         */
+        public final Map<String, Set<TypeUse>> typeUses = new HashMap<>();
 
         public ClassInfo(String fullName, String simpleName, String packageName) {
             this(fullName, simpleName, packageName, false);
@@ -70,6 +77,10 @@ public class DependencyModel {
         public Set<EdgeKind> getKinds(String target) {
             EnumSet<EdgeKind> set = dependencyKinds.get(target);
             return set == null ? Set.of() : EnumSet.copyOf(set);
+        }
+
+        public void addTypeUse(String target, TypeUse use) {
+            typeUses.computeIfAbsent(target, k -> new HashSet<>()).add(use);
         }
 
         public void addMethod(String name, String descriptor) {

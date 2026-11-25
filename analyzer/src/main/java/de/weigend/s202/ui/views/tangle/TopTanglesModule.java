@@ -16,6 +16,7 @@
 package de.weigend.s202.ui.views.tangle;
 
 import de.weigend.s202.domain.ContainerProjection;
+import de.weigend.s202.domain.DependencyDetails;
 import de.weigend.s202.domain.DependencyEdge;
 import de.weigend.s202.domain.StronglyConnectedComponent;
 import de.weigend.s202.domain.SCCFinder;
@@ -30,6 +31,7 @@ import de.weigend.s202.ui.core.platform.ProgressPublisher;
 import de.weigend.s202.ui.core.platform.ViewDescriptor;
 import de.weigend.s202.ui.core.events.CutTangleEdgeEvent;
 import de.weigend.s202.ui.core.events.CutTangleEdgesEvent;
+import de.weigend.s202.ui.core.events.DependencySelectionEvent;
 import de.weigend.s202.ui.core.events.OpenTangleEvent;
 import de.weigend.s202.ui.core.events.RefactoringsResetEvent;
 import de.weigend.s202.ui.core.events.RestoreTangleEdgeEvent;
@@ -55,6 +57,7 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 /**
  * WFX module for the {@link TopTanglesView}. Sits between the outline
@@ -143,16 +146,8 @@ public class TopTanglesModule implements Module {
                 bus.publish(new CutTangleEdgeEvent(from, to, tanglesView)));
         tanglesView.setOnRestoreEdge((from, to) ->
                 bus.publish(new RestoreTangleEdgeEvent(from, to, tanglesView)));
-        tanglesView.setOnCutAll(tangle -> {
-            Set<DependencyEdge> candidates = tangle.edges().stream()
-                    .filter(edge -> edge.cycleBreakEdge() && !edge.cutApplied())
-                    .map(edge -> new DependencyEdge(edge.from(), edge.to()))
-                    .collect(Collectors.toCollection(java.util.LinkedHashSet::new));
-            if (candidates.isEmpty()) {
-                return;
-            }
-            bus.publish(new CutTangleEdgesEvent(candidates, tanglesView));
-        });
+        tanglesView.setOnCutAll(edges ->
+                bus.publish(new CutTangleEdgesEvent(edges, tanglesView)));
         // Tangle tabs and preview cuts. A cut belongs to the document of the
         // view it was made in (or, made in this panel, to the active one): it
         // is recorded there and shown in that document's tabs only.
@@ -175,6 +170,13 @@ public class TopTanglesModule implements Module {
         bus.subscribe(RestoreTangleEdgeEvent.class, ev -> {
             if (tangleTabs.restorePreviewCut(viewManager.documentFor(ev.getSource()), ev.getFrom(), ev.getTo())) {
                 requestScopeRefresh();
+            }
+            return true;
+        });
+
+        bus.subscribe(DependencySelectionEvent.class, ev -> {
+            if (ev.getSource() instanceof ArchitectureCanvas canvas) {
+                tangleTabs.revealInOutline(ev.getSelection(), canvas);
             }
             return true;
         });
@@ -230,10 +232,7 @@ public class TopTanglesModule implements Module {
         unbind();
 
         if (newBound == null) {
-            tanglesView.clear();
-            lastDataset = null;
-            currentScope = null;
-            currentScopeInitialized = false;
+            clear();
             return;
         }
 
@@ -256,18 +255,24 @@ public class TopTanglesModule implements Module {
         rootListener = null;
     }
 
+    /** Empties the panel and forgets what it showed: the next data is shown even if it is the same. */
+    private void clear() {
+        tanglesView.clear();
+        lastDataset = null;
+        lastScopeLabel = null;
+        lastTangles = null;
+        lastPreviewEdges = null;
+        currentScope = null;
+        currentScopeInitialized = false;
+    }
+
     private void requestScopeRefresh() {
         applyCurrentScope(false);
     }
 
     private void applyCurrentScope(boolean updateScopeFromSelection) {
         if (boundView == null) {
-            tanglesView.clear();
-            lastScopeLabel = null;
-            currentScope = null;
-            currentScopeInitialized = false;
-            lastTangles = null;
-            lastPreviewEdges = null;
+            clear();
             return;
         }
         DomainModel model = boundView.getDomainModel();
@@ -475,65 +480,38 @@ public class TopTanglesModule implements Module {
     private static List<TopTanglesView.KindEntry> buildCallKindEntries(DependencyModel rawModel,
                                                                        String from,
                                                                        String to) {
-        if (rawModel == null) {
-            return List.of();
-        }
-        DependencyModel.ClassInfo sourceClass = rawModel.getClass(from);
-        if (sourceClass == null) {
-            return List.of();
-        }
-        return sourceClass.methods.values().stream()
-                .flatMap(method -> method.methodCalls.keySet().stream()
-                        .filter(call -> callOwnerMatchesTarget(call, to))
-                        .flatMap(call -> callDetails(method, call).stream()
-                                .map(detail -> new TopTanglesView.KindEntry(EdgeKind.CALLS, detail))))
+        return DependencyDetails.of(rawModel, from, to).calls().stream()
+                // Constructor calls are what the "instantiates" entry stands for.
+                .filter(call -> !call.isConstructor())
+                .flatMap(call -> call.descriptors().isEmpty()
+                        ? Stream.of(call.methodName())
+                        : call.descriptors().stream().map(descriptor -> call.methodName() + descriptor))
+                .map(detail -> new TopTanglesView.KindEntry(EdgeKind.CALLS, detail))
                 .distinct()
                 .sorted(Comparator.comparing(TopTanglesView.KindEntry::detail))
                 .toList();
     }
 
-    private static List<String> callDetails(DependencyModel.MethodInfo sourceMethod, String methodCall) {
-        String methodName = methodCallName(methodCall);
-        if (methodName == null || "<init>".equals(methodName)) {
-            return List.of();
-        }
-        Set<String> descriptors = sourceMethod.methodCallDescriptors.get(methodCall);
-        if (descriptors == null || descriptors.isEmpty()) {
-            return List.of(methodName);
-        }
-        return descriptors.stream()
-                .sorted()
-                .map(descriptor -> methodName + descriptor)
-                .toList();
-    }
-
     static List<TopTanglesView.HotspotEntryRow> computeHotspots(List<TopTanglesView.Tangle> tangles, int topN) {
-        // Collect distinct (from→to) edge pairs per called method across all tangles.
-        // Two callers of the same method in the same tangle each count as a separate edge.
-        // The map value encodes method-level to: "targetClass|methodName" so that a
-        // Cut All for this hotspot only removes that specific method's contribution to
-        // the dependency, leaving other method calls on the same class pair intact.
-        Map<String, Set<Map.Entry<String, String>>> methodToEdges = new HashMap<>();
+        // The distinct back-edges per called method across all tangles. They are
+        // class dependencies like every other cut: what the preview removes is
+        // the whole dependency, not the one call.
+        Map<String, Set<DependencyEdge>> methodToEdges = new HashMap<>();
         for (TopTanglesView.Tangle tangle : tangles) {
             for (TopTanglesView.TangleEdge edge : tangle.edges()) {
                 if (!edge.cycleBreakEdge()) continue;
                 for (TopTanglesView.KindEntry entry : edge.entries()) {
                     if (entry.kind() == EdgeKind.CALLS && entry.detail() != null) {
                         String label = simple(edge.to()) + "." + methodLabel(entry.detail());
-                        // Extract simple method name (strip descriptor) for the cut key.
-                        String detail = entry.detail();
-                        int paren = detail.indexOf('(');
-                        String methodName = paren > 0 ? detail.substring(0, paren) : detail;
-                        String methodLevelTo = edge.to() + "|" + methodName;
                         methodToEdges.computeIfAbsent(label, k -> new HashSet<>())
-                                .add(Map.entry(edge.from(), methodLevelTo));
+                                .add(new DependencyEdge(edge.from(), edge.to()));
                     }
                 }
             }
         }
         return methodToEdges.entrySet().stream()
                 .filter(e -> e.getValue().size() > 1)
-                .sorted(Comparator.<Map.Entry<String, Set<Map.Entry<String, String>>>>comparingInt(e -> e.getValue().size())
+                .sorted(Comparator.<Map.Entry<String, Set<DependencyEdge>>>comparingInt(e -> e.getValue().size())
                         .reversed()
                         .thenComparing(Map.Entry::getKey))
                 .limit(topN)
@@ -541,8 +519,10 @@ public class TopTanglesModule implements Module {
                         e.getKey(),
                         e.getValue().size(),
                         e.getValue().stream()
-                                .sorted(Comparator.comparing(p -> simple(p.getKey())))
-                                .map(p -> new TopTanglesView.HotspotCallerRow(p.getKey(), p.getValue()))
+                                .sorted(Comparator.comparing((DependencyEdge edge) -> simple(edge.from()))
+                                        .thenComparing(DependencyEdge::from)
+                                        .thenComparing(DependencyEdge::to))
+                                .map(edge -> new TopTanglesView.HotspotCallerRow(edge.from(), edge.to()))
                                 .toList()))
                 .toList();
     }
@@ -570,33 +550,6 @@ public class TopTanglesModule implements Module {
         }
         DependencyModel.ClassInfo info = rawModel.getClass(from);
         return info == null ? Set.of() : info.getKinds(to);
-    }
-
-    private static boolean callOwnerMatchesTarget(String methodCall, String targetClass) {
-        String owner = methodCallOwner(methodCall);
-        return owner != null
-                && (targetClass.equals(owner) || targetClass.equals(outerClassName(owner)));
-    }
-
-    private static String methodCallOwner(String methodCall) {
-        if (methodCall == null) {
-            return null;
-        }
-        int dot = methodCall.lastIndexOf('.');
-        return dot <= 0 ? null : methodCall.substring(0, dot);
-    }
-
-    private static String methodCallName(String methodCall) {
-        if (methodCall == null) {
-            return null;
-        }
-        int dot = methodCall.lastIndexOf('.');
-        return dot < 0 || dot == methodCall.length() - 1 ? null : methodCall.substring(dot + 1);
-    }
-
-    private static String outerClassName(String className) {
-        int dollar = className.indexOf('$');
-        return dollar < 0 ? className : className.substring(0, dollar);
     }
 
     private static boolean inScope(String fqn, String scope) {

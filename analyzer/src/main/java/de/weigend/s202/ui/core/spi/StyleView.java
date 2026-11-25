@@ -17,7 +17,6 @@ package de.weigend.s202.ui.core.spi;
 
 import de.weigend.s202.domain.architecture.ArchitectureKind;
 import de.weigend.s202.domain.architecture.ViolationKind;
-import de.weigend.s202.ui.core.canvas.ArchitectureTreeBuilder;
 import de.weigend.s202.ui.core.model.ArchitectureNode;
 import javafx.scene.Node;
 import javafx.scene.control.MenuItem;
@@ -48,7 +47,7 @@ public interface StyleView {
 
     void buildTreeAsync(ArchitectureNode root,
                         int maxDepth,
-                        ArchitectureTreeBuilder.ProgressSink progressSink,
+                        BuildProgressSink progressSink,
                         Consumer<VBox> onComplete);
 
     /** Verstoß-Arten, die das What-If-/Verstoß-Overlay für diesen Stil zeichnet. */

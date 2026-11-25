@@ -12,6 +12,8 @@ A JavaFX-based tool for analyzing code across multiple languages and visualizing
 ![C](https://img.shields.io/badge/C-PoC-blueviolet)
 ![License](https://img.shields.io/badge/License-Apache%202.0-blue)
 
+> **→ [S202 Handbook](docs/handbook/README.md)** — every view, panel and menu, with pictures.
+
 > **→ [The Tool That Fixed Itself — S202 Case Study](docs/s202/CASE_STUDY.md)**
 > *We pointed S202 at its own codebase. No source code was read. Here's what happened.*
 
@@ -20,7 +22,7 @@ A JavaFX-based tool for analyzing code across multiple languages and visualizing
 
 ## Features
 
-- **Readers**: Java bytecode (ASM 9.11.1), Maven and Gradle multi-module projects, Python source (CPython AST), C source (PoC), Go source (Alpha); TypeScript, Rust planned
+- **Readers**: Java bytecode (ASM 9.11.1), Maven and Gradle multi-module projects, Python source (CPython AST), JavaScript source (ES modules), C source (PoC), Go source (Alpha); TypeScript, Rust planned
 - **Dependency detection**: Class/module and package dependencies — imports, calls, inheritance, type annotations
 - **Class cycle detection**: SCCs at class level (red overlay)
 - **Package tangle detection**: Mutual package dependencies (orange overlay); both overlays are independently togglable
@@ -40,6 +42,7 @@ A JavaFX-based tool for analyzing code across multiple languages and visualizing
 <tr><td><small><b>Reader: Maven</b></small></td><td><small>Multi-module via <code>pom.xml</code></small></td><td><small><b>Stable</b></small></td></tr>
 <tr><td><small><b>Reader: Gradle</b></small></td><td><small>Multi-module via <code>settings.gradle(.kts)</code></small></td><td><small><b>Beta</b></small></td></tr>
 <tr><td><small><b>Reader: Python</b></small></td><td><small>Source analysis via CPython <code>ast</code></small></td><td><small><b>Alpha</b></small></td></tr>
+<tr><td><small><b>Reader: JavaScript</b></small></td><td><small>ES modules: imports, classes, use of imported names</small></td><td><small>not rated</small></td></tr>
 <tr><td><small><b>Reader: C</b></small></td><td><small>Source analysis via AST</small></td><td><small><b>PoC</b></small></td></tr>
 <tr><td><small><b>Reader: Go</b></small></td><td><small>Source analysis</small></td><td><small><b>Alpha</b></small></td></tr>
 <tr><td><small><b>Reader: TypeScript</b></small></td><td><small>Source analysis</small></td><td><small><b>Planned</b></small></td></tr>
@@ -117,7 +120,7 @@ Then use the **File** menu:
 - **Open JAR…** - one or more JARs (multi-selection opens a staging dialog)
 - **Open Maven Project…** - select the root `pom.xml`; all module JARs from `target/` are collected
 - **Open Gradle Project…** - select `settings.gradle(.kts)` or `build.gradle(.kts)`; all module JARs from `build/libs/` are collected
-- **Open Python Source…** - select a Python project root or package directory; requires `python3` in PATH (or set the `PYTHON` environment variable)
+- **Open Source Code** - JavaScript, Go, Python or C: select the directory. Python requires `python3` in PATH (or set the `PYTHON` environment variable), Go requires `go`
 
 The architecture is analyzed, visualized, and automatically checked against five layout invariants (plausibility alerts).
 
@@ -139,6 +142,7 @@ The **Layered Architecture View** is the default view after loading a JAR or pro
 - **Selective display**: Click a package or class to highlight only the dependencies that involve the selected element.
 - **Collapsed view**: Packages can be collapsed to their package name; dependencies are then shown as aggregated arrows with a filled-circle count badge.
 - **Full expansion**: Expand any package to see all contained classes and their individual dependency arrows.
+- **Edge kinds**: The **Edge Kinds** button in the toolbar hides kinds of dependency — calls, inheritance, imports, references by type — in the active view. A dependency disappears when everything it consists of is hidden; it still counts for levels, cycles and violations.
 
 ## Tangle View and Top Tangles
 
@@ -161,6 +165,10 @@ Expanding a package member shows the classes behind its arrows — only those th
 ![Tangle View with the package members expanded](docs/tangle-view-minecraft-expanded.png)
 
 Here the single back-edge turns out to be `MapGenEndCity → ChunkGeneratorEnd`, carried by two method calls.
+
+**Seeing what carries a dependency:**
+
+Clicking an arrow — in the Tangle View or any other architecture view — explains it in the **Dependency Details** panel: every call with the calling method on the left and the called one on the right, and under *Other references* the places that name the class without calling it — fields, parameter and return types, casts. Those keep the dependency alive even when every call is removed. *Cycle closes via* shows the shortest way back that makes the dependency part of a cycle. The arrow of a collapsed package lists its class dependencies, back-edges first. Clicking a method shows it in the outline.
 
 **Cutting edges to resolve the tangle:**
 
@@ -221,7 +229,7 @@ The screenshot shows the bundled **test-hexagon** example (the *paperwhale* book
 To try it, build and load the example project under [`test-hexagon`](test-hexagon):
 
 ```bash
-mvn -pl test-hexagon -am install    # produces test-hexagon/target/test-hexagon-1.4.0.jar
+mvn -pl test-hexagon -am install    # produces test-hexagon/target/test-hexagon-1.5.0.jar
 ```
 
 Then **File → Open Maven Project…** on `test-hexagon/pom.xml` (or **Open JAR…** on the produced JAR) and switch to **View → Hexagonal View**.
@@ -236,7 +244,7 @@ The report combines several signals from the dependency model into a single **Ov
 
 ## Python Source Analysis
 
-Use **File → Open Python Source…** to load a Python project. S202 discovers all `.py` files, maps each module to a node in the dependency graph, and builds the same layered and component views used for Java.
+Use **File → Open Source Code → Open Python Source…** to load a Python project. S202 discovers all `.py` files, maps each module to a node in the dependency graph, and builds the same layered and component views used for Java.
 
 **What gets analyzed:**
 
@@ -284,13 +292,13 @@ The bundled Python AST helper (`s202_py_ast.py`) lives in `analyzer/src/main/res
 
 ## Usage
 
-1. **Load code**: Use `File -> Open JAR…` for individual JARs, `Open Maven Project…` / `Open Gradle Project…` for complete multi-module builds, or `Open Python Source…` for Python projects
+1. **Load code**: Use `File -> Open JAR…` for individual JARs, `Open Maven Project…` / `Open Gradle Project…` for complete multi-module builds, or `Open Source Code` for JavaScript, Go, Python and C
 2. **Analyze**: Packages and modules are analyzed automatically; a layout invariant check reports plausibility alerts to the developer
 3. **Navigate**: Expand and collapse packages or component boxes, inspect dependencies
 4. **Change views**: Open **View -> Component View** to inspect API-vs-implementation boundaries
 5. **Violations**: Bold dashed arrows show architectural problems (package aggregates use a filled circle to bundle the call count); for pipeline bugs, a reproducer dialog opens with a copy button
 
-**Several analyses at once.** Every `Open …` and `Load Project…` adds an analysis in a tab of its own; the ones already open stay. `Close Project` closes the analysis you are working on with all its tabs, `Windows -> Close All` closes every analysis. All tabs of an analysis carry its name — `app.jar`, `app.jar · Component View`, `app.jar · Tangle …` — and the window title names the analysis you are working on. Outline, Top Tangles, Quality and the Dependencies panel show that analysis, also while you work in one of them, and the View menu, Save Project and the Quality Report act on it. Preview cuts and API annotations stay with the analysis they were made in.
+**Several analyses at once.** Every `Open …` and `Load Project…` adds an analysis in a tab of its own; the ones already open stay. `Close Project` closes the analysis you are working on with all its tabs, `Windows -> Close All` closes every analysis. All tabs of an analysis carry its name — `app.jar`, `app.jar · Component View`, `app.jar · Tangle …` — and the window title names the analysis you are working on. Outline, Top Tangles, Quality, Dependencies and Dependency Details show that analysis, also while you work in one of them, and the View menu, Save Project and the Quality Report act on it. Preview cuts and API annotations stay with the analysis they were made in.
 
 **What is remembered.** A project file (`Save Project…`) holds an analysis together with its tabs — the Component, Scope and Tangle views opened on it, their package depth, zoom and open packages — and its preview cuts, so `Load Project…` brings the analysis back the way you left it. The window is remembered separately: its size and position, where the panels sit and how the areas are divided are saved on exit and restored on the next start (in `~/.s202`). `Windows -> Default Layout` goes back to the original arrangement.
 
@@ -311,6 +319,7 @@ Details: [docs/VS_CODE_SETUP.md](docs/VS_CODE_SETUP.md)
 
 ## Documentation
 
+- [Handbook](docs/handbook/README.md) - What S202 does and how to use it: all views, functions and dialogs, with screenshots
 - [QUICKSTART.md](QUICKSTART.md) - Quick introduction
 - Architecture concept paper:
   [Deutsch](docs/concept/Software-Architektur-als-Schichtendarstellung.pdf),

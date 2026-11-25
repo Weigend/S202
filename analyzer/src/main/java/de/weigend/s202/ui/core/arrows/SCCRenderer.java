@@ -30,6 +30,7 @@ import javafx.scene.paint.Color;
 import javafx.scene.shape.Line;
 
 import java.util.*;
+import java.util.function.BiPredicate;
 import java.util.function.Consumer;
 import java.util.function.Function;
 
@@ -66,6 +67,7 @@ public class SCCRenderer {
 
     /** Class cycles of the whole model; null until a model is bound. */
     private EdgeCycleClassifier edgeCycles;
+    private BiPredicate<String, String> edgeFilter = (from, to) -> true;
 
     private boolean showClassScc = false;
     private boolean showPackageCycles = false;
@@ -101,6 +103,11 @@ public class SCCRenderer {
     /** Binds the model's class cycles; with {@code null} the visible classes are searched for cycles. */
     public void setEdgeCycles(EdgeCycleClassifier edgeCycles) {
         this.edgeCycles = edgeCycles;
+    }
+
+    /** The class dependencies to draw at all; the others are left out of the picture. */
+    public void setEdgeFilter(BiPredicate<String, String> edgeFilter) {
+        this.edgeFilter = edgeFilter == null ? (from, to) -> true : edgeFilter;
     }
 
     public void setShowClassScc(boolean show) { this.showClassScc = show; }
@@ -273,7 +280,7 @@ public class SCCRenderer {
                 // Filter dependencies to only include classes we know about
                 Set<String> visibleDeps = new HashSet<>();
                 for (String dep : node.getDependencies()) {
-                    if (elementRegistry.containsKey(dep)) {
+                    if (elementRegistry.containsKey(dep) && edgeFilter.test(node.getFullName(), dep)) {
                         visibleDeps.add(dep);
                     }
                 }

@@ -21,18 +21,21 @@ import de.weigend.s202.annotation.S202Component;
 import de.weigend.s202.annotation.S202Package;
 import de.weigend.s202.reader.EdgeKind;
 import de.weigend.s202.reader.LanguageAnalyzer;
+import de.weigend.s202.reader.TypeUse;
 import de.weigend.s202.reader.impl.PackageHierarchyBuilder;
 
 import jakarta.inject.Singleton;
+import org.objectweb.asm.AnnotationVisitor;
 import org.objectweb.asm.ClassReader;
 import org.objectweb.asm.ClassVisitor;
 import org.objectweb.asm.FieldVisitor;
+import org.objectweb.asm.Handle;
+import org.objectweb.asm.Label;
 import org.objectweb.asm.MethodVisitor;
 import org.objectweb.asm.ModuleVisitor;
 import org.objectweb.asm.Opcodes;
 import org.objectweb.asm.Type;
-import org.objectweb.asm.signature.SignatureReader;
-import org.objectweb.asm.signature.SignatureVisitor;
+import org.objectweb.asm.TypePath;
 
 import java.io.BufferedReader;
 import java.io.IOException;
@@ -273,9 +276,11 @@ public class InputAnalyzer implements LanguageAnalyzer {
     private int analyzeInto(String jarPath, DependencyModel model, Consumer<AnalysisProgress> progress,
                             int processedClasses, int totalClasses) throws IOException {
         try (JarFile jarFile = new JarFile(jarPath)) {
-            Enumeration<JarEntry> entries = jarFile.entries();
-            while (entries.hasMoreElements()) {
-                JarEntry entry = entries.nextElement();
+            // Nested classes last: they add to their outer class, which must be there by then.
+            List<JarEntry> entries = jarFile.stream()
+                    .sorted(Comparator.comparing(entry -> entry.getName().contains("$")))
+                    .toList();
+            for (JarEntry entry : entries) {
                 if (!entry.getName().endsWith(".class") || entry.isDirectory()) {
                     continue;
                 }
@@ -334,6 +339,9 @@ public class InputAnalyzer implements LanguageAnalyzer {
     private void analyzeClass(String classPath, byte[] bytecode, DependencyModel model) {
         try {
             ClassReader reader = new ClassReader(bytecode);
+            if (reader.getClassName().contains("$") && !isNestedClass(reader)) {
+                return; // a generated class that only looks like a nested one, e.g. Foo$DI
+            }
             DependencyExtractor extractor = new DependencyExtractor(model);
             reader.accept(extractor, ClassReader.SKIP_FRAMES);
         } catch (Exception e) {
@@ -435,14 +443,56 @@ public class InputAnalyzer implements LanguageAnalyzer {
     }
 
     /**
-     * ASM ClassVisitor to extract dependencies from bytecode.
+     * True for a class that is nested, at whatever depth, in the top-level class
+     * its name starts with. The name alone does not tell: generators like to
+     * call top-level classes {@code Foo$DI}. The bytecode names the enclosing
+     * class of a member class, and that of the visited local or anonymous one.
+     */
+    private static boolean isNestedClass(ClassReader reader) {
+        Map<String, String> enclosing = new HashMap<>();
+        reader.accept(new ClassVisitor(Opcodes.ASM9) {
+            private String enclosingOfVisited;
+
+            @Override
+            public void visitOuterClass(String owner, String name, String descriptor) {
+                enclosingOfVisited = owner;
+            }
+
+            @Override
+            public void visitInnerClass(String name, String outerName, String innerName, int access) {
+                enclosing.put(name, outerName != null ? outerName
+                        : name.equals(reader.getClassName()) ? enclosingOfVisited : null);
+            }
+        }, ClassReader.SKIP_CODE | ClassReader.SKIP_DEBUG | ClassReader.SKIP_FRAMES);
+        String current = reader.getClassName();
+        if (!enclosing.containsKey(current)) {
+            return false;
+        }
+        while (current != null && enclosing.containsKey(current)) {
+            current = enclosing.get(current);
+        }
+        // Null: inside another anonymous class, whose own enclosing class is not named here.
+        return current == null || current.equals(outerClassName(reader.getClassName()));
+    }
+
+    /** The class a nested class counts for: {@code com.example.Foo$Bar} → {@code com.example.Foo}. */
+    private static String outerClassName(String className) {
+        int dollar = className.indexOf('$');
+        return dollar < 0 ? className : className.substring(0, dollar);
+    }
+
+    /**
+     * ASM ClassVisitor to extract dependencies from bytecode. A nested class
+     * has no entry of its own in the model; what it depends on is added to its
+     * outer class.
      */
     private static class DependencyExtractor extends ClassVisitor {
         private final DependencyModel model;
-        private String currentClassName;
-        private String currentPackageName;
-        private String currentSimpleName;
+        /** Where the dependencies go: the visited class, or the outer class of a nested one. */
         private DependencyModel.ClassInfo currentClassInfo;
+        /** {@code Inner.} for the members of a nested class, else empty. */
+        private String memberPrefix = "";
+        private TypeUseRecorder typeUses;
 
         public DependencyExtractor(DependencyModel model) {
             super(Opcodes.ASM9);
@@ -453,71 +503,83 @@ public class InputAnalyzer implements LanguageAnalyzer {
         public void visit(int version, int access, String name, String signature,
                           String superName, String[] interfaces) {
             // Convert bytecode name (com/example/Class) to source name (com.example.Class)
-            this.currentClassName = convertClassName(name);
-
-            // Skip inner classes (contain $)
-            // OPEN POINT: Inner classes are currently ignored. This means that dependencies
-            // from/to inner classes are not tracked separately. Inner class dependencies are
-            // implicitly attributed to the outer class.
-            // TODO: Consider whether inner class analysis should be supported as a separate feature
-            if (currentClassName.contains("$")) {
-                return;
-            }
+            String className = convertClassName(name);
 
             // Skip classes the user excluded via excluded-prefixes.txt — keeps
             // framework-generated wiring (Avaje DI modules, Lombok stubs, etc.)
             // out of the model entirely instead of just out of dep targets.
-            if (isExcludedClass(currentClassName)) {
+            if (isExcludedClass(className)) {
                 return;
             }
-            
-            // Handle inner classes: extract outer class name before $
-            String classNameForPackage = currentClassName;
-            if (currentClassName.contains("$")) {
-                classNameForPackage = currentClassName.substring(0, currentClassName.indexOf("$"));
-            }
-            
-            String[] parts = classNameForPackage.split("\\.");
-            this.currentSimpleName = parts[parts.length - 1];
-            this.currentPackageName = classNameForPackage.substring(0,
-                classNameForPackage.lastIndexOf("."));
 
-            // Create ClassInfo
-            boolean interfaceType = (access & Opcodes.ACC_INTERFACE) != 0;
-            this.currentClassInfo = new DependencyModel.ClassInfo(
-                currentClassName, currentSimpleName, currentPackageName, interfaceType
-            );
-            model.addClass(currentClassName, currentClassInfo);
-
-            // Add superclass dependency
-            if (superName != null && !superName.equals("java/lang/Object")) {
-                String superClassName = convertClassName(superName);
-                if (!isSelfDependency(superClassName) && !isExternalLibraryClass(superClassName)) {
-                    currentClassInfo.addDependency(superClassName, EdgeKind.EXTENDS);
+            String outerName = outerClassName(className);
+            if (outerName.equals(className)) {
+                int packageEnd = className.lastIndexOf('.');
+                this.currentClassInfo = new DependencyModel.ClassInfo(className,
+                        className.substring(packageEnd + 1), className.substring(0, packageEnd),
+                        (access & Opcodes.ACC_INTERFACE) != 0);
+                model.addClass(className, currentClassInfo);
+            } else {
+                this.currentClassInfo = model.getClass(outerName);
+                if (currentClassInfo == null) {
+                    return; // the outer class is not part of the analysis
                 }
+                this.memberPrefix = className.substring(outerName.length() + 1) + ".";
             }
+            this.typeUses = new TypeUseRecorder(
+                    currentClassInfo, className, memberPrefix, InputAnalyzer::isExcludedClass);
+            typeUses.superTypeArguments(signature);
 
-            // Add interface dependencies
+            if (superName != null) {
+                addInheritance(className, convertClassName(superName), EdgeKind.EXTENDS);
+            }
             if (interfaces != null) {
                 for (String iface : interfaces) {
-                    String ifaceClassName = convertClassName(iface);
-                    if (!isSelfDependency(ifaceClassName) && !isExternalLibraryClass(ifaceClassName)) {
-                        currentClassInfo.addDependency(ifaceClassName, EdgeKind.IMPLEMENTS);
-                    }
+                    addInheritance(className, convertClassName(iface), EdgeKind.IMPLEMENTS);
                 }
             }
 
             super.visit(version, access, name, signature, superName, interfaces);
         }
 
+        private void addInheritance(String className, String superType, EdgeKind kind) {
+            String target = outerClassName(superType);
+            if (isSelfDependency(target) || isExternalLibraryClass(target)) {
+                return;
+            }
+            boolean betweenTopLevelClasses = target.equals(superType) && currentClassInfo.fullName.equals(className);
+            currentClassInfo.addDependency(target, betweenTopLevelClasses ? kind : EdgeKind.NESTED_INHERITANCE);
+        }
+
         @Override
         public FieldVisitor visitField(int access, String name, String descriptor,
                                        String signature, Object value) {
-            if (currentClassInfo != null) {
-                addTypeRefs(descriptor);
-                addSignatureRefs(signature);
+            if (currentClassInfo == null) {
+                return null;
             }
-            return super.visitField(access, name, descriptor, signature, value);
+            typeUses.field(name, descriptor, signature);
+            return new FieldVisitor(Opcodes.ASM9) {
+                @Override
+                public AnnotationVisitor visitAnnotation(String annotation, boolean visible) {
+                    return typeUses.annotation(memberPrefix + name, null, annotation);
+                }
+
+                @Override
+                public AnnotationVisitor visitTypeAnnotation(int typeRef, TypePath path, String annotation,
+                                                             boolean visible) {
+                    return typeUses.annotation(memberPrefix + name, null, annotation);
+                }
+            };
+        }
+
+        @Override
+        public AnnotationVisitor visitAnnotation(String annotation, boolean visible) {
+            return currentClassInfo == null ? null : typeUses.annotation(memberPrefix, null, annotation);
+        }
+
+        @Override
+        public AnnotationVisitor visitTypeAnnotation(int typeRef, TypePath path, String annotation, boolean visible) {
+            return visitAnnotation(annotation, visible);
         }
 
         @Override
@@ -526,52 +588,12 @@ public class InputAnalyzer implements LanguageAnalyzer {
             if (currentClassInfo == null)
                 return null;
 
-            // Parameter and return types from descriptor + generic types from signature
-            addTypeRefs(descriptor);
-            addSignatureRefs(signature);
+            String member = memberPrefix + name;
+            typeUses.method(member, descriptor, signature, exceptions);
 
-            currentClassInfo.addMethod(name, descriptor);
-            DependencyModel.MethodInfo methodInfo = currentClassInfo.getMethod(name, descriptor);
-            return new MethodCallExtractor(currentClassInfo, methodInfo);
-        }
-
-        /** Adds a USES edge for every non-primitive, non-array-of-primitive class in {@code descriptor}. */
-        private void addTypeRefs(String descriptor) {
-            if (descriptor == null || currentClassInfo == null) return;
-            try {
-                Type type = Type.getType(descriptor);
-                addTypeRef(type);
-            } catch (IllegalArgumentException e) {
-                // method descriptor — parse args + return separately
-                try {
-                    for (Type arg : Type.getArgumentTypes(descriptor)) addTypeRef(arg);
-                    addTypeRef(Type.getReturnType(descriptor));
-                } catch (IllegalArgumentException ignored) { }
-            }
-        }
-
-        private void addTypeRef(Type type) {
-            if (type == null) return;
-            while (type.getSort() == Type.ARRAY) type = type.getElementType();
-            if (type.getSort() != Type.OBJECT) return;
-            String className = type.getClassName();
-            if (!isSelfDependency(className) && !isExternalLibraryClass(className))
-                currentClassInfo.addDependency(className, EdgeKind.USES);
-        }
-
-        /** Visits a generic signature string and adds every referenced class. */
-        private void addSignatureRefs(String signature) {
-            if (signature == null || currentClassInfo == null) return;
-            try {
-                new SignatureReader(signature).accept(new SignatureVisitor(Opcodes.ASM9) {
-                    @Override
-                    public void visitClassType(String name) {
-                        String className = name.replace("/", ".");
-                        if (!isSelfDependency(className) && !isExternalLibraryClass(className))
-                            currentClassInfo.addDependency(className, EdgeKind.USES);
-                    }
-                });
-            } catch (Exception ignored) { }
+            currentClassInfo.addMethod(member, descriptor);
+            DependencyModel.MethodInfo methodInfo = currentClassInfo.getMethod(member, descriptor);
+            return new MethodCallExtractor(currentClassInfo, methodInfo, typeUses);
         }
 
         private String convertClassName(String internalName) {
@@ -579,7 +601,7 @@ public class InputAnalyzer implements LanguageAnalyzer {
         }
 
         private boolean isSelfDependency(String className) {
-            return className.equals(currentClassName);
+            return className.equals(currentClassInfo.fullName);
         }
 
         /**
@@ -592,10 +614,7 @@ public class InputAnalyzer implements LanguageAnalyzer {
             if (className.startsWith("[")) {
                 return true;
             }
-            String outerClassName = className.contains("$")
-                ? className.substring(0, className.indexOf('$'))
-                : className;
-            return isExcludedClass(outerClassName);
+            return isExcludedClass(outerClassName(className));
         }
     }
 
@@ -605,103 +624,118 @@ public class InputAnalyzer implements LanguageAnalyzer {
     private static class MethodCallExtractor extends MethodVisitor {
         private final DependencyModel.ClassInfo classInfo;
         private final DependencyModel.MethodInfo methodInfo;
+        private final TypeUseRecorder typeUses;
 
         public MethodCallExtractor(DependencyModel.ClassInfo classInfo,
-                                   DependencyModel.MethodInfo methodInfo) {
+                                   DependencyModel.MethodInfo methodInfo,
+                                   TypeUseRecorder typeUses) {
             super(Opcodes.ASM9);
+            this.typeUses = typeUses;
             this.classInfo = classInfo;
             this.methodInfo = methodInfo;
+        }
+
+        @Override
+        public AnnotationVisitor visitAnnotationDefault() {
+            return typeUses.annotationValues(methodInfo.name, methodInfo.descriptor);
+        }
+
+        @Override
+        public AnnotationVisitor visitAnnotation(String annotation, boolean visible) {
+            return typeUses.annotation(methodInfo.name, methodInfo.descriptor, annotation);
+        }
+
+        @Override
+        public AnnotationVisitor visitTypeAnnotation(int typeRef, TypePath path, String annotation, boolean visible) {
+            return visitAnnotation(annotation, visible);
+        }
+
+        @Override
+        public AnnotationVisitor visitParameterAnnotation(int parameter, String annotation, boolean visible) {
+            return visitAnnotation(annotation, visible);
+        }
+
+        @Override
+        public void visitTryCatchBlock(Label start, Label end, Label handler, String type) {
+            if (type != null) { // finally catches everything
+                typeUses.typeInstruction(methodInfo, TypeUse.Kind.CATCH, type);
+            }
+            super.visitTryCatchBlock(start, end, handler, type);
+        }
+
+        @Override
+        public void visitMultiANewArrayInsn(String descriptor, int dimensions) {
+            typeUses.typeInstruction(methodInfo, TypeUse.Kind.ARRAY, descriptor);
+            super.visitMultiANewArrayInsn(descriptor, dimensions);
         }
 
         @Override
         public void visitLdcInsn(Object value) {
             // Class literals: Foo.class compiles to LDC with a Type constant
             if (value instanceof Type t) {
-                if (t.getSort() == Type.OBJECT || t.getSort() == Type.ARRAY) {
-                    Type elem = t;
-                    while (elem.getSort() == Type.ARRAY) elem = elem.getElementType();
-                    if (elem.getSort() == Type.OBJECT) {
-                        String className = getOuterClassName(elem.getClassName());
-                        if (!isExternalLibraryClass(className) && !className.equals(classInfo.fullName))
-                            classInfo.addDependency(className, EdgeKind.USES);
-                    }
-                }
+                typeUses.classLiteral(methodInfo, t);
             }
             super.visitLdcInsn(value);
         }
 
         @Override
         public void visitTypeInsn(int opcode, String type) {
-            // NEW, CHECKCAST, INSTANCEOF, ANEWARRAY — unwrap array descriptors to element class
-            String className;
-            if (type.startsWith("[")) {
-                try {
-                    Type t = Type.getType(type);
-                    while (t.getSort() == Type.ARRAY) t = t.getElementType();
-                    if (t.getSort() != Type.OBJECT) { super.visitTypeInsn(opcode, type); return; }
-                    className = getOuterClassName(t.getClassName());
-                } catch (IllegalArgumentException ignored) { super.visitTypeInsn(opcode, type); return; }
-            } else {
-                className = getOuterClassName(type.replace("/", "."));
-            }
-            if (!isExternalLibraryClass(className) && !className.equals(classInfo.fullName))
-                classInfo.addDependency(className, EdgeKind.USES);
+            typeUses.typeInstruction(methodInfo, switch (opcode) {
+                case Opcodes.NEW -> TypeUse.Kind.NEW;
+                case Opcodes.CHECKCAST -> TypeUse.Kind.CAST;
+                case Opcodes.INSTANCEOF -> TypeUse.Kind.INSTANCEOF;
+                default -> TypeUse.Kind.ARRAY;
+            }, type);
             super.visitTypeInsn(opcode, type);
         }
 
         @Override
         public void visitFieldInsn(int opcode, String owner, String name, String descriptor) {
-            // GETSTATIC, PUTSTATIC, GETFIELD, PUTFIELD — track owner AND field type
-            String ownerClass = getOuterClassName(owner.replace("/", "."));
-            if (!isExternalLibraryClass(ownerClass) && !ownerClass.equals(classInfo.fullName))
-                classInfo.addDependency(ownerClass, EdgeKind.USES);
-            try {
-                Type fieldType = Type.getType(descriptor);
-                while (fieldType.getSort() == Type.ARRAY) fieldType = fieldType.getElementType();
-                if (fieldType.getSort() == Type.OBJECT) {
-                    String typeClass = getOuterClassName(fieldType.getClassName());
-                    if (!isExternalLibraryClass(typeClass) && !typeClass.equals(classInfo.fullName))
-                        classInfo.addDependency(typeClass, EdgeKind.USES);
-                }
-            } catch (IllegalArgumentException ignored) { }
+            typeUses.fieldAccess(methodInfo, owner, name, descriptor);
             super.visitFieldInsn(opcode, owner, name, descriptor);
         }
 
         @Override
         public void visitMethodInsn(int opcode, String owner, String name, String descriptor, boolean isInterface) {
-            String ownerClass = owner.replace("/", ".");
-
-            // Map inner classes to their outer class for dependency tracking
-            String dependencyClass = getOuterClassName(ownerClass);
-            String methodCall = ownerClass + "." + name;
-
-            // Track the call - filter out external library classes and self-references
-            if (!isExternalLibraryClass(dependencyClass) && !dependencyClass.equals(classInfo.fullName)) {
-                methodInfo.methodCalls.merge(methodCall, 1, Integer::sum);
-                methodInfo.methodCallDescriptors
-                        .computeIfAbsent(methodCall, k -> new HashSet<>())
-                        .add(descriptor);
-                // INVOKESPECIAL on <init> is "new T(...)" — distinguish constructor
-                // from regular method calls so the UI can show "instantiates" vs "calls".
-                EdgeKind kind = (opcode == Opcodes.INVOKESPECIAL && "<init>".equals(name))
-                        ? EdgeKind.INSTANTIATES
-                        : EdgeKind.CALLS;
-                classInfo.addDependency(dependencyClass, kind);
-            }
-
+            // INVOKESPECIAL on <init> is "new T(...)" — distinguish constructor
+            // from regular method calls so the UI can show "instantiates" vs "calls".
+            addCall(owner, name, descriptor, opcode == Opcodes.INVOKESPECIAL && "<init>".equals(name));
             super.visitMethodInsn(opcode, owner, name, descriptor, isInterface);
         }
-        
+
         /**
-         * Gets the outer class name for inner classes.
-         * e.g., "com.example.Foo$Bar" -> "com.example.Foo"
+         * A method or constructor reference ({@code Foo::bar}) calls nothing
+         * here, but it names the method it stands for among the arguments. The
+         * body of a lambda is a method of the class itself.
          */
-        private String getOuterClassName(String className) {
-            return className.contains("$") 
-                ? className.substring(0, className.indexOf('$')) 
-                : className;
+        @Override
+        public void visitInvokeDynamicInsn(String name, String descriptor, Handle bootstrapMethod,
+                                           Object... bootstrapArguments) {
+            for (Object argument : bootstrapArguments) {
+                if (argument instanceof Handle handle && handle.getTag() >= Opcodes.H_INVOKEVIRTUAL) {
+                    addCall(handle.getOwner(), handle.getName(), handle.getDesc(),
+                            handle.getTag() == Opcodes.H_NEWINVOKESPECIAL);
+                }
+            }
+            super.visitInvokeDynamicInsn(name, descriptor, bootstrapMethod, bootstrapArguments);
         }
-        
+
+        /** Records a call unless it goes to an external library or to the class itself. */
+        private void addCall(String owner, String name, String descriptor, boolean constructor) {
+            String ownerClass = owner.replace("/", ".");
+            // Map inner classes to their outer class for dependency tracking
+            String dependencyClass = outerClassName(ownerClass);
+            if (isExternalLibraryClass(dependencyClass) || dependencyClass.equals(classInfo.fullName)) {
+                return;
+            }
+            String methodCall = ownerClass + "." + name;
+            methodInfo.methodCalls.merge(methodCall, 1, Integer::sum);
+            methodInfo.methodCallDescriptors
+                    .computeIfAbsent(methodCall, k -> new HashSet<>())
+                    .add(descriptor);
+            classInfo.addDependency(dependencyClass, constructor ? EdgeKind.INSTANTIATES : EdgeKind.CALLS);
+        }
+
         /**
          * Checks if a class is from external libraries (JDK, JavaFX, frameworks, etc.)
          * or matches a user-supplied glob pattern. Entries are loaded from
@@ -712,10 +746,7 @@ public class InputAnalyzer implements LanguageAnalyzer {
             if (className.startsWith("[")) {
                 return true;
             }
-            String outerClassName = className.contains("$")
-                ? className.substring(0, className.indexOf('$'))
-                : className;
-            return isExcludedClass(outerClassName);
+            return isExcludedClass(outerClassName(className));
         }
     }
 }

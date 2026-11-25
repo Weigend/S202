@@ -30,7 +30,6 @@ import de.weigend.s202.ui.core.arrows.SCCRenderer;
 import de.weigend.s202.ui.core.arrows.TangleEdgeScope;
 import de.weigend.s202.ui.core.arrows.WhatIfUpwardEdgeRenderer;
 import de.weigend.s202.ui.core.graph.PulseCoalescer;
-import de.weigend.s202.ui.core.canvas.ZoomController;
 import io.softwareecg.wfx.lookup.api.Lookup;
 import javafx.beans.property.BooleanProperty;
 import javafx.scene.Node;
@@ -41,6 +40,7 @@ import javafx.scene.layout.StackPane;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.function.BiPredicate;
 import java.util.function.Consumer;
 import java.util.function.Supplier;
 
@@ -60,6 +60,7 @@ final class OverlayRenderCoordinator {
     private final BooleanProperty showPackageScc;
     private final BooleanProperty showWhatIfViolations;
     private final PulseCoalescer arrowsCoalescer;
+    private BiPredicate<String, String> edgeFilter = (from, to) -> true;
     private final de.weigend.s202.ui.core.arrows.DependencyEdgeActions edgeActions;
     /** The refactoring-preview cuts; a cycle they break is no longer one. */
     private final Supplier<Set<DependencyEdge>> appliedCuts;
@@ -129,9 +130,8 @@ final class OverlayRenderCoordinator {
     }
 
     /** Erzeugt alle Renderer für den frisch gebauten Content neu. */
-    void rebuildRenderers(Pane zoomableContent, StackPane overlayPane,
-                          ScrollPane scrollPane, ZoomController zoomController) {
-        classicRenderer = new DependencyRenderer(dependencyPane, elementRegistry, zoomController, status);
+    void rebuildRenderers(Pane zoomableContent, StackPane overlayPane, ScrollPane scrollPane) {
+        classicRenderer = new DependencyRenderer(dependencyPane, elementRegistry, status);
         classicRenderer.setCoordinateContext(zoomableContent, overlayPane, scrollPane);
         classicRenderer.setEdgeActions(edgeActions);
         dependencyRenderer = classicRenderer;
@@ -142,11 +142,28 @@ final class OverlayRenderCoordinator {
 
         whatIfRenderer = new WhatIfUpwardEdgeRenderer(whatIfPane, elementRegistry);
         whatIfRenderer.setCoordinateContext(zoomableContent, overlayPane);
+        applyEdgeFilter();
 
         dependencyRenderer.clearDependencyArrows();
         sccRenderer.clearSccLines();
         dependencyPane.setVisible(false);
         sccPane.setVisible(false);
+    }
+
+    /** Draws only the class dependencies that pass; all overlays follow. */
+    void setEdgeFilter(BiPredicate<String, String> filter) {
+        edgeFilter = filter;
+        linesNeedUpdate = true;
+        if (classicRenderer != null) {
+            applyEdgeFilter();
+            arrowsCoalescer.markDirty();
+        }
+    }
+
+    private void applyEdgeFilter() {
+        classicRenderer.setEdgeFilter(edgeFilter);
+        sccRenderer.setEdgeFilter(edgeFilter);
+        whatIfRenderer.setEdgeFilter(edgeFilter);
     }
 
     WhatIfUpwardEdgeRenderer whatIfRenderer() {

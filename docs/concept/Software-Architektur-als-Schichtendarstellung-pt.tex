@@ -34,7 +34,7 @@
 \title{Arquitetura de Software como Representa\c{c}\~ao em Camadas\\
   \large An\'alise de Arquitetura de Software com S202}
 \author{Johannes Weigend}
-\date{Vers\~ao revista, 14~de novembro de~2026}
+\date{Vers\~ao revista, 24~de novembro de~2026}
 
 \begin{document}
 
@@ -380,6 +380,15 @@ detectar SCCs e atribuir cada depend\^encia ao cont\^einer que decide sua
 dire\c{c}\~ao. A figura vis\'ivel de S202 surge depois a partir da estrutura
 de pacotes e da ordem dentro de cada cont\^einer.
 
+Uma depend\^encia entre classes surge de uma chamada ou refer\^encia de m\'etodo,
+de uma instancia\c{c}\~ao, de heran\c{c}a ou de uma refer\^encia pura de tipo:
+tipo de campo, de par\^ametro ou de retorno, argumento de tipo, cast,
+anota\c{c}\~ao ou exce\c{c}\~ao capturada. Todas contam igualmente, pois em
+nenhum desses casos o c\'odigo compila sem a outra classe. Quanto custa remover a
+depend\^encia \'e uma quest\~ao \`a parte, respondida pelo peso. Classes
+aninhadas, locais e an\^onimas n\~ao s\~ao n\'os pr\'oprios: aquilo de que elas
+dependem e aquilo que depende delas conta para a classe que as envolve.
+
 Para cada depend\^encia entre classes $X \to Y$, S202 determina o cont\^einer
 mais profundo que cont\'em $X$ e $Y$ e os dois filhos desse cont\^einer em
 cujas sub\'arvores $X$ e $Y$ se encontram. A depend\^encia torna-se uma aresta
@@ -393,7 +402,8 @@ com.a.X -> com.a.b.Y    conteiner com.a   aresta com.a.X -> com.a.b
 
 O peso de uma aresta entre irm\~aos \'e a soma das chamadas de m\'etodo de
 todas as depend\^encias entre classes projetadas sobre ela; uma depend\^encia
-sem contagem de chamadas contribui com um peso de fallback de~1. Nada \'e
+sem chamadas~-- heran\c{c}a ou uma refer\^encia pura de tipo~-- contribui com um
+peso de fallback de~1. Nada \'e
 propagado: nem o lado de origem nem o de destino \'e multiplicado ao longo da
 cadeia de ancestrais. O n\'umero de arestas \'e limitado pelo n\'umero de
 depend\^encias entre classes, e cada depend\^encia tem exatamente um lugar em
@@ -671,13 +681,13 @@ seguida verificar se esses cortes realmente dissolvem a SCC afetada. O
 usu\'ario n\~ao v\^e apenas qual aresta seria uma quebra plaus\'ivel da ordem,
 mas tamb\'em pode verificar o efeito desse corte sobre o ciclo.
 
-Essa l\'ogica de CUT trabalha em granularidade mais fina que a aresta vis\'ivel
-entre classes ou pacotes. O corte ocorre no n\'ivel de chamada de m\'etodo:
-n\~ao necessariamente desaparece toda a rela\c{c}\~ao entre duas classes, mas
-a chamada concreta de m\'etodo que causa a depend\^encia c\'iclica. Assim o
-recurso se ajusta melhor ao trabalho pr\'atico de refatora\c{c}\~ao, porque um
-ciclo muitas vezes surge de poucas chamadas concretas, n\~ao da rela\c{c}\~ao
-funcional completa entre duas classes.
+O que se corta \'e a depend\^encia entre duas classes. Para cada corte, a
+ferramenta mostra o que a sustenta: as chamadas de m\'etodo individuais e as
+demais refer\^encias~-- campos, par\^ametros, casts~-- que mant\^em a
+depend\^encia viva mesmo quando todas as chamadas foram removidas. Um ciclo
+muitas vezes surge de poucos pontos concretos do c\'odigo, n\~ao da
+rela\c{c}\~ao funcional completa entre duas classes; a ferramenta indica esses
+pontos e, com isso, o esfor\c{c}o que um corte representa.
 
 \section{Implementa\c{c}\~ao em N\'ivel Conceitual}
 
@@ -688,11 +698,11 @@ estarem dispon\'iveis as informa\c{c}\~oes que justificam essa posi\c{c}\~ao.
 \begin{enumerate}
   \item \textbf{Construir o grafo de classes:} A partir do bytecode \'e gerado
         um grafo dirigido de classes. Esse grafo permanece o modelo bruto da
-        an\'alise. Entram no c\'alculo da ordem apenas arestas que carregam pelo
-        menos uma rela\c{c}\~ao do tipo \texttt{extends}, \texttt{implements},
-        \texttt{imports}, \texttt{instantiates} ou \texttt{calls}; refer\^encias
-        puras de tipo (tipos de campos, par\^ametros e retornos, casts) s\~ao
-        mantidas no modelo bruto, mas n\~ao s\~ao contadas.
+        an\'alise. Entram no c\'alculo da ordem arestas de todos os tipos:
+        \texttt{extends}, \texttt{implements}, \texttt{imports},
+        \texttt{instantiates}, \texttt{calls}, heran\c{c}a com uma classe
+        aninhada em uma das pontas e refer\^encias puras de tipo
+        (\texttt{uses}). Classes aninhadas contam para a classe que as envolve.
   \item \textbf{Detectar SCCs:} No grafo de classes, componentes fortemente
         conexas s\~ao determinadas com Tarjan. O resultado ainda n\~ao \'e um
         layout, mas a informa\c{c}\~ao de quais classes podem ser ordenadas

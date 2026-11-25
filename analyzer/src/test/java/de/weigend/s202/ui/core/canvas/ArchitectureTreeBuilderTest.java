@@ -15,6 +15,7 @@
  */
 package de.weigend.s202.ui.core.canvas;
 
+import de.weigend.s202.ui.core.model.WhatIfMove;
 import de.weigend.s202.ui.core.graph.ElementLookup;
 import de.weigend.s202.ui.views.component.ComponentArchitectureTreeBuilder;
 import de.weigend.s202.domain.DomainModel;
@@ -553,7 +554,7 @@ public class ArchitectureTreeBuilderTest {
 
             drop(store, findComponent(view, "com.acme.ship").rowStack(false));
             assertEquals(1, view.getWhatIfMoves().size());
-            WhatIfUndoManager.Move move = view.getWhatIfMoves().get(0);
+            WhatIfMove move = view.getWhatIfMoves().get(0);
             assertEquals("com.acme.repo.store.Store", move.fqn());
             assertEquals("com.acme.ship", move.containerFqn());
             assertFalse(move.api());

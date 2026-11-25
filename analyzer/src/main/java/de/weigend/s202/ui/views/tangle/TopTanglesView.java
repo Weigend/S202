@@ -15,6 +15,7 @@
  */
 package de.weigend.s202.ui.views.tangle;
 
+import de.weigend.s202.domain.DependencyEdge;
 import de.weigend.s202.reader.EdgeKind;
 import io.softwareecg.wfx.windowmanager.api.Position;
 import io.softwareecg.wfx.windowmanager.api.View;
@@ -29,6 +30,7 @@ import javafx.scene.input.MouseButton;
 import javafx.scene.layout.BorderPane;
 
 import java.net.URL;
+import java.util.Collection;
 import java.util.List;
 import java.util.function.BiConsumer;
 import java.util.function.Consumer;
@@ -62,9 +64,9 @@ public class TopTanglesView implements View {
     public record RefactoringPreviewRow(String from, String to) implements Row {}
     /** Section header separating the method-hotspot list from the tangle list. */
     public record HotspotHeaderRow() implements Row {}
-    /** One method call that eliminates the most tangle edges when removed. */
+    /** A method that several back-edges call, with these back-edges. */
     public record HotspotEntryRow(String label, int edgeCount, List<HotspotCallerRow> callerRows) implements Row {}
-    /** One caller edge (with FQNs) shown as child of a {@link HotspotEntryRow}. */
+    /** One back-edge, a class dependency, shown as child of a {@link HotspotEntryRow}. */
     public record HotspotCallerRow(String from, String to) implements Row {}
 
     /** Display data for a single tangle. */
@@ -88,7 +90,7 @@ public class TopTanglesView implements View {
     private Consumer<OpenRequest> openTangleHandler;
     private BiConsumer<String, String> cutEdgeHandler = (from, to) -> {};
     private BiConsumer<String, String> restoreEdgeHandler = (from, to) -> {};
-    private Consumer<Tangle> cutAllHandler = tangle -> {};
+    private Consumer<Collection<DependencyEdge>> cutAllHandler = edges -> {};
 
     public TopTanglesView() {
         root.getStyleClass().add("top-tangles-view");
@@ -255,8 +257,9 @@ public class TopTanglesView implements View {
         this.restoreEdgeHandler = handler == null ? (from, to) -> {} : handler;
     }
 
-    public void setOnCutAll(Consumer<Tangle> handler) {
-        this.cutAllHandler = handler == null ? tangle -> {} : handler;
+    /** Called with the dependencies of a "Cut All", of a tangle or of a cut target. */
+    public void setOnCutAll(Consumer<Collection<DependencyEdge>> handler) {
+        this.cutAllHandler = handler == null ? edges -> {} : handler;
     }
 
     private static String simple(String fqn) {
@@ -350,19 +353,22 @@ public class TopTanglesView implements View {
 
         private ContextMenu hotspotCutAllMenu(HotspotEntryRow row) {
             MenuItem cutAll = new MenuItem("Cut All");
-            cutAll.setOnAction(e -> row.callerRows()
-                    .forEach(c -> cutEdgeHandler.accept(c.from(), c.to())));
+            cutAll.setOnAction(e -> cutAllHandler.accept(row.callerRows().stream()
+                    .map(c -> new DependencyEdge(c.from(), c.to()))
+                    .toList()));
             return new ContextMenu(cutAll);
         }
 
         private ContextMenu tangleContextMenu(Tangle tangle) {
-            boolean hasCutCandidate = tangle.edges().stream()
-                    .anyMatch(edge -> edge.cycleBreakEdge() && !edge.cutApplied());
-            if (!hasCutCandidate) {
+            List<DependencyEdge> candidates = tangle.edges().stream()
+                    .filter(edge -> edge.cycleBreakEdge() && !edge.cutApplied())
+                    .map(edge -> new DependencyEdge(edge.from(), edge.to()))
+                    .toList();
+            if (candidates.isEmpty()) {
                 return null;
             }
             MenuItem cutAll = new MenuItem("Cut All");
-            cutAll.setOnAction(e -> cutAllHandler.accept(tangle));
+            cutAll.setOnAction(e -> cutAllHandler.accept(candidates));
             return new ContextMenu(cutAll);
         }
 

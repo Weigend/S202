@@ -15,9 +15,7 @@
  */
 package de.weigend.s202.project;
 
-import de.weigend.s202.analysis.invariants.LayoutInvariantReport;
 import de.weigend.s202.domain.DependencyEdge;
-import de.weigend.s202.domain.DomainModel;
 import de.weigend.s202.domain.architecture.ArchitectureAnnotations;
 import de.weigend.s202.reader.DependencyModel;
 
@@ -25,7 +23,7 @@ import java.util.List;
 import java.util.Set;
 
 /**
- * Converts between the runtime domain model and the serialisable
+ * Converts between the runtime models and the serialisable
  * {@link S202Project} snapshot.
  */
 public interface ProjectMapper {
@@ -39,22 +37,13 @@ public interface ProjectMapper {
     S202Project toProject(String appVersion,
                           S202Project.Source source,
                           DependencyModel rawModel,
-                          DomainModel domainModel,
                           ArchitectureAnnotations annotations,
-                          LayoutInvariantReport invariantReport,
-                          Set<DependencyEdge> cycleBreakEdges,
                           Set<DependencyEdge> previewCuts,
                           List<S202Project.ViewDto> views);
 
     DependencyModel toDependencyModel(S202Project.DependencyModelDto dto);
 
-    DomainModel toDomainModel(S202Project.DomainModelDto dto);
-
     ArchitectureAnnotations toArchitectureAnnotations(S202Project.ArchitectureAnnotationsDto dto);
 
-    LayoutInvariantReport toLayoutInvariantReport(S202Project.LayoutInvariantReportDto dto);
-
-    Set<DependencyEdge> toCycleBreakEdges(List<S202Project.CycleBreakEdgeDto> dtos);
-
-    Set<DependencyEdge> toPreviewCuts(List<S202Project.CycleBreakEdgeDto> dtos);
+    Set<DependencyEdge> toPreviewCuts(List<S202Project.CutDto> dtos);
 }

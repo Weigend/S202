@@ -205,7 +205,8 @@ public final class HexagonalArchitectureBuilder implements ArchitectureStyle {
                                 .thenComparing(HexagonalArchitecture.HexPort::classFqn))
                         .toList(),
                 elements,
-                detectViolations(domain, projectionByClass),
+                detectViolations(domain, projectionByClass,
+                        contractSides(index, effectiveAnnotations).keySet()),
                 detectTangles(domain));
     }
 
@@ -646,8 +647,10 @@ public final class HexagonalArchitectureBuilder implements ArchitectureStyle {
         return false;
     }
 
+    /** @param contracts the ports of the hexagon: marked by the user or in a package named api or spi */
     private static List<Violation> detectViolations(DomainModel domain,
-                                                    Map<String, ElementProjection> projectionByClass) {
+                                                    Map<String, ElementProjection> projectionByClass,
+                                                    Set<String> contracts) {
         List<Violation> violations = new ArrayList<>();
         for (CalculatedElementInfo source : sortedClasses(domain)) {
             ElementProjection sourceProjection = projectionByClass.get(source.fullName);
@@ -661,10 +664,10 @@ public final class HexagonalArchitectureBuilder implements ArchitectureStyle {
                 }
                 CalculatedElementInfo target = domain.getClass(targetFqn);
                 int targetLevel = target == null ? -1 : target.architectureLevel;
-                boolean targetIsExplicitPort = targetProjection.explicitPort();
                 boolean outward = ringRank(sourceProjection.ringRole()) < ringRank(targetProjection.ringRole());
 
-                if (outward && !isAllowedOutboundPortDependency(targetProjection)) {
+                boolean targetIsPort = contracts.contains(targetFqn);
+                if (outward && !(targetIsPort && mayBeUsedFromInside(targetProjection))) {
                     violations.add(new Violation(
                             source.fullName,
                             targetFqn,
@@ -685,7 +688,7 @@ public final class HexagonalArchitectureBuilder implements ArchitectureStyle {
                 boolean adapterToApplicationImplementation =
                         sourceProjection.ringRole() == HexagonalArchitecture.RingRole.ADAPTER
                                 && targetProjection.ringRole() == HexagonalArchitecture.RingRole.APPLICATION;
-                if (adapterToApplicationImplementation && !targetIsExplicitPort) {
+                if (adapterToApplicationImplementation && !targetIsPort) {
                     violations.add(new Violation(
                             source.fullName,
                             targetFqn,
@@ -699,11 +702,10 @@ public final class HexagonalArchitectureBuilder implements ArchitectureStyle {
         return violations;
     }
 
-    private static boolean isAllowedOutboundPortDependency(ElementProjection targetProjection) {
-        return targetProjection.explicitPort()
-                && (targetProjection.elementRole() == ArchitectureAnnotations.ElementRole.OUTBOUND_PORT
-                || targetProjection.elementRole() == ArchitectureAnnotations.ElementRole.INBOUND_PORT
-                || targetProjection.elementRole() == ArchitectureAnnotations.ElementRole.NONE);
+    private static boolean mayBeUsedFromInside(ElementProjection port) {
+        return port.elementRole() == ArchitectureAnnotations.ElementRole.OUTBOUND_PORT
+                || port.elementRole() == ArchitectureAnnotations.ElementRole.INBOUND_PORT
+                || port.elementRole() == ArchitectureAnnotations.ElementRole.NONE;
     }
 
     private static int ringRank(HexagonalArchitecture.RingRole role) {

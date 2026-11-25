@@ -31,7 +31,7 @@ from X to Y, fallback 1.
 
 | Step | What | Where |
 |---|---|---|
-| 1, 2 | Create class and package elements. Only edge kinds other than `USES` count as dependencies. | `LevelCalculator` |
+| 1, 2 | Create class and package elements. Every edge kind counts as a dependency, references by type (`USES`) included. | `LevelCalculator` |
 | 3 | **Container levelization** per container: Tarjan → *container tangles*; deterministic rank cut → *container back-edges*; longest path → `localLevel`. | `ContainerLevelizer` |
 | 4 | **Class back-edges**: a class dependency is a back-edge iff its projection is a cut sibling edge. | `LevelCalculator` |
 | 5 | **Class `architectureLevel`**: longest path on the class graph minus the *level cuts* — the back-edges that lie inside a class cycle (Tarjan on the class graph). A back-edge outside any class cycle still counts. Acyclic by construction: every class cycle contains at least one back-edge. | `LevelCalculator` |

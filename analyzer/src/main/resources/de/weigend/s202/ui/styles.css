@@ -64,6 +64,10 @@
     -fx-text-fill: #b0b0b0;
 }
 
+.check-menu-item:checked > .left-container > .check {
+    -fx-background-color: #ffd54f;
+}
+
 .separator-menu-item .line {
     -fx-border-color: #34495e;
     -fx-border-width: 1 0 0 0;
@@ -395,6 +399,73 @@
 
 .top-tangles-tree .top-tangles-hotspot-caller-row {
     -fx-text-fill: #9ab0c8;
+}
+
+/* ===== Dependency Details view (under the editor area, light like the Dependencies panel) ===== */
+.dependency-details,
+.dependency-details-header {
+    -fx-background-color: #f5f5f0;
+}
+
+.dependency-details-header {
+    -fx-padding: 4 8;
+}
+
+.dependency-details .dependency-details-title {
+    -fx-font-size: 12px;
+    -fx-font-weight: bold;
+    -fx-text-fill: #202020;
+}
+
+.dependency-details .dependency-details-summary {
+    -fx-font-size: 11px;
+    -fx-text-fill: #5a5e62;
+}
+
+.dependency-details .tree-table-view {
+    -fx-background-color: #f5f5f0;
+    -fx-control-inner-background: #f5f5f0;
+    -fx-control-inner-background-alt: #f5f5f0;
+    -fx-table-cell-border-color: transparent;
+}
+
+.dependency-details .tree-table-view > .placeholder > .label {
+    -fx-text-fill: #5a5e62;
+}
+
+.dependency-details .column-header-background,
+.dependency-details .column-header,
+.dependency-details .column-header-background .filler {
+    -fx-background-color: #e4e4dc;
+}
+
+.dependency-details .column-header .label {
+    -fx-text-fill: #5a5e62;
+    -fx-font-weight: bold;
+    -fx-alignment: center-left;
+}
+
+.dependency-details .tree-table-cell {
+    -fx-font-size: 11px;
+    -fx-padding: 2 6;
+    -fx-text-fill: #202020;
+}
+
+.dependency-details .dependency-details-group {
+    -fx-font-weight: bold;
+}
+
+.dependency-details .dependency-details-back-edge {
+    -fx-text-fill: #c62828;
+}
+
+.dependency-details .dependency-details-reference {
+    -fx-font-style: italic;
+}
+
+.dependency-details .tree-table-row-cell:selected .tree-table-cell {
+    -fx-background-color: #3d5a80;
+    -fx-text-fill: #ffffff;
 }
 
 /* ===== About dialog ===== */

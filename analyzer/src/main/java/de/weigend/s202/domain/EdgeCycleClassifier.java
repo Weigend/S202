@@ -15,11 +15,17 @@
  */
 package de.weigend.s202.domain;
 
+import java.util.ArrayDeque;
+import java.util.ArrayList;
+import java.util.Comparator;
+import java.util.Deque;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.TreeMap;
 
 /**
  * Answers, for one class dependency, the questions every cycle view asks:
@@ -52,6 +58,8 @@ public final class EdgeCycleClassifier {
     }
 
     private final DomainModel model;
+    /** Class fqn → dependencies within the model, without the preview cuts. */
+    private final Map<String, Set<String>> graph = new HashMap<>();
     /** Class fqn → id of its class cycle; classes outside any cycle are absent. */
     private final Map<String, Integer> classCycleOf = new HashMap<>();
     /** Sibling fqn (class or package) → index of its container tangle. */
@@ -67,7 +75,7 @@ public final class EdgeCycleClassifier {
     public static EdgeCycleClassifier of(DomainModel model, Set<DependencyEdge> cutEdges, SCCFinder finder) {
         EdgeCycleClassifier result = new EdgeCycleClassifier(model);
         Map<String, DomainModel.CalculatedElementInfo> classes = model.getAllClasses();
-        Map<String, Set<String>> graph = new HashMap<>();
+        Map<String, Set<String>> graph = result.graph;
         for (DomainModel.CalculatedElementInfo cls : classes.values()) {
             Set<String> targets = new HashSet<>();
             for (String dep : cls.dependencies) {
@@ -138,5 +146,86 @@ public final class EdgeCycleClassifier {
     /** Id of the class cycle {@code classFqn} belongs to, or {@code null} when it is on none. */
     public Integer classCycleId(String classFqn) {
         return classCycleOf.get(classFqn);
+    }
+
+    /**
+     * Why {@code from → to} lies on a cycle: the shortest way back from
+     * {@code to} to {@code from} — through classes for a class cycle, through
+     * the siblings of the container for a package cycle.
+     */
+    public CycleReturnPath returnPath(String from, String to) {
+        Integer cycle = classCycleOf.get(from);
+        if (cycle == null || !cycle.equals(classCycleOf.get(to))) {
+            return packageReturnPath(from, to);
+        }
+        // The whole way back stays inside the class cycle.
+        Map<String, Map<String, List<DependencyEdge>>> steps = new HashMap<>();
+        for (Map.Entry<String, Set<String>> entry : graph.entrySet()) {
+            if (!cycle.equals(classCycleOf.get(entry.getKey()))) {
+                continue;
+            }
+            for (String target : entry.getValue()) {
+                if (cycle.equals(classCycleOf.get(target))) {
+                    addStep(steps, entry.getKey(), target, new DependencyEdge(entry.getKey(), target));
+                }
+            }
+        }
+        return new CycleReturnPath(false, shortestPath(steps, to, from));
+    }
+
+    /**
+     * The way back between the two siblings that {@code from → to} connects;
+     * {@link CycleReturnPath#NONE} when they are not tangled.
+     */
+    public CycleReturnPath packageReturnPath(String from, String to) {
+        ContainerProjection.Projection p = ContainerProjection.project(from, to);
+        if (p == null || !inTangle(from, to)) {
+            return CycleReturnPath.NONE;
+        }
+        Integer tangle = tangleOf.get(p.fromSibling());
+        Map<String, Map<String, List<DependencyEdge>>> steps = new HashMap<>();
+        for (Map.Entry<String, Set<String>> entry : graph.entrySet()) {
+            for (String target : entry.getValue()) {
+                ContainerProjection.Projection step = ContainerProjection.project(entry.getKey(), target);
+                if (step != null && tangle.equals(tangleOf.get(step.fromSibling()))
+                        && tangle.equals(tangleOf.get(step.toSibling()))) {
+                    addStep(steps, step.fromSibling(), step.toSibling(), new DependencyEdge(entry.getKey(), target));
+                }
+            }
+        }
+        return new CycleReturnPath(true, shortestPath(steps, p.toSibling(), p.fromSibling()));
+    }
+
+    private static void addStep(Map<String, Map<String, List<DependencyEdge>>> steps,
+                                String from, String to, DependencyEdge edge) {
+        steps.computeIfAbsent(from, k -> new TreeMap<>()).computeIfAbsent(to, k -> new ArrayList<>()).add(edge);
+    }
+
+    /** Breadth-first; neighbours in name order, so the answer is the same every time. */
+    private static List<CycleReturnPath.Step> shortestPath(Map<String, Map<String, List<DependencyEdge>>> steps,
+                                                           String start, String end) {
+        Map<String, String> cameFrom = new HashMap<>();
+        Deque<String> queue = new ArrayDeque<>(List.of(start));
+        cameFrom.put(start, start);
+        while (!queue.isEmpty() && !cameFrom.containsKey(end)) {
+            String node = queue.remove();
+            for (String next : steps.getOrDefault(node, Map.of()).keySet()) {
+                if (cameFrom.putIfAbsent(next, node) == null) {
+                    queue.add(next);
+                }
+            }
+        }
+        if (!cameFrom.containsKey(end)) {
+            return List.of();
+        }
+        LinkedList<CycleReturnPath.Step> path = new LinkedList<>();
+        for (String node = end; !node.equals(start); node = cameFrom.get(node)) {
+            String previous = cameFrom.get(node);
+            List<DependencyEdge> edges = steps.get(previous).get(node).stream()
+                    .sorted(Comparator.comparing(DependencyEdge::from).thenComparing(DependencyEdge::to))
+                    .toList();
+            path.addFirst(new CycleReturnPath.Step(previous, node, edges));
+        }
+        return path;
     }
 }

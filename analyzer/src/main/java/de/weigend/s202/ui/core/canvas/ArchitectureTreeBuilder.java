@@ -15,6 +15,7 @@
  */
 package de.weigend.s202.ui.core.canvas;
 
+import de.weigend.s202.ui.core.spi.BuildProgressSink;
 import de.weigend.s202.ui.core.graph.ArchitectureDragController;
 import de.weigend.s202.ui.core.graph.LevelClassBox;
 import de.weigend.s202.ui.core.graph.LevelPackageBox;
@@ -229,7 +230,7 @@ public class ArchitectureTreeBuilder {
 
     public void buildTreeAsync(ArchitectureNode rootNode,
                                int maxDepth,
-                               ProgressSink progressSink,
+                               BuildProgressSink progressSink,
                                Consumer<VBox> onComplete) {
         buildTreeAsync(rootNode, maxDepth, true, progressSink, onComplete);
     }
@@ -237,7 +238,7 @@ public class ArchitectureTreeBuilder {
     public void buildTreeAsync(ArchitectureNode rootNode,
                                int maxDepth,
                                boolean skipTransparentTopLevelPackages,
-                               ProgressSink progressSink,
+                               BuildProgressSink progressSink,
                                Consumer<VBox> onComplete) {
         if (rootNode == null) {
             throw new IllegalArgumentException("rootNode cannot be null");
@@ -276,11 +277,6 @@ public class ArchitectureTreeBuilder {
         }
     }
 
-    @FunctionalInterface
-    public interface ProgressSink {
-        void accept(int processedNodes, int totalNodes, String currentElement);
-    }
-
     private void runAsyncBatch(Queue<Runnable> queue, VBox topLevelContainer, Consumer<VBox> onComplete) {
         int steps = 0;
         while (!queue.isEmpty() && steps < ASYNC_BATCH_SIZE) {
@@ -303,7 +299,7 @@ public class ArchitectureTreeBuilder {
                                       Set<String> elementsAddedToParent,
                                       Queue<Runnable> queue,
                                       BuildProgressCounter counter,
-                                      ProgressSink progressSink) {
+                                      BuildProgressSink progressSink) {
         HBox levelRow = topLevelRows.computeIfAbsent(child.getLevel(),
                 l -> TreeBuilderSupport.createTopLevelRow(topLevelContainer, siblingGap()));
 
@@ -345,7 +341,7 @@ public class ArchitectureTreeBuilder {
                                  int maxDepth,
                                  Queue<Runnable> queue,
                                  BuildProgressCounter counter,
-                                 ProgressSink progressSink) {
+                                 BuildProgressSink progressSink) {
         for (ArchitectureNode child : HorizontalLayoutOrdering.childrenInLayoutOrder(node)) {
             queue.add(() -> processChildNode(child, packageContainers, rootLevel, elementsAddedToParent,
                     archRoot, currentDepth, maxDepth, queue, counter, progressSink));
@@ -361,7 +357,7 @@ public class ArchitectureTreeBuilder {
                                   int maxDepth,
                                   Queue<Runnable> queue,
                                   BuildProgressCounter counter,
-                                  ProgressSink progressSink) {
+                                  BuildProgressSink progressSink) {
         if (elementsAddedToParent.contains(child.getFullName())) {
             return;
         }
@@ -415,7 +411,7 @@ public class ArchitectureTreeBuilder {
         reportProgress(counter, child, progressSink);
     }
 
-    private void reportProgress(BuildProgressCounter counter, ArchitectureNode node, ProgressSink sink) {
+    private void reportProgress(BuildProgressCounter counter, ArchitectureNode node, BuildProgressSink sink) {
         counter.processed++;
         if (sink != null && (counter.processed == 1 || counter.processed % ASYNC_BATCH_SIZE == 0
                 || counter.processed >= counter.total)) {

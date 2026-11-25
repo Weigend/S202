@@ -15,6 +15,7 @@
  */
 package de.weigend.s202.ui.features.outline;
 
+import de.weigend.s202.domain.MethodDeclarations;
 import de.weigend.s202.reader.DependencyModel;
 import de.weigend.s202.ui.core.model.ArchitectureNode;
 import io.softwareecg.wfx.windowmanager.api.Position;
@@ -53,6 +54,8 @@ public class OutlineExplorerView implements View {
 
     private final BorderPane root = new BorderPane();
     private final TreeView<OutlineRow> treeView = new TreeView<>();
+    /** Knows the methods and supertypes of the shown classes; null when nothing is shown. */
+    private DependencyModel rawModel;
     private final Label emptyPlaceholder = new Label("No JAR loaded");
 
     private Consumer<String> nodeClickHandler = fqn -> { /* no-op */ };
@@ -88,6 +91,7 @@ public class OutlineExplorerView implements View {
     }
 
     public void setArchitectureRoot(ArchitectureNode rootNode, DependencyModel rawModel) {
+        this.rawModel = rootNode == null ? null : rawModel;
         if (rootNode == null) {
             showEmpty();
             return;
@@ -133,10 +137,12 @@ public class OutlineExplorerView implements View {
 
     /**
      * Expand the owning class, select the matching method row, and scroll it
-     * into view. Falls back to the class row if the method is absent.
+     * into view. A method the class inherits is shown at the supertype that
+     * declares it, if the outline contains that one. Falls back to the class
+     * row if the method is absent or {@code methodName} is {@code null}.
      */
     public void revealMethod(String className, String methodName, String descriptor) {
-        if (className == null || methodName == null) {
+        if (className == null) {
             return;
         }
         TreeItem<OutlineRow> rootItem = treeView.getRoot();
@@ -147,7 +153,15 @@ public class OutlineExplorerView implements View {
         if (classItem == null) {
             return;
         }
-        TreeItem<OutlineRow> methodItem = findMethodItem(classItem, methodName, descriptor);
+        TreeItem<OutlineRow> methodItem = methodName == null ? null
+                : findMethodItem(classItem, methodName, descriptor);
+        if (methodItem == null) {
+            String declaring = MethodDeclarations.declaringClass(rawModel, className, methodName, descriptor);
+            TreeItem<OutlineRow> declaringItem = declaring == null ? null : findItem(rootItem, declaring);
+            if (declaringItem != null) {
+                methodItem = findMethodItem(declaringItem, methodName, descriptor);
+            }
+        }
         selectTreeItem(methodItem == null ? classItem : methodItem);
     }
 

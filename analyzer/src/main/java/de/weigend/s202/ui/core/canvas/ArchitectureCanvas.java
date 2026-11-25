@@ -15,8 +15,9 @@
  */
 package de.weigend.s202.ui.core.canvas;
 
+import de.weigend.s202.ui.core.model.EdgeKindGroup;
+import de.weigend.s202.ui.core.model.WhatIfMove;
 import de.weigend.s202.ui.core.canvas.WhatIfEditController;
-import de.weigend.s202.ui.core.canvas.WhatIfUndoManager;
 import de.weigend.s202.ui.core.graph.ArchitectureDragController;
 import de.weigend.s202.ui.core.graph.GraphSelection;
 import de.weigend.s202.ui.core.graph.LevelClassBox;
@@ -43,6 +44,7 @@ import de.weigend.s202.ui.core.model.ArchitectureNodeCloner;
 import de.weigend.s202.ui.core.model.ScopeExtensionModel;
 import de.weigend.s202.ui.core.arrows.DependencyRenderer;
 import de.weigend.s202.ui.core.arrows.DependencyRendererStrategy;
+import de.weigend.s202.ui.core.arrows.DependencySelection;
 import de.weigend.s202.ui.core.arrows.SCCRenderer;
 import de.weigend.s202.ui.core.arrows.TangleEdgeScope;
 import de.weigend.s202.ui.core.arrows.WhatIfUpwardEdgeRenderer;
@@ -238,7 +240,7 @@ public class ArchitectureCanvas extends AbstractArchitectureCanvas {
                 () -> currentRootNode,
                 this::getScopeExtensionSourceRoot,
                 () -> getScene() == null ? null : getScene().getWindow(),
-                this::setArchitectureRoot,
+                extendedRoot -> keepingOverlays(() -> setArchitectureRoot(extendedRoot)),
                 this::selectByFullName,
                 this::scopeExtended);
         wirePropertyListeners();
@@ -375,6 +377,8 @@ public class ArchitectureCanvas extends AbstractArchitectureCanvas {
         showPackageScc.addListener((obs, was, isNow) -> overlay.applyShowPackageScc(isNow));
         showWhatIfViolations.addListener((obs, was, isNow) -> overlay.applyShowWhatIfViolations(isNow));
         limitBoxWidth.addListener((obs, was, isNow) -> applyLimitBoxWidth(isNow));
+        hiddenEdgeKinds.addListener((obs, was, isNow) -> overlay.setEdgeFilter((from, to) ->
+                EdgeKindGroup.shows(isNow, projection.getRawDependencyModel(), from, to)));
     }
 
     /**
@@ -451,18 +455,12 @@ public class ArchitectureCanvas extends AbstractArchitectureCanvas {
         // A planned package may have been added or deleted, with moves into it.
         componentMovesChanged();
         String selected = selection.getSelectedFullName();
-        boolean depsSave = showDependencies.get();
-        boolean sccSave = showScc.get();
-        boolean pkgSccSave = showPackageScc.get();
-        boolean wifSave = showWhatIfViolations.get();
-        setArchitectureRoot(currentRootNode, viewState);
-        if (viewStyle == ArchitectureKind.COMPONENT) {
-            whatIfEdit.replayMoves();
-        }
-        showDependencies.set(depsSave);
-        showScc.set(sccSave);
-        showPackageScc.set(pkgSccSave);
-        showWhatIfViolations.set(wifSave);
+        keepingOverlays(() -> {
+            setArchitectureRoot(currentRootNode, viewState);
+            if (viewStyle == ArchitectureKind.COMPONENT) {
+                whatIfEdit.replayMoves();
+            }
+        });
         if (selected != null) {
             selection.restoreSelectionWithoutScrolling(selected);
         }
@@ -571,6 +569,8 @@ public class ArchitectureCanvas extends AbstractArchitectureCanvas {
         }
 
         zoomController = new ZoomController(zoomableContent, overlay::handleZoomChanged);
+        // A new controller starts at 100 %, whatever the one before was at.
+        zoomFactor.set(zoomController.getZoomFactor());
         zoomController.zoomFactorProperty().addListener(
                 (obs, was, isNow) -> zoomFactor.set(isNow.doubleValue()));
         if (preservedState != null) {
@@ -579,7 +579,7 @@ public class ArchitectureCanvas extends AbstractArchitectureCanvas {
             zoomController.resetZoom();
         }
 
-        overlay.rebuildRenderers(zoomableContent, overlayPane, scrollPane, zoomController);
+        overlay.rebuildRenderers(zoomableContent, overlayPane, scrollPane);
 
         // Reset overlay toggles for the new architecture so the global toolbar resyncs.
         showDependencies.set(false);
@@ -796,30 +796,33 @@ public class ArchitectureCanvas extends AbstractArchitectureCanvas {
         if (currentRootNode == null) {
             return;
         }
-        // finishArchitectureRootBuild resets overlay toggles to false so that the
-        // toolbar syncs correctly when a new JAR is loaded.  For a depth-change
-        // refresh we want to keep whatever the user had enabled, so save and
-        // restore them around the rebuild.
-        boolean depsSave    = showDependencies.get();
-        boolean sccSave     = showScc.get();
-        boolean pkgSccSave2 = showPackageScc.get();
-        boolean wifSave     = showWhatIfViolations.get();
-
         WhatIfArchitecture wif = projection.getWhatIfArchitecture();
         if (wif != null) {
             wif.reset();
         }
         whatIfEdit.clearMovedFqns();
-        setArchitectureRoot(currentRootNode);
+        keepingOverlays(() -> setArchitectureRoot(currentRootNode));
+    }
 
-        showDependencies.set(depsSave);
-        showScc.set(sccSave);
-        showPackageScc.set(pkgSccSave2);
-        showWhatIfViolations.set(wifSave);
+    /**
+     * Runs {@code rebuild} and switches the overlays back to what they were:
+     * every build of a root switches them off, for a new analysis to start
+     * plain. A rebuild of what the user is looking at keeps them.
+     */
+    private void keepingOverlays(Runnable rebuild) {
+        boolean dependencies = showDependencies.get();
+        boolean classCycles = showScc.get();
+        boolean packageCycles = showPackageScc.get();
+        boolean violations = showWhatIfViolations.get();
+        rebuild.run();
+        showDependencies.set(dependencies);
+        showScc.set(classCycles);
+        showPackageScc.set(packageCycles);
+        showWhatIfViolations.set(violations);
     }
 
     /** The moves made in this view, in order, without the undone ones. */
-    public List<WhatIfUndoManager.Move> getWhatIfMoves() {
+    public List<WhatIfMove> getWhatIfMoves() {
         return whatIfEdit.undoManager().effectiveMoves();
     }
 
@@ -989,12 +992,12 @@ public class ArchitectureCanvas extends AbstractArchitectureCanvas {
     }
 
     /**
-     * Set a sink that receives {@code (from, to)} whenever the user selects a
-     * class-to-class dependency arrow, and {@code (null, null)} when the
-     * arrow is deselected. Pass {@code null} to detach.
+     * Set a sink that is told whenever the user selects a dependency arrow,
+     * and {@link DependencySelection#NONE} when the arrow is deselected. Pass
+     * {@code null} to detach.
      */
-    public void setOnDependencyEdgeClicked(BiConsumer<String, String> sink) {
-        previewCuts.setOnEdgeClicked(sink);
+    public void setOnDependencySelected(Consumer<DependencySelection> sink) {
+        previewCuts.setOnSelected(sink);
     }
 
     /**

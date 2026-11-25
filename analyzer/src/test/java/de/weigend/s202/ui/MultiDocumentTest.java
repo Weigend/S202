@@ -24,18 +24,23 @@ import de.weigend.s202.domain.architecture.ArchitectureKind;
 import de.weigend.s202.project.S202Project;
 import de.weigend.s202.reader.DependencyModel;
 import de.weigend.s202.reader.impl.java.InputAnalyzer;
+import de.weigend.s202.ui.core.arrows.DependencySelection;
 import de.weigend.s202.ui.core.canvas.ArchitectureCanvas;
 import de.weigend.s202.ui.core.events.CutTangleEdgeEvent;
+import de.weigend.s202.ui.core.events.DependencySelectionEvent;
 import de.weigend.s202.ui.core.events.OpenTangleEvent;
 import de.weigend.s202.ui.core.events.RestoreTangleEdgeEvent;
 import de.weigend.s202.ui.core.layout.horizontal.HorizontalRowLayoutOptimizer;
 import de.weigend.s202.ui.core.model.ArchitectureNode;
 import de.weigend.s202.ui.core.model.ArchitectureNodeBuilder;
+import de.weigend.s202.ui.core.model.EdgeKindGroup;
 import de.weigend.s202.ui.core.platform.AnalysisDocument;
 import de.weigend.s202.ui.core.platform.ArchitectureViewManager;
 import de.weigend.s202.ui.core.platform.ArchitectureWfxView;
 import de.weigend.s202.ui.core.platform.Refactorings;
 import de.weigend.s202.ui.core.platform.ViewDescriptor;
+import de.weigend.s202.ui.features.details.DependencyDetailsModule;
+import de.weigend.s202.ui.features.details.DependencyDetailsView;
 import de.weigend.s202.ui.features.outline.OutlineExplorerModule;
 import de.weigend.s202.ui.features.outline.OutlineExplorerView;
 import de.weigend.s202.ui.features.quality.QualityModule;
@@ -44,14 +49,21 @@ import de.weigend.s202.ui.features.whatif.WhatIfDependenciesModule;
 import de.weigend.s202.ui.features.whatif.WhatIfDependenciesView;
 import de.weigend.s202.ui.shell.ProjectPersistenceController;
 import de.weigend.s202.ui.shell.S202Module;
+import de.weigend.s202.ui.shell.ToolbarController;
 import de.weigend.s202.ui.views.tangle.TopTanglesModule;
 import de.weigend.s202.ui.views.tangle.TopTanglesView;
 import io.softwareecg.wfx.lookup.api.Lookup;
 import io.softwareecg.wfx.platform.api.EventBus;
 import io.softwareecg.wfx.platform.api.Module;
+import io.softwareecg.wfx.windowmanager.api.ApplicationWindow;
 import io.softwareecg.wfx.windowmanager.api.View;
 import io.softwareecg.wfx.windowmanager.api.WindowManager;
 import javafx.application.Platform;
+import javafx.collections.FXCollections;
+import javafx.collections.ObservableList;
+import javafx.scene.Node;
+import javafx.scene.control.CheckBox;
+import javafx.scene.control.TreeView;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Assumptions;
@@ -61,6 +73,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
 import java.lang.reflect.Field;
+import java.lang.reflect.Proxy;
 import java.nio.file.Path;
 import java.time.Duration;
 import java.util.EventObject;
@@ -98,8 +111,8 @@ import static org.junit.jupiter.api.Assertions.fail;
 class MultiDocumentTest {
 
     private static final Duration FX_TIMEOUT = Duration.ofSeconds(20);
-    private static final String EXAMPLE_JAR = "../test-example/target/test-example-1.4.0.jar";
-    private static final String HEXAGON_JAR = "../test-hexagon/target/test-hexagon-1.4.0.jar";
+    private static final String EXAMPLE_JAR = "../test-example/target/test-example-1.5.0.jar";
+    private static final String HEXAGON_JAR = "../test-hexagon/target/test-hexagon-1.5.0.jar";
 
     private static boolean javaFxStarted;
     private static List<Module> panels;
@@ -129,7 +142,8 @@ class MultiDocumentTest {
                 module(all, OutlineExplorerModule.class),
                 module(all, QualityModule.class),
                 module(all, TopTanglesModule.class),
-                module(all, WhatIfDependenciesModule.class));
+                module(all, WhatIfDependenciesModule.class),
+                module(all, DependencyDetailsModule.class));
         for (Module panel : panels) {
             panel.preload();
         }
@@ -182,7 +196,7 @@ class MultiDocumentTest {
     @Test
     void everyPanelIsRegisteredBeforeAnAnalysisIsOpen() {
         assertEquals(Set.of(OutlineExplorerView.VIEW_ID, QualityView.VIEW_ID, TopTanglesView.VIEW_ID,
-                WhatIfDependenciesView.VIEW_ID), Set.copyOf(panelsAtStartup));
+                WhatIfDependenciesView.VIEW_ID, DependencyDetailsView.VIEW_ID), Set.copyOf(panelsAtStartup));
     }
 
     /* ----- Welches Dokument ist gemeint? ------------------------------------ */
@@ -236,6 +250,37 @@ class MultiDocumentTest {
             assertNull(viewManager.activeDocument());
             assertPanelsShow(null);
         });
+    }
+
+    @Test
+    void theDetailsPanelExplainsTheArrowSelectedInTheActiveTab() {
+        DependencyEdge edge = example.domainModel().getClassBackEdges().stream()
+                .min(java.util.Comparator.comparing(DependencyEdge::from).thenComparing(DependencyEdge::to))
+                .orElseThrow();
+        DependencySelection arrow = new DependencySelection(edge.from(), edge.to(), List.of(edge));
+        onFx(() -> {
+            ArchitectureCanvas canvas = exampleView.getArchitectureView();
+            windowManager.setFocusedView(exampleView);
+            assertTrue(detailRows().isEmpty());
+
+            bus.publish(new DependencySelectionEvent(arrow, canvas));
+            int rows = detailRows().size();
+            assertTrue(rows > 0);
+
+            windowManager.setFocusedView(hexagonView);
+            assertTrue(detailRows().isEmpty(), "nothing is selected in this tab");
+            windowManager.setFocusedView(exampleView);
+            assertEquals(rows, detailRows().size(), "back in the tab, its arrow is still explained");
+
+            bus.publish(new DependencySelectionEvent(DependencySelection.NONE, canvas));
+            assertTrue(detailRows().isEmpty());
+        });
+    }
+
+    private List<?> detailRows() {
+        javafx.scene.layout.BorderPane root = (javafx.scene.layout.BorderPane)
+                windowManager.findView(DependencyDetailsView.VIEW_ID).getRootNode();
+        return ((javafx.scene.control.TreeTableView<?>) root.getCenter()).getRoot().getChildren();
     }
 
     /* ----- Abgeleitete Tabs gehören zum aktiven Dokument --------------------- */
@@ -446,6 +491,117 @@ class MultiDocumentTest {
         });
     }
 
+    /** The file holds the dependencies only; levels, weights and back-edges come out as they were. */
+    @Test
+    void aLoadedProjectShowsTheSameArchitecture(@TempDir Path directory) {
+        Path file = directory.resolve("saved.s202.json");
+        ProjectPersistenceController persistence = persistence();
+        onFx(() -> persistence.saveProject(example, file));
+
+        onFx(() -> persistence.loadProject(file));
+        await(() -> viewManager.activeDocument() != null
+                && viewManager.activeDocument().name().equals("saved")
+                && viewManager.activeCanvas().hasRoot());
+
+        onFx(() -> {
+            DomainModel before = example.domainModel();
+            DomainModel after = viewManager.activeDocument().domainModel();
+            assertTrue(before.getAllPackages().values().stream().anyMatch(pkg -> pkg.localLevel > 0));
+            before.getAllClasses().forEach((fqn, cls) -> {
+                assertEquals(cls.localLevel, after.getClass(fqn).localLevel, fqn);
+                assertEquals(cls.architectureLevel, after.getClass(fqn).architectureLevel, fqn);
+                cls.dependencies.forEach(dep -> assertEquals(before.getClassEdgeWeight(fqn, dep),
+                        after.getClassEdgeWeight(fqn, dep), fqn + " -> " + dep));
+            });
+            before.getAllPackages().forEach((fqn, pkg) -> {
+                assertEquals(pkg.localLevel, after.getPackage(fqn).localLevel, fqn);
+                assertEquals(pkg.architectureLevel, after.getPackage(fqn).architectureLevel, fqn);
+            });
+            assertFalse(before.getClassBackEdges().isEmpty());
+            assertEquals(before.getClassBackEdges(), after.getClassBackEdges());
+            assertEquals(before.getSiblingEdgeWeights(), after.getSiblingEdgeWeights());
+            assertEquals(Set.copyOf(before.getContainerTangles()), Set.copyOf(after.getContainerTangles()));
+            assertEquals(exampleView.getArchitectureView().getArchitecture().violations().size(),
+                    viewManager.activeCanvas().getArchitecture().violations().size());
+            assertEquals(example.cycleBreakEdges(), viewManager.activeDocument().cycleBreakEdges());
+            assertFalse(viewManager.activeDocument().invariants().hasFindings());
+        });
+    }
+
+    /** Closing the last analysis empties the panel; the same code opened again fills it. */
+    @Test
+    void topTanglesShowsTheSameCodeAgainAfterEverythingWasClosed() {
+        onFx(() -> {
+            windowManager.setFocusedView(exampleView);
+            viewManager.closeDocument(hexagon);
+        });
+        await(() -> topTangleRows() > 0);
+        onFx(() -> viewManager.closeDocument(example));
+        await(() -> topTangleRows() == 0);
+
+        onFx(() -> open(example));
+
+        await(() -> topTangleRows() > 0);
+    }
+
+    @SuppressWarnings("unchecked")
+    private int topTangleRows() {
+        View panel = windowManager.findView(TopTanglesView.VIEW_ID);
+        TreeView<Object> tree = (TreeView<Object>) panel.getRootNode().lookup(".top-tangles-tree");
+        return tree.getRoot() == null ? 0 : tree.getRoot().getChildren().size();
+    }
+
+    /* ----- Was die Toolbar anzeigt ------------------------------------------ */
+
+    /** Every rebuild starts at 100 %, and the view says so. */
+    @Test
+    void theZoomOfAViewIsWhatItsPictureShows() {
+        onFx(() -> {
+            ArchitectureCanvas canvas = exampleView.getArchitectureView();
+            canvas.setZoom(0.6);
+            assertEquals(0.6, canvas.zoomFactorProperty().get(), 0.001);
+            canvas.refreshLayout();
+            assertEquals(1.0, canvas.zoomFactorProperty().get(), 0.001);
+        });
+    }
+
+    @Test
+    void theToolbarFollowsTheViewWhoeverChangesIt() {
+        onFx(() -> {
+            ApplicationWindow window = windowWithToolbar(FXCollections.observableArrayList());
+            new ToolbarController(window, viewManager, () -> { }, () -> { }, () -> { }).install();
+            windowManager.setFocusedView(exampleView);
+            CheckBox dependencies = checkBox(window, "Show Dependencies");
+            assertFalse(dependencies.isSelected());
+
+            exampleView.getArchitectureView().setShowDependencies(true);
+            assertTrue(dependencies.isSelected());
+
+            exampleView.getArchitectureView().setShowDependencies(false);
+            bus.publish(new OpenTangleEvent(someClassesOf(example), "a tangle", "Tangle", this));
+            assertTrue(dependencies.isSelected(), "a tangle tab opens with its arrows on");
+            assertTrue(checkBox(window, "Class SCCs").isDisable(), "which already show the cycles");
+
+            windowManager.setFocusedView(exampleView);
+            assertFalse(dependencies.isSelected());
+            assertFalse(checkBox(window, "Class SCCs").isDisable());
+        });
+    }
+
+    /** There is no main window in this test, but the toolbar needs one to put its controls into. */
+    private static ApplicationWindow windowWithToolbar(ObservableList<Node> toolbarItems) {
+        return (ApplicationWindow) Proxy.newProxyInstance(ApplicationWindow.class.getClassLoader(),
+                new Class<?>[]{ApplicationWindow.class},
+                (proxy, method, args) -> method.getName().equals("getToolbarItems") ? toolbarItems : null);
+    }
+
+    private static CheckBox checkBox(ApplicationWindow window, String text) {
+        return window.getToolbarItems().stream()
+                .filter(CheckBox.class::isInstance).map(CheckBox.class::cast)
+                .filter(box -> text.equals(box.getText()))
+                .findFirst().orElseThrow();
+    }
+
     @Test
     void aSavedProjectComesBackWithItsTabsAsTheUserLeftThem(@TempDir Path directory) {
         Path file = directory.resolve("saved.s202.json");
@@ -477,6 +633,7 @@ class MultiDocumentTest {
             main.setPackageDepth(2);
             main.refreshLayout();
             main.setShowDependencies(true);
+            main.setHiddenEdgeKinds(Set.of(EdgeKindGroup.REFERENCES));
             Map<String, Boolean> expansion = new HashMap<>(main.captureViewSnapshot().packageExpansion());
             String open = expansion.entrySet().stream().filter(Map.Entry::getValue).map(Map.Entry::getKey)
                     .sorted().findFirst().orElseThrow();
@@ -518,6 +675,8 @@ class MultiDocumentTest {
             ArchitectureCanvas main = tabs.get(0).getArchitectureView();
             assertEquals(2, main.getPackageDepth());
             assertTrue(main.isShowDependencies());
+            assertEquals(Set.of(EdgeKindGroup.REFERENCES), main.getHiddenEdgeKinds());
+            assertEquals(Set.of(), tabs.get(1).getArchitectureView().getHiddenEdgeKinds(), "each tab its own");
             assertEquals(expansionBefore.get(), main.captureViewSnapshot().packageExpansion(),
                     "the same packages are open and closed");
 
@@ -552,8 +711,7 @@ class MultiDocumentTest {
         Path file = directory.resolve("plain.s202.json");
         new de.weigend.s202.project.impl.S202ProjectStore().save(file,
                 new de.weigend.s202.project.impl.S202ProjectMapper().toProject("test", example.source(),
-                        example.rawModel(), example.domainModel(), example.annotations(), null,
-                        example.cycleBreakEdges()));
+                        example.rawModel(), example.annotations()));
         ProjectPersistenceController persistence = persistence();
 
         onFx(() -> persistence.loadProject(file));

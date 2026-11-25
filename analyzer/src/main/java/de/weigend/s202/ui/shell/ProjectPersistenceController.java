@@ -15,19 +15,14 @@
  */
 package de.weigend.s202.ui.shell;
 
-import de.weigend.s202.analysis.invariants.LayoutInvariantReport;
-import de.weigend.s202.analysis.quality.QualityMetrics;
 import de.weigend.s202.domain.DependencyEdge;
-import de.weigend.s202.domain.DomainModel;
 import de.weigend.s202.domain.architecture.ArchitectureAnnotations;
 import de.weigend.s202.project.ProjectMapper;
 import de.weigend.s202.project.ProjectStore;
 import de.weigend.s202.project.S202Project;
 import de.weigend.s202.reader.DependencyModel;
 import de.weigend.s202.ui.core.canvas.ArchitectureCanvas;
-import de.weigend.s202.ui.core.layout.horizontal.HorizontalRowLayoutOptimizer;
-import de.weigend.s202.ui.core.model.ArchitectureNode;
-import de.weigend.s202.ui.core.model.ArchitectureNodeBuilder;
+import de.weigend.s202.ui.core.model.EdgeKindGroup;
 import de.weigend.s202.ui.core.platform.AnalysisDocument;
 import de.weigend.s202.ui.core.platform.ArchitectureViewManager;
 import de.weigend.s202.ui.core.platform.Dialogs;
@@ -35,6 +30,7 @@ import de.weigend.s202.ui.core.platform.ProgressPublisher;
 import de.weigend.s202.ui.core.platform.RecentDirectories;
 import de.weigend.s202.ui.core.platform.ArchitectureWfxView;
 import de.weigend.s202.ui.core.platform.ViewDescriptor;
+import de.weigend.s202.ui.shell.AnalysisBuilder.AnalysisResult;
 import io.softwareecg.wfx.lookup.api.Lookup;
 import io.softwareecg.wfx.windowmanager.api.WindowManager;
 import javafx.concurrent.Task;
@@ -52,6 +48,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.TreeMap;
+import java.util.stream.Collectors;
 import java.util.function.Supplier;
 
 /**
@@ -74,13 +71,12 @@ public final class ProjectPersistenceController {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(ProjectPersistenceController.class);
 
-    private final ArchitectureNodeBuilder architectureNodeBuilder = new ArchitectureNodeBuilder();
-
     private final ArchitectureViewManager viewManager;
     private final ProgressPublisher progress;
     private final RecentDirectories recentDirs;
     private final Supplier<Window> dialogOwner;
     private final Supplier<String> appVersion;
+    private final AnalysisBuilder analysisBuilder;
 
     public ProjectPersistenceController(ArchitectureViewManager viewManager,
                                         ProgressPublisher progress,
@@ -92,13 +88,11 @@ public final class ProjectPersistenceController {
         this.recentDirs = recentDirs;
         this.dialogOwner = dialogOwner;
         this.appVersion = appVersion;
+        this.analysisBuilder = new AnalysisBuilder(progress);
     }
 
-    private record LoadedProject(S202Project project, DependencyModel rawModel,
-                                 DomainModel domainModel, ArchitectureAnnotations annotations,
-                                 ArchitectureNode rootNode,
-                                 QualityMetrics metrics, LayoutInvariantReport invariants,
-                                 Set<DependencyEdge> cycleBreakEdges,
+    private record LoadedProject(S202Project project, AnalysisResult analysis,
+                                 ArchitectureAnnotations annotations,
                                  Set<DependencyEdge> previewCuts) {}
 
     /** Speichert das aktive Dokument — das, an dem der Benutzer gerade arbeitet. */
@@ -129,10 +123,7 @@ public final class ProjectPersistenceController {
                 appVersion.get(),
                 document.source(),
                 document.rawModel(),
-                document.domainModel(),
                 document.annotations(),
-                document.invariants(),
-                document.cycleBreakEdges(),
                 document.previewCuts(),
                 views);
 
@@ -165,20 +156,15 @@ public final class ProjectPersistenceController {
                 ProjectMapper projectMapper = projectMapper();
                 S202Project project = projectStore().load(file);
                 DependencyModel rawModel = projectMapper.toDependencyModel(project.dependencyModel());
-                DomainModel domainModel = projectMapper.toDomainModel(project.domainModel());
-                ArchitectureAnnotations annotations =
-                        projectMapper.toArchitectureAnnotations(project.architectureAnnotations());
-                ArchitectureNode root = architectureNodeBuilder.build(domainModel);
-                new HorizontalRowLayoutOptimizer().assignHorizontalLayoutOrders(root);
-                de.weigend.s202.ui.core.consistency.ArchitectureConsistencyDevHook
-                        .runIfEnabled(domainModel, root);
-                QualityMetrics metrics = QualityMetrics.compute(domainModel);
-                LayoutInvariantReport invariants = projectMapper.toLayoutInvariantReport(project.layoutInvariantReport());
-                Set<DependencyEdge> cycleBreakEdges =
-                        projectMapper.toCycleBreakEdges(project.cycleBreakEdges());
-                Set<DependencyEdge> previewCuts = projectMapper.toPreviewCuts(project.previewCuts());
-                return new LoadedProject(project, rawModel, domainModel, annotations, root, metrics, invariants,
-                        cycleBreakEdges, previewCuts);
+                AnalysisResult analysis = analysisBuilder.build(rawModel,
+                        project.source() == null || project.source().paths() == null
+                                ? List.of() : project.source().paths());
+                if (analysis.rootNode() == null) {
+                    throw new IOException("The project contains no classes");
+                }
+                return new LoadedProject(project, analysis,
+                        projectMapper.toArchitectureAnnotations(project.architectureAnnotations()),
+                        projectMapper.toPreviewCuts(project.previewCuts()));
             }
         };
         task.setOnSucceeded(e -> applyLoadedProject(file, task.getValue()));
@@ -198,8 +184,9 @@ public final class ProjectPersistenceController {
     private void applyLoadedProject(Path path, LoadedProject loaded) {
         AnalysisDocument document = new AnalysisDocument(
                 viewManager.uniqueDocumentName(documentName(path)),
-                loaded.project().source(), loaded.rawModel(), loaded.domainModel(), loaded.rootNode(),
-                loaded.metrics(), loaded.invariants(), loaded.cycleBreakEdges());
+                loaded.project().source(), loaded.analysis().rawModel(), loaded.analysis().domainModel(),
+                loaded.analysis().rootNode(), loaded.analysis().metrics(), loaded.analysis().invariants(),
+                loaded.analysis().cycleBreakEdges());
         document.setAnnotations(loaded.annotations());
         document.addPreviewCuts(loaded.previewCuts());
 
@@ -227,9 +214,9 @@ public final class ProjectPersistenceController {
             progress.progress(String.format(
                     "Loaded project %s | %d classes | %d levels | Max level %d | %d of %d tab%s",
                     path.getFileName(),
-                    loaded.rawModel().getAllClasses().size(),
-                    loaded.rootNode().getLevelCount(),
-                    loaded.rootNode().getMaxLevel(),
+                    loaded.analysis().rawModel().getAllClasses().size(),
+                    loaded.analysis().rootNode().getLevelCount(),
+                    loaded.analysis().rootNode().getMaxLevel(),
                     opened[0], expected, expected == 1 ? "" : "s"), 1);
         });
     }
@@ -288,6 +275,7 @@ public final class ProjectPersistenceController {
                 canvas.isShowPackageScc(),
                 canvas.isShowWhatIfViolations(),
                 canvas.isLimitBoxWidth(),
+                canvas.getHiddenEdgeKinds().stream().map(EdgeKindGroup::name).sorted().toList(),
                 snapshot == null ? 1.0 : snapshot.zoom(),
                 snapshot == null ? 0.0 : snapshot.horizontalScroll(),
                 snapshot == null ? 0.0 : snapshot.verticalScroll(),
@@ -314,6 +302,8 @@ public final class ProjectPersistenceController {
         canvas.setShowPackageScc(dto.showPackageCycles());
         canvas.setShowWhatIfViolations(dto.showViolations());
         canvas.setLimitBoxWidth(dto.limitBoxWidth());
+        canvas.setHiddenEdgeKinds(dto.hiddenEdgeKinds() == null ? Set.of()
+                : dto.hiddenEdgeKinds().stream().map(EdgeKindGroup::valueOf).collect(Collectors.toSet()));
         canvas.restoreViewSnapshot(new ArchitectureCanvas.ViewSnapshot(
                 dto.zoom(), dto.horizontalScroll(), dto.verticalScroll(), dto.expandedPackages()));
     }
@@ -321,7 +311,7 @@ public final class ProjectPersistenceController {
     private static S202Project.ViewDto layeredViewOfTheWholeAnalysis() {
         return new S202Project.ViewDto(
                 ViewDescriptor.Kind.LAYERED.name(), null, null, List.of(), List.of(), null, false,
-                ArchitectureCanvas.DEFAULT_PACKAGE_DEPTH, false, false, false, false, false,
+                ArchitectureCanvas.DEFAULT_PACKAGE_DEPTH, false, false, false, false, false, List.of(),
                 1.0, 0.0, 0.0, Map.of(), null, true);
     }
 

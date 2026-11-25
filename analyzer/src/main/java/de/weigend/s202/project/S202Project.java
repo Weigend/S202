@@ -15,30 +15,35 @@
  */
 package de.weigend.s202.project;
 
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
+import com.fasterxml.jackson.annotation.JsonInclude;
 import de.weigend.s202.reader.EdgeKind;
+import de.weigend.s202.reader.TypeUse;
 
 import java.util.List;
 import java.util.Map;
 
 /**
  * Serializable project snapshot: one analysis and what the user had open on
- * it. It captures the analyzed data model, the annotations and preview cuts
- * made on it, and its tabs — what each shows and how it was set up (package
- * depth, zoom, open packages). It does not capture where the tabs sat in the
- * window; the arrangement of the window belongs to the workbench, not to one
- * analysis.
+ * it. It captures the dependencies that were read, the annotations and preview
+ * cuts made on them, and the tabs — what each shows and how it was set up
+ * (package depth, zoom, open packages). It does not capture where the tabs sat
+ * in the window; the arrangement of the window belongs to the workbench, not
+ * to one analysis.
+ * <p>
+ * What can be computed from the dependencies — levels, cycles, back-edges,
+ * invariants — is computed when the project is loaded. Files older than
+ * version 7 contain parts of it; those are not read.
  */
+@JsonIgnoreProperties({"domainModel", "cycleBreakEdges", "layoutInvariantReport"})
 public record S202Project(
         String format,
         int formatVersion,
         CreatedWith createdWith,
         Source source,
         DependencyModelDto dependencyModel,
-        DomainModelDto domainModel,
         ArchitectureAnnotationsDto architectureAnnotations,
-        List<CycleBreakEdgeDto> cycleBreakEdges,
-        LayoutInvariantReportDto layoutInvariantReport,
-        List<CycleBreakEdgeDto> previewCuts,
+        List<CutDto> previewCuts,
         List<ViewDto> views,
         String savedAt) {
 
@@ -46,18 +51,29 @@ public record S202Project(
     public static final int MIN_SUPPORTED_FORMAT_VERSION = 1;
     /**
      * Version 4 added {@link #previewCuts()} and {@link #views()}, version 5
-     * {@link ViewDto#limitBoxWidth()}.
+     * {@link ViewDto#limitBoxWidth()}, version 6 {@link ClassInfoDto#typeUses()}
+     * and {@link ViewDto#hiddenEdgeKinds()}, version 7 the annotated packages of
+     * {@link DependencyModelDto}; it dropped what is computed on loading.
      */
-    public static final int FORMAT_VERSION = 5;
+    public static final int FORMAT_VERSION = 7;
 
     public record CreatedWith(String app, String version) {}
 
     public record Source(String kind, List<String> paths, String projectRoot) {}
 
+    /**
+     * @param componentPackages packages annotated with {@code @S202Component}; files older than
+     *                          version 7 do not name annotated packages
+     * @param apiPackages       packages annotated with {@code @S202Api}
+     * @param plainPackages     packages annotated with {@code @S202Package}
+     */
     public record DependencyModelDto(
             Map<String, ClassInfoDto> classes,
             Map<String, PackageInfoDto> packages,
-            List<ModuleInfoDto> modules) {}
+            List<ModuleInfoDto> modules,
+            List<String> componentPackages,
+            List<String> apiPackages,
+            List<String> plainPackages) {}
 
     public record ClassInfoDto(
             String fullName,
@@ -66,7 +82,16 @@ public record S202Project(
             boolean interfaceType,
             List<String> dependencies,
             Map<String, List<EdgeKind>> dependencyKinds,
-            Map<String, MethodInfoDto> methods) {}
+            Map<String, MethodInfoDto> methods,
+            Map<String, List<TypeUseDto>> typeUses) {}
+
+    /** Attributes that do not apply are left out of the file. */
+    @JsonInclude(JsonInclude.Include.NON_NULL)
+    public record TypeUseDto(
+            TypeUse.Kind kind,
+            String member,
+            String descriptor,
+            String detail) {}
 
     public record MethodInfoDto(
             String name,
@@ -89,10 +114,6 @@ public record S202Project(
     public record ModulePackageAccessDto(
             String packageName,
             List<String> targetModules) {}
-
-    public record DomainModelDto(
-            Map<String, CalculatedElementDto> classes,
-            Map<String, CalculatedElementDto> packages) {}
 
     public record ArchitectureAnnotationsDto(
             List<ComponentSpecDto> components,
@@ -120,16 +141,8 @@ public record S202Project(
             String elementFqn,
             String role) {}
 
-    public record CalculatedElementDto(
-            String fullName,
-            String simpleName,
-            String type,
-            boolean interfaceType,
-            int level,
-            List<String> dependencies,
-            List<String> dependents) {}
-
-    public record CycleBreakEdgeDto(String from, String to) {}
+    /** A class dependency cut in the refactoring preview. */
+    public record CutDto(String from, String to) {}
 
     /**
      * One tab of the analysis: what it shows ({@code kind} to
@@ -147,6 +160,8 @@ public record S202Project(
      * @param limitBoxWidth    whether package boxes stop at a maximum width
      *                         instead of filling their row; files older than
      *                         version 5 do not have it and read as false
+     * @param hiddenEdgeKinds  the kinds of dependency the tab does not draw;
+     *                         files older than version 6 do not have it
      * @param expandedPackages package FQN to open (true) or closed (false)
      * @param active           whether this was the tab the user worked in
      */
@@ -164,29 +179,11 @@ public record S202Project(
             boolean showPackageCycles,
             boolean showViolations,
             boolean limitBoxWidth,
+            List<String> hiddenEdgeKinds,
             double zoom,
             double horizontalScroll,
             double verticalScroll,
             Map<String, Boolean> expandedPackages,
             String selected,
             boolean active) {}
-
-    public record LayoutInvariantReportDto(
-            List<String> sourcePaths,
-            int maxLevel,
-            int packageCount,
-            int classCount,
-            int dependencyCount,
-            int identifiedBackEdgeCount,
-            List<InvariantFindingDto> findings) {}
-
-    public record InvariantFindingDto(
-            String ruleId,
-            String message,
-            String fromName,
-            String toName,
-            int fromLevel,
-            int toLevel,
-            String fromContainer,
-            String toContainer) {}
 }

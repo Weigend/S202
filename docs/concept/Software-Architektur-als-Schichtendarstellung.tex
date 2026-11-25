@@ -34,7 +34,7 @@
 \title{Software-Architektur als Schichtendarstellung\\
   \large Analyse von Software-Architektur mit S202}
 \author{Johannes Weigend}
-\date{\"Uberarbeitete Fassung, 14.~November~2026}
+\date{\"Uberarbeitete Fassung, 24.~November~2026}
 
 \begin{document}
 
@@ -375,6 +375,15 @@ zu erkennen und jede Abh\"angigkeit dem Container zuzuordnen, der \"uber ihre
 Richtung entscheidet. Die sichtbare S202-Grafik entsteht danach aus der
 Paketstruktur und der Ordnung innerhalb jedes Containers.
 
+Eine Klassenabh\"angigkeit entsteht durch einen Methodenaufruf oder eine
+Methodenreferenz, durch Instanziierung, durch Vererbung oder durch eine reine
+Typreferenz: Feld-, Parameter- oder R\"uckgabetyp, Typargument, Cast, Annotation
+oder gefangene Exception. Alle z\"ahlen gleicherma\ss{}en, denn in keinem dieser
+F\"alle kompiliert der Code ohne die andere Klasse. Wie teuer es ist, die
+Abh\"angigkeit zu l\"osen, ist eine eigene Frage; sie beantwortet das Gewicht.
+Verschachtelte, lokale und anonyme Klassen sind keine eigenen Knoten: Wovon sie
+abh\"angen und was von ihnen abh\"angt, z\"ahlt f\"ur die umschlie\ss{}ende Klasse.
+
 F\"ur jede Klassenabh\"angigkeit $X \to Y$ bestimmt S202 den tiefsten Container,
 der $X$ und $Y$ gemeinsam enth\"alt, und die beiden Kinder dieses Containers,
 in deren Teilb\"aumen $X$ und $Y$ liegen. Die Abh\"angigkeit wird zur Kante
@@ -388,7 +397,8 @@ com.a.X -> com.a.b.Y    Container com.a   Kante com.a.X -> com.a.b
 
 Das Gewicht einer Geschwisterkante ist die Summe der Methodenaufrufe aller
 Klassenabh\"angigkeiten, die auf sie abgebildet werden; eine Abh\"angigkeit
-ohne Aufrufz\"ahlung tr\"agt ein Fallback-Gewicht von~1 bei. Es wird nichts
+ohne Aufrufe~-- Vererbung oder eine reine Typreferenz~-- tr\"agt ein
+Fallback-Gewicht von~1 bei. Es wird nichts
 propagiert: Weder die Quell- noch die Zielseite wird entlang der Ahnenkette
 vervielf\"altigt. Die Zahl der Kanten ist durch die Zahl der
 Klassenabh\"angigkeiten beschr\"ankt, und jede Abh\"angigkeit hat genau eine
@@ -666,12 +676,13 @@ pr\"ufen, ob diese Schnitte die betroffene SCC tats\"achlich aufl\"osen. Der
 Benutzer sieht nicht nur, welche Kante als Bruch der Ordnung plausibel w\"are,
 sondern kann die Wirkung dieses Schnitts auf den Zyklus \"uberpr\"ufen.
 
-Diese CUT-Logik arbeitet feiner als die sichtbare Klassen- oder Paketkante.
-Geschnitten wird auf Methodenaufrufebene: Nicht zwingend die gesamte Beziehung
-zwischen zwei Klassen verschwindet, sondern der konkrete Methodenaufruf, der
-die zyklische Abh\"angigkeit verursacht. Dadurch passt das Feature besser zur
-praktischen Refactoring-Arbeit, weil ein Zyklus oft durch wenige konkrete
-Aufrufe entsteht, nicht durch die komplette fachliche Beziehung zweier Klassen.
+Geschnitten wird die Abh\"angigkeit zwischen zwei Klassen. Zu jedem Schnitt zeigt
+das Werkzeug, was sie tr\"agt: die einzelnen Methodenaufrufe und die \"ubrigen
+Referenzen~-- Felder, Parameter, Casts~--, die die Abh\"angigkeit auch dann am
+Leben halten, wenn jeder Aufruf entfernt ist. Ein Zyklus entsteht oft durch
+wenige konkrete Stellen im Code, nicht durch die komplette fachliche Beziehung
+zweier Klassen; das Werkzeug nennt diese Stellen und damit den Aufwand, f\"ur den
+ein Schnitt steht.
 
 \section{Umsetzung auf konzeptioneller Ebene}
 
@@ -682,11 +693,12 @@ vorliegen, die diese Position begr\"unden.
 \begin{enumerate}
   \item \textbf{Klassengraph aufbauen:} Aus dem Bytecode wird ein gerichteter
         Klassengraph erzeugt. Dieser Graph bleibt das fachliche Rohmodell der
-        Analyse. In die Ordnungsberechnung gehen nur Kanten ein, die mindestens
-        eine Beziehung der Art \texttt{extends}, \texttt{implements},
-        \texttt{imports}, \texttt{instantiates} oder \texttt{calls} tragen;
-        reine Typreferenzen (Feldtypen, Parameter- und R\"uckgabetypen, Casts)
-        bleiben im Rohmodell erhalten, werden aber nicht gewertet.
+        Analyse. In die Ordnungsberechnung gehen Kanten jeder Art ein:
+        \texttt{extends}, \texttt{implements}, \texttt{imports},
+        \texttt{instantiates}, \texttt{calls}, Vererbung mit einer
+        verschachtelten Klasse an einem Ende und reine Typreferenzen
+        (\texttt{uses}). Verschachtelte Klassen z\"ahlen f\"ur die
+        umschlie\ss{}ende Klasse.
   \item \textbf{SCCs erkennen:} Auf dem Klassengraphen werden stark
         zusammenh\"angende Komponenten mittels Tarjan ermittelt. Das Ergebnis
         ist noch kein Layout, sondern die Information, welche Klassen azyklisch

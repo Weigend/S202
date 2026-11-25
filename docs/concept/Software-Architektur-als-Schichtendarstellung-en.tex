@@ -34,7 +34,7 @@
 \title{Software Architecture as a Layered Representation\\
   \large Analyzing Software Architecture with S202}
 \author{Johannes Weigend}
-\date{Revised version, November~14,~2026}
+\date{Revised version, November~24,~2026}
 
 \begin{document}
 
@@ -354,6 +354,15 @@ and assign every dependency to the container that decides its direction. The
 visible S202 graphic then arises from the package structure and the order
 inside each container.
 
+A class dependency arises from a method call or a method reference, from an
+instantiation, from inheritance, or from a pure type reference: a field,
+parameter, or return type, a type argument, a cast, an annotation, a caught
+exception. All of these count alike, because in none of these cases does the
+code compile without the other class. How much it takes to remove the
+dependency is a separate question, and it is answered by the weight. Nested,
+local, and anonymous classes are not nodes of their own: what they depend on and
+what depends on them counts for the class that encloses them.
+
 For every class dependency $X \to Y$, S202 determines the deepest container
 that holds both $X$ and $Y$, and the two children of that container whose
 subtrees contain $X$ and $Y$. The dependency becomes an edge between these two
@@ -366,8 +375,8 @@ com.a.X -> com.a.b.Y    container com.a   edge com.a.X -> com.a.b
 \end{lstlisting}
 
 The weight of a sibling edge is the sum of the method calls of all class
-dependencies projected onto it; a dependency without call data contributes a
-fallback weight of~1. Nothing is propagated: neither the source nor the target
+dependencies projected onto it; a dependency without calls -- inheritance or a
+pure type reference -- contributes a fallback weight of~1. Nothing is propagated: neither the source nor the target
 side is multiplied along the ancestor chain. The number of edges is bounded by
 the number of class dependencies, and every dependency has exactly one place
 where its direction is decided. Classes and packages are equal nodes in this
@@ -625,12 +634,12 @@ resolve the affected SCC. The user not only sees which edge would be a
 plausible break in the order, but can also verify the effect of that cut on the
 cycle.
 
-This CUT logic is more fine-grained than the visible class or package edge.
-The cut is made at method-call level: not necessarily the entire relationship
-between two classes disappears, but the concrete method call that causes the
-cyclic dependency. This makes the feature fit practical refactoring work more
-closely, because a cycle often arises from a few concrete calls, not from the
-entire domain relationship between two classes.
+What is cut is the dependency between two classes. For every cut the tool shows
+what carries it: the individual method calls, and the other references~--
+fields, parameters, casts~-- that keep the dependency alive even when every call
+has been removed. A cycle often arises from a few concrete places in the code,
+not from the entire domain relationship between two classes; the tool names
+these places and thereby the effort a cut stands for.
 
 \section{Implementation at the Conceptual Level}
 
@@ -641,11 +650,11 @@ information that justifies this position is available.
 \begin{enumerate}
   \item \textbf{Build the class graph:} A directed class graph is created from
         the bytecode. This graph remains the raw domain model of the analysis.
-        Only edges carrying at least one relation of kind \texttt{extends},
-        \texttt{implements}, \texttt{imports}, \texttt{instantiates}, or
-        \texttt{calls} enter the ordering computation; pure type references
-        (field types, parameter and return types, casts) are kept in the raw
-        model but not counted.
+        Edges of every kind enter the ordering computation:
+        \texttt{extends}, \texttt{implements}, \texttt{imports},
+        \texttt{instantiates}, \texttt{calls}, inheritance with a nested class
+        at one end, and pure type references (\texttt{uses}). Nested classes
+        count for the class that encloses them.
   \item \textbf{Detect SCCs:} Strongly connected components are determined on
         the class graph using Tarjan. The result is not yet a layout, but the
         information which classes can be ordered acyclically and which belong

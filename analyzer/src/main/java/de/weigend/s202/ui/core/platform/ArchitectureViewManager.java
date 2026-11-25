@@ -154,6 +154,9 @@ public final class ArchitectureViewManager {
                 bus.publish(new de.weigend.s202.ui.core.events.CutTangleEdgeEvent(from, to, view)));
         view.setOnDependencyEdgeRestore((from, to) ->
                 bus.publish(new de.weigend.s202.ui.core.events.RestoreTangleEdgeEvent(from, to, view)));
+        // What the user selects among the arrows, for the panels that explain it.
+        view.setOnDependencySelected(selection ->
+                bus.publish(new de.weigend.s202.ui.core.events.DependencySelectionEvent(selection, view)));
     }
 
     /* ----- Dokument und seine Tabs ------------------------------------------ */

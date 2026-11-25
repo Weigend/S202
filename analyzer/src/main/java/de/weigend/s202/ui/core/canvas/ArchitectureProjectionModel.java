@@ -15,6 +15,7 @@
  */
 package de.weigend.s202.ui.core.canvas;
 
+import de.weigend.s202.domain.architecture.WhatIfSource;
 import de.weigend.s202.domain.DomainModel;
 import de.weigend.s202.domain.architecture.Architecture;
 import de.weigend.s202.domain.architecture.ArchitectureAnnotations;
@@ -23,7 +24,6 @@ import de.weigend.s202.domain.architecture.ArchitectureKind;
 import de.weigend.s202.domain.architecture.ArchitectureStyle;
 import de.weigend.s202.domain.architecture.ComponentArchitecture;
 import de.weigend.s202.domain.architecture.ComponentMoves;
-import de.weigend.s202.domain.architecture.LayeredArchitecture;
 import de.weigend.s202.domain.architecture.WhatIfArchitecture;
 import de.weigend.s202.reader.DependencyModel;
 import io.softwareecg.wfx.lookup.api.Lookup;
@@ -151,8 +151,8 @@ final class ArchitectureProjectionModel {
             original = requireArchitectureStyle(ArchitectureKind.LAYERED).build(context);
         }
         architecture.set(original);
-        whatIfArchitecture.set(original instanceof LayeredArchitecture la
-                ? la.toWhatIf(model)
+        whatIfArchitecture.set(original instanceof WhatIfSource source
+                ? source.toWhatIf(model)
                 : null);
         afterRebuild.run();
     }

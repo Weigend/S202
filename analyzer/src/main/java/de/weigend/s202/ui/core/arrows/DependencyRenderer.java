@@ -15,6 +15,7 @@
  */
 package de.weigend.s202.ui.core.arrows;
 
+import de.weigend.s202.domain.DependencyEdge;
 import de.weigend.s202.domain.EdgeCycleClassifier;
 import de.weigend.s202.domain.EdgeCycleClassifier.CycleKind;
 import de.weigend.s202.ui.core.graph.ElementLookup;
@@ -23,7 +24,6 @@ import de.weigend.s202.ui.core.graph.LevelClassBox;
 import de.weigend.s202.ui.core.graph.LevelPackageBox;
 import de.weigend.s202.ui.core.graph.ContainerBox;
 import de.weigend.s202.ui.core.model.ArchitectureNode;
-import de.weigend.s202.ui.core.canvas.ZoomController;
 import javafx.scene.Node;
 import javafx.scene.Parent;
 import javafx.scene.control.ScrollPane;
@@ -36,6 +36,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
+import java.util.function.BiPredicate;
 import java.util.function.Consumer;
 
 /**
@@ -48,13 +49,11 @@ import java.util.function.Consumer;
  *   <li>Color-coded: anthrazit (outgoing), green (incoming)</li>
  *   <li>Interactive line selection with status updates</li>
  *   <li>Visibility filtering (only draws visible elements)</li>
- *   <li>Zoom-aware scaling</li>
  * </ul>
  */
 public class DependencyRenderer implements DependencyRendererStrategy {
 
     private final Map<String, Node> elementRegistry;
-    private final ZoomController zoomController;
     private final DependencyArrowPainter painter;
 
     private final Map<String, Integer> levelByFqn = new HashMap<>();
@@ -68,6 +67,7 @@ public class DependencyRenderer implements DependencyRendererStrategy {
     private boolean backEdgesDecideDirection;
     // Non-null in a tangle view: which dependencies it draws and how.
     private TangleEdgeScope tangleScope;
+    private BiPredicate<String, String> edgeFilter = (from, to) -> true;
 
     // Dynamic references set by ArchitectureCanvas
     private Pane zoomableContent;
@@ -79,13 +79,11 @@ public class DependencyRenderer implements DependencyRendererStrategy {
      *
      * @param dependencyPane Pane where dependency lines are drawn
      * @param elementRegistry Map from element names to UI nodes
-     * @param zoomController Controller for zoom-aware scaling
      * @param statusCallback Callback to update status messages
      */
     public DependencyRenderer(Pane dependencyPane, Map<String, Node> elementRegistry,
-                               ZoomController zoomController, Consumer<String> statusCallback) {
+                              Consumer<String> statusCallback) {
         this.elementRegistry = Objects.requireNonNull(elementRegistry, "elementRegistry cannot be null");
-        this.zoomController = Objects.requireNonNull(zoomController, "zoomController cannot be null");
         this.painter = new DependencyArrowPainter(dependencyPane, statusCallback);
     }
 
@@ -99,7 +97,7 @@ public class DependencyRenderer implements DependencyRendererStrategy {
         this.scrollPane = scrollPane;
     }
 
-    /** Cut, restore and click handling for class-to-class arrows; {@code null} disables it. */
+    /** Selection handling for all arrows, cut and restore for class-to-class ones; {@code null} disables it. */
     public void setEdgeActions(DependencyEdgeActions edgeActions) {
         painter.setEdgeActions(edgeActions);
     }
@@ -120,6 +118,15 @@ public class DependencyRenderer implements DependencyRendererStrategy {
     /** Turns this renderer into the one of a tangle view; {@code null} restores the regular look. */
     public void setTangleScope(TangleEdgeScope tangleScope) {
         this.tangleScope = tangleScope;
+    }
+
+    /** The class dependencies to draw at all; the others are left out of the picture. */
+    public void setEdgeFilter(BiPredicate<String, String> edgeFilter) {
+        this.edgeFilter = edgeFilter == null ? (from, to) -> true : edgeFilter;
+    }
+
+    private boolean draws(String from, String to) {
+        return edgeFilter.test(from, to) && (tangleScope == null || tangleScope.draws(from, to));
     }
 
     @Override
@@ -255,7 +262,7 @@ public class DependencyRenderer implements DependencyRendererStrategy {
                 // package collapse to one arrow pointing at the package box.
                 Map<Node, EdgeGroup> groups = new HashMap<>();
                 for (String depName : child.getDependencies()) {
-                    if (tangleScope != null && !tangleScope.draws(child.getFullName(), depName)) {
+                    if (!draws(child.getFullName(), depName)) {
                         continue;
                     }
                     Node target = findVisibleTarget(depName);
@@ -285,7 +292,7 @@ public class DependencyRenderer implements DependencyRendererStrategy {
                     boolean classEdge = targetElement == elementRegistry.get(depName);
                     arrows.add(new DependencyArrowPainter.Arrow(sourceElement, targetElement,
                             child.getFullName(), targetName, isIncoming, classEdge,
-                            null, false, weightOf(group), styleOf(group)));
+                            group.edges, null, false, weightOf(group), styleOf(group)));
                 }
 
             } else if (child.getType() == ArchitectureNode.NodeType.PACKAGE) {
@@ -409,7 +416,7 @@ public class DependencyRenderer implements DependencyRendererStrategy {
             // A tangle view writes the weight on the line; that replaces the count.
             String weight = weightOf(group);
             arrows.add(new DependencyArrowPainter.Arrow(sourceElement, targetElement, srcFqn, targetFqn,
-                    isIncoming, false, showBadge && weight == null ? group.badge() : null,
+                    isIncoming, false, group.edges, showBadge && weight == null ? group.badge() : null,
                     group.wrongDirection > 0, weight, styleOf(group)));
         }
     }
@@ -428,7 +435,7 @@ public class DependencyRenderer implements DependencyRendererStrategy {
             if (child.getType() == ArchitectureNode.NodeType.CLASS) {
                 for (String dep : child.getDependencies()) {
                     if (dep.equals(srcFqn) || dep.startsWith(srcPrefix)) continue; // internal
-                    if (tangleScope != null && !tangleScope.draws(child.getFullName(), dep)) continue;
+                    if (!draws(child.getFullName(), dep)) continue;
                     Node target = findVisibleTarget(dep);
                     if (target != null) {
                         targetGroups.computeIfAbsent(target, k -> new EdgeGroup(dep)).add(child.getFullName(), dep);
@@ -446,6 +453,7 @@ public class DependencyRenderer implements DependencyRendererStrategy {
      */
     private final class EdgeGroup {
         final String representative;
+        final List<DependencyEdge> edges = new ArrayList<>();
         int total;
         int wrongDirection;
         int backEdges;
@@ -461,6 +469,7 @@ public class DependencyRenderer implements DependencyRendererStrategy {
 
         void add(String from, String to) {
             total++;
+            edges.add(new DependencyEdge(from, to));
             if (isWrongDirection(from, to)) {
                 wrongDirection++;
             }

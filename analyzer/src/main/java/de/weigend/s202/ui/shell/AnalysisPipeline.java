@@ -15,24 +15,17 @@
  */
 package de.weigend.s202.ui.shell;
 
-import de.weigend.s202.analysis.invariants.LayoutInvariantChecker;
 import de.weigend.s202.analysis.invariants.LayoutInvariantReport;
-import de.weigend.s202.analysis.quality.QualityMetrics;
-import de.weigend.s202.domain.DependencyEdge;
-import de.weigend.s202.domain.DomainComputer;
-import de.weigend.s202.domain.DomainModel;
 import de.weigend.s202.project.S202Project;
 import de.weigend.s202.reader.DependencyModel;
 import de.weigend.s202.reader.LanguageAnalyzer;
 import de.weigend.s202.ui.core.canvas.ArchitectureCanvas;
-import de.weigend.s202.ui.core.layout.horizontal.HorizontalRowLayoutOptimizer;
-import de.weigend.s202.ui.core.model.ArchitectureNode;
-import de.weigend.s202.ui.core.model.ArchitectureNodeBuilder;
 import de.weigend.s202.ui.core.platform.AnalysisDocument;
 import de.weigend.s202.ui.core.platform.ArchitectureViewManager;
 import de.weigend.s202.ui.core.platform.Dialogs;
 import de.weigend.s202.ui.core.platform.ProgressPublisher;
 import de.weigend.s202.ui.core.platform.ArchitectureWfxView;
+import de.weigend.s202.ui.shell.AnalysisBuilder.AnalysisResult;
 import io.softwareecg.wfx.lookup.api.Lookup;
 import javafx.animation.PauseTransition;
 import javafx.application.Platform;
@@ -47,7 +40,6 @@ import java.io.File;
 import java.nio.file.Path;
 import java.util.List;
 import java.util.Locale;
-import java.util.Set;
 import java.util.function.Supplier;
 import java.util.stream.Collectors;
 
@@ -63,12 +55,10 @@ public final class AnalysisPipeline {
     private static final Logger LOGGER = LoggerFactory.getLogger(AnalysisPipeline.class);
     static final String JAVA_BYTECODE_ANALYZER = "Java bytecode";
 
-    private final ArchitectureNodeBuilder architectureNodeBuilder = new ArchitectureNodeBuilder();
-    private final LayoutInvariantChecker invariantChecker = new LayoutInvariantChecker();
-
     private final ArchitectureViewManager viewManager;
     private final ProgressPublisher progress;
     private final Supplier<Stage> dialogOwner;
+    private final AnalysisBuilder analysisBuilder;
 
     public AnalysisPipeline(ArchitectureViewManager viewManager,
                             ProgressPublisher progress,
@@ -76,14 +66,10 @@ public final class AnalysisPipeline {
         this.viewManager = viewManager;
         this.progress = progress;
         this.dialogOwner = dialogOwner;
+        this.analysisBuilder = new AnalysisBuilder(progress);
     }
 
     record AnalysisInputSummary(String label, int count) {}
-
-    record AnalysisResult(DependencyModel rawModel, ArchitectureNode rootNode,
-                          QualityMetrics metrics, DomainModel domainModel,
-                          LayoutInvariantReport invariants,
-                          Set<DependencyEdge> cycleBreakEdges) {}
 
     static S202Project.Source projectSource(String kind, File root, List<File> jars) {
         return new S202Project.Source(
@@ -110,14 +96,6 @@ public final class AnalysisPipeline {
                 .filter(analyzer -> displayName.equalsIgnoreCase(analyzer.displayName()))
                 .findFirst()
                 .orElseThrow(() -> new IllegalStateException("No language analyzer registered for " + displayName));
-    }
-
-    private static DomainComputer requireDomainComputer() {
-        DomainComputer computer = Lookup.lookup(DomainComputer.class);
-        if (computer == null) {
-            throw new IllegalStateException("No domain computer registered");
-        }
-        return computer;
     }
 
     /**
@@ -152,7 +130,7 @@ public final class AnalysisPipeline {
             protected AnalysisResult call() throws Exception {
                 progress.progress("Reading bytecode: " + fileNames, 0.20);
                 DependencyModel rawModel = languageAnalyzer.analyze(jarInputPaths);
-                return buildAnalysisResult(rawModel, jarPaths);
+                return analysisBuilder.build(rawModel, jarPaths);
             }
         };
 
@@ -203,7 +181,7 @@ public final class AnalysisPipeline {
             protected AnalysisResult call() throws Exception {
                 progress.progress(readerProgress, 0.20);
                 DependencyModel rawModel = analyzer.analyze(List.of(root));
-                return buildAnalysisResult(rawModel, List.of(rootPath));
+                return analysisBuilder.build(rawModel, List.of(rootPath));
             }
         };
 
@@ -233,31 +211,6 @@ public final class AnalysisPipeline {
         Thread analyzerThread = new Thread(task, "s202-" + sourceKind.toLowerCase(Locale.ROOT) + "-analyzer");
         analyzerThread.setDaemon(true);
         analyzerThread.start();
-    }
-
-    private AnalysisResult buildAnalysisResult(DependencyModel rawModel, List<String> sourcePaths) {
-        if (rawModel.getAllClasses().isEmpty()) {
-            return new AnalysisResult(rawModel, null, null, null, null, Set.of());
-        }
-
-        progress.progress("Calculating architectural levels...", 0.75);
-        DomainModel calculated = requireDomainComputer().compute(rawModel);
-        Set<DependencyEdge> cycleBreakEdges = calculated.getClassBackEdges();
-
-        progress.progress("Building architecture tree...", 0.85);
-        ArchitectureNode root = architectureNodeBuilder.build(calculated);
-        new HorizontalRowLayoutOptimizer().assignHorizontalLayoutOrders(root);
-        de.weigend.s202.ui.core.consistency.ArchitectureConsistencyDevHook
-                .runIfEnabled(calculated, root);
-
-        progress.progress("Preparing quality metrics...", 0.90);
-        QualityMetrics metrics = QualityMetrics.compute(calculated);
-
-        // Layout invariant check runs on the same background thread so
-        // findings reach the FX thread together with the rest of the result.
-        progress.progress("Verifying layout invariants...", 0.95);
-        LayoutInvariantReport invariants = invariantChecker.check(calculated, rawModel, sourcePaths);
-        return new AnalysisResult(rawModel, root, metrics, calculated, invariants, cycleBreakEdges);
     }
 
     private void applyAnalysisResult(AnalysisInputSummary summary, ArchitectureWfxView target,

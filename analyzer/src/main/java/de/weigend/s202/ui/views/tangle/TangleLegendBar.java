@@ -86,6 +86,7 @@ final class TangleLegendBar extends HBox {
         weights.setTooltip(new Tooltip(
                 "The number on an arrow counts the method calls that carry the dependency: what cutting it costs.\n"
                         + "A dependency without calls (inheritance, a field or parameter type) counts 1.\n"
+                        + "Kinds hidden with Edge Kinds are not drawn but still counted in this bar.\n"
                         + "\"12 / 3\u2191\" on an arrow that bundles several dependencies: 3 of its 12 calls are back-edges."));
         context.setStyle(TEXT_STYLE);
         context.setTooltip(new Tooltip(

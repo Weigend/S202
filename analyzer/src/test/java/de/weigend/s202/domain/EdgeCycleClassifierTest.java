@@ -103,6 +103,43 @@ class EdgeCycleClassifierTest {
         assertEquals(1, cycles.weightOf("b.Y", "a.X"), "no weight recorded: it counts as one reference");
     }
 
+    @Test
+    void theReturnPathOfAClassCycleRunsThroughClasses() {
+        CycleReturnPath path = classifier(Set.of()).returnPath("b.Y", "a.X");
+
+        assertFalse(path.packageLevel());
+        assertEquals(java.util.List.of(new CycleReturnPath.Step("a.X", "b.Y",
+                java.util.List.of(new DependencyEdge("a.X", "b.Y")))), path.steps());
+    }
+
+    @Test
+    void theReturnPathOfAPackageCycleRunsThroughSiblingsAndNamesTheirDependencies() {
+        CycleReturnPath path = classifier(Set.of()).returnPath("c.P", "d.Q");
+
+        assertTrue(path.packageLevel());
+        assertEquals(java.util.List.of(new CycleReturnPath.Step("d", "c",
+                java.util.List.of(new DependencyEdge("d.R", "c.S")))), path.steps());
+    }
+
+    @Test
+    void theReturnPathIsTheShortestOne() {
+        DomainModel model = new DomainModel();
+        add(model, "p.A", "p.B");
+        add(model, "p.B", "p.C", "p.D");
+        add(model, "p.C", "p.D");
+        add(model, "p.D", "p.A");
+        EdgeCycleClassifier cycles = EdgeCycleClassifier.of(model, Set.of(), Lookup.lookup(SCCFinder.class));
+
+        assertEquals(java.util.List.of("p.B>p.D", "p.D>p.A"), cycles.returnPath("p.A", "p.B").steps().stream()
+                .map(step -> step.from() + ">" + step.to()).toList());
+    }
+
+    @Test
+    void aDependencyOnNoCycleHasNoReturnPathAndACutTakesItAway() {
+        assertFalse(classifier(Set.of()).returnPath("a.X", "e.Leaf").exists());
+        assertFalse(classifier(Set.of(new DependencyEdge("a.X", "b.Y"))).returnPath("b.Y", "a.X").exists());
+    }
+
     /**
      * a.X <-> b.Y (class cycle), c.P -> d.Q and d.R -> c.S (package cycle only),
      * a.X -> e.Leaf (no cycle). The levelization cut b.Y -> a.X.

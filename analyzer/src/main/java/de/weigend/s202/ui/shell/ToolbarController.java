@@ -15,6 +15,7 @@
  */
 package de.weigend.s202.ui.shell;
 
+import de.weigend.s202.ui.core.model.EdgeKindGroup;
 import de.weigend.s202.ui.core.canvas.ArchitectureCanvas;
 import de.weigend.s202.ui.core.graph.ArchitectureViewSettings;
 import de.weigend.s202.ui.core.platform.ArchitectureViewManager;
@@ -25,8 +26,11 @@ import javafx.beans.property.BooleanProperty;
 import javafx.beans.property.ReadOnlyDoubleProperty;
 import javafx.beans.property.SimpleBooleanProperty;
 import javafx.beans.value.ChangeListener;
+import javafx.beans.value.ObservableValue;
 import javafx.geometry.Pos;
 import javafx.scene.Node;
+import javafx.scene.control.MenuButton;
+import javafx.scene.control.CheckMenuItem;
 import javafx.scene.control.Button;
 import javafx.scene.control.CheckBox;
 import javafx.scene.control.Label;
@@ -43,6 +47,9 @@ import org.kordamp.ikonli.materialdesign2.MaterialDesignF;
 import org.kordamp.ikonli.materialdesign2.MaterialDesignR;
 import org.kordamp.ikonli.materialdesign2.MaterialDesignU;
 
+import java.util.stream.Collectors;
+import java.util.Map;
+import java.util.EnumMap;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -59,6 +66,8 @@ public final class ToolbarController {
     private final Runnable exportImageAction;
     private final Runnable resetRefactoringsAction;
 
+    private static final String EDGE_KINDS = "Edge Kinds";
+
     // Toolbar widgets — shared across all ArchitectureWfxView tabs.
     private Button openJarButton;
     private Spinner<Integer> depthSpinner;
@@ -67,6 +76,8 @@ public final class ToolbarController {
     private CheckBox showSccCheckbox;
     private CheckBox showPackageSccCheckbox;
     private CheckBox limitBoxWidthCheckbox;
+    private MenuButton edgeKindsButton;
+    private final Map<EdgeKindGroup, CheckMenuItem> edgeKindItems = new EnumMap<>(EdgeKindGroup.class);
     private CheckBox showWhatIfViolationsCheckbox;
     private CheckBox showIconsCheckbox;
     private CheckBox showArchLevelCheckbox;
@@ -88,6 +99,8 @@ public final class ToolbarController {
     private ArchitectureCanvas boundView;
     // Reusable listener so we can detach it cleanly (no-op when boundView is null).
     private ChangeListener<Number> zoomLabelListener;
+    /** Keeps the widgets at what the bound view shows, whoever changes it. */
+    private final ChangeListener<Object> settingsListener = (obs, was, isNow) -> mirrorSettings();
 
     public ToolbarController(ApplicationWindow applicationWindow,
                              ArchitectureViewManager viewManager,
@@ -226,6 +239,21 @@ public final class ToolbarController {
             if (boundView != null) boundView.setLimitBoxWidth(isNow);
         });
 
+        edgeKindsButton = new MenuButton(EDGE_KINDS);
+        edgeKindsButton.setId("toolbar.edgeKinds");
+        edgeKindsButton.getStyleClass().add("toolbar-button");
+        edgeKindsButton.setTooltip(new Tooltip(
+                "Choose the kinds of dependency to draw.\n"
+                        + "A dependency disappears when everything it consists of is hidden;\n"
+                        + "it still counts for levels, cycles and violations."));
+        for (EdgeKindGroup group : EdgeKindGroup.values()) {
+            CheckMenuItem item = new CheckMenuItem(group.label());
+            item.setSelected(true);
+            item.setOnAction(e -> applyEdgeKinds());
+            edgeKindItems.put(group, item);
+            edgeKindsButton.getItems().add(item);
+        }
+
         zoomOutButton = new Button("−");
         zoomOutButton.getStyleClass().add("toolbar-zoom-button");
         zoomOutButton.setTooltip(new Tooltip("Zoom Out (Ctrl+Scroll Down)"));
@@ -252,7 +280,7 @@ public final class ToolbarController {
                 depthLabel, depthSpinner, refreshButton,
                 showDependenciesCheckbox, showSccCheckbox, showPackageSccCheckbox,
                 showWhatIfViolationsCheckbox, showIconsCheckbox, showArchLevelCheckbox,
-                limitBoxWidthCheckbox,
+                limitBoxWidthCheckbox, edgeKindsButton,
                 zoomOutButton, zoomLabel, zoomInButton, zoomResetButton,
                 resetRefactoringsButton, exportImageButton));
 
@@ -264,7 +292,7 @@ public final class ToolbarController {
                 new Separator(),
                 showDependenciesCheckbox, showSccCheckbox, showPackageSccCheckbox,
                 showWhatIfViolationsCheckbox, showIconsCheckbox, showArchLevelCheckbox,
-                limitBoxWidthCheckbox,
+                limitBoxWidthCheckbox, edgeKindsButton,
                 new Separator(),
                 zoomGroup, zoomResetButton,
                 new Separator(),
@@ -284,6 +312,9 @@ public final class ToolbarController {
     private void bindToolbarToFocusedView() {
         if (boundView != null && zoomLabelListener != null && boundView.zoomFactorProperty() != null) {
             boundView.zoomFactorProperty().removeListener(zoomLabelListener);
+        }
+        if (boundView != null) {
+            settingsOf(boundView).forEach(setting -> setting.removeListener(settingsListener));
         }
         boundView = null;
         zoomLabelListener = null;
@@ -313,6 +344,35 @@ public final class ToolbarController {
         canUndo.bind(view.canUndoWhatIfProperty());
         canRedo.bind(view.canRedoWhatIfProperty());
 
+        settingsOf(view).forEach(setting -> setting.addListener(settingsListener));
+        mirrorSettings();
+
+        ReadOnlyDoubleProperty zoomProp = view.zoomFactorProperty();
+        if (zoomProp != null) {
+            updateZoomLabel(zoomProp.get());
+            zoomLabelListener = (obs, was, isNow) -> updateZoomLabel(isNow.doubleValue());
+            zoomProp.addListener(zoomLabelListener);
+        } else {
+            zoomLabel.setText("100%");
+        }
+    }
+
+    /**
+     * What a view can be set to. The root is among them because a tab is told
+     * that it is a tangle view while its first content is being built.
+     */
+    private static List<ObservableValue<?>> settingsOf(ArchitectureCanvas view) {
+        return List.of(view.packageDepthProperty(),
+                view.showDependenciesProperty(), view.showSccProperty(), view.showPackageSccProperty(),
+                view.showWhatIfViolationsProperty(), view.limitBoxWidthProperty(),
+                view.hiddenEdgeKindsProperty(), view.architectureRootProperty());
+    }
+
+    private void mirrorSettings() {
+        ArchitectureCanvas view = boundView;
+        if (view == null) {
+            return;
+        }
         depthSpinner.getValueFactory().setValue(view.getPackageDepth());
         showDependenciesCheckbox.setSelected(view.isShowDependencies());
         showSccCheckbox.setSelected(view.isShowScc());
@@ -328,17 +388,27 @@ public final class ToolbarController {
         // ... and its nodes are plain: icon and name, no box that could grow.
         limitBoxWidthCheckbox.setSelected(view.isLimitBoxWidth());
         limitBoxWidthCheckbox.setDisable(tangleView);
+        edgeKindItems.forEach((group, item) -> item.setSelected(!view.getHiddenEdgeKinds().contains(group)));
+        showHiddenEdgeKinds();
         showIconsCheckbox.setSelected(ArchitectureViewSettings.isShowIcons());
         showArchLevelCheckbox.setSelected(ArchitectureViewSettings.isShowArchitectureLevel());
+    }
 
-        ReadOnlyDoubleProperty zoomProp = view.zoomFactorProperty();
-        if (zoomProp != null) {
-            updateZoomLabel(zoomProp.get());
-            zoomLabelListener = (obs, was, isNow) -> updateZoomLabel(isNow.doubleValue());
-            zoomProp.addListener(zoomLabelListener);
-        } else {
-            zoomLabel.setText("100%");
+    private void applyEdgeKinds() {
+        if (boundView != null) {
+            boundView.setHiddenEdgeKinds(edgeKindItems.entrySet().stream()
+                    .filter(entry -> !entry.getValue().isSelected())
+                    .map(Map.Entry::getKey)
+                    .collect(Collectors.toSet()));
         }
+        showHiddenEdgeKinds();
+    }
+
+    /** A picture with something left out says so. */
+    private void showHiddenEdgeKinds() {
+        long shown = edgeKindItems.values().stream().filter(CheckMenuItem::isSelected).count();
+        edgeKindsButton.setText(shown == edgeKindItems.size() ? EDGE_KINDS
+                : EDGE_KINDS + " (" + shown + " of " + edgeKindItems.size() + ")");
     }
 
     private void updateZoomLabel(double factor) {

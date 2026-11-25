@@ -154,6 +154,8 @@ public class S202Module implements Module {
     private final ArchitectureImageExportController imageExport;
     private final RefactoringController refactoring;
     private final SessionLayout sessionLayout = new SessionLayout();
+    /** The arrangement of the panels before that of the last session is put back. */
+    private String defaultLayout;
 
     @jakarta.inject.Inject
     public S202Module(ApplicationWindow applicationWindow,
@@ -256,7 +258,28 @@ public class S202Module implements Module {
         if (applicationWindow.getStage() != null) {
             sessionLayout.restoreWindow(applicationWindow.getStage());
         }
-        Platform.runLater(() -> sessionLayout.restoreViews(Lookup.lookup(WindowManager.class)));
+        Platform.runLater(() -> {
+            WindowManager windowManager = Lookup.lookup(WindowManager.class);
+            defaultLayout = windowManager.saveLayout();
+            sessionLayout.restoreViews(windowManager);
+            sourceOpen.openFiles(S202Main.filesToOpen());
+        });
+    }
+
+    /**
+     * Arranges the panels as they were registered. Open analyses stay open —
+     * {@link WindowManager#restoreDefaultLayout()} would close them.
+     */
+    private void restoreDefaultLayout() {
+        if (defaultLayout == null) {
+            return;
+        }
+        WindowManager windowManager = Lookup.lookup(WindowManager.class);
+        ArchitectureWfxView active = viewManager.wrapperOf(viewManager.activeCanvas());
+        windowManager.restoreLayout(defaultLayout);
+        if (active != null) {
+            windowManager.showView(active);
+        }
     }
 
     private void subscribeToOpenScope(EventBus<EventObject> bus) {
@@ -287,10 +310,7 @@ public class S202Module implements Module {
         bus.subscribe(MenuRequestEvent.OpenHexagonalView.class, ev -> { viewManager.openStyleView(ArchitectureKind.HEXAGONAL); return true; });
         bus.subscribe(MenuRequestEvent.CloseFocusedView.class, ev -> { viewManager.closeFocusedView(); return true; });
         bus.subscribe(MenuRequestEvent.CloseAllViews.class, ev -> { viewManager.closeAllViews(); return true; });
-        bus.subscribe(MenuRequestEvent.RestoreDefaultLayout.class, ev -> {
-            Lookup.lookup(WindowManager.class).restoreDefaultLayout();
-            return true;
-        });
+        bus.subscribe(MenuRequestEvent.RestoreDefaultLayout.class, ev -> { restoreDefaultLayout(); return true; });
         bus.subscribe(MenuRequestEvent.Undo.class, ev -> { if (toolbar.boundView() != null) toolbar.boundView().undoWhatIf(); return true; });
         bus.subscribe(MenuRequestEvent.Redo.class, ev -> { if (toolbar.boundView() != null) toolbar.boundView().redoWhatIf(); return true; });
     }

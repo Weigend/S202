@@ -32,6 +32,6 @@ public interface DependencyEdgeActions {
     /** The user chose "Restore" on the cut arrow {@code from → to}. */
     void restore(String from, String to);
 
-    /** The user selected the arrow {@code from → to}; both {@code null} when it was deselected. */
-    void clicked(String from, String to);
+    /** The user selected an arrow; {@link DependencySelection#NONE} when it was deselected. */
+    void selected(DependencySelection selection);
 }

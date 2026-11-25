@@ -15,6 +15,7 @@
  */
 package de.weigend.s202.ui.core.canvas;
 
+import de.weigend.s202.ui.core.model.WhatIfMove;
 import de.weigend.s202.ui.core.graph.ElementLookup;
 import de.weigend.s202.domain.architecture.ArchitectureKind;
 import de.weigend.s202.domain.architecture.WhatIfArchitecture;
@@ -152,7 +153,7 @@ public final class WhatIfEditController {
             return;
         }
         if (wasNewRow) {
-            undoManager.record(new WhatIfUndoManager.Move.AsNewRow(
+            undoManager.record(new WhatIfMove.AsNewRow(
                     movedFqcn, destinationContainerFqcn, rowIndex, api));
             if (wif != null) {
                 wif.moveElementAsNewRow(movedFqcn, destinationContainerFqcn, rowIndex);
@@ -162,7 +163,7 @@ public final class WhatIfEditController {
             if (colIndex < 0) {
                 return;
             }
-            undoManager.record(new WhatIfUndoManager.Move.InRow(
+            undoManager.record(new WhatIfMove.InRow(
                     movedFqcn, destinationContainerFqcn, rowIndex, colIndex, api));
             if (wif != null) {
                 wif.moveElement(movedFqcn, destinationContainerFqcn, rowIndex, colIndex);
@@ -182,7 +183,7 @@ public final class WhatIfEditController {
         String current = undoManager.effectiveMoves().stream()
                 .filter(move -> move.fqn().equals(movedFqcn))
                 .reduce((first, second) -> second)
-                .map(WhatIfUndoManager.Move::containerFqn)
+                .map(WhatIfMove::containerFqn)
                 .orElse(movedFqcn);
         String home = apiAnnotator.componentOf(movedFqcn);
         return home != null
@@ -252,7 +253,7 @@ public final class WhatIfEditController {
 
     public void undo() {
         if (!canEdit()) return;
-        List<WhatIfUndoManager.Move> remaining = undoManager.decrement();
+        List<WhatIfMove> remaining = undoManager.decrement();
         if (remaining == null) return;
         boolean violations = showWhatIfViolations.get();
         resetVisualLayout.run();
@@ -263,7 +264,7 @@ public final class WhatIfEditController {
 
     public void redo() {
         if (!canEdit()) return;
-        WhatIfUndoManager.Move m = undoManager.increment();
+        WhatIfMove m = undoManager.increment();
         if (m == null) return;
         applyMoveToScene(m);
         arrowsCoalescer.markDirty();
@@ -286,7 +287,7 @@ public final class WhatIfEditController {
         return container instanceof ContainerBox box ? box.rowStack(api) : null;
     }
 
-    private void applyMoveToScene(WhatIfUndoManager.Move move) {
+    private void applyMoveToScene(WhatIfMove move) {
         Node node = ElementLookup.materialize(elementRegistry, move.fqn());
         if (node == null) return;
         VBox stack = findRowStack(move.containerFqn(), move.api());
@@ -301,7 +302,7 @@ public final class WhatIfEditController {
             }
         }
 
-        if (move instanceof WhatIfUndoManager.Move.AsNewRow asNewRow) {
+        if (move instanceof WhatIfMove.AsNewRow asNewRow) {
             HBox newRow = new HBox(8);
             newRow.setMaxWidth(Double.MAX_VALUE);
             newRow.setMaxHeight(Double.MAX_VALUE);
@@ -315,7 +316,7 @@ public final class WhatIfEditController {
             if (wif != null) {
                 wif.moveElementAsNewRow(move.fqn(), move.containerFqn(), asNewRow.rowIndex());
             }
-        } else if (move instanceof WhatIfUndoManager.Move.InRow inRow) {
+        } else if (move instanceof WhatIfMove.InRow inRow) {
             while (stack.getChildren().size() <= inRow.rowIndex()) {
                 HBox gap = new HBox(8);
                 ArchitectureDragController.markAsRow(gap);

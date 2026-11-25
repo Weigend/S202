@@ -58,7 +58,7 @@ public final class S202ProjectStore implements ProjectStore {
                 || project.formatVersion() > S202Project.FORMAT_VERSION) {
             throw new IOException("Unsupported project format version: " + project.formatVersion());
         }
-        if (project.dependencyModel() == null || project.domainModel() == null) {
+        if (project.dependencyModel() == null) {
             throw new IOException("Project file does not contain a complete analysis model");
         }
     }

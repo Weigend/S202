@@ -21,7 +21,6 @@ import de.weigend.s202.domain.DomainModel;
 import de.weigend.s202.domain.DomainModel.CalculatedElementInfo;
 import de.weigend.s202.domain.StronglyConnectedComponent;
 import de.weigend.s202.reader.DependencyModel;
-import de.weigend.s202.reader.EdgeKind;
 import jakarta.inject.Singleton;
 
 import java.util.ArrayList;
@@ -34,7 +33,6 @@ import java.util.Map;
 import java.util.Set;
 import java.util.TreeMap;
 import java.util.TreeSet;
-import java.util.stream.Collectors;
 
 /**
  * Calculates the hierarchical architecture hypothesis of a code base.
@@ -73,15 +71,14 @@ public class LevelCalculator implements DomainComputer {
     public DomainModel calculate(DependencyModel rawModel) {
         DomainModel model = new DomainModel();
 
-        // Step 1: classes — only structural dependency kinds (everything but USES) count.
+        // Step 1: classes. Every kind of dependency counts: without the other
+        // class the code does not compile. How much it takes to get rid of it
+        // is a question of the weight.
         for (String className : new TreeSet<>(rawModel.getAllClassNames())) {
             DependencyModel.ClassInfo rawClass = rawModel.getClass(className);
-            Set<String> structuralDeps = rawClass.dependencies.stream()
-                .filter(dep -> rawClass.getKinds(dep).stream().anyMatch(k -> k != EdgeKind.USES))
-                .collect(Collectors.toSet());
             model.addClass(className, new CalculatedElementInfo(
                 className, rawClass.simpleName, "CLASS", 0,
-                structuralDeps, rawClass.interfaceType));
+                new HashSet<>(rawClass.dependencies), rawClass.interfaceType));
         }
 
         // Step 2: packages

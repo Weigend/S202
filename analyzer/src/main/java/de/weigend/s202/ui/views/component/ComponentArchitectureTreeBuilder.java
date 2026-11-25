@@ -15,6 +15,7 @@
  */
 package de.weigend.s202.ui.views.component;
 
+import de.weigend.s202.ui.core.spi.BuildProgressSink;
 import de.weigend.s202.ui.core.canvas.ArchitectureTreeBuilder;
 import de.weigend.s202.ui.core.canvas.TreeBuilderSupport;
 import de.weigend.s202.domain.architecture.ArchitectureAnnotations;
@@ -129,7 +130,7 @@ public class ComponentArchitectureTreeBuilder {
 
     public void buildTreeAsync(ArchitectureNode rootNode,
                                int maxDepth,
-                               ArchitectureTreeBuilder.ProgressSink progressSink,
+                               BuildProgressSink progressSink,
                                Consumer<VBox> onComplete) {
         Objects.requireNonNull(onComplete, "onComplete cannot be null");
         Runnable build = () -> {

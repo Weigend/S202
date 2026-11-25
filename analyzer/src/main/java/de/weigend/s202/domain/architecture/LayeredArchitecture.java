@@ -15,8 +15,6 @@
  */
 package de.weigend.s202.domain.architecture;
 
-import de.weigend.s202.domain.DomainModel;
-
 import java.util.List;
 
 /**
@@ -37,13 +35,4 @@ public interface LayeredArchitecture extends Architecture {
      * the rendering pipeline.
      */
     List<List<Element>> rows();
-
-    /**
-     * Returns a mutable what-if view of this architecture, or {@code null}
-     * if this implementation does not support interactive editing (e.g.
-     * because it is already a {@link WhatIfArchitecture}).
-     */
-    default WhatIfArchitecture toWhatIf(DomainModel domain) {
-        return null;
-    }
 }

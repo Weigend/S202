@@ -15,6 +15,7 @@
  */
 package de.weigend.s202.domain.impl;
 
+import de.weigend.s202.domain.architecture.WhatIfSource;
 import de.weigend.s202.domain.DomainModel;
 import de.weigend.s202.domain.architecture.Element;
 import de.weigend.s202.domain.architecture.LayeredArchitecture;
@@ -44,7 +45,7 @@ import java.util.List;
 public record HierarchicalLayeredArchitecture(
         List<List<Element>> rows,
         List<Violation> violations,
-        List<Tangle> tangles) implements LayeredArchitecture {
+        List<Tangle> tangles) implements LayeredArchitecture, WhatIfSource {
 
     public HierarchicalLayeredArchitecture {
         rows = copyDeepImmutable(rows);

@@ -15,10 +15,10 @@
  */
 package de.weigend.s202.ui.views.hexagonal;
 
+import de.weigend.s202.ui.core.spi.BuildProgressSink;
 import de.weigend.s202.domain.architecture.ArchitectureKind;
 import de.weigend.s202.domain.architecture.HexagonalArchitecture;
 import de.weigend.s202.domain.architecture.ViolationKind;
-import de.weigend.s202.ui.core.canvas.ArchitectureTreeBuilder;
 import de.weigend.s202.ui.core.model.ArchitectureNode;
 import de.weigend.s202.ui.core.spi.StyleView;
 import de.weigend.s202.ui.core.spi.ViewServices;
@@ -66,7 +66,7 @@ final class HexagonalStyleView implements StyleView {
 
     @Override
     public void buildTreeAsync(ArchitectureNode root, int maxDepth,
-                               ArchitectureTreeBuilder.ProgressSink progressSink,
+                               BuildProgressSink progressSink,
                                Consumer<VBox> onComplete) {
         builder().buildTreeAsync(root, maxDepth, progressSink, onComplete);
     }

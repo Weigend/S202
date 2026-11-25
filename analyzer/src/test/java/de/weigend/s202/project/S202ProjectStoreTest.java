@@ -17,13 +17,11 @@ package de.weigend.s202.project;
 
 import de.weigend.s202.project.impl.S202ProjectMapper;
 import de.weigend.s202.project.impl.S202ProjectStore;
-import de.weigend.s202.analysis.invariants.InvariantFinding;
-import de.weigend.s202.analysis.invariants.LayoutInvariantReport;
 import de.weigend.s202.domain.DependencyEdge;
-import de.weigend.s202.domain.DomainModel;
 import de.weigend.s202.domain.architecture.ArchitectureAnnotations;
 import de.weigend.s202.reader.DependencyModel;
 import de.weigend.s202.reader.EdgeKind;
+import de.weigend.s202.reader.TypeUse;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
@@ -42,7 +40,9 @@ class S202ProjectStoreTest {
     @Test
     void saveAndLoadRoundTripsAnalysisModels() throws Exception {
         DependencyModel rawModel = rawModel();
-        DomainModel domainModel = domainModel();
+        rawModel.addComponentAnnotatedPackage("com.example");
+        rawModel.addApiAnnotatedPackage("com.example.contract");
+        rawModel.addPlainPackage("com.example.plain");
         ArchitectureAnnotations annotations = new ArchitectureAnnotations(
                 List.of(),
                 Set.of("com.example.A"),
@@ -51,27 +51,22 @@ class S202ProjectStoreTest {
                 List.of())
                 .withPort("com.example.A", ArchitectureAnnotations.PortDirection.INBOUND, "com.example")
                 .withElementRole("com.example.internal", ArchitectureAnnotations.ElementRole.ADAPTER);
-        LayoutInvariantReport report = invariantReport();
-        Set<DependencyEdge> cycleBreakEdges = Set.of(
-                new DependencyEdge("com.example.A", "com.example.B"));
+        Set<DependencyEdge> cuts = Set.of(new DependencyEdge("com.example.A", "com.example.B"));
         S202Project.Source source = new S202Project.Source(
                 "JAR", List.of("/tmp/example.jar"), null);
 
         S202ProjectMapper mapper = new S202ProjectMapper();
         S202ProjectStore store = new S202ProjectStore();
         S202Project project = mapper.toProject(
-                "test", source, rawModel, domainModel, annotations, report, cycleBreakEdges);
+                "test", source, rawModel, annotations, cuts, List.of());
 
         Path file = tempDir.resolve("example.s202.json");
         store.save(file, project);
 
         S202Project loaded = store.load(file);
         DependencyModel loadedRaw = mapper.toDependencyModel(loaded.dependencyModel());
-        DomainModel loadedDomain = mapper.toDomainModel(loaded.domainModel());
         ArchitectureAnnotations loadedAnnotations =
                 mapper.toArchitectureAnnotations(loaded.architectureAnnotations());
-        LayoutInvariantReport loadedReport = mapper.toLayoutInvariantReport(loaded.layoutInvariantReport());
-        Set<DependencyEdge> loadedEdges = mapper.toCycleBreakEdges(loaded.cycleBreakEdges());
 
         assertEquals(S202Project.FORMAT, loaded.format());
         assertEquals(S202Project.FORMAT_VERSION, loaded.formatVersion());
@@ -98,12 +93,9 @@ class S202ProjectStoreTest {
         assertTrue(loadedModule.openedPackages.stream()
                 .anyMatch(access -> access.packageName().equals("com.example.reflect")));
 
-        DomainModel.CalculatedElementInfo loadedElement = loadedDomain.getClass("com.example.A");
-        assertNotNull(loadedElement);
-        assertEquals(2, loadedElement.architectureLevel);
-        assertTrue(loadedElement.interfaceType);
-        assertEquals(Set.of("com.example.B"), loadedElement.dependencies);
-        assertEquals(Set.of("com.example.C"), loadedElement.dependents);
+        assertEquals(Set.of("com.example"), loadedRaw.getComponentAnnotatedPackages());
+        assertEquals(Set.of("com.example.contract"), loadedRaw.getApiAnnotatedPackages());
+        assertEquals(Set.of("com.example.plain"), loadedRaw.getPlainPackages());
         assertEquals(Set.of("com.example.A"), loadedAnnotations.componentApiIncludes());
         assertEquals(Set.of("com.example.internal"), loadedAnnotations.componentApiExcludes());
         assertEquals(1, loadedAnnotations.ports().size());
@@ -112,10 +104,33 @@ class S202ProjectStoreTest {
         assertEquals(ArchitectureAnnotations.ElementRole.ADAPTER,
                 loadedAnnotations.explicitElementRole("com.example.internal.Repository"));
 
-        assertNotNull(loadedReport);
-        assertEquals(1, loadedReport.findings().size());
-        assertEquals("R1", loadedReport.findings().get(0).ruleId());
-        assertEquals(cycleBreakEdges, loadedEdges);
+        assertEquals(cuts, mapper.toPreviewCuts(loaded.previewCuts()));
+    }
+
+    /** Files older than version 7 carry computed results and no annotated packages. */
+    @Test
+    void whatOlderVersionsComputedIsNotRead() throws Exception {
+        S202ProjectMapper mapper = new S202ProjectMapper();
+        S202ProjectStore store = new S202ProjectStore();
+        Path file = tempDir.resolve("version-six.s202.json");
+        store.save(file, mapper.toProject("test",
+                new S202Project.Source("JAR", List.of("/tmp/example.jar"), null), rawModel(), null));
+        com.fasterxml.jackson.databind.ObjectMapper json = new com.fasterxml.jackson.databind.ObjectMapper();
+        com.fasterxml.jackson.databind.node.ObjectNode tree =
+                (com.fasterxml.jackson.databind.node.ObjectNode) json.readTree(file.toFile());
+        tree.put("formatVersion", 6);
+        tree.set("domainModel", json.readTree("{\"classes\":{},\"packages\":{}}"));
+        tree.set("cycleBreakEdges", json.readTree("[{\"from\":\"a.A\",\"to\":\"a.B\"}]"));
+        tree.set("layoutInvariantReport", json.readTree("{\"maxLevel\":3,\"findings\":[]}"));
+        com.fasterxml.jackson.databind.node.ObjectNode raw =
+                (com.fasterxml.jackson.databind.node.ObjectNode) tree.path("dependencyModel");
+        raw.remove(List.of("componentPackages", "apiPackages", "plainPackages"));
+        json.writeValue(file.toFile(), tree);
+
+        DependencyModel loaded = mapper.toDependencyModel(store.load(file).dependencyModel());
+
+        assertEquals(1, loaded.getClassCount());
+        assertTrue(loaded.getComponentAnnotatedPackages().isEmpty());
     }
 
     @Test
@@ -126,19 +141,14 @@ class S202ProjectStoreTest {
                 "test",
                 new S202Project.Source("JAR", List.of("/tmp/example.jar"), null),
                 rawModel(),
-                domainModel(),
-                null,
-                Set.of());
+                null);
         S202Project legacy = new S202Project(
                 S202Project.FORMAT,
                 1,
                 current.createdWith(),
                 current.source(),
                 current.dependencyModel(),
-                current.domainModel(),
                 null,
-                current.cycleBreakEdges(),
-                current.layoutInvariantReport(),
                 null,
                 null,
                 current.savedAt());
@@ -153,6 +163,35 @@ class S202ProjectStoreTest {
                 mapper.toArchitectureAnnotations(loaded.architectureAnnotations()));
     }
 
+    @Test
+    void typeUsesRoundTripAndAreMissingInProjectsBeforeVersionSix() throws Exception {
+        S202ProjectMapper mapper = new S202ProjectMapper();
+        S202ProjectStore store = new S202ProjectStore();
+        DependencyModel raw = rawModel();
+        TypeUse field = new TypeUse(TypeUse.Kind.FIELD, "b", null, null);
+        TypeUse access = new TypeUse(TypeUse.Kind.FIELD_ACCESS, "run", "()V", "B.x");
+        raw.getClass("com.example.A").addTypeUse("com.example.B", field);
+        raw.getClass("com.example.A").addTypeUse("com.example.B", access);
+        Path file = tempDir.resolve("uses.s202.json");
+        store.save(file, mapper.toProject("test", new S202Project.Source("JAR", List.of("/tmp/example.jar"), null),
+                raw, null));
+
+        DependencyModel loaded = mapper.toDependencyModel(store.load(file).dependencyModel());
+        assertEquals(Map.of("com.example.B", Set.of(field, access)), loaded.getClass("com.example.A").typeUses);
+
+        com.fasterxml.jackson.databind.ObjectMapper json = new com.fasterxml.jackson.databind.ObjectMapper();
+        com.fasterxml.jackson.databind.node.ObjectNode tree =
+                (com.fasterxml.jackson.databind.node.ObjectNode) json.readTree(file.toFile());
+        tree.put("formatVersion", 5);
+        tree.path("dependencyModel").path("classes").forEach(cls ->
+                ((com.fasterxml.jackson.databind.node.ObjectNode) cls).remove("typeUses"));
+        json.writeValue(file.toFile(), tree);
+
+        DependencyModel old = mapper.toDependencyModel(store.load(file).dependencyModel());
+        assertTrue(old.getClass("com.example.A").typeUses.isEmpty());
+        assertEquals(Set.of("com.example.B"), old.getClass("com.example.A").dependencies);
+    }
+
     /** A tab saved before version 5 has no box width setting: it comes back with flush boxes. */
     @Test
     void viewSavedBeforeTheBoxWidthSettingLoadsUnlimited() throws Exception {
@@ -162,12 +201,10 @@ class S202ProjectStoreTest {
                 "test",
                 new S202Project.Source("JAR", List.of("/tmp/example.jar"), null),
                 rawModel(),
-                domainModel(),
-                null,
-                Set.of());
+                null);
         S202Project.ViewDto view = new S202Project.ViewDto(
                 "LAYERED", null, null, List.of(), List.of(), null, false,
-                3, true, false, false, false, true,
+                3, true, false, false, false, true, List.of(),
                 1.0, 0.0, 0.0, java.util.Map.of(), null, true);
         S202Project versionFour = new S202Project(
                 S202Project.FORMAT,
@@ -175,10 +212,7 @@ class S202ProjectStoreTest {
                 current.createdWith(),
                 current.source(),
                 current.dependencyModel(),
-                current.domainModel(),
                 current.architectureAnnotations(),
-                current.cycleBreakEdges(),
-                current.layoutInvariantReport(),
                 List.of(),
                 List.of(view),
                 current.savedAt());
@@ -218,35 +252,5 @@ class S202ProjectStoreTest {
         moduleInfo.addOpenedPackage("com.example.reflect", Set.of());
         model.addModule(moduleInfo);
         return model;
-    }
-
-    private static DomainModel domainModel() {
-        DomainModel model = new DomainModel();
-        DomainModel.CalculatedElementInfo classInfo = new DomainModel.CalculatedElementInfo(
-                "com.example.A", "A", "CLASS", 2, Set.of("com.example.B"), true);
-        classInfo.addDependent("com.example.C");
-        model.addClass(classInfo.fullName, classInfo);
-        model.addPackage("com.example", new DomainModel.CalculatedElementInfo(
-                "com.example", "example", "PACKAGE", 1, Set.of("com.other")));
-        return model;
-    }
-
-    private static LayoutInvariantReport invariantReport() {
-        return new LayoutInvariantReport(
-                List.of("/tmp/example.jar"),
-                2,
-                1,
-                1,
-                1,
-                1,
-                List.of(new InvariantFinding(
-                        "R1",
-                        "Level inversion across non-back-edge dependency",
-                        "com.example.A",
-                        "com.example.B",
-                        2,
-                        1,
-                        "com.example",
-                        "com.example")));
     }
 }

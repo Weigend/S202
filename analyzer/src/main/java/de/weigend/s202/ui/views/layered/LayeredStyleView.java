@@ -15,6 +15,7 @@
  */
 package de.weigend.s202.ui.views.layered;
 
+import de.weigend.s202.ui.core.spi.BuildProgressSink;
 import de.weigend.s202.domain.architecture.ArchitectureKind;
 import de.weigend.s202.domain.architecture.ViolationKind;
 import de.weigend.s202.ui.core.canvas.ArchitectureTreeBuilder;
@@ -53,7 +54,7 @@ final class LayeredStyleView implements StyleView {
 
     @Override
     public void buildTreeAsync(ArchitectureNode root, int maxDepth,
-                               ArchitectureTreeBuilder.ProgressSink progressSink,
+                               BuildProgressSink progressSink,
                                Consumer<VBox> onComplete) {
         builder().buildTreeAsync(root, maxDepth,
                 services.skipTransparentTopLevelPackages().get(), progressSink, onComplete);

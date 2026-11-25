@@ -21,6 +21,7 @@ import javafx.scene.shape.Line;
 import javafx.scene.shape.Rectangle;
 import org.junit.jupiter.api.Test;
 
+import java.util.List;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -84,7 +85,7 @@ class DependencyArrowPainterTest {
     private Line draw(Node source, Node target, boolean opposed) {
         dependencyPane.getChildren().clear();
         painter.draw(new DependencyArrowPainter.Arrow(source, target, "a.Source", "a.Target",
-                false, true, null, false, null, null), opposed, Map.of());
+                false, true, List.of(), null, false, null, null), opposed, Map.of());
         assertTrue(content.getChildren().contains(dependencyPane));
         return dependencyPane.getChildren().stream()
                 .filter(node -> node instanceof Line line && line.getOnMouseClicked() != null)

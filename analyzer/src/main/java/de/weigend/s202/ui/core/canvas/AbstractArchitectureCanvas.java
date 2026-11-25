@@ -15,6 +15,7 @@
  */
 package de.weigend.s202.ui.core.canvas;
 
+import de.weigend.s202.ui.core.model.EdgeKindGroup;
 import de.weigend.s202.domain.architecture.ArchitectureKind;
 import de.weigend.s202.analysis.quality.QualityMetrics;
 import de.weigend.s202.ui.core.model.ArchitectureNode;
@@ -28,6 +29,7 @@ import javafx.beans.property.SimpleBooleanProperty;
 import javafx.beans.property.SimpleIntegerProperty;
 import javafx.scene.layout.BorderPane;
 
+import java.util.Set;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
@@ -52,6 +54,7 @@ public abstract class AbstractArchitectureCanvas extends BorderPane {
     final BooleanProperty showPackageScc = new SimpleBooleanProperty(false);
     final BooleanProperty showWhatIfViolations = new SimpleBooleanProperty(false);
     final BooleanProperty limitBoxWidth = new SimpleBooleanProperty(false);
+    final ReadOnlyObjectWrapper<Set<EdgeKindGroup>> hiddenEdgeKinds = new ReadOnlyObjectWrapper<>(Set.of());
     final ReadOnlyDoubleWrapper zoomFactor = new ReadOnlyDoubleWrapper(1.0);
     final ReadOnlyObjectWrapper<ArchitectureNode> architectureRoot = new ReadOnlyObjectWrapper<>(null);
     final ReadOnlyObjectWrapper<QualityMetrics> qualityMetrics = new ReadOnlyObjectWrapper<>(null);
@@ -214,6 +217,22 @@ public abstract class AbstractArchitectureCanvas extends BorderPane {
 
     public void setLimitBoxWidth(boolean limit) {
         limitBoxWidth.set(limit);
+    }
+
+    /**
+     * The kinds of dependency this view does not draw. What is hidden still
+     * counts for levels, cycles and violations.
+     */
+    public Set<EdgeKindGroup> getHiddenEdgeKinds() {
+        return hiddenEdgeKinds.get();
+    }
+
+    public ReadOnlyObjectProperty<Set<EdgeKindGroup>> hiddenEdgeKindsProperty() {
+        return hiddenEdgeKinds.getReadOnlyProperty();
+    }
+
+    public void setHiddenEdgeKinds(Set<EdgeKindGroup> hidden) {
+        hiddenEdgeKinds.set(hidden == null ? Set.of() : Set.copyOf(hidden));
     }
 
     /* ----- View-Konfiguration --------------------------------------------------- */

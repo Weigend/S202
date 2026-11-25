@@ -16,6 +16,8 @@
 package de.weigend.s202.analysis.domain;
 
 import de.weigend.s202.reader.DependencyModel;
+import de.weigend.s202.reader.EdgeKind;
+import de.weigend.s202.reader.impl.PackageHierarchyBuilder;
 import de.weigend.s202.reader.impl.java.InputAnalyzer;
 import de.weigend.s202.domain.DomainModel;
 import de.weigend.s202.domain.impl.LevelCalculator;
@@ -41,7 +43,7 @@ class LevelCalculatorTest {
     @BeforeEach
     void setUp() throws IOException {
         calculator = new LevelCalculator();
-        testJarPath = "../test-example/target/test-example-1.4.0.jar";
+        testJarPath = "../test-example/target/test-example-1.5.0.jar";
         
         // Load the raw model first
         InputAnalyzer analyzer = new InputAnalyzer();
@@ -49,6 +51,27 @@ class LevelCalculatorTest {
         
         // Calculate the model
         calculatedModel = calculator.calculate(rawModel);
+    }
+
+    @Test
+    void aReferenceByTypeAloneIsADependencyOfWeightOneAndClosesCycles() {
+        DependencyModel raw = new DependencyModel();
+        DependencyModel.ClassInfo control = new DependencyModel.ClassInfo("app.control.Status", "Status", "app.control");
+        DependencyModel.ClassInfo job = new DependencyModel.ClassInfo("app.jobs.Job", "Job", "app.jobs");
+        job.addMethod("run", "()V");
+        job.getMethod("run", "()V").methodCalls.put("app.control.Status.number", 3);
+        job.addDependency("app.control.Status", EdgeKind.CALLS);
+        control.addDependency("app.jobs.Job", EdgeKind.USES);
+        raw.addClass("app.control.Status", control);
+        raw.addClass("app.jobs.Job", job);
+        PackageHierarchyBuilder.buildPackageHierarchy(raw);
+
+        DomainModel model = calculator.calculate(raw);
+
+        assertEquals(1, model.getClassEdgeWeight("app.control.Status", "app.jobs.Job"));
+        assertEquals(1, model.getPackageTangles().size());
+        assertTrue(model.isClassBackEdge("app.control.Status", "app.jobs.Job"), "the lighter direction is cut");
+        assertEquals(1, model.getClass("app.jobs.Job").architectureLevel);
     }
 
     @Test

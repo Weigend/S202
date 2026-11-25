@@ -17,14 +17,12 @@ package de.weigend.s202.project.impl;
 
 import de.weigend.s202.project.ProjectMapper;
 import de.weigend.s202.project.S202Project;
-import de.weigend.s202.analysis.invariants.InvariantFinding;
 import jakarta.inject.Singleton;
-import de.weigend.s202.analysis.invariants.LayoutInvariantReport;
 import de.weigend.s202.domain.DependencyEdge;
-import de.weigend.s202.domain.DomainModel;
 import de.weigend.s202.domain.architecture.ArchitectureAnnotations;
 import de.weigend.s202.reader.DependencyModel;
 import de.weigend.s202.reader.EdgeKind;
+import de.weigend.s202.reader.TypeUse;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -47,31 +45,14 @@ public final class S202ProjectMapper implements ProjectMapper {
     public S202Project toProject(String appVersion,
                                  S202Project.Source source,
                                  DependencyModel rawModel,
-                                 DomainModel domainModel,
-                                 LayoutInvariantReport invariantReport,
-                                 Set<DependencyEdge> cycleBreakEdges) {
-        return toProject(appVersion, source, rawModel, domainModel,
-                ArchitectureAnnotations.empty(), invariantReport, cycleBreakEdges);
+                                 ArchitectureAnnotations annotations) {
+        return toProject(appVersion, source, rawModel, annotations, Set.of(), List.of());
     }
 
     public S202Project toProject(String appVersion,
                                  S202Project.Source source,
                                  DependencyModel rawModel,
-                                 DomainModel domainModel,
                                  ArchitectureAnnotations annotations,
-                                 LayoutInvariantReport invariantReport,
-                                 Set<DependencyEdge> cycleBreakEdges) {
-        return toProject(appVersion, source, rawModel, domainModel, annotations, invariantReport,
-                cycleBreakEdges, Set.of(), List.of());
-    }
-
-    public S202Project toProject(String appVersion,
-                                 S202Project.Source source,
-                                 DependencyModel rawModel,
-                                 DomainModel domainModel,
-                                 ArchitectureAnnotations annotations,
-                                 LayoutInvariantReport invariantReport,
-                                 Set<DependencyEdge> cycleBreakEdges,
                                  Set<DependencyEdge> previewCuts,
                                  List<S202Project.ViewDto> views) {
         return new S202Project(
@@ -80,11 +61,8 @@ public final class S202ProjectMapper implements ProjectMapper {
                 new S202Project.CreatedWith("S202 Code Analyzer", appVersion),
                 source,
                 toDependencyModelDto(rawModel),
-                toDomainModelDto(domainModel),
                 toArchitectureAnnotationsDto(annotations),
-                toCycleBreakEdgeDtos(cycleBreakEdges),
-                toLayoutInvariantReportDto(invariantReport),
-                toCycleBreakEdgeDtos(previewCuts),
+                toCutDtos(previewCuts),
                 views == null ? List.of() : List.copyOf(views),
                 Instant.now().toString());
     }
@@ -122,6 +100,11 @@ public final class S202ProjectMapper implements ProjectMapper {
                         }
                         classInfo.methods.put(method.name + method.descriptor, method);
                     }
+                }
+                // Projects saved before version 6 have none.
+                if (classDto.typeUses() != null) {
+                    classDto.typeUses().forEach((target, uses) -> uses.forEach(use -> classInfo.addTypeUse(
+                            target, new TypeUse(use.kind(), use.member(), use.descriptor(), use.detail()))));
                 }
                 model.addClass(classInfo.fullName, classInfo);
             }
@@ -161,24 +144,9 @@ public final class S202ProjectMapper implements ProjectMapper {
                 model.addModule(moduleInfo);
             }
         }
-        return model;
-    }
-
-    public DomainModel toDomainModel(S202Project.DomainModelDto dto) {
-        DomainModel model = new DomainModel();
-        if (dto == null) {
-            return model;
-        }
-        if (dto.classes() != null) {
-            for (S202Project.CalculatedElementDto element : dto.classes().values()) {
-                model.addClass(element.fullName(), toCalculatedElementInfo(element));
-            }
-        }
-        if (dto.packages() != null) {
-            for (S202Project.CalculatedElementDto element : dto.packages().values()) {
-                model.addPackage(element.fullName(), toCalculatedElementInfo(element));
-            }
-        }
+        nullToList(dto.componentPackages()).forEach(model::addComponentAnnotatedPackage);
+        nullToList(dto.apiPackages()).forEach(model::addApiAnnotatedPackage);
+        nullToList(dto.plainPackages()).forEach(model::addPlainPackage);
         return model;
     }
 
@@ -213,27 +181,7 @@ public final class S202ProjectMapper implements ProjectMapper {
         return new ArchitectureAnnotations(components, includes, excludes, ports, roles);
     }
 
-    public LayoutInvariantReport toLayoutInvariantReport(S202Project.LayoutInvariantReportDto dto) {
-        if (dto == null) {
-            return null;
-        }
-        List<InvariantFinding> findings = dto.findings() == null ? List.of()
-                : dto.findings().stream()
-                        .map(f -> new InvariantFinding(
-                                f.ruleId(), f.message(), f.fromName(), f.toName(),
-                                f.fromLevel(), f.toLevel(), f.fromContainer(), f.toContainer()))
-                        .toList();
-        return new LayoutInvariantReport(
-                nullToList(dto.sourcePaths()),
-                dto.maxLevel(),
-                dto.packageCount(),
-                dto.classCount(),
-                dto.dependencyCount(),
-                dto.identifiedBackEdgeCount(),
-                findings);
-    }
-
-    public Set<DependencyEdge> toCycleBreakEdges(List<S202Project.CycleBreakEdgeDto> dtos) {
+    public Set<DependencyEdge> toPreviewCuts(List<S202Project.CutDto> dtos) {
         if (dtos == null) {
             return Set.of();
         }
@@ -242,13 +190,10 @@ public final class S202ProjectMapper implements ProjectMapper {
                 .collect(Collectors.toUnmodifiableSet());
     }
 
-    public Set<DependencyEdge> toPreviewCuts(List<S202Project.CycleBreakEdgeDto> dtos) {
-        return toCycleBreakEdges(dtos);
-    }
-
     private S202Project.DependencyModelDto toDependencyModelDto(DependencyModel model) {
         if (model == null) {
-            return new S202Project.DependencyModelDto(Map.of(), Map.of(), List.of());
+            return new S202Project.DependencyModelDto(
+                    Map.of(), Map.of(), List.of(), List.of(), List.of(), List.of());
         }
         Map<String, S202Project.ClassInfoDto> classes = new TreeMap<>();
         for (Map.Entry<String, DependencyModel.ClassInfo> entry : model.getAllClasses().entrySet()) {
@@ -260,7 +205,8 @@ public final class S202ProjectMapper implements ProjectMapper {
                     info.interfaceType,
                     sorted(info.dependencies),
                     toDependencyKindsDto(info.dependencyKinds),
-                    toMethodsDto(info.methods)));
+                    toMethodsDto(info.methods),
+                    toTypeUsesDto(info.typeUses)));
         }
 
         Map<String, S202Project.PackageInfoDto> packages = new TreeMap<>();
@@ -272,7 +218,10 @@ public final class S202ProjectMapper implements ProjectMapper {
                     sorted(info.childPackages),
                     sorted(info.classNames)));
         }
-        return new S202Project.DependencyModelDto(classes, packages, toModuleInfoDtos(model));
+        return new S202Project.DependencyModelDto(classes, packages, toModuleInfoDtos(model),
+                sorted(model.getComponentAnnotatedPackages()),
+                sorted(model.getApiAnnotatedPackages()),
+                sorted(model.getPlainPackages()));
     }
 
     private List<S202Project.ModuleInfoDto> toModuleInfoDtos(DependencyModel model) {
@@ -302,21 +251,6 @@ public final class S202ProjectMapper implements ProjectMapper {
                         access.packageName(),
                         sorted(access.targetModules())))
                 .toList();
-    }
-
-    private S202Project.DomainModelDto toDomainModelDto(DomainModel model) {
-        if (model == null) {
-            return new S202Project.DomainModelDto(Map.of(), Map.of());
-        }
-        Map<String, S202Project.CalculatedElementDto> classes = new TreeMap<>();
-        for (Map.Entry<String, DomainModel.CalculatedElementInfo> entry : model.getAllClasses().entrySet()) {
-            classes.put(entry.getKey(), toCalculatedElementDto(entry.getValue()));
-        }
-        Map<String, S202Project.CalculatedElementDto> packages = new TreeMap<>();
-        for (Map.Entry<String, DomainModel.CalculatedElementInfo> entry : model.getAllPackages().entrySet()) {
-            packages.put(entry.getKey(), toCalculatedElementDto(entry.getValue()));
-        }
-        return new S202Project.DomainModelDto(classes, packages);
     }
 
     private S202Project.ArchitectureAnnotationsDto toArchitectureAnnotationsDto(
@@ -376,6 +310,20 @@ public final class S202ProjectMapper implements ProjectMapper {
         return result;
     }
 
+    private Map<String, List<S202Project.TypeUseDto>> toTypeUsesDto(Map<String, Set<TypeUse>> typeUses) {
+        Map<String, List<S202Project.TypeUseDto>> result = new TreeMap<>();
+        for (Map.Entry<String, Set<TypeUse>> entry : typeUses.entrySet()) {
+            result.put(entry.getKey(), entry.getValue().stream()
+                    .sorted(Comparator.comparing(TypeUse::kind)
+                            .thenComparing(TypeUse::member)
+                            .thenComparing(TypeUse::descriptor, Comparator.nullsFirst(Comparator.naturalOrder()))
+                            .thenComparing(TypeUse::detail, Comparator.nullsFirst(Comparator.naturalOrder())))
+                    .map(use -> new S202Project.TypeUseDto(use.kind(), use.member(), use.descriptor(), use.detail()))
+                    .toList());
+        }
+        return result;
+    }
+
     private Map<String, List<String>> toMethodCallDescriptorsDto(Map<String, Set<String>> descriptors) {
         Map<String, List<String>> result = new TreeMap<>();
         if (descriptors == null) {
@@ -387,58 +335,15 @@ public final class S202ProjectMapper implements ProjectMapper {
         return result;
     }
 
-    private S202Project.CalculatedElementDto toCalculatedElementDto(DomainModel.CalculatedElementInfo info) {
-        return new S202Project.CalculatedElementDto(
-                info.fullName,
-                info.simpleName,
-                info.type,
-                info.interfaceType,
-                info.architectureLevel,
-                sorted(info.dependencies),
-                sorted(info.dependents));
-    }
-
-    private DomainModel.CalculatedElementInfo toCalculatedElementInfo(S202Project.CalculatedElementDto element) {
-        DomainModel.CalculatedElementInfo info = new DomainModel.CalculatedElementInfo(
-                element.fullName(),
-                element.simpleName(),
-                element.type(),
-                element.level(),
-                new HashSet<>(nullToList(element.dependencies())),
-                element.interfaceType());
-        for (String dependent : nullToList(element.dependents())) {
-            info.addDependent(dependent);
-        }
-        return info;
-    }
-
-    private List<S202Project.CycleBreakEdgeDto> toCycleBreakEdgeDtos(Set<DependencyEdge> edges) {
+    private List<S202Project.CutDto> toCutDtos(Set<DependencyEdge> edges) {
         if (edges == null) {
             return List.of();
         }
         return edges.stream()
                 .sorted(Comparator.comparing(DependencyEdge::from)
                         .thenComparing(DependencyEdge::to))
-                .map(edge -> new S202Project.CycleBreakEdgeDto(edge.from(), edge.to()))
+                .map(edge -> new S202Project.CutDto(edge.from(), edge.to()))
                 .toList();
-    }
-
-    private S202Project.LayoutInvariantReportDto toLayoutInvariantReportDto(LayoutInvariantReport report) {
-        if (report == null) {
-            return null;
-        }
-        return new S202Project.LayoutInvariantReportDto(
-                report.sourcePaths(),
-                report.maxLevel(),
-                report.packageCount(),
-                report.classCount(),
-                report.dependencyCount(),
-                report.identifiedBackEdgeCount(),
-                report.findings().stream()
-                        .map(f -> new S202Project.InvariantFindingDto(
-                                f.ruleId(), f.message(), f.fromName(), f.toName(),
-                                f.fromLevel(), f.toLevel(), f.fromContainer(), f.toContainer()))
-                        .toList());
     }
 
     private static List<String> sorted(Set<String> values) {

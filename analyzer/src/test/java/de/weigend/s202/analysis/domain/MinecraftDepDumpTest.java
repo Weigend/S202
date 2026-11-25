@@ -3,7 +3,6 @@ package de.weigend.s202.analysis.domain;
 import de.weigend.s202.domain.DomainModel;
 import de.weigend.s202.domain.impl.LevelCalculator;
 import de.weigend.s202.reader.DependencyModel;
-import de.weigend.s202.reader.EdgeKind;
 import de.weigend.s202.reader.impl.java.InputAnalyzer;
 import org.junit.jupiter.api.Test;
 
@@ -44,15 +43,13 @@ public class MinecraftDepDumpTest {
         //   CLASS className;dep1|dep2|...
         //   PKG   packageName;level
         try (PrintWriter pw = new PrintWriter(DEPS)) {
-            // class structural deps
+            // class deps
             for (String name : new TreeSet<>(knownClasses)) {
                 DependencyModel.ClassInfo ci = rawModel.getClass(name);
                 List<String> deps = new ArrayList<>();
                 if (ci != null) {
                     for (String d : ci.dependencies) {
-                        if (!knownClasses.contains(d)) continue;
-                        Set<EdgeKind> kinds = ci.getKinds(d);
-                        if (kinds.stream().anyMatch(k -> k != EdgeKind.USES)) deps.add(d);
+                        if (knownClasses.contains(d)) deps.add(d);
                     }
                 }
                 Collections.sort(deps);

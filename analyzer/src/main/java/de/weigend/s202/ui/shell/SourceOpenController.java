@@ -156,9 +156,19 @@ public final class SourceOpenController {
         if (initial != null) {
             fileChooser.setInitialDirectory(initial);
         }
-        List<File> picked = fileChooser.showOpenMultipleDialog(dialogOwner.get());
+        openFiles(fileChooser.showOpenMultipleDialog(dialogOwner.get()));
+    }
+
+    /** Opens JARs, or one Maven or Gradle project file, as chosen in the toolbar or named on the command line. */
+    public void openFiles(List<File> picked) {
         if (picked == null || picked.isEmpty()) {
             return;
+        }
+        for (File f : picked) {
+            if (!f.isFile()) {
+                Dialogs.showError("File not found", "There is no file\n" + f.getAbsolutePath());
+                return;
+            }
         }
 
         // Single-file picks may be a project descriptor; check the filename first.

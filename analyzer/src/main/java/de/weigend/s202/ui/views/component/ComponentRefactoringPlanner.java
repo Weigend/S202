@@ -15,9 +15,9 @@
  */
 package de.weigend.s202.ui.views.component;
 
+import de.weigend.s202.ui.core.model.WhatIfMove;
 import de.weigend.s202.domain.DependencyEdge;
 import de.weigend.s202.domain.architecture.ArchitectureAnnotations;
-import de.weigend.s202.ui.core.canvas.WhatIfUndoManager;
 import de.weigend.s202.ui.core.events.MenuRequestEvent;
 import de.weigend.s202.ui.core.graph.ArchitectureDragController;
 import de.weigend.s202.ui.core.spi.ViewServices;
@@ -199,8 +199,8 @@ final class ComponentRefactoringPlanner {
 
     private String buildRefactoringReportJson() {
         // Deduplicate moves: keep only the last move per FQN (latest destination wins).
-        LinkedHashMap<String, WhatIfUndoManager.Move> lastMove = new LinkedHashMap<>();
-        for (WhatIfUndoManager.Move m : services.whatIfMoves().get()) {
+        LinkedHashMap<String, WhatIfMove> lastMove = new LinkedHashMap<>();
+        for (WhatIfMove m : services.whatIfMoves().get()) {
             lastMove.put(m.fqn(), m);
         }
 
@@ -232,7 +232,7 @@ final class ComponentRefactoringPlanner {
                     + "    }");
         }
 
-        for (WhatIfUndoManager.Move m : lastMove.values()) {
+        for (WhatIfMove m : lastMove.values()) {
             String dest = m.containerFqn() == null || m.containerFqn().isEmpty()
                     ? "(top-level)" : plannedPackageNames.getOrDefault(m.containerFqn(), m.containerFqn());
             entries.add("    {\n"

@@ -17,6 +17,7 @@ package de.weigend.s202.ui.core.canvas;
 
 import de.weigend.s202.domain.DependencyEdge;
 import de.weigend.s202.ui.core.arrows.DependencyEdgeActions;
+import de.weigend.s202.ui.core.arrows.DependencySelection;
 
 import java.util.Collection;
 import java.util.HashSet;
@@ -38,7 +39,7 @@ public final class PreviewCutController implements DependencyEdgeActions {
     private Set<DependencyEdge> cycleBreakEdges = Set.of();
     private final Set<DependencyEdge> appliedCutEdges = new HashSet<>();
 
-    private BiConsumer<String, String> edgeClickedSink = (a, b) -> { /* no-op default */ };
+    private Consumer<DependencySelection> selectionSink = selection -> { /* no-op default */ };
     private BiConsumer<String, String> edgeCutSink = (a, b) -> { /* no-op default */ };
     private BiConsumer<String, String> edgeRestoreSink = (a, b) -> { /* no-op default */ };
 
@@ -129,12 +130,12 @@ public final class PreviewCutController implements DependencyEdgeActions {
     }
 
     @Override
-    public void clicked(String from, String to) {
-        edgeClickedSink.accept(from, to);
+    public void selected(DependencySelection selection) {
+        selectionSink.accept(selection);
     }
 
-    public void setOnEdgeClicked(BiConsumer<String, String> sink) {
-        this.edgeClickedSink = sink == null ? (a, b) -> {} : sink;
+    public void setOnSelected(Consumer<DependencySelection> sink) {
+        this.selectionSink = sink == null ? selection -> {} : sink;
     }
 
     public void setOnEdgeCut(BiConsumer<String, String> sink) {

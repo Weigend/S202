@@ -1,33 +1,32 @@
 #!/bin/bash
 # Starte die S202 Code Analyzer App mit JavaFX
-# Optional: JAR-Datei als Parameter angeben
-# Beispiel: ./run-ui.sh test-example/target/test-example-1.4.0.jar
+# Optional: zu öffnende Dateien als Parameter — JARs, oder eine pom.xml bzw. ein
+# Gradle-Skript. Relative Pfade gelten relativ zum aktuellen Verzeichnis oder zum
+# Projekt-Root.
+# Beispiel: ./run-ui.sh test-example/target/test-example-1.5.0.jar
 # Beispiel: ./run-ui.sh /absolute/path/to/file.jar
 
 # Bestimme das absolute Root-Verzeichnis des Projekts
-SCRIPT_PATH="$(cd "$(dirname "$0")" && pwd)"
-PROJECT_ROOT="$SCRIPT_PATH"
+PROJECT_ROOT="$(cd "$(dirname "$0")" && pwd)"
 
-# Nur wenn Parameter übergeben wurde
-if [[ -n "$1" ]]; then
-    JAR_FILE="$1"
-    
-    # Konvertiere JAR-Pfad zu absolutem Pfad
-    if [[ ! "$JAR_FILE" = /* ]]; then
-        # Relativer Pfad - relativ zum Projekt-Root
-        JAR_FILE="$PROJECT_ROOT/$JAR_FILE"
+# Die App startet im Verzeichnis analyzer: absolute Pfade übergeben, in
+# Anführungszeichen, weil ein Pfad Leerzeichen enthalten kann.
+FILES=""
+for FILE in "$@"; do
+    if [[ ! "$FILE" = /* ]]; then
+        if [[ -e "$PWD/$FILE" ]]; then
+            FILE="$PWD/$FILE"
+        else
+            FILE="$PROJECT_ROOT/$FILE"
+        fi
     fi
-    
-    # Setze Umgebungsvariable BEVOR Maven aufgerufen wird
-    export APP_JAR="$JAR_FILE"
-    echo "Starte S202 Code Analyzer mit JAR: $APP_JAR"
-else
-    echo "Starte S202 Code Analyzer"
-fi
+    FILES="$FILES \"$FILE\""
+done
 
 cd "$PROJECT_ROOT/analyzer"
-# DEMO_ALERT_INJECTION (Philippsen review, 2026-05-19): activates a deliberate
-# R1-algo violation on com.example.A when test-example is loaded, so the
-# implausibility alert dialog pops up. Comment out the export to disable.
-export JAVA_TOOL_OPTIONS="-Ds202.demo.injectAlert=true"
-mvn org.openjfx:javafx-maven-plugin:0.0.8:run
+if [[ -n "$FILES" ]]; then
+    echo "Starte S202 Code Analyzer mit:$FILES"
+    exec mvn org.openjfx:javafx-maven-plugin:0.0.8:run "-Djavafx.args=${FILES# }"
+fi
+echo "Starte S202 Code Analyzer"
+exec mvn org.openjfx:javafx-maven-plugin:0.0.8:run

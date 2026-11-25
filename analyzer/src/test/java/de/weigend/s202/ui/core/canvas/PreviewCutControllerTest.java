@@ -16,6 +16,7 @@
 package de.weigend.s202.ui.core.canvas;
 
 import de.weigend.s202.domain.DependencyEdge;
+import de.weigend.s202.ui.core.arrows.DependencySelection;
 import org.junit.jupiter.api.Test;
 
 import java.util.ArrayList;
@@ -81,11 +82,14 @@ class PreviewCutControllerTest {
 
     @Test
     void selectingAnArrowIsForwardedToTheShell() {
-        cuts.setOnEdgeClicked((from, to) -> events.add("clicked " + from + ">" + to));
+        List<DependencySelection> selections = new ArrayList<>();
+        cuts.setOnSelected(selections::add);
+        DependencySelection arrow = new DependencySelection("a.A", "b.B",
+                List.of(new DependencyEdge("a.A", "b.B")));
 
-        cuts.clicked("a.A", "b.B");
-        cuts.clicked(null, null);
+        cuts.selected(arrow);
+        cuts.selected(DependencySelection.NONE);
 
-        assertEquals(List.of("clicked a.A>b.B", "clicked null>null"), events);
+        assertEquals(List.of(arrow, DependencySelection.NONE), selections);
     }
 }

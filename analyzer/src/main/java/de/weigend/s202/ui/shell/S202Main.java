@@ -18,13 +18,31 @@ package de.weigend.s202.ui.shell;
 import io.softwareecg.wfx.main.Main;
 import javafx.application.Application;
 
+import java.io.File;
+import java.util.Arrays;
+import java.util.List;
+
 /**
  * Entry point for the S202 Code Analyzer running on the WFX rich-client platform
- * using the lookup strategy provided by the WFX launcher.
+ * using the lookup strategy provided by the WFX launcher. The arguments are the
+ * files to open: JARs, or one {@code pom.xml} or Gradle script.
  */
 public class S202Main extends Main {
 
+    private static List<File> filesToOpen = List.of();
+
+    /** The files named on the command line. */
+    static List<File> filesToOpen() {
+        return filesToOpen;
+    }
+
     public static void main(String[] args) {
+        filesToOpen = Arrays.stream(args)
+                // The javafx-maven-plugin (run-ui.sh) leaves the quotes of a path with blanks in place.
+                .map(arg -> arg.replaceAll("^\"(.*)\"$", "$1"))
+                .map(File::new)
+                .map(File::getAbsoluteFile)
+                .toList();
         Application.launch(S202Main.class, args);
     }
 }
