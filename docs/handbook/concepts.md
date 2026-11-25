@@ -83,6 +83,9 @@ the cycle become back-edges. Its members may then stand in the same row with not
 between them. Such a cycle is found in [Top Tangles](tangle-view.md#top-tangles) and with **Class
 SCCs** and **Package Cycles**.
 
+In the [Component View](component-view.md#the-inverted-layers) the API of a component is drawn above
+its implementation. What runs upwards there, from the implementation to its API, is no violation.
+
 A violation can also be made by hand: when a box is [moved](layered-view.md#moving-boxes) to a
 place where its dependencies run upwards.
 

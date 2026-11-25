@@ -3,8 +3,9 @@
 [Handbook home](README.md) · [Concepts](concepts.md#components) ·
 [Layered Architecture View](layered-view.md) · [Planning a refactoring](refactoring.md)
 
-**View → Component View** shows the same layers with the boundaries of components. A component has
-a public part, its API, and a private part, its implementation.
+**View → Component View** shows the layers with the boundaries of components. A component has a
+public part, its API, and a private part, its implementation. Between components and packages the
+order is the usual one; within a component it is [inverted](#the-inverted-layers): the API is on top.
 
 ![The components of the web shop](images/component-view.png)
 
@@ -40,6 +41,44 @@ makes the classes of exactly this package public, for components that keep their
 and hide the rest in `impl`. `@S202Component` declares a component without `api` or `spi`, and
 `@S202Package` keeps a package from becoming one. The annotations are in the module
 [s202-annotations](../../s202-annotations), which has no dependencies and is not needed at run time.
+
+## The inverted layers
+
+The implementation depends on the API: it implements its interfaces and uses its types. In the
+[Layered Architecture View](layered-view.md) the API is therefore at the bottom of its package, on
+level 0 or 1, and the implementation above it:
+
+![The layers of the web shop](images/layered-basic.png)
+
+The Component View turns this round. The API is drawn on top, as the interface to everybody who uses
+the component from above, and the implementation below, hidden behind it. Only these two parts
+change places; inside the API and inside the implementation the layers are as usual.
+
+So the dependencies of an implementation on its own API run **upwards** here. That is a matter of the
+drawing and no violation; the numbers still tell the order, `api` with `L:0` above `impl` with `L:2`.
+What runs down, from the API into the implementation, is the dependency that is wrong, the
+[API leak](#violations).
+
+The two views do not contradict each other. A valid component architecture without cycles has no
+violations in the Layered Architecture View either: whoever uses an API from outside lies above it, and
+so does the implementation. It only looks unstructured there. All arrows from outside pass the upper
+rows of a component and end at the bottom, on level 0 or 1, as if they went through the implementation:
+
+![The dependencies of the package payment in the Layered Architecture View](images/layered-selected-package.png)
+
+The green arrows of `order` run across `impl` to `api`. With the API on top the same arrows end at the
+upper edge of the component, and one that goes on into the implementation stands out.
+
+The boundary alone does not prevent cycles: `RefundPolicy` uses `order` through its API, which is
+right here, and is still a violation of the layers, because `order` uses `payment` as well. So look
+at both views.
+
+The inverted layers show *inversion of control*. A call goes from top to bottom: `RefundScreen` calls
+`OrderService`, and `OrderServiceImpl` is executed. The dependency in the code points the other way,
+from the implementation to the API. That is why the implementation can be replaced and the caller does
+not notice. `spi` does the same at the other end: `order` calls `OrderRepository`, and
+`JdbcOrderRepository` in `persistence`, which lies above, is executed. `persistence` depends on
+`order`, not `order` on the database.
 
 ## Violations
 

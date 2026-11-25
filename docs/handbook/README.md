@@ -1,8 +1,8 @@
 # S202 Handbook
 
-One more condition for a refund sounds like a change of one class. Then both the payment and the
-order component have to change, because they depend on each other. S202 makes such dependencies
-visible.
+A complex system can be mastered as long as it can be taken apart, into parts that are understood,
+developed and replaced one at a time. Whether that is possible is not said by the names of the
+packages but by the dependencies between them. S202 makes them visible.
 
 It reads compiled Java code or the source code of another language, computes which part
 depends on which, and draws the result as layers: what is used lies below what uses it. A
@@ -21,11 +21,9 @@ Where something is to be changed, it goes on: *which dependency breaks the layer
 to be cut to get rid of this cycle*, *what happens if this class moves there*. The answers become a
 list of changes that can be given to the developers. The analyzed code is never changed.
 
-Dependencies show where a change can spread, which parts have to be understood together, and whether
-a boundary protects its implementation or only has a good name. S202 finds them; the team decides
-which of them are wrong. The first pages explain this reasoning, the others describe every view,
-panel, menu and dialog with pictures of the running application. The handbook describes release
-1.5.0.
+S202 finds the dependencies; the team decides which of them are wrong. The first pages explain this
+reasoning, the others describe every view, panel, menu and dialog with pictures of the running
+application. The handbook describes release 1.5.0.
 
 ![The main window of S202 with an analysis](images/window-overview.png)
 
@@ -48,7 +46,7 @@ panel, menu and dialog with pictures of the running application. The handbook de
 
 | Topic | Page |
 | --- | --- |
-| Why dependencies determine the cost of change; observed, inferred and intended architecture; reviewing an unknown system | [Why architecture matters](why-architecture.md) |
+| Divide and conquer, and why dependencies decide whether it works; the cost of change; observed, inferred and intended architecture; reviewing an unknown system | [Why architecture matters](why-architecture.md) |
 | Dependencies, levels, violations, cycles, tangles, components | [Concepts](concepts.md) |
 | Installation, the first analysis step by step | [Getting started](getting-started.md) |
 | The five defects of the sample, what they mean and how to judge them | [The web shop story](webshop-story.md) |
