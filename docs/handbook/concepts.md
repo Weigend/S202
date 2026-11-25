@@ -1,10 +1,15 @@
 # Concepts
 
-[Handbook home](README.md) · [Getting started](getting-started.md) ·
+[Handbook home](README.md) · [Why architecture matters](why-architecture.md) ·
+[Getting started](getting-started.md) ·
 [Layered Architecture View](layered-view.md) · [Tangles](tangle-view.md)
 
-This page explains the terms the views use. The theory behind them is in the
-[architecture concept paper](../concept/Software-Architektur-als-Schichtendarstellung-en.pdf).
+This page explains the terms the views use. How layers, components, hexagonal roles and tangles relate
+to each other is said in
+[Why architecture matters](why-architecture.md#four-lenses-on-the-same-code). The theory behind the
+terms is in the
+[architecture concept paper](../concept/Software-Architektur-als-Schichtendarstellung-en.pdf), and
+their wider context is in the [literature](literature.md).
 
 ## Dependencies
 
@@ -22,7 +27,8 @@ calls it. The filter [Edge Kinds](layered-view.md#edge-kinds) hides kinds in the
 not change what is computed.
 
 A class dependency has a **weight**: the number of method calls that carry it, and 1 if there
-are none. The weight says what it would cost to remove the dependency.
+are none. It is a heuristic for choosing what to cut, not an estimate of the effort: a single call
+can be expensive to replace.
 
 Nested, local and anonymous classes are not shown. What they depend on counts for the class
 around them. In languages without classes the files or modules take their place; see
@@ -69,6 +75,9 @@ So without cycles there are no violations, and removing all back-edges leaves th
 cycles. Which dependency of a cycle is *wrong* in the sense of the design is a decision for the
 architect; the back-edges are a proposal.
 
+Conversely, a dependency that runs downwards can break a rule of the design; see
+[three different architectures](why-architecture.md#three-different-architectures).
+
 A cycle is not always visible as a violation. If both directions weigh the same, all dependencies of
 the cycle become back-edges. Its members may then stand in the same row with nothing running upwards
 between them. Such a cycle is found in [Top Tangles](tangle-view.md#top-tangles) and with **Class
@@ -85,16 +94,20 @@ place where its dependencies run upwards.
 | Package cycle | Packages depend on each other in a circle, through different classes: `p.A → q.B` and `q.C → p.D`, without a circle among the classes. | Moving a class may be enough. |
 | Tangle | A group of members of one package - packages, classes or both - that depend on each other in circles. | See [Tangles](tangle-view.md). |
 
-A class cycle within one small package is often harmless: those classes belong together. A class
-cycle across packages and a package cycle are not, because such packages can neither be
-understood nor built nor replaced one at a time.
+A class cycle within one package can be acceptable when its classes are understood, tested and
+changed as one unit. A cycle across packages usually costs more: there is no order in which the
+packages could be understood, tested or replaced one at a time, and they cannot be split into
+separate build units.
 
 ## Components
 
-A package is a **component** when it has a direct sub-package named `api` or `spi`. What is in
-them is public, everything else is private. `api` is what others call, `spi` what others
-implement. The [Component View](component-view.md) draws this boundary and reports who ignores
-it.
+In S202 a **component** is a package with a public part, its API, and a private one, its
+implementation. It is a boundary in the code, not necessarily a JAR or a service of its own.
+
+A package is a component when it has a direct sub-package named `api` or `spi`. What is in them is
+public, everything else is private. `api` is what others call, `spi` what others implement. A
+component can also be [declared or marked](component-view.md#what-is-a-component). The
+[Component View](component-view.md) draws this boundary and reports who ignores it.
 
 ## Boxes and colours
 

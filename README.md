@@ -12,7 +12,8 @@ A JavaFX-based tool for analyzing code across multiple languages and visualizing
 ![C](https://img.shields.io/badge/C-PoC-blueviolet)
 ![License](https://img.shields.io/badge/License-Apache%202.0-blue)
 
-> **→ [S202 Handbook](docs/handbook/README.md)** — every view, panel and menu, with pictures.
+> **→ [S202 Handbook](docs/handbook/README.md)** — why dependencies and boundaries matter, and every
+> view, panel and menu, with pictures.
 
 > **→ [The Tool That Fixed Itself — S202 Case Study](docs/s202/CASE_STUDY.md)**
 > *We pointed S202 at its own codebase. No source code was read. Here's what happened.*
@@ -319,7 +320,8 @@ Details: [docs/VS_CODE_SETUP.md](docs/VS_CODE_SETUP.md)
 
 ## Documentation
 
-- [Handbook](docs/handbook/README.md) - What S202 does and how to use it: all views, functions and dialogs, with screenshots
+- [Handbook](docs/handbook/README.md) - Why software structure matters, how to judge a finding,
+  and all views, functions and dialogs of S202, with screenshots
 - [QUICKSTART.md](QUICKSTART.md) - Quick introduction
 - Architecture concept paper:
   [Deutsch](docs/concept/Software-Architektur-als-Schichtendarstellung.pdf),

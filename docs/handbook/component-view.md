@@ -14,6 +14,10 @@ packages.
 
 ## What is a component
 
+The purpose of a component is to keep changes local: clients depend on what it promises, not on how
+it keeps the promise. A layer says something else, in which direction dependencies run. A dependency
+can run in the right direction and still bypass an API, as `RefundScreen` → `CardPayments` does.
+
 - A package is a component if it has a direct sub-package named **`api`** (called by others) or
   **`spi`** (implemented by others).
 - Everything below `api` and `spi` is public, everything else is private. It does not matter

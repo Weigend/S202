@@ -1,7 +1,7 @@
 # Getting Started
 
-[Handbook home](README.md) · [Concepts](concepts.md) · [Loading code](loading-code.md) ·
-[The window](window.md)
+[Handbook home](README.md) · [Concepts](concepts.md) · [The web shop story](webshop-story.md) ·
+[Loading code](loading-code.md) · [The window](window.md)
 
 ## Install a release
 
@@ -63,8 +63,8 @@ shows everything again.
 
 ![The dependencies of OrderService](images/layered-selected-class.png)
 
-**4. Ask what is wrong.** Switch **Show Dependencies** off and **Show Violations** on. Four dashed
-arrows remain. They are the dependencies that run against the layers.
+**4. Ask what breaks the order.** Switch **Show Dependencies** off and **Show Violations** on. Four
+dashed arrows remain. They are the dependencies that run against the layers.
 
 ![The four violations of the web shop](images/layered-violations.png)
 
@@ -82,7 +82,7 @@ opens that shows nothing but this tangle: `order` uses `payment` with five calls
 carries it: `RefundPolicy.allows` calls `OrderService.isCancelled`. Open `order` and its `api`, and
 `payment` and its `impl`, with their **+** to see the two classes.
 
-**7. Try the remedy.** Right-click the arrow between `RefundPolicy` and `OrderService` and choose
+**7. Try a remedy.** Right-click the arrow between `RefundPolicy` and `OrderService` and choose
 **Cut**. The bar above the picture says *No cycle left between the members*. Nothing has been
 changed; the cut is noted as a planned refactoring.
 
@@ -94,10 +94,11 @@ picture.
 
 ## Where to go from here
 
+- What the findings mean and how to judge them: [The web shop story](webshop-story.md)
 - What else the pictures show and how to filter them: [Layered Architecture View](layered-view.md)
 - Larger systems: [Scopes](layered-view.md#scopes), [Package depth](layered-view.md#package-depth)
   and [Limit Box Width](layered-view.md#box-width)
 - The other four defects of the sample: [Tangles](tangle-view.md) and
   [Component View](component-view.md)
 
-[Next: Loading code →](loading-code.md)
+[Next: The web shop story →](webshop-story.md)

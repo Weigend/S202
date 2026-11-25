@@ -7,6 +7,9 @@ This is the view an analysis opens with. It shows packages and classes as boxes 
 rows: what is used lies below what uses it. Why that is so, and what the numbers `L:n` and `G:n`
 mean, is said in [Concepts](concepts.md#levels-and-layers).
 
+The rows are computed from the dependencies that exist. They are not the layers somebody once
+intended; see [three different architectures](why-architecture.md#three-different-architectures).
+
 ![The layers of the web shop](images/layered-basic.png)
 
 Reading the picture from the top: `app` starts the shop. Below are `ui` and `persistence`, which

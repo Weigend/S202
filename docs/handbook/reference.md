@@ -112,5 +112,9 @@ The keys of the 3D views are in [3D views](3d-views.md).
 
 - Nested classes are not shown; what they depend on counts for the class around them.
 - In Java, code that is only reached by reflection or configuration is not seen as a dependency.
+- Layers are computed from the dependencies that exist. Which dependency the design forbids, S202
+  does not know; see [three different architectures](why-architecture.md#three-different-architectures).
+- Static code dependencies do not include change history, shared data, deployment or team coupling;
+  see [smells outside the model](architecture-smells.md#smells-outside-the-model).
 
-[Back to handbook home →](README.md)
+[Next: Literature →](literature.md)

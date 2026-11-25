@@ -1,26 +1,44 @@
 # S202 Handbook
 
-S202 reads compiled Java code or the source code of another language, computes which part
+One more condition for a refund sounds like a change of one class. Then both the payment and the
+order component have to change, because they depend on each other. S202 makes such dependencies
+visible.
+
+It reads compiled Java code or the source code of another language, computes which part
 depends on which, and draws the result as layers: what is used lies below what uses it. A
 dependency that runs upwards is a finding, and so is a group of packages or classes that depend
 on each other in a circle.
 
-It is a tool for the architect of an existing system. It answers questions such as *what are the
-layers of this system*, *which dependency breaks them*, *what would have to be cut to get rid of
-this cycle* and *what happens if this class moves there*, and it turns the answers into a list of
-changes that can be given to the developers. The analyzed code is never changed.
+It is a tool for understanding and judging an existing system. The picture of the whole shows whether
+there is an architecture at all, parts with an order and boundaries, or a big ball of mud in which
+everything is tied to everything. It shows the terms of the domain as they are in the code: which
+there are, which are central, what rests on what, and where business and technology are mixed. And
+it shows the quality of the structure, from the whole down to the single call. That makes S202 a tool
+for [architecture reviews](why-architecture.md#reviewing-an-unknown-system) and for analyses of
+quality in general.
 
-This handbook describes every view, panel, menu and dialog of S202 with pictures of the running
-application. It describes release 1.5.0.
+Where something is to be changed, it goes on: *which dependency breaks the layers*, *what would have
+to be cut to get rid of this cycle*, *what happens if this class moves there*. The answers become a
+list of changes that can be given to the developers. The analyzed code is never changed.
+
+Dependencies show where a change can spread, which parts have to be understood together, and whether
+a boundary protects its implementation or only has a good name. S202 finds them; the team decides
+which of them are wrong. The first pages explain this reasoning, the others describe every view,
+panel, menu and dialog with pictures of the running application. The handbook describes release
+1.5.0.
 
 ![The main window of S202 with an analysis](images/window-overview.png)
 
 ## Choose a path
 
+- **Why structure matters:** [Why architecture matters](why-architecture.md) →
+  [The web shop story](webshop-story.md) → [Architecture smells](architecture-smells.md)
 - **First use:** [Concepts](concepts.md) → [Getting started](getting-started.md) →
   [The window](window.md)
-- **Understand a system:** [Loading code](loading-code.md) →
-  [Layered Architecture View](layered-view.md) → [Quality](quality.md)
+- **Understand and review a system:**
+  [Reviewing an unknown system](why-architecture.md#reviewing-an-unknown-system) →
+  [Loading code](loading-code.md) → [Layered Architecture View](layered-view.md) →
+  [Tangles](tangle-view.md) → [Quality](quality.md)
 - **Resolve cycles:** [Tangles](tangle-view.md) → [Planning a refactoring](refactoring.md)
 - **Draw component boundaries:** [Component View](component-view.md) →
   [Planning a refactoring](refactoring.md)
@@ -30,8 +48,11 @@ application. It describes release 1.5.0.
 
 | Topic | Page |
 | --- | --- |
+| Why dependencies determine the cost of change; observed, inferred and intended architecture; reviewing an unknown system | [Why architecture matters](why-architecture.md) |
 | Dependencies, levels, violations, cycles, tangles, components | [Concepts](concepts.md) |
 | Installation, the first analysis step by step | [Getting started](getting-started.md) |
+| The five defects of the sample, what they mean and how to judge them | [The web shop story](webshop-story.md) |
+| Cycles, API leaks, excessive coupling and what static analysis cannot decide | [Architecture smells](architecture-smells.md) |
 | JARs, Maven and Gradle projects, Python, Go, JavaScript and C source, what is left out | [Loading code](loading-code.md) |
 | The window part by part: menus, toolbar, tabs, panels, status bar | [The window](window.md) |
 | Reading the layers, arrows, overlays, filters, scopes, moving boxes | [Layered Architecture View](layered-view.md) |
@@ -43,6 +64,7 @@ application. It describes release 1.5.0.
 | From a finding to a list of changes; the reports, undo and reset | [Planning a refactoring](refactoring.md) |
 | Project files, what is remembered, pictures and reports | [Projects and export](projects-and-export.md) |
 | Menus, toolbar, mouse and keyboard, files, settings, status of the features, known limitations | [Reference](reference.md) |
+| The ideas and research behind modules, dependency models and layered visualization | [Literature](literature.md) |
 
 ## The sample project
 
@@ -57,7 +79,7 @@ mvn package                      # produces target/webshop-1.0.jar
 The shop is mostly well structured: `order`, `payment`, `catalog` and `customer` are components
 with an `api` and an `impl` package, above them are `ui`, `persistence` and `app`, below them is
 `common`. It has five deliberate defects, each marked in the source code, and the handbook finds
-all of them:
+all of them. [The web shop story](webshop-story.md) tells how to judge them:
 
 | Defect | Where | Kind |
 | --- | --- | --- |
@@ -84,4 +106,4 @@ The status of every feature is in the [Reference](reference.md#status-of-the-fea
 known not to work is listed in [Known limitations](reference.md#known-limitations), and mentioned
 where it matters.
 
-[Next: Concepts →](concepts.md)
+[Next: Why architecture matters →](why-architecture.md)

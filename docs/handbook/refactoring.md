@@ -8,6 +8,10 @@ result is a list. This page puts the steps together.
 
 ## A way to work
 
+The purpose is not to remove every finding. It is to turn a structural observation into an explicit
+decision. What belongs to one is said under
+[How to judge a finding](architecture-smells.md#how-to-judge-a-finding).
+
 1. **Get an overview.** Open the code, look at the top rows of the
    [layers](layered-view.md), and set **Depth** so that the main packages are closed. Does the
    order match what the team believes?

@@ -58,6 +58,10 @@ The score begins at 100 and loses points
 | 40 to 54 | High Risk |
 | less | Critical |
 
+The score is a heuristic over static dependencies, with the same thresholds for every system. It is
+good for comparing versions of one system, not for ranking different ones, and it is no release gate
+on its own.
+
 Component findings are not part of the score, because whether a system has components is a guess if
 nothing declares it.
 

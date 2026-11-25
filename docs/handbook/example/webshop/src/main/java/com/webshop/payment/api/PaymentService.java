@@ -9,5 +9,6 @@ public interface PaymentService {
 
     PaymentResult capture(Identifier orderId);
 
+    /** Refunds an order once; a further request is not successful. */
     PaymentResult refund(Identifier orderId);
 }

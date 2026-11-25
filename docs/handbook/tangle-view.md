@@ -40,7 +40,7 @@ The members are arranged in layers as usual, but drawn as a graph: icon and name
 
 | In the picture | Meaning |
 | --- | --- |
-| Number on an arrow | How many method calls carry the dependency: what it costs to cut it. A dependency without calls counts 1. |
+| Number on an arrow | How many method calls carry the dependency, its [weight](concepts.md#dependencies). A dependency without calls counts 1. |
 | `12 / 3↑` | An arrow that bundles several dependencies: three of the twelve calls belong to back-edges. |
 | Red and heavy | Back-edge: the arrow that runs up, the candidate to remove. |
 | Solid | The dependency lies on a class cycle. Only a change of the code resolves it. |
@@ -135,8 +135,8 @@ The back-edges are a proposal, made from the numbers. Reasons to choose another 
 
 - **Design.** The direction that should remain is known: a foundation must not know business
   classes, an API not its implementation, whatever the numbers say.
-- **Cost.** A dependency with one call is cheaper than one with twenty. Look at *Other references*
-  as well.
+- **Likely effort.** A dependency with one call is often simpler to replace than one with twenty,
+  but not always. Look at *Other references* as well.
 - **Effect.** A method in *Top Cut Targets* is called by several back-edges. Its **Cut All** cuts the
   dependencies as a whole: if one of them also calls other methods, these have to go as well.
 

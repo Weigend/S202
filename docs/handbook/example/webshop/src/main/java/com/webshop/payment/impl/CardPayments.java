@@ -6,10 +6,14 @@ import com.webshop.payment.api.PaymentResult;
 import com.webshop.payment.api.PaymentService;
 import com.webshop.payment.spi.PaymentGateway;
 
+import java.util.HashSet;
+import java.util.Set;
+
 public class CardPayments implements PaymentService {
 
     private final PaymentGateway gateway;
     private final RefundPolicy refundPolicy;
+    private final Set<Identifier> refunded = new HashSet<>();
 
     public CardPayments(PaymentGateway gateway, RefundPolicy refundPolicy) {
         this.gateway = gateway;
@@ -28,6 +32,6 @@ public class CardPayments implements PaymentService {
 
     @Override
     public PaymentResult refund(Identifier orderId) {
-        return new PaymentResult(orderId, refundPolicy.allows(orderId));
+        return new PaymentResult(orderId, refundPolicy.allows(orderId) && refunded.add(orderId));
     }
 }

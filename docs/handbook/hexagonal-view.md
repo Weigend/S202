@@ -9,6 +9,10 @@
 **View → Hexagonal View** arranges packages as the rings of a hexagonal architecture, also called
 *ports and adapters*: the core in the middle, the application around it, the adapters outside.
 
+These roles say why code exists, not only what it depends on. S202 infers them from names,
+implementations and levels; where that does not match the design,
+[correct them by hand](#roles-and-ports).
+
 ![The bookshop of test-hexagon](images/hexagonal-view.png)
 
 The pictures show the project [test-hexagon](../../test-hexagon), a bookshop. It is built in the
