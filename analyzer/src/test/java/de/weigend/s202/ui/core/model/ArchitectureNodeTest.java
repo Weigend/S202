@@ -42,7 +42,7 @@ class ArchitectureNodeTest {
     @BeforeEach
     void setUp() throws IOException {
         builder = new ArchitectureNodeBuilder();
-        testJarPath = "../test-example/target/test-example-1.5.0.jar";
+        testJarPath = "../test-example/target/test-example-1.6.0.jar";
         
         // Build the full chain: InputAnalyzer -> LevelCalculator -> ArchitectureNodeBuilder
         InputAnalyzer analyzer = new InputAnalyzer();

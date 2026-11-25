@@ -191,18 +191,18 @@ The screenshot below shows S202 analyzing its own codebase — four components (
 
 ![Component View showing S202 components](docs/10-component-architecture-final-all-deps.png)
 
-A package is a component when it has a direct sub-package named `api` (called by others) or `spi` (implemented by others). Everything below `api` and `spi` is public, everything else is private. Whether a type is an interface or how a class is named plays no role.
+A package is a component when it has a direct sub-package named `api` (called by others), `spi` (implemented by others), `port` or `ports` (either). Everything below these packages is public, everything else is private. Whether a type is an interface or how a class is named plays no role.
 
-Components can be nested to any depth, with the same rule on every level. An inner component belongs to the private part of the outer one: its API is visible inside the outer component only, and an access has to pass the API of *every* component it enters. Inside `api` and `spi` nothing nests; they are public as a whole. A package without `api` or `spi` is a plain package, which may contain components.
+Components can be nested to any depth, with the same rule on every level. An inner component belongs to the private part of the outer one: its API is visible inside the outer component only, and an access has to pass the API of *every* component it enters. Inside `api`, `spi`, `port` and `ports` nothing nests; they are public as a whole. A package without any of them is a plain package, which may contain components.
 
 Explicit declarations complement the convention or override it, the first match decides:
 
 - Manual markings from the context menu: **Add To Api** and **Remove From Api**. A marking belongs to the innermost component around the marked element; marking an inner component publishes it in the outer one.
 - JPMS `exports` from `module-info.class`, public across all enclosing components
 - `@S202Api` in `package-info.java`: the package with its sub-packages — or, on the root package of a component, the classes of exactly this package (for components that keep their API at the root and hide the rest, e.g. in `impl`)
-- Packages named `api` or `spi`
+- Packages named `api`, `spi`, `port` or `ports`
 
-`@S202Component` declares a component that has no `api` or `spi`, `@S202Package` keeps a package from becoming one.
+`@S202Component` declares a component that has no such package, `@S202Package` keeps a package from becoming one.
 
 You can also drag packages or classes between the API area and the implementation area of their component. These manual API decisions are stored with the project and are reapplied when the project is loaded again. Dragging an element into another package or component is recorded as a move: it stays visible, can be undone and appears in the refactoring report. The component violations follow every move at once: the moved element belongs to the component it was dropped into, public if dropped into its API area and private otherwise. Moves are not stored with the project.
 
@@ -230,7 +230,7 @@ The screenshot shows the bundled **test-hexagon** example (the *paperwhale* book
 To try it, build and load the example project under [`test-hexagon`](test-hexagon):
 
 ```bash
-mvn -pl test-hexagon -am install    # produces test-hexagon/target/test-hexagon-1.5.0.jar
+mvn -pl test-hexagon -am install    # produces test-hexagon/target/test-hexagon-1.6.0.jar
 ```
 
 Then **File → Open Maven Project…** on `test-hexagon/pom.xml` (or **Open JAR…** on the produced JAR) and switch to **View → Hexagonal View**.

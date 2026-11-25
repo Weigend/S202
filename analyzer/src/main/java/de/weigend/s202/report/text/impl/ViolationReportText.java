@@ -94,8 +94,9 @@ final class ViolationReportText {
         }
         report.section("Access past the API of a component");
         report.paragraph("Rule: code outside of a component uses its public classes only, i.e. the ones in "
-                + "its sub-packages api and spi or marked as API. Everything else is private. To fix one, use "
-                + "the API of the component, add what is missing there, or move one of the classes.");
+                + "its sub-packages api, spi, port and ports or marked as API. Everything else is private. "
+                + "To fix one, use the API of the component, add what is missing there, or move one of the "
+                + "classes.");
         Map<String, List<Violation>> byComponent = new TreeMap<>();
         for (Violation violation : bypasses) {
             String boundary = components.boundaryBetween(violation.sourceFqn(), violation.targetFqn());

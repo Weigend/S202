@@ -15,6 +15,8 @@
  */
 package de.weigend.s202.ui.core.graph;
 
+import javafx.beans.value.ChangeListener;
+import javafx.beans.value.WeakChangeListener;
 import javafx.geometry.Insets;
 import javafx.geometry.Pos;
 import javafx.scene.Cursor;
@@ -88,16 +90,8 @@ public class LevelPackageBox extends VBox implements GraphSelection.Selectable, 
     /** Full names of all elements {@link #lazyContent} will create, directly or in sub-packages. */
     private Set<String> pendingElements = Set.of();
 
-    // Static callback for notifying when expand/collapse changes
-    private static Runnable onExpandChangeCallback = null;
-
-    /**
-     * Sets a global callback that is called whenever any LevelPackageBox is expanded/collapsed.
-     * Used to refresh dependency arrows in ArchitectureCanvas.
-     */
-    public static void setOnExpandChangeCallback(Runnable callback) {
-        onExpandChangeCallback = callback;
-    }
+    /** Held here: the setting lives as long as the application and must not hold the box. */
+    private final ChangeListener<Boolean> architectureLevelListener = (obs, was, isNow) -> applyLabelText();
 
     public LevelPackageBox(String levelName) {
         this(levelName, -1);
@@ -157,7 +151,8 @@ public class LevelPackageBox extends VBox implements GraphSelection.Selectable, 
 
         // Live toggle: re-render the label whenever the global architecture-level
         // visibility flips, without rebuilding the tree.
-        ArchitectureViewSettings.showArchitectureLevelProperty().addListener((obs, oldVal, newVal) -> applyLabelText());
+        ArchitectureViewSettings.showArchitectureLevelProperty()
+                .addListener(new WeakChangeListener<>(architectureLevelListener));
 
         // Selectable click target on the package frame itself (free area outside
         // the header). The toggle icon and inner boxes consume their own clicks
@@ -392,13 +387,7 @@ public class LevelPackageBox extends VBox implements GraphSelection.Selectable, 
             applyBaseStyle(); // the frame comes and goes with the content
         }
 
-        if (onExpandChangeCallback != null) {
-            // Defer until after the current pulse so listeners observe stable
-            // bounds — running synchronously inside the pulse that just queued
-            // the layout invalidation makes bounds-readers see stale values.
-            Runnable callback = onExpandChangeCallback;
-            javafx.application.Platform.runLater(callback);
-        }
+        ExpandChangedEvent.fireFrom(this);
     }
 
     public void addToLevel(int levelNumber, Node node) {

@@ -107,9 +107,9 @@ separate build units.
 In S202 a **component** is a package with a public part, its API, and a private one, its
 implementation. It is a boundary in the code, not necessarily a JAR or a service of its own.
 
-A package is a component when it has a direct sub-package named `api` or `spi`. What is in them is
-public, everything else is private. `api` is what others call, `spi` what others implement. A
-component can also be [declared or marked](component-view.md#what-is-a-component). The
+A package is a component when it has a direct sub-package named `api`, `spi`, `port` or `ports`. What
+is in them is public, everything else is private. `api` is what others call, `spi` what others
+implement, and `port` can be both. A component can also be [declared or marked](component-view.md#what-is-a-component). The
 [Component View](component-view.md) draws this boundary and reports who ignores it.
 
 ## Boxes and colours

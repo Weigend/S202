@@ -74,6 +74,31 @@ class ComponentArchitectureBuilderTest {
     }
 
     @Test
+    void portAndPortsArePublicLikeApiAndSpi() {
+        for (String name : List.of("port", "ports")) {
+            String contract = "com.acme.order." + name;
+            DomainModel domain = new DomainModel();
+            pkgs(domain, "com", "com.acme", "com.acme.order", contract, contract + ".in", contract + ".out",
+                    contract + ".out.api", "com.acme.order.service", "com.acme.web", "com.acme.util");
+            cls(domain, contract + ".in.PlaceOrder", true, 0, Set.of());
+            cls(domain, contract + ".out.Orders", true, 0, Set.of());
+            cls(domain, contract + ".out.api.Paging", false, 0, Set.of());
+            cls(domain, "com.acme.order.service.OrderService", false, 0, Set.of(contract + ".in.PlaceOrder"));
+            cls(domain, "com.acme.web.Controller", false, 0,
+                    Set.of(contract + ".in.PlaceOrder", "com.acme.order.service.OrderService"));
+
+            ComponentArchitecture architecture = build(domain);
+
+            assertEquals(List.of("com.acme.order"), roots(architecture.components()),
+                    "nothing nests inside a contract package");
+            assertEquals(Set.of(contract + ".in.PlaceOrder", contract + ".out.Orders", contract + ".out.api.Paging"),
+                    apiFqns(architecture, "com.acme.order"));
+            assertEquals(Set.of("BYPASS com.acme.web.Controller -> com.acme.order.service.OrderService"),
+                    violations(architecture));
+        }
+    }
+
+    @Test
     void accessPastTheContractIsABypassAndAnApiThatUsesTheImplementationLeaksIt() {
         DomainModel domain = new DomainModel();
         pkgs(domain, "com", "com.acme", "com.acme.payment", "com.acme.payment.api", "com.acme.payment.store",

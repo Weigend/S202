@@ -29,7 +29,6 @@ import javafx.scene.layout.VBox;
 
 import java.util.ArrayList;
 import java.util.List;
-import java.util.concurrent.CopyOnWriteArrayList;
 
 /**
  * Drag-and-drop controller for the architecture view. Phase 2 of the
@@ -48,8 +47,9 @@ import java.util.concurrent.CopyOnWriteArrayList;
  *       dragged node becomes its sole child.</li>
  * </ul>
  *
- * <p>API is intentionally static: there is exactly one active drag at a
- * time, scene-wide.
+ * <p>A drop is announced with a {@link BoxDroppedEvent}. The API is
+ * intentionally static: there is exactly one active drag at a time,
+ * scene-wide.
  */
 public final class ArchitectureDragController {
 
@@ -75,27 +75,6 @@ public final class ArchitectureDragController {
     private static DropMode currentDropMode;
     private static int currentDropIndex = -1;
     private static Region insertMarker;
-
-    private static final List<DropListener> dropListeners = new CopyOnWriteArrayList<>();
-
-    /**
-     * Callback invoked when a drag finishes with a successful visual drop.
-     * Receives the original drag source plus the HBox row it now sits in —
-     * for row-slot drops that's the existing target row, for stack-gap
-     * drops it's the freshly created row (signaled by {@code wasNewRow}).
-     */
-    @FunctionalInterface
-    public interface DropListener {
-        void onDrop(Node movedSource, HBox destinationRow, boolean wasNewRow);
-    }
-
-    public static void addDropListener(DropListener listener) {
-        dropListeners.add(listener);
-    }
-
-    public static void removeDropListener(DropListener listener) {
-        dropListeners.remove(listener);
-    }
 
     private ArchitectureDragController() {}
 
@@ -175,13 +154,7 @@ public final class ArchitectureDragController {
         reset();
         e.consume();
         if (droppedInto != null) {
-            fireDrop(movedSource, droppedInto, finishedMode == DropMode.STACK);
-        }
-    }
-
-    private static void fireDrop(Node movedSource, HBox destinationRow, boolean wasNewRow) {
-        for (DropListener listener : dropListeners) {
-            listener.onDrop(movedSource, destinationRow, wasNewRow);
+            movedSource.fireEvent(new BoxDroppedEvent(movedSource, droppedInto, finishedMode == DropMode.STACK));
         }
     }
 

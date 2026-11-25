@@ -15,6 +15,7 @@
  */
 package de.weigend.s202.ui.core.arrows;
 
+import de.weigend.s202.ui.core.graph.BoxVisibility;
 import de.weigend.s202.ui.core.graph.ElementLookup;
 import de.weigend.s202.domain.architecture.Architecture;
 import de.weigend.s202.domain.architecture.EndpointPair;
@@ -25,7 +26,6 @@ import de.weigend.s202.ui.core.graph.ContainerBox;
 import de.weigend.s202.ui.core.arrows.ClassEdge;
 import javafx.geometry.Bounds;
 import javafx.scene.Node;
-import javafx.scene.Parent;
 import javafx.scene.layout.Pane;
 import javafx.geometry.VPos;
 import javafx.scene.Group;
@@ -182,11 +182,11 @@ public final class WhatIfUpwardEdgeRenderer {
             if (pending == null) {
                 return null;
             }
-            if (isActuallyVisible(pending)) {
+            if (isShown(pending)) {
                 return pending.getFullName();
             }
             node = pending;
-        } else if (isActuallyVisible(node)) {
+        } else if (isShown(node)) {
             return fqcn;
         }
         Node n = node.getParent();
@@ -194,11 +194,11 @@ public final class WhatIfUpwardEdgeRenderer {
             Object rollup = n.getProperties().get("s202.rollupEndpointFqn");
             if (rollup instanceof String endpointFqn) {
                 Node endpoint = elementRegistry.get(endpointFqn);
-                if (endpoint != null && isActuallyVisible(endpoint)) {
+                if (endpoint != null && isShown(endpoint)) {
                     return endpointFqn;
                 }
             }
-            if (n instanceof ContainerBox cb && isActuallyVisible(n)) {
+            if (n instanceof ContainerBox cb && isShown(n)) {
                 return cb.getFullName();
             }
             n = n.getParent();
@@ -206,18 +206,8 @@ public final class WhatIfUpwardEdgeRenderer {
         return null;
     }
 
-    private static boolean isActuallyVisible(Node node) {
-        if (node == null || !node.isVisible()) {
-            return false;
-        }
-        Parent parent = node.getParent();
-        while (parent != null) {
-            if (!parent.isVisible()) {
-                return false;
-            }
-            parent = parent.getParent();
-        }
-        return true;
+    private boolean isShown(Node node) {
+        return BoxVisibility.isShown(node, zoomableContent);
     }
 
     /**

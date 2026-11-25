@@ -24,9 +24,10 @@ import java.lang.annotation.Target;
  * Marks a Java package as a component root in S202's component architecture view.
  * Place this annotation in the package's {@code package-info.java}.
  *
- * <p>A package with a direct sub-package {@code api} or {@code spi} is a component
- * without it. Use it for a component that has no such package: all of its classes
- * are private then, unless {@link S202Api} says otherwise. Components may be nested.
+ * <p>A package with a direct sub-package {@code api}, {@code spi}, {@code port} or
+ * {@code ports} is a component without it. Use it for a component that has no such
+ * package: all of its classes are private then, unless {@link S202Api} says otherwise.
+ * Components may be nested.
  *
  * <pre>{@code
  * // de/weigend/s202/reader/package-info.java

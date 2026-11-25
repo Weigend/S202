@@ -19,7 +19,7 @@ The pictures show the project [test-hexagon](../../test-hexagon), a bookshop. It
 root of the repository:
 
 ```bash
-mvn -pl test-hexagon -am package   # produces test-hexagon/target/test-hexagon-1.5.0.jar
+mvn -pl test-hexagon -am package   # produces test-hexagon/target/test-hexagon-1.6.0.jar
 ```
 
 ## Reading the picture
@@ -49,13 +49,28 @@ in the theme `book`.
 For every package with classes, the first rule that applies decides:
 
 1. a role set by hand, see [below](#roles-and-ports);
-2. its relation to the packages named `api` and `spi`: a package that implements an `spi` is an
-   adapter, one that implements an `api` is application, one that only uses an `api` is an adapter;
+2. its relation to the [ports](#ports): a package that implements an outbound port is an adapter, one
+   that implements an inbound port is application, one that only uses inbound ports is an adapter;
 3. its global level compared with the highest one: the lower third is core, the middle third
    application, the rest adapters.
 
 The themes are the largest group of core packages with a common parent, here the packages in
 `domain`. If there is no such group, the top-level packages or components take their place.
+
+## Ports
+
+Every class of the following packages is a port, without being marked:
+
+| Package | Side |
+| --- | --- |
+| `api` | inbound: called from outside |
+| `spi` | outbound: implemented outside |
+| `port`, `ports` and below | The sub-package says it: `in`, `inbound`, `incoming`, `input`, `driving`, `primary`, `api` or `out`, `outbound`, `outgoing`, `output`, `driven`, `secondary`, `spi`. |
+| | Without such a sub-package the implementation says it. What is implemented outside of the package around `port` is outbound, everything else inbound. |
+
+If `port` lies directly below the root of the system and has no such sub-packages, nothing is outside.
+Then its ports have no direction, are shown with the **API**, and the level decides about the rings.
+[Marking them](#roles-and-ports) helps.
 
 ## Violations
 
@@ -63,8 +78,6 @@ The themes are the largest group of core packages with a common parent, here the
 | --- | --- |
 | Outward dependency | A class depends on one of a ring further out. |
 | Port bypass | An adapter uses a class of the application ring that is not a port. |
-
-A port is a class in a package named `api` or `spi`, or one [marked by hand](#roles-and-ports).
 
 Violations are drawn with **Show Violations** and listed under *Hexagonal violations* in the panel
 [Dependencies](window.md#dependencies).

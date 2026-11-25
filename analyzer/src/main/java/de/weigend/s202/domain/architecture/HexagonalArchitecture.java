@@ -78,6 +78,7 @@ public interface HexagonalArchitecture extends Architecture {
         }
     }
 
+    /** @param portDirection the side a port is on; {@code null} for what is no port */
     record HexElement(String fqn,
                       String simpleName,
                       boolean classElement,
@@ -88,7 +89,8 @@ public interface HexagonalArchitecture extends Architecture {
                       int localLevel,
                       boolean componentApi,
                       boolean portCandidate,
-                      boolean explicitPort) {
+                      boolean explicitPort,
+                      ArchitectureAnnotations.PortDirection portDirection) {
         public HexElement {
             if (fqn == null || fqn.isBlank()) {
                 throw new IllegalArgumentException("fqn must be non-empty");

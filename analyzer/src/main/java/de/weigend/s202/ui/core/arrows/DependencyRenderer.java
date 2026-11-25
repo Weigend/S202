@@ -18,6 +18,7 @@ package de.weigend.s202.ui.core.arrows;
 import de.weigend.s202.domain.DependencyEdge;
 import de.weigend.s202.domain.EdgeCycleClassifier;
 import de.weigend.s202.domain.EdgeCycleClassifier.CycleKind;
+import de.weigend.s202.ui.core.graph.BoxVisibility;
 import de.weigend.s202.ui.core.graph.ElementLookup;
 import de.weigend.s202.ui.core.graph.GraphSelection;
 import de.weigend.s202.ui.core.graph.LevelClassBox;
@@ -194,7 +195,7 @@ public class DependencyRenderer implements DependencyRendererStrategy {
     private Map<Node, double[]> nodeBoxes() {
         Map<Node, double[]> boxes = new HashMap<>();
         for (Node node : elementRegistry.values()) {
-            if (boxes.containsKey(node) || !isNodeActuallyVisible(node)) {
+            if (boxes.containsKey(node) || !isShown(node)) {
                 continue;
             }
             boolean single = node instanceof LevelPackageBox pkg ? !pkg.isExpanded() : node instanceof LevelClassBox;
@@ -254,7 +255,7 @@ public class DependencyRenderer implements DependencyRendererStrategy {
         for (ArchitectureNode child : node.getChildren()) {
             if (child.getType() == ArchitectureNode.NodeType.CLASS) {
                 Node sourceElement = elementRegistry.get(child.getFullName());
-                if (sourceElement == null || !isNodeActuallyVisible(sourceElement)) {
+                if (sourceElement == null || !isShown(sourceElement)) {
                     continue;
                 }
                 // Group deps by their visible target node.
@@ -298,7 +299,7 @@ public class DependencyRenderer implements DependencyRendererStrategy {
             } else if (child.getType() == ArchitectureNode.NodeType.PACKAGE) {
                 Node uiElement = elementRegistry.get(child.getFullName());
                 if (uiElement instanceof ContainerBox
-                        && isNodeActuallyVisible(uiElement)
+                        && isShown(uiElement)
                         && isPackageCollapsed(child)) {
                     // Closed source: draw aggregated or class-level arrows from the package
                     drawCollapsedPackageArrows(child, uiElement, selectedFqn);
@@ -329,7 +330,7 @@ public class DependencyRenderer implements DependencyRendererStrategy {
             element = ElementLookup.pendingContainer(elementRegistry, targetFqn);
             if (element == null) return null;
         }
-        if (isNodeActuallyVisible(element)) return element;
+        if (isShown(element)) return element;
 
         // Target is inside a collapsed package/component — roll up to the nearest visible box.
         Parent parent = element.getParent();
@@ -337,11 +338,11 @@ public class DependencyRenderer implements DependencyRendererStrategy {
             Object rollup = parent.getProperties().get("s202.rollupEndpointFqn");
             if (rollup instanceof String endpointFqn) {
                 Node endpoint = elementRegistry.get(endpointFqn);
-                if (endpoint != null && isNodeActuallyVisible(endpoint)) {
+                if (endpoint != null && isShown(endpoint)) {
                     return endpoint;
                 }
             }
-            if (parent instanceof ContainerBox && isNodeActuallyVisible(parent)) {
+            if (parent instanceof ContainerBox && isShown(parent)) {
                 return parent;
             }
             parent = parent.getParent();
@@ -353,7 +354,7 @@ public class DependencyRenderer implements DependencyRendererStrategy {
         return node != null
                 && Boolean.TRUE.equals(node.getProperties().get("s202.aggregateEndpoint"))
                 && Boolean.TRUE.equals(node.getProperties().get("s202.collapsed"))
-                && isNodeActuallyVisible(node);
+                && isShown(node);
     }
 
     /**
@@ -365,7 +366,7 @@ public class DependencyRenderer implements DependencyRendererStrategy {
     private boolean isPackageCollapsed(ArchitectureNode pkg) {
         for (ArchitectureNode child : pkg.getChildren()) {
             Node n = elementRegistry.get(child.getFullName());
-            if (n != null && isNodeActuallyVisible(n)) {
+            if (n != null && isShown(n)) {
                 return false;
             }
         }
@@ -542,23 +543,7 @@ public class DependencyRenderer implements DependencyRendererStrategy {
         return "";
     }
 
-    /**
-     * Checks if a node is actually visible (itself and all parents are visible).
-     */
-    private boolean isNodeActuallyVisible(Node node) {
-        if (node == null || !node.isVisible()) {
-            return false;
-        }
-
-        // Check all parents up to the scene root
-        Parent parent = node.getParent();
-        while (parent != null) {
-            if (!parent.isVisible()) {
-                return false;
-            }
-            parent = parent.getParent();
-        }
-
-        return true;
+    private boolean isShown(Node node) {
+        return BoxVisibility.isShown(node, zoomableContent);
     }
 }

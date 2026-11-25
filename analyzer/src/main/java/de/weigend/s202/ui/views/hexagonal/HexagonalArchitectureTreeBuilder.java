@@ -66,7 +66,6 @@ public final class HexagonalArchitectureTreeBuilder {
 
     private final Map<String, Node> elementRegistry;
     private final Consumer<String> selectionChangeSink;
-    private final ArchitectureAnnotations annotations;
     private final HexagonalArchitecture architecture;
     private final HexagonalRoleMenus roleMenus;
     private final Runnable layoutChangeCallback;
@@ -81,9 +80,8 @@ public final class HexagonalArchitectureTreeBuilder {
                                             Map<String, Boolean> packageExpansionState) {
         this.elementRegistry = Objects.requireNonNull(elementRegistry, "elementRegistry cannot be null");
         this.selectionChangeSink = selectionChangeSink;
-        this.annotations = annotations == null ? ArchitectureAnnotations.empty() : annotations;
         this.architecture = architecture;
-        this.roleMenus = new HexagonalRoleMenus(this.annotations,
+        this.roleMenus = new HexagonalRoleMenus(annotations == null ? ArchitectureAnnotations.empty() : annotations,
                 annotationChangeSink != null ? annotationChangeSink : (next, message) -> {});
         this.layoutChangeCallback = layoutChangeCallback != null ? layoutChangeCallback : () -> {};
         this.packageExpansionState = packageExpansionState != null ? packageExpansionState : new HashMap<>();
@@ -296,27 +294,19 @@ public final class HexagonalArchitectureTreeBuilder {
     }
 
     /**
-     * Which socket a class belongs to. Explicit port directions win; otherwise
-     * the conventional package names api/spi decide. No ring precondition:
+     * Which socket a class belongs to: the side of the port it is. A port
+     * without a direction is shown with the API. No ring precondition:
      * contract interfaces sit at architecture level 0 by design (everything
      * rests on them), yet they belong on the application boundary sockets.
      * Everything else stays in its implementation group.
      */
-    private PortSide portSide(HexagonalArchitecture.HexElement element) {
-        ArchitectureAnnotations.PortSpec port = annotations.explicitPort(element.fqn());
-        if (port != null) {
-            return port.direction() == ArchitectureAnnotations.PortDirection.OUTBOUND
-                    ? PortSide.SPI
-                    : PortSide.API;
+    private static PortSide portSide(HexagonalArchitecture.HexElement element) {
+        if (element.portDirection() == null) {
+            return PortSide.NONE;
         }
-        String packageName = TreeBuilderSupport.simpleName(TreeBuilderSupport.parentOf(element.fqn()));
-        if ("spi".equalsIgnoreCase(packageName)) {
-            return PortSide.SPI;
-        }
-        if ("api".equalsIgnoreCase(packageName)) {
-            return PortSide.API;
-        }
-        return PortSide.NONE;
+        return element.portDirection() == ArchitectureAnnotations.PortDirection.OUTBOUND
+                ? PortSide.SPI
+                : PortSide.API;
     }
 
     private int packageLevel(Map<String, HexagonalArchitecture.HexElement> packagesByFqn, String packageFqn) {

@@ -16,8 +16,8 @@
 package de.weigend.s202.ui.views.component;
 
 import de.weigend.s202.ui.core.graph.ArchitectureDragController;
+import de.weigend.s202.ui.core.graph.ExpandChangedEvent;
 import de.weigend.s202.ui.core.graph.GraphSelection;
-import javafx.application.Platform;
 import javafx.geometry.Insets;
 import javafx.geometry.Pos;
 import javafx.scene.Cursor;
@@ -72,12 +72,6 @@ public class ComponentBox extends VBox implements GraphSelection.Selectable, de.
     private Consumer<String> selectionChangeSink;
     private String styleNormal = STYLE_NORMAL;
     private String styleSelected = STYLE_SELECTED;
-
-    private static Runnable onExpandChangeCallback = null;
-
-    public static void setOnExpandChangeCallback(Runnable callback) {
-        onExpandChangeCallback = callback;
-    }
 
     public ComponentBox(String displayName, String fullName, int apiCount) {
         this.fullName = fullName;
@@ -266,14 +260,14 @@ public class ComponentBox extends VBox implements GraphSelection.Selectable, de.
         componentExpanded = !componentExpanded;
         setVisibleManaged(componentContentContainer, componentExpanded);
         componentToggleIcon.setText(componentExpanded ? EXPANDED_MARK : COLLAPSED_MARK);
-        notifyExpandChanged();
+        ExpandChangedEvent.fireFrom(this);
     }
 
     private void toggleApiExpanded() {
         apiExpanded = !apiExpanded;
         setVisibleManaged(apiRowsContainer, apiExpanded);
         apiToggleIcon.setText(apiExpanded ? EXPANDED_MARK : COLLAPSED_MARK);
-        notifyExpandChanged();
+        ExpandChangedEvent.fireFrom(this);
     }
 
     private static void setVisibleManaged(Node node, boolean visible) {
@@ -292,13 +286,6 @@ public class ComponentBox extends VBox implements GraphSelection.Selectable, de.
         toggle.setAlignment(Pos.CENTER);
         toggle.setCursor(Cursor.HAND);
         return toggle;
-    }
-
-    private static void notifyExpandChanged() {
-        if (onExpandChangeCallback != null) {
-            Runnable callback = onExpandChangeCallback;
-            Platform.runLater(callback);
-        }
     }
 
     private static Node createLollipop() {

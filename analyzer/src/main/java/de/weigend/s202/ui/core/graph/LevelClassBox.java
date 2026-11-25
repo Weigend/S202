@@ -15,6 +15,8 @@
  */
 package de.weigend.s202.ui.core.graph;
 
+import javafx.beans.value.ChangeListener;
+import javafx.beans.value.WeakChangeListener;
 import javafx.geometry.Pos;
 import javafx.scene.Cursor;
 import javafx.scene.control.Label;
@@ -42,6 +44,8 @@ public class LevelClassBox extends HBox implements GraphSelection.Selectable {
     private final int level;
     private final int architectureLevel;
     private final Label nameLabel;
+    /** Held here: the setting lives as long as the application and must not hold the box. */
+    private final ChangeListener<Boolean> architectureLevelListener = (obs, was, isNow) -> applyLabelText(isNow);
     private Consumer<String> selectionChangeSink;
 
     public LevelClassBox(String name) {
@@ -91,9 +95,8 @@ public class LevelClassBox extends HBox implements GraphSelection.Selectable {
 
         // Live toggle: re-render the label whenever the global architecture-level
         // visibility flips, without rebuilding the tree.
-        ArchitectureViewSettings.showArchitectureLevelProperty().addListener((obs, oldVal, newVal) ->
-                nameLabel.setText(BoxLabelFormatter.format(simpleName, this.level,
-                        this.architectureLevel, newVal)));
+        ArchitectureViewSettings.showArchitectureLevelProperty()
+                .addListener(new WeakChangeListener<>(architectureLevelListener));
 
         this.getChildren().addAll(icon, nameLabel);
 
@@ -115,6 +118,10 @@ public class LevelClassBox extends HBox implements GraphSelection.Selectable {
             // selection handler.
             event.consume();
         });
+    }
+
+    private void applyLabelText(boolean showArchitectureLevel) {
+        nameLabel.setText(BoxLabelFormatter.format(simpleName, level, architectureLevel, showArchitectureLevel));
     }
 
     /** Displayed label text (incl. "(L:n)" suffix when set). */

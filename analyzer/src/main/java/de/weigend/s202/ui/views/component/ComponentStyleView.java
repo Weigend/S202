@@ -72,9 +72,6 @@ final class ComponentStyleView implements StyleView {
     }
 
     private ComponentArchitectureTreeBuilder builder() {
-        // Expand/Collapse der Komponenten-Boxen stößt das Pfeil-Overlay an —
-        // vorher setzte der Canvas diesen (statischen) Callback für alle Stile.
-        ComponentBox.setOnExpandChangeCallback(services.markArrowsDirty());
         return new ComponentArchitectureTreeBuilder(
                 services.elementRegistry(),
                 services.selectionSink(),

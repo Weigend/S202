@@ -29,6 +29,7 @@ import java.util.stream.Collectors;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class HexagonalArchitectureBuilderTest {
@@ -229,6 +230,36 @@ class HexagonalArchitectureBuilderTest {
                 .findFirst()
                 .orElseThrow();
         assertEquals("com.shop.domain.book", apiPackage.segmentId());
+    }
+
+    @Test
+    void portInAndPortOutAreNoThemes() {
+        DomainModel domain = new DomainModel();
+        pkg(domain, "com", 0);
+        pkg(domain, "com.shop", 0);
+        pkg(domain, "com.shop.app", 0);
+        pkg(domain, "com.shop.app.port", 0);
+        pkg(domain, "com.shop.app.port.in", 0);
+        pkg(domain, "com.shop.app.port.out", 0);
+        pkg(domain, "com.shop.app.service", 1);
+        pkg(domain, "com.shop.web", 3);
+        cls(domain, "com.shop.app.port.in.Sell", true, 0, Set.of());
+        cls(domain, "com.shop.app.port.out.Store", true, 0, Set.of());
+        cls(domain, "com.shop.app.service.SellService", false, 1,
+                Set.of("com.shop.app.port.in.Sell", "com.shop.app.port.out.Store"));
+        cls(domain, "com.shop.web.SellController", false, 3, Set.of("com.shop.app.port.in.Sell"));
+
+        HexagonalArchitecture architecture = new HexagonalArchitectureBuilder()
+                .build(domain, ArchitectureAnnotations.empty());
+
+        assertEquals(List.of("com.shop.app", "com.shop.web"), architecture.segments().stream()
+                .map(HexagonalArchitecture.HexSegment::rootFqn).sorted().toList());
+        assertEquals(ArchitectureAnnotations.PortDirection.INBOUND,
+                classElement(architecture, "com.shop.app.port.in.Sell").portDirection());
+        assertEquals(ArchitectureAnnotations.PortDirection.OUTBOUND,
+                classElement(architecture, "com.shop.app.port.out.Store").portDirection());
+        assertNull(classElement(architecture, "com.shop.app.service.SellService").portDirection());
+        assertTrue(architecture.violations().isEmpty(), () -> architecture.violations().toString());
     }
 
     private static HexagonalArchitecture.HexElement classElement(HexagonalArchitecture architecture, String fqn) {

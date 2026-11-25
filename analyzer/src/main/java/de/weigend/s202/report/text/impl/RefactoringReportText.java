@@ -201,7 +201,7 @@ final class RefactoringReportText {
             return;
         }
         report.section("Component mapping");
-        report.paragraph("By convention the sub-packages api and spi of a component are public and "
+        report.paragraph("By convention the sub-packages api, spi, port and ports of a component are public and "
                 + "everything else is private. The marks below override that.");
         report.line("");
         annotations.components().forEach(spec ->

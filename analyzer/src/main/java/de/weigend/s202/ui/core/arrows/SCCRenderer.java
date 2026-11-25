@@ -20,10 +20,10 @@ import de.weigend.s202.domain.EdgeCycleClassifier.CycleKind;
 import de.weigend.s202.domain.StronglyConnectedComponent;
 import io.softwareecg.wfx.lookup.api.Lookup;
 import de.weigend.s202.domain.SCCFinder;
+import de.weigend.s202.ui.core.graph.BoxVisibility;
 import de.weigend.s202.ui.core.model.ArchitectureNode;
 import javafx.geometry.Bounds;
 import javafx.scene.Node;
-import javafx.scene.Parent;
 import javafx.scene.control.ScrollPane;
 import javafx.scene.layout.Pane;
 import javafx.scene.paint.Color;
@@ -58,6 +58,7 @@ public class SCCRenderer {
     private static final double SCC_HIGHLIGHT_WIDTH_FACTOR = 3.0;
 
     private final Pane sccPane;
+    private Pane zoomableContent;
     private final Map<String, Node> elementRegistry;
     private final Consumer<String> statusCallback;
 
@@ -114,7 +115,8 @@ public class SCCRenderer {
     public void setShowPackageCycles(boolean show) { this.showPackageCycles = show; }
 
     public void setCoordinateContext(Pane zoomableContent, Pane overlayPane, ScrollPane scrollPane) {
-        // Kept for existing callers. SCC coordinates are derived from sccPane directly.
+        // SCC coordinates are derived from sccPane directly.
+        this.zoomableContent = zoomableContent;
     }
 
     /**
@@ -257,7 +259,7 @@ public class SCCRenderer {
                     continue;
                 }
                 Node targetNode = elementRegistry.get(to);
-                if (targetNode == null || !isNodeActuallyVisible(targetNode)) {
+                if (targetNode == null || !isShown(targetNode)) {
                     continue;
                 }
                 createSccLine(sourceNode, targetNode, from, to);
@@ -276,7 +278,7 @@ public class SCCRenderer {
         if (node.getType() == ArchitectureNode.NodeType.CLASS) {
             // Check if this class is actually visible in the UI
             Node uiNode = elementRegistry.get(node.getFullName());
-            if (uiNode != null && isNodeActuallyVisible(uiNode)) {
+            if (uiNode != null && isShown(uiNode)) {
                 // Filter dependencies to only include classes we know about
                 Set<String> visibleDeps = new HashSet<>();
                 for (String dep : node.getDependencies()) {
@@ -313,7 +315,7 @@ public class SCCRenderer {
                     Node src = elementRegistry.get(cls);
                     Node tgt = elementRegistry.get(dep);
                     if (src == null || tgt == null) continue;
-                    if (!isNodeActuallyVisible(src) || !isNodeActuallyVisible(tgt)) continue;
+                    if (!isShown(src) || !isShown(tgt)) continue;
                     drawLine(src, tgt, cls, dep, PKG_CYCLE_COLOR);
                     count++;
                 }
@@ -353,7 +355,7 @@ public class SCCRenderer {
         // Draw dependency edges between members of this SCC
         for (String member : members) {
             Node sourceNode = elementRegistry.get(member);
-            if (sourceNode == null || !isNodeActuallyVisible(sourceNode)) {
+            if (sourceNode == null || !isShown(sourceNode)) {
                 continue;
             }
 
@@ -361,7 +363,7 @@ public class SCCRenderer {
             for (String dep : deps) {
                 if (members.contains(dep)) {
                     Node targetNode = elementRegistry.get(dep);
-                    if (targetNode != null && isNodeActuallyVisible(targetNode)) {
+                    if (targetNode != null && isShown(targetNode)) {
                         createSccLine(sourceNode, targetNode, member, dep);
                     }
                 }
@@ -462,24 +464,8 @@ public class SCCRenderer {
         }
     }
 
-    /**
-     * Checks if a node is actually visible (itself and all parents are visible).
-     */
-    private boolean isNodeActuallyVisible(Node node) {
-        if (node == null || !node.isVisible()) {
-            return false;
-        }
-
-        // Check all parents up to the scene root
-        Parent parent = node.getParent();
-        while (parent != null) {
-            if (!parent.isVisible()) {
-                return false;
-            }
-            parent = parent.getParent();
-        }
-
-        return true;
+    private boolean isShown(Node node) {
+        return BoxVisibility.isShown(node, zoomableContent);
     }
 
     /**

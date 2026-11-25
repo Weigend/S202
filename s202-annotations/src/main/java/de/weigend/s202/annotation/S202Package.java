@@ -22,7 +22,7 @@ import java.lang.annotation.Target;
 
 /**
  * Explicitly marks a Java package as a plain package: S202 does not treat it as a
- * component root, even if it has a sub-package {@code api} or {@code spi}.
+ * component root, even if it has a sub-package such as {@code api} or {@code port}.
  * Place this annotation in the package's {@code package-info.java}.
  *
  * <pre>{@code

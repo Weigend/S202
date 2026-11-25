@@ -24,7 +24,7 @@ import java.util.*;
 
 public class DebugPackageDependencies {
     public static void main(String[] args) throws Exception {
-        String jarPath = "../test-example/target/test-example-1.5.0.jar";
+        String jarPath = "../test-example/target/test-example-1.6.0.jar";
         
         System.out.println("Analyzing: " + jarPath);
         

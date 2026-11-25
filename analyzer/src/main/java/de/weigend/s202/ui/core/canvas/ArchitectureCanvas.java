@@ -19,6 +19,7 @@ import de.weigend.s202.ui.core.model.EdgeKindGroup;
 import de.weigend.s202.ui.core.model.WhatIfMove;
 import de.weigend.s202.ui.core.canvas.WhatIfEditController;
 import de.weigend.s202.ui.core.graph.ArchitectureDragController;
+import de.weigend.s202.ui.core.graph.ExpandChangedEvent;
 import de.weigend.s202.ui.core.graph.GraphSelection;
 import de.weigend.s202.ui.core.graph.LevelClassBox;
 import de.weigend.s202.ui.core.graph.ContainerBox;
@@ -244,6 +245,7 @@ public class ArchitectureCanvas extends AbstractArchitectureCanvas {
                 this::selectByFullName,
                 this::scopeExtended);
         wirePropertyListeners();
+        addEventHandler(ExpandChangedEvent.EXPAND_CHANGED, event -> arrowsCoalescer.markDirty());
     }
 
     private void setupUI() {
@@ -438,8 +440,6 @@ public class ArchitectureCanvas extends AbstractArchitectureCanvas {
     private void beginArchitectureRootBuild(ArchitectureNode rootNode) {
         this.currentRootNode = rootNode;
         this.elementRegistry.clear();
-
-        LevelPackageBox.setOnExpandChangeCallback(arrowsCoalescer::markDirty);
 
         // Node selection is now a single-click action. Keep the legacy
         // double-click callback disconnected to avoid duplicate selection
@@ -682,7 +682,7 @@ public class ArchitectureCanvas extends AbstractArchitectureCanvas {
                 && projection.getDomainModel() != null) {
             projection.rebuildArchitectureProjection();
         }
-        whatIfEdit.ensureDropListenerRegistered();
+        whatIfEdit.ensureDropHandlerInstalled();
         arrowsCoalescer.markDirty();
     }
 

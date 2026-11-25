@@ -24,9 +24,9 @@ import java.lang.annotation.Target;
  * Marks a Java package as part of the public API of the component around it.
  * Place this annotation in the package's {@code package-info.java}.
  *
- * <p>Packages named {@code api} or {@code spi} are public without it. Use it for
- * a contract package with another name, sub-packages included. Without a component
- * around the package, its parent package becomes one.
+ * <p>Packages named {@code api}, {@code spi}, {@code port} or {@code ports} are public
+ * without it. Use it for a contract package with another name, sub-packages included.
+ * Without a component around the package, its parent package becomes one.
  *
  * <p>On the root package of a component it makes the classes of exactly this
  * package public, sub-packages remain private — for components that keep their

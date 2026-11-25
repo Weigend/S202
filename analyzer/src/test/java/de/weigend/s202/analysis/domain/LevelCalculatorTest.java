@@ -43,7 +43,7 @@ class LevelCalculatorTest {
     @BeforeEach
     void setUp() throws IOException {
         calculator = new LevelCalculator();
-        testJarPath = "../test-example/target/test-example-1.5.0.jar";
+        testJarPath = "../test-example/target/test-example-1.6.0.jar";
         
         // Load the raw model first
         InputAnalyzer analyzer = new InputAnalyzer();

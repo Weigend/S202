@@ -20,6 +20,7 @@ import de.weigend.s202.ui.core.graph.ElementLookup;
 import de.weigend.s202.domain.architecture.ArchitectureKind;
 import de.weigend.s202.domain.architecture.WhatIfArchitecture;
 import de.weigend.s202.ui.core.graph.ArchitectureDragController;
+import de.weigend.s202.ui.core.graph.BoxDroppedEvent;
 import de.weigend.s202.ui.core.graph.ContainerBox;
 import de.weigend.s202.ui.core.graph.GraphSelection;
 import de.weigend.s202.ui.core.graph.LevelClassBox;
@@ -47,7 +48,7 @@ import java.util.function.Supplier;
  */
 public final class WhatIfEditController {
 
-    /** Szene-Wurzel dieser View — nur für den „gehört der Drop zu uns?“-Check. */
+    /** Szene-Wurzel dieser View — hier kommen die Drops ihrer Boxen an. */
     private final Node viewRoot;
     private final Map<String, Node> elementRegistry;
     private final PulseCoalescer arrowsCoalescer;
@@ -75,7 +76,7 @@ public final class WhatIfEditController {
     // currently sits lives in the WhatIfArchitecture; this set only tracks
     // "user touched it" for the cosmetic decoration.
     private final Set<String> movedFqns = new HashSet<>();
-    private ArchitectureDragController.DropListener dropListener;
+    private boolean dropHandlerInstalled;
 
     private final WhatIfUndoManager undoManager = new WhatIfUndoManager();
 
@@ -109,18 +110,16 @@ public final class WhatIfEditController {
         movedFqns.clear();
     }
 
-    public void ensureDropListenerRegistered() {
-        if (dropListener != null) {
+    public void ensureDropHandlerInstalled() {
+        if (dropHandlerInstalled) {
             return;
         }
-        dropListener = this::handleWhatIfDrop;
-        ArchitectureDragController.addDropListener(dropListener);
+        dropHandlerInstalled = true;
+        viewRoot.addEventHandler(BoxDroppedEvent.BOX_DROPPED,
+                event -> handleWhatIfDrop(event.box(), event.destinationRow(), event.isNewRow()));
     }
 
     private void handleWhatIfDrop(Node movedSource, HBox destinationRow, boolean wasNewRow) {
-        if (!isInsideThisView(movedSource)) {
-            return;
-        }
         if (!(movedSource instanceof GraphSelection.Selectable selectable)) {
             return;
         }
@@ -207,17 +206,6 @@ public final class WhatIfEditController {
             apiAnnotator.removeFromApi(movedFqcn);
         }
         return true;
-    }
-
-    private boolean isInsideThisView(Node node) {
-        Node n = node;
-        while (n != null) {
-            if (n == viewRoot) {
-                return true;
-            }
-            n = n.getParent();
-        }
-        return false;
     }
 
     /**

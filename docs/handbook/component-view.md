@@ -19,13 +19,14 @@ The purpose of a component is to keep changes local: clients depend on what it p
 it keeps the promise. A layer says something else, in which direction dependencies run. A dependency
 can run in the right direction and still bypass an API, as `RefundScreen` → `CardPayments` does.
 
-- A package is a component if it has a direct sub-package named **`api`** (called by others) or
-  **`spi`** (implemented by others).
-- Everything below `api` and `spi` is public, everything else is private. It does not matter
+- A package is a component if it has a direct sub-package named **`api`** (called by others),
+  **`spi`** (implemented by others), **`port`** or **`ports`** (the word of the hexagonal architecture
+  for both).
+- Everything below these packages is public, everything else is private. It does not matter
   whether a type is an interface or how it is called.
 - Components can contain components. An inner component belongs to the private part of the outer
   one, and whoever enters several components has to use the API of each.
-- Nothing nests inside `api` and `spi`; they are public as a whole.
+- Nothing nests inside these packages; they are public as a whole, `port.in` and `port.out` too.
 
 Declarations complement the rule or override it. The first one that applies decides:
 
@@ -34,12 +35,12 @@ Declarations complement the rule or override it. The first one that applies deci
 | 1 | The marks **Add To Api** and **Remove From Api** | [in this view](#marking-the-api) |
 | 2 | `exports` of a Java module | `module-info.java` |
 | 3 | `@S202Api` on a package | `package-info.java` |
-| 4 | The names `api` and `spi` | the package |
+| 4 | The names `api`, `spi`, `port` and `ports` | the package |
 
 `@S202Api` makes a package with its sub-packages public. On the root package of a component it
 makes the classes of exactly this package public, for components that keep their API at the root
-and hide the rest in `impl`. `@S202Component` declares a component without `api` or `spi`, and
-`@S202Package` keeps a package from becoming one. The annotations are in the module
+and hide the rest in `impl`. `@S202Component` declares a component without such a package, and
+`@S202Package` keeps a package from becoming one, for instance where ports are harbours. The annotations are in the module
 [s202-annotations](../../s202-annotations), which has no dependencies and is not needed at run time.
 
 ## The inverted layers

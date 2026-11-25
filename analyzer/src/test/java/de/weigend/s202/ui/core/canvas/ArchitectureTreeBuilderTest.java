@@ -733,14 +733,7 @@ public class ArchitectureTreeBuilderTest {
         ((HBox) node.getParent()).getChildren().remove(node);
         HBox row = new HBox(node);
         stack.getChildren().add(row);
-        try {
-            java.lang.reflect.Method fireDrop = de.weigend.s202.ui.core.graph.ArchitectureDragController.class
-                    .getDeclaredMethod("fireDrop", Node.class, HBox.class, boolean.class);
-            fireDrop.setAccessible(true);
-            fireDrop.invoke(null, node, row, true);
-        } catch (ReflectiveOperationException ex) {
-            throw new AssertionError(ex);
-        }
+        node.fireEvent(new de.weigend.s202.ui.core.graph.BoxDroppedEvent(node, row, true));
     }
 
     private static double widthInRow(ComponentBox box, double rowWidth) {

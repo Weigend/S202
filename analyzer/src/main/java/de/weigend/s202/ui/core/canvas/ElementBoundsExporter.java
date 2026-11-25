@@ -15,11 +15,11 @@
  */
 package de.weigend.s202.ui.core.canvas;
 
+import de.weigend.s202.ui.core.graph.BoxVisibility;
 import de.weigend.s202.ui.core.graph.LevelClassBox;
 import de.weigend.s202.ui.core.graph.LevelPackageBox;
 import javafx.geometry.Bounds;
 import javafx.scene.Node;
-import javafx.scene.Parent;
 import javafx.scene.Scene;
 import javafx.scene.layout.Pane;
 
@@ -146,28 +146,14 @@ final class ElementBoundsExporter {
         return content.sceneToLocal(node.localToScene(node.getBoundsInLocal()));
     }
 
-    private static String nearestVisiblePackageParent(Node node) {
+    private String nearestVisiblePackageParent(Node node) {
         Node current = node;
         while (current != null) {
-            if (current instanceof LevelPackageBox pkg && isActuallyVisible(current)) {
+            if (current instanceof LevelPackageBox pkg && BoxVisibility.isShown(current, zoomableContent.get())) {
                 return pkg.getFullName();
             }
             current = current.getParent();
         }
         return null;
-    }
-
-    private static boolean isActuallyVisible(Node node) {
-        if (node == null || !node.isVisible()) {
-            return false;
-        }
-        Parent parent = node.getParent();
-        while (parent != null) {
-            if (!parent.isVisible()) {
-                return false;
-            }
-            parent = parent.getParent();
-        }
-        return true;
     }
 }

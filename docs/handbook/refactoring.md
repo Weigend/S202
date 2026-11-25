@@ -58,8 +58,8 @@ Found:     1 past a component API, 1 API leaks, 4 against the layers, 3 package 
 1. Access past the API of a component
 -------------------------------------
 Rule: code outside of a component uses its public classes only, i.e. the ones in its
-sub-packages api and spi or marked as API. Everything else is private. To fix one, use the
-API of the component, add what is missing there, or move one of the classes.
+sub-packages api, spi, port and ports or marked as API. Everything else is private. To fix one,
+use the API of the component, add what is missing there, or move one of the classes.
 
 Component com.webshop.payment
   public: com.webshop.payment.api, com.webshop.payment.spi

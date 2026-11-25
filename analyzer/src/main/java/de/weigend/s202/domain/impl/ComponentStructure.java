@@ -25,7 +25,6 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
-import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 
@@ -34,14 +33,14 @@ import java.util.Set;
  * classes are public.
  *
  * <p>A package is a component when it has a <em>contract package</em> — a direct
- * sub-package named {@code api} (called by others) or {@code spi} (implemented by
- * others). Everything below the contract packages is public, everything else is
+ * sub-package named {@code api} (called by others), {@code spi} (implemented by
+ * others), {@code port} or {@code ports} (either). Everything below the contract packages is public, everything else is
  * private. Whether a type is an interface or how a class is named plays no role.
  *
  * <p>The rule is recursive: a component may contain further components. An inner
  * component belongs to the private part of the outer one, so its contract is
  * visible inside the outer component only. Nothing nests inside a contract package
- * by convention — what is in {@code api} or {@code spi} is public as a whole.
+ * by convention — what is in a contract package is public as a whole.
  *
  * <p>What is declared explicitly complements the convention or overrides it, the
  * first match decides:
@@ -51,7 +50,7 @@ import java.util.Set;
  *   <li>JPMS exports, which are public across all enclosing components,</li>
  *   <li>{@code @S202Api} packages: part of the contract of the innermost component
  *       around them — or, on a component root, the classes of exactly this package,</li>
- *   <li>the contract packages {@code api} and {@code spi}.</li>
+ *   <li>the contract packages, see {@link ContractPackages}.</li>
  * </ol>
  * {@code @S202Component} declares a component root, {@code @S202Package} prevents one.
  */
@@ -134,7 +133,7 @@ final class ComponentStructure {
         contracts.removeAll(roots);
         for (String packageFqn : outermostFirst(packages)) {
             String parent = parentOf(packageFqn);
-            if (isContractPackageName(simpleName(packageFqn))
+            if (ContractPackages.isContractName(simpleName(packageFqn))
                     && packages.contains(parent)
                     && !plain.contains(parent)
                     && !isInAny(parent, contracts)) {
@@ -251,11 +250,6 @@ final class ComponentStructure {
         return false;
     }
 
-    static boolean isContractPackageName(String simpleName) {
-        String normalized = simpleName == null ? "" : simpleName.toLowerCase(Locale.ROOT);
-        return normalized.equals("api") || normalized.equals("spi");
-    }
-
     private boolean isInContract(Component component, String fqn, String packageFqn, boolean classElement) {
         Boolean mark = nearestMark(component, fqn);
         if (mark != null) {
@@ -274,7 +268,7 @@ final class ComponentStructure {
             }
         }
         String contract = childOnPath(root, packageFqn);
-        return contract != null && isContractPackageName(simpleName(contract));
+        return contract != null && ContractPackages.isContractName(simpleName(contract));
     }
 
     private Boolean nearestMark(Component component, String fqn) {
