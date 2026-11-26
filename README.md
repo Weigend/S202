@@ -19,7 +19,7 @@ A JavaFX-based tool for analyzing code across multiple languages and visualizing
 > *We pointed S202 at its own codebase. No source code was read. Here's what happened.*
 
 
-![UI Screenshot](docs/image1.png)
+![UI Screenshot](docs/main.png)
 
 ## Features
 
