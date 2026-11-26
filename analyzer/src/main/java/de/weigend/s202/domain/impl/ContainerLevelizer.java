@@ -31,7 +31,7 @@ import java.util.TreeMap;
 import java.util.TreeSet;
 
 /**
- * Levelizes every container independently — the Structure101 model.
+ * Levelizes every container independently.
  *
  * <p>A <em>container</em> is a package (or the root) whose direct children,
  * classes and sub-packages alike, are its <em>siblings</em>. Every class

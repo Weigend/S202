@@ -37,9 +37,6 @@ principles behind S202 and give names to the design questions raised by its view
 
 ## Dependency analysis and visualization
 
-- Structure101, a commercial tool, acquired by Sonar. Its levelized structure map - containers within
-  containers, ordered by their dependencies - is the model for the layers of S202.
-  [Product page](https://www.sonarsource.com/structure101/)
 - Neeraj Sangal, Ev Jordan, Vineet Sinha, Daniel Jackson: "Using Dependency Models to Manage Complex
   Software Architecture", OOPSLA 2005, pp. 167-176. Dependencies are extracted from code, arranged
   to expose structural patterns and combined with design rules that capture architectural intent.

@@ -8,9 +8,9 @@ this file is the short map from concept to code.
 
 ## The Model: Containers, Siblings, One Decision per Dependency
 
-S202 levelizes like Structure101: **every container orders its own direct
-children**. A container is a package (or the root); its children — classes and
-sub-packages alike — are its *siblings*.
+S202 levelizes container by container: **every container orders its own
+direct children**. A container is a package (or the root); its children —
+classes and sub-packages alike — are its *siblings*.
 
 Every class dependency `X → Y` is attributed to exactly **one** container: the
 deepest one that holds both X and Y. There it becomes a weighted edge between
@@ -51,8 +51,8 @@ internal edges are cut (symmetric tangle, no justified direction). SCCs are
 recomputed after each round until none remains. Deterministic: all iteration is
 over sorted names, no thresholds.
 
-This is a deterministic stand-in for Structure101's minimal feedback set; it
-is not a minimisation.
+This is a deterministic stand-in for a minimal feedback arc set; it is not a
+minimisation.
 
 ---
 
