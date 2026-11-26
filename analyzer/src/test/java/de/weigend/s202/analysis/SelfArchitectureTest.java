@@ -18,6 +18,10 @@ package de.weigend.s202.analysis;
 import de.weigend.s202.domain.DomainModel;
 import de.weigend.s202.domain.SCCFinder;
 import de.weigend.s202.domain.StronglyConnectedComponent;
+import de.weigend.s202.domain.architecture.ArchitectureAnnotations;
+import de.weigend.s202.domain.architecture.ArchitectureContext;
+import de.weigend.s202.domain.architecture.Violation;
+import de.weigend.s202.domain.impl.ComponentArchitectureBuilder;
 import de.weigend.s202.domain.impl.LevelCalculator;
 import de.weigend.s202.reader.DependencyModel;
 import de.weigend.s202.reader.impl.java.InputAnalyzer;
@@ -44,8 +48,8 @@ import static org.junit.jupiter.api.Assertions.fail;
 
 /**
  * S202 analysiert sich selbst: die eigene Pipeline läuft über {@code target/classes}
- * und wacht darüber, dass keine neuen Paket-Tangles, Klassen-Zyklen oder
- * Back-Edges in die Codebase rutschen.
+ * und wacht darüber, dass keine neuen Paket-Tangles, Klassen-Zyklen,
+ * Back-Edges oder Komponentenverletzungen in die Codebase rutschen.
  *
  * <p>Die Budgets starten auf dem Ist-Stand des Refactoring-Konzepts
  * und werden mit jedem
@@ -59,6 +63,7 @@ public class SelfArchitectureTest {
     private static final int CLASS_CYCLE_BUDGET = 0;
     private static final int CLASS_BACK_EDGE_BUDGET = 0;
 
+    private static DependencyModel raw;
     private static DomainModel model;
 
     @BeforeAll
@@ -68,7 +73,7 @@ public class SelfArchitectureTest {
         Path tempJar = Files.createTempFile("s202-self-analysis", ".jar");
         tempJar.toFile().deleteOnExit();
         jarUp(classesDir, tempJar);
-        DependencyModel raw = new InputAnalyzer().analyze(tempJar.toString());
+        raw = new InputAnalyzer().analyze(tempJar.toString());
         model = new LevelCalculator().calculate(raw);
     }
 
@@ -117,6 +122,27 @@ public class SelfArchitectureTest {
         assertTrue(backEdges <= CLASS_BACK_EDGE_BUDGET,
                 "Neue Klassen-Back-Edges eingebaut! Budget " + CLASS_BACK_EDGE_BUDGET
                         + ", gefunden " + backEdges + ":\n" + detail);
+    }
+
+    /**
+     * Die Component View von S202 auf sich selbst: Keine Klasse greift an der
+     * API einer Komponente vorbei, keine API zeigt auf Interna. Komponenten und
+     * ihre API erklären die {@code package-info.java} mit {@code @S202Component}
+     * und {@code @S202Api}; ein neues Unterpaket, das andere nutzen, braucht dort
+     * seine Erklärung.
+     */
+    @Test
+    void noComponentViolations() {
+        List<Violation> violations = new ComponentArchitectureBuilder()
+                .build(new ArchitectureContext(raw, model, ArchitectureAnnotations.empty()))
+                .violations().stream()
+                .filter(v -> v.kind().name().startsWith("COMPONENT_"))
+                .toList();
+        assertTrue(violations.isEmpty(),
+                "Komponentenverletzungen eingebaut (" + violations.size() + "):\n  "
+                        + String.join("\n  ", violations.stream()
+                                .map(v -> v.kind() + ": " + v.sourceFqn() + " -> " + v.targetFqn())
+                                .sorted().toList()));
     }
 
     /**

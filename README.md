@@ -189,9 +189,9 @@ The user decides which edges to cut — guided by what is easiest to implement, 
 
 The **Component View** is available from the **View -> Component View** menu after loading a JAR or project. It keeps the normal layered package ordering, but projects packages with a public API into component boxes: the API is shown in a blue section at the top, and both API and implementation keep their regular nested package layout. Local levels inside the API are recalculated from API-only dependencies.
 
-The screenshot below shows S202 analyzing its own codebase — four components (project, analysis, domain, reader) arranged in layers, each with a blue API area at the top and a yellow implementation area below.
+The screenshot below shows S202 analyzing its own codebase — six components (report.quality, report.text, analysis, project, domain, reader) arranged in layers, each with a blue API area at the top and a yellow implementation area below, with all dependencies and no component violations.
 
-![Component View showing S202 components](docs/10-component-architecture-final-all-deps.png)
+![Component View showing the six components of S202](docs/component-view-s202.png)
 
 A package is a component when it has a direct sub-package named `api` (called by others), `spi` (implemented by others), `port` or `ports` (either). Everything below these packages is public, everything else is private. Whether a type is an interface or how a class is named plays no role.
 
