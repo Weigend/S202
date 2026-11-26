@@ -1,6 +1,6 @@
 # City3D — The Software City of S202
 
-*As of July 2026 · branch `feat/city3d-prototype` · code under [`city3d/`](../city3d/)*
+*As of July 2026 · part of S202 since release 1.0.0 · code under [`city3d/`](../city3d/)*
 
 City3D renders the analysed architecture of a Java system as a 3D city you
 can walk through in the browser (three.js/WebGL): an island in the ocean on
@@ -141,8 +141,11 @@ city3d/src/
   roads.js     graph builder (stations/intersections), weighted Dijkstra, drivable routes
   vehicles.js  vehicle pools (cabs/pedestrians, multi-layer instancing), labels, picking, follow
   deps.js      dependency arcs + GPU pulses
+  controls.js  camera control: orbit and free flight (pointer lock)
   city.js      rendering: buildings (facade shader), platforms, streets, ramps, island, water
   sky.js       sky dome, sun/moon, lighting model, clouds, env map
+  weather.js   weather: wetness and rain
+  postfx.js    post-processing: SSAO, bloom, tone mapping, SMAA, colour grading
   greenery.js  parks, trees, bushes, open areas (sampling + collision test)
   labels.js    package name signs
   i18n.js      UI translations (DE/EN/PT), language choice + applying data-i18n
