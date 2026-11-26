@@ -1,0 +1,56 @@
+.splash-root {
+    -fx-background-color: #07111f;
+    -fx-font-family: "System";
+}
+
+.splash-shade {
+    -fx-background-color:
+        linear-gradient(to right,
+            rgba(4, 13, 25, 0.72) 0%,
+            rgba(4, 13, 25, 0.60) 45%,
+            rgba(4, 13, 25, 0.12) 68%,
+            rgba(4, 13, 25, 0.00) 78%),
+        linear-gradient(to top,
+            rgba(3, 10, 19, 0.82) 0%,
+            rgba(3, 10, 19, 0.00) 28%);
+}
+
+.splash-title {
+    -fx-font-size: 28px;
+    -fx-font-weight: bold;
+    -fx-text-fill: white;
+    -fx-effect: dropshadow(gaussian, rgba(0, 0, 0, 0.46), 12, 0.20, 0, 2);
+}
+
+.splash-subtitle {
+    -fx-font-size: 12px;
+    -fx-text-fill: #b0bccd;
+}
+
+.splash-version {
+    -fx-font-size: 11px;
+    -fx-text-fill: #b9c7d3;
+}
+
+.splash-progress-bar {
+    -fx-accent: #ffd54f;
+    -fx-pref-height: 4px;
+}
+
+.splash-progress-bar > .track {
+    -fx-background-color: rgba(117, 180, 224, 0.18);
+    -fx-background-insets: 0;
+    -fx-background-radius: 2px;
+}
+
+.splash-progress-bar > .bar {
+    -fx-background-color: linear-gradient(to right, #d89a2b, #ffd54f);
+    -fx-background-insets: 0;
+    -fx-background-radius: 2px;
+    -fx-padding: 2px;
+}
+
+.splash-progress-text {
+    -fx-font-size: 10px;
+    -fx-text-fill: #b8c9d8;
+}
