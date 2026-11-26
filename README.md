@@ -1,5 +1,3 @@
-![S202 Teaser](docs/s202-teaser.png)
-
 # S202 Code Analyzer
 
 A JavaFX-based tool for analyzing code across multiple languages and visualizing software architecture.
@@ -12,12 +10,13 @@ A JavaFX-based tool for analyzing code across multiple languages and visualizing
 ![C](https://img.shields.io/badge/C-PoC-blueviolet)
 ![License](https://img.shields.io/badge/License-Apache%202.0-blue)
 
+![S202 in 25 seconds: levels, dependencies, violations, and the 2.5D view with metrics as height and colour](docs/s202-demo.gif)
+
 > **→ [S202 Handbook](docs/handbook/README.md)** — why dependencies and boundaries matter, and every
 > view, panel and menu, with pictures.
 
 > **→ [The Tool That Fixed Itself — S202 Case Study](docs/s202/CASE_STUDY.md)**
 > *We pointed S202 at its own codebase. No source code was read. Here's what happened.*
-
 
 ![UI Screenshot](docs/main.png)
 
