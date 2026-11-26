@@ -32,7 +32,7 @@ import de.weigend.s202.report.quality.QualityReportModel;
 import de.weigend.s202.reader.DependencyModel;
 import de.weigend.s202.reader.EdgeKind;
 
-import java.time.OffsetDateTime;
+import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -54,6 +54,8 @@ import java.util.stream.Collectors;
 final class QualityReportModelBuilder {
 
     private static final int TOP_LIMIT = 10;
+    /** As in the text report: to the minute, in the time of the machine. */
+    private static final DateTimeFormatter GENERATED_AT = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm");
     private final ArchitectureInsightsProvider architectureInsights;
     private final String scopeImageExtension;
     private final int scopeImageLimit;
@@ -106,7 +108,7 @@ final class QualityReportModelBuilder {
         List<String> paths = source == null ? sourcePaths(input.invariantReport()) : nullToList(source.paths());
         return new QualityReportModel.ReportMetadata(
                 input.title(),
-                OffsetDateTime.now().format(DateTimeFormatter.ISO_OFFSET_DATE_TIME),
+                LocalDateTime.now().format(GENERATED_AT),
                 source == null || source.kind() == null || source.kind().isBlank() ? "UNKNOWN" : source.kind(),
                 paths,
                 source == null ? null : source.projectRoot(),
