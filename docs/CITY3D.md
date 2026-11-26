@@ -1,192 +1,196 @@
-# City3D — Die Software-Stadt von Structure202
+# City3D — The Software City of Structure202
 
-*Stand: Juli 2026 · Branch `feat/city3d-prototype` · Code unter [`city3d/`](../city3d/)*
+*As of July 2026 · branch `feat/city3d-prototype` · code under [`city3d/`](../city3d/)*
 
-City3D rendert die analysierte Architektur eines Java-Systems als begehbare
-3D-Stadt im Browser (three.js/WebGL): eine Insel im Ozean, auf der Pakete zu
-terrassierten Plattformen, Klassen zu Gebäuden und **Abhängigkeiten zu echtem
-Verkehr** werden. Die Ansicht wird aus der JavaFX-App heraus geöffnet
-(*File → Show City3D View*), läuft aber auch standalone gegen ein exportiertes
+City3D renders the analysed architecture of a Java system as a 3D city you
+can walk through in the browser (three.js/WebGL): an island in the ocean on
+which packages become terraced platforms, classes become buildings and
+**dependencies become real traffic**. The view is opened from the JavaFX app
+(*File → Show City3D View*), but also runs standalone against an exported
 `city.json`.
 
 ---
 
-## 1. Konzeption: Das Layout ist die Aussage
+## 1. Concept: the layout is the statement
 
-Die zentrale Entwurfsregel der gesamten Entwicklung:
+The central design rule of the whole development:
 
-> **Das X/Z-Layout kodiert die Abhängigkeitsstruktur und ist unantastbar.**
-> Alle visuellen Ebenen (Licht, Verkehr, Bögen, Atmosphäre) sind additiv und
-> dürfen die Anordnung nie verändern — höchstens die Abstände.
+> **The X/Z layout encodes the dependency structure and is untouchable.**
+> All visual layers (light, traffic, arcs, atmosphere) are additive and
+> must never change the arrangement — at most the spacing.
 
-Die Stadt ist die 3D-Projektion der S202-Schichtendarstellung
-(siehe [`docs/concept`](concept/)):
+The city is the 3D projection of the S202 layered representation
+(see [`docs/concept`](concept/)):
 
-- **Paket-Baum = verschachtelte Plattformen.** Jedes Paket ist ein Rechteck,
-  das seine Kinder umschließt; jede Verschachtelungsebene hebt die Plattform
-  eine Terrassenstufe an. Die Stadt-Silhouette *ist* der Paketbaum.
-- **Level-Reihen.** Innerhalb eines Pakets stehen Kinder zeilenweise nach
-  lokalem Level (das „L:x" der 2D-Ansicht): unten die Basis, oben die Nutzer —
-  exakt die Anordnung der 2D-Architektursicht, nur als Stadtgrundriss.
-- **Abhängigkeiten fließen deshalb sichtbar „bergab".** Regelkonforme Kanten
-  laufen von hinteren zu vorderen Reihen; alles, was gegen die Schichtung
-  verstößt, fällt als Gegenverkehr auf.
+- **Package tree = nested platforms.** Every package is a rectangle that
+  encloses its children; every nesting level raises the platform by one
+  terrace step. The city skyline *is* the package tree.
+- **Level rows.** Inside a package, children stand in rows by local level
+  (the "L:x" of the 2D view): the base at the bottom, the users at the top —
+  exactly the arrangement of the 2D architecture view, only as a city map.
+- **Dependencies therefore visibly flow "downhill".** Conforming edges run
+  from rear rows to front rows; anything that violates the layering stands
+  out as oncoming traffic.
 
-Damit gilt: Wer die Stadt lesen kann, liest die Architektur — Distanz,
-Richtung und Höhe sind nie Dekoration, sondern immer Struktur.
+So: whoever can read the city reads the architecture — distance, direction
+and height are never decoration, always structure.
 
-## 2. Was die Stadt kodiert
+## 2. What the city encodes
 
-| Stadtelement | Bedeutung |
+| City element | Meaning |
 |---|---|
-| Plattform (Terrasse) | Paket; Stapelhöhe = Verschachtelungstiefe, Reihen = lokale Levels |
-| Rote Plattform | Paket ist Teil eines Paket-Zyklus (Tangle) |
-| Gebäude | Klasse; ein Gebäude pro Klasse, auf der Plattform seines Pakets |
-| Gebäudehöhe | Methodenanzahl (Codemenge) |
-| Grundfläche | Fan-In (Breite) × Fan-Out (Tiefe) |
-| Gebäudetyp Glas → Beton | globales Architektur-Level (oben → unten); Interfaces sind immer Glas |
-| Rot blinkendes Dach-Beacon | Klasse steckt in einem Abhängigkeits-Zyklus |
-| Fensterlicht (Metrik-Modus) | Dichte/Helligkeit folgt wählbarer Metrik (Fan-In / Fan-Out / Methoden) — Hotspots leuchten nachts, tote Klassen bleiben dunkel |
-| Paket-Schilder | Distrikt-Namen an den Plattformkanten, distanzabhängig eingeblendet |
+| Platform (terrace) | Package; stack height = nesting depth, rows = local levels |
+| Red platform | The package is part of a package cycle (tangle) |
+| Building | Class; one building per class, on the platform of its package |
+| Building height | Number of methods (amount of code) |
+| Footprint | Fan-in (width) × fan-out (depth) |
+| Building type glass → concrete | Global architecture level (top → bottom); interfaces are always glass |
+| Red flashing roof beacon | The class is part of a dependency cycle |
+| Window light (metric mode) | Density/brightness follows a selectable metric (fan-in / fan-out / methods) — hotspots light up at night, dead classes stay dark |
+| Package signs | District names at the platform edges, shown depending on distance |
 
-## 3. Abhängigkeiten: zwei Visualisierungen, eine Semantik
+## 3. Dependencies: two visualisations, one semantics
 
-**Farbcode überall gleich:** cyan/blau = regelkonform (Level fällt),
-**rot = Verstoß** (Kante aufwärts oder gleiches Level = Zyklus).
+**The same colour code everywhere:** cyan/blue = conforming (level falls),
+**red = violation** (edge upward, or same level = cycle).
 
-### 3.1 Datenströme (Bögen)
+### 3.1 Data streams (arcs)
 
-Leuchtende Bézier-Bögen von Dach zu Dach mit GPU-animierten Pulsen
-(„Datenpakete" fliegen vom Nutzer zum Genutzten). Modi: *Aus / Auswahl /
-Alle / nur Verstöße*; im Auswahl-Modus eingehend türkis, ausgehend amber.
-Das Panel zeigt Kantenzahl und Verstoß-Zähler.
+Glowing Bézier arcs from roof to roof with GPU-animated pulses
+("data packets" fly from the user to the used). Modes: *off / selection /
+all / violations only*; in selection mode, incoming is turquoise and
+outgoing amber. The panel shows the edge count and the violation counter.
 
-### 3.2 Verkehr (das Herzstück)
+### 3.2 Traffic (the centrepiece)
 
-Jede (gesampelte) Abhängigkeit **fährt**: ein Fahrzeug nimmt die echte
-Straßenroute von der nutzenden zur genutzten Klasse.
+Every (sampled) dependency **drives**: a vehicle takes the real street route
+from the using class to the used class.
 
-- **Gelbe NY-Cabs** = paketübergreifende Beziehungen. Karosserie mit dunkler
-  Glaskabine, weiße Scheinwerfer, rote Rücklichter; die Semantik sitzt in der
-  **Taxi-Dachleuchte** (cyan/rot).
-- **Fußgänger** (einfarbige Spielfiguren) = paketlokale Beziehungen; sie
-  laufen auf dem Gehsteig statt auf der Fahrbahn.
-- **Tempo = Metrik:** Die Geschwindigkeit skaliert mit dem globalen
-  Level-Sprung der Abhängigkeit — weite Fahrten quer durch den Schichtenstapel
-  rasen, Ein-Level-Hops schlendern. (Netter Nebeneffekt: Zyklus-Fahrten sind
-  level-nah und damit auffällig langsame rote Cabs.)
-- **Tag/Nacht-Rhythmus:** Verkehrsdichte = Regler × Tageslicht-Faktor.
-- **Labels:** In Kameranähe erscheint über den nächsten Pods der Fahrttext
-  „Quelle → Ziel" (reiner Text, positionsgenau pro Frame nachgeführt).
-- **Hotspots** (zuschaltbar): sanft pulsierende Glow-Flächen auf den
-  meistbefahrenen Kreuzungen — die Routenlast pro Graphknoten macht die
-  „Arterien" der Architektur sichtbar.
+- **Yellow NY cabs** = relationships across packages. Body with a dark glass
+  cabin, white headlights, red tail lights; the meaning sits in the
+  **taxi roof light** (cyan/red).
+- **Pedestrians** (single-coloured game pieces) = relationships within a
+  package; they walk on the pavement instead of the road.
+- **Speed = metric:** the speed scales with the global level jump of the
+  dependency — long trips across the layer stack race, one-level hops
+  stroll. (Nice side effect: cycle trips stay close in level and are
+  therefore conspicuously slow red cabs.)
+- **Day/night rhythm:** traffic density = slider × daylight factor.
+- **Labels:** close to the camera, the trip text "source → target" appears
+  above the nearest pods (plain text, tracked to the exact position every
+  frame).
+- **Hotspots** (optional): softly pulsing glow areas on the busiest
+  intersections — the route load per graph node makes the "arteries" of the
+  architecture visible.
 
-## 4. Das Straßennetz: ein routbarer Graph
+## 4. The street network: a routable graph
 
-Straßen sind keine Dekoration in den Lücken, sondern ein **Graph**, auf dem
-Dijkstra Routen berechnet ([`roads.js`](../city3d/src/roads.js)):
+Streets are not decoration in the gaps but a **graph** on which Dijkstra
+computes routes ([`roads.js`](../city3d/src/roads.js)):
 
-- **Ringstraße** innen an jeder Plattformkante (garantiert Konnektivität),
-  **Querstraßen** zwischen den Level-Reihen, **Seitenstraßen** zwischen
-  Nachbarn, **Stichstraßen** (Zufahrten) an *beiden* Gebäudeseiten — das
-  Routing startet/endet per Multi-Source-Dijkstra an der günstigeren
-  Ausfahrt, statt ums Paket zu fahren —, **Rampen** von jedem Kind-Deck zu
-  den Eltern-Korridoren (durch die Hierarchie immer genau eine
-  Terrassenstufe).
-- **Kantengewichte erzeugen Bündelung:** Autos zahlen Aufschlag auf schmale
-  Straßen (Verkehr sammelt sich auf den breiten Boulevards der Wurzel) und
-  einen Rampen-Malus (kein Abkürzen über fremde Paket-Decks); Fußgänger
-  bevorzugen invers die ruhigen Seitenstraßen.
-- **Fahrbar gemacht:** Rechtsverkehr per Spurversatz, Ecken als
-  Quadratic-Bézier-Bögen, Gehsteige mit Bordstein und Freischnitten an
-  Kreuzungen/Zufahrten, runde Kreuzungsteller (Asphalt- + Gehweg-Disc) gegen
-  die 90°-Ecklücken, Mittellinien, Laternen.
-- Boulevards werden zur Hierarchie-Wurzel hin breiter — die Straßenbreite
-  selbst kodiert die Ebene.
+- A **ring road** on the inside of every platform edge (guarantees
+  connectivity), **cross streets** between the level rows, **side streets**
+  between neighbours, **access roads** on *both* sides of each building —
+  routing starts and ends at the cheaper exit via multi-source Dijkstra
+  instead of driving around the package —, **ramps** from every child deck
+  to the parent corridors (always exactly one terrace step, thanks to the
+  hierarchy).
+- **Edge weights create bundling:** cars pay a surcharge on narrow streets
+  (traffic gathers on the wide boulevards of the root) and a ramp penalty
+  (no shortcuts across other packages' decks); pedestrians, conversely,
+  prefer the quiet side streets.
+- **Made drivable:** right-hand traffic by lane offset, corners as
+  quadratic Bézier curves, pavements with kerbs and cut-outs at
+  intersections/access roads, round intersection discs (asphalt + pavement
+  disc) against the gaps at 90° corners, centre lines, street lamps.
+- Boulevards get wider towards the root of the hierarchy — the street width
+  itself encodes the level.
 
-## 5. Atmosphäre & Landschaft
+## 5. Atmosphere & landscape
 
-- **Eigener Himmel-Dome** (Shader): sattes Zenit-Blau → heller Horizont,
-  Sonnenscheibe mit Glow, **Mondscheibe** gegenüber der Sonne. Nachts ist der
-  Mond ein echtes Key-Light (kühles Blau, Schattenwurf) — die Mondlichtphase
-  hält Boden und Straßen lesbar. Driftende prozedurale Wolkenschicht
-  (FBM-Canvas) mit Horizont-Fade; **Zeitraffer**-Knopf rotiert Sonne und Mond
-  durch den vollen Tagesbogen.
-- **Insel im Ozean:** Die Stadt steht auf einem Betonsockel; außenrum eine
-  animierte, reflektierende Wasserfläche (Szenen-Spiegelung, Wellen-Wobble,
-  Fresnel, Distanz-Blend in den Horizontdunst).
-- **Grünflächen:** Parks (Rasenfelder + Baum-Cluster, zwei Baumtypen,
-  Büsche) und Beton-Freiflächen werden kollisionsgeprüft in die freien
-  Plaza-Bereiche gesampelt; ein Grüngürtel säumt die Insel.
-- Wetter (Nässe/Regen), Nebel, Bloom, SSAO, Farb-Grading — alles regelbar.
+- **Custom sky dome** (shader): deep zenith blue → bright horizon, sun disc
+  with glow, **moon disc** opposite the sun. At night the moon is a real key
+  light (cool blue, casting shadows) — the moonlight phase keeps the ground
+  and streets readable. A drifting procedural cloud layer (FBM canvas) with
+  a horizon fade; a **time-lapse** button rotates sun and moon through the
+  full arc of the day.
+- **Island in the ocean:** the city stands on a concrete base; around it an
+  animated, reflecting water surface (scene reflection, wave wobble,
+  Fresnel, distance blend into the horizon haze).
+- **Green spaces:** parks (lawns + tree clusters, two kinds of trees,
+  bushes) and open concrete areas are sampled into the free plaza areas with
+  a collision check; a green belt lines the island.
+- Weather (wetness/rain), fog, bloom, SSAO, colour grading — all adjustable.
 
-## 6. Interaktion
+## 6. Interaction
 
-| Aktion | Wirkung |
+| Action | Effect |
 |---|---|
-| Klick auf Gebäude/Plattform | Info-Panel (Metriken, klickbare Uses/Used-by-Chips zum Navigieren), Glow-Highlight; erneuter Klick deselektiert (Toggle) |
-| Klick auf Pod | Fahrt-Info (Quelle → Ziel, Typ, Routenlänge), Route leuchtet, beide Endgebäude glühen; **📍 Verfolgen** startet die Chase-Cam |
-| **🎥 Rundfahrt** | Kamera heftet sich an ein zufälliges Fahrzeug — endlose Stadttour entlang echter Abhängigkeiten (Esc/Klick beendet) |
-| Suche (`/`) | Autocomplete über Klassen + Pakete, Auswahl mit Kamera-Anflug |
-| Doppelklick | Anflug auf das Objekt |
-| 2D-Sync | Selektion läuft bidirektional zwischen Browser und JavaFX-App (Loopback-Server) |
+| Click on a building/platform | Info panel (metrics, clickable uses/used-by chips for navigation), glow highlight; clicking again deselects (toggle) |
+| Click on a pod | Trip info (source → target, type, route length), the route lights up, both end buildings glow; **📍 Follow** starts the chase cam |
+| **🎥 Tour** | The camera attaches to a random vehicle — an endless city tour along real dependencies (Esc/click ends it) |
+| Search (`/`) | Autocomplete over classes + packages, selection with a camera fly-to |
+| Double-click | Fly to the object |
+| 2D sync | Selection runs both ways between the browser and the JavaFX app (loopback server) |
 
-## 7. Implementierung
+## 7. Implementation
 
 ```
 city3d/src/
-  adapter.js   CityModel-JSON -> Layout (Layout3D-Port) + Straßennetz als Graph-Daten + Anker
-  roads.js     Graph-Builder (Stationen/Kreuzungen), gewichteter Dijkstra, fahrbare Routen
-  vehicles.js  Fahrzeug-Pools (Cabs/Fußgänger, Multi-Layer-Instancing), Labels, Picking, Follow
-  deps.js      Abhängigkeits-Bögen + GPU-Pulse
-  city.js      Rendering: Gebäude (Fassaden-Shader), Plattformen, Straßen, Rampen, Insel, Wasser
-  sky.js       Himmel-Dome, Sonne/Mond, Beleuchtungsmodell, Wolken, Env-Map
-  greenery.js  Parks, Bäume, Büsche, Freiflächen (Sampling + Kollisionstest)
-  labels.js    Paket-Namensschilder
-  i18n.js      UI-Übersetzungen (DE/EN/PT), Sprachwahl + data-i18n-Anwendung
-  main.js      Orchestrierung, UI, Selektion, Kamera (Anflug/Follow), Post-FX
+  adapter.js   CityModel JSON -> layout (Layout3D port) + street network as graph data + anchors
+  roads.js     graph builder (stations/intersections), weighted Dijkstra, drivable routes
+  vehicles.js  vehicle pools (cabs/pedestrians, multi-layer instancing), labels, picking, follow
+  deps.js      dependency arcs + GPU pulses
+  city.js      rendering: buildings (facade shader), platforms, streets, ramps, island, water
+  sky.js       sky dome, sun/moon, lighting model, clouds, env map
+  greenery.js  parks, trees, bushes, open areas (sampling + collision test)
+  labels.js    package name signs
+  i18n.js      UI translations (DE/EN/PT), language choice + applying data-i18n
+  main.js      orchestration, UI, selection, camera (fly-to/follow), post-FX
 ```
 
-**Mehrsprachigkeit:** Die gesamte Oberfläche (Panels, Legende, Hilfe, Suche,
-Info-Overlays, Tooltips) ist in Deutsch, Englisch und Portugiesisch verfügbar.
-Statische Texte hängen über `data-i18n`-Attribute in `index.html` am
-Wörterbuch in `i18n.js`; dynamische Texte (Info-Panel, Tageszeit-Label,
-FPS-Zeile) rufen `t()` direkt. Sprachwahl: `?lang=de|en|pt` in der URL schlägt
-die gespeicherte Wahl (`localStorage`) schlägt die Browsersprache; Umschalter
-im Einstellungs-Panel, Wechsel wirkt live ohne Reload. Klassen-, Paket- und
-Fahrzeug-Beschriftungen in der Szene sind Bezeichner aus dem Modell und
-bleiben sprachneutral.
+**Multiple languages:** the whole interface (panels, legend, help, search,
+info overlays, tooltips) is available in German, English and Portuguese.
+Static texts are tied to the dictionary in `i18n.js` via `data-i18n`
+attributes in `index.html`; dynamic texts (info panel, time-of-day label,
+FPS line) call `t()` directly. Language choice: `?lang=de|en|pt` in the URL
+beats the stored choice (`localStorage`), which beats the browser language;
+the switch in the settings panel takes effect live without a reload. Class,
+package and vehicle labels in the scene are identifiers from the model and
+stay language-neutral.
 
-Datenfluss: `CityModelExporter` (Java) serialisiert die Analyse zu
-`city.json` (Pakete, Klassen, Metriken, **Abhängigkeitskanten**);
-`CityView3DServer` serviert das Vite-Bundle und den Selektions-Sync.
+Data flow: `CityModelExporter` (Java) serialises the analysis to
+`city.json` (packages, classes, metrics, **dependency edges**);
+`CityView3DServer` serves the Vite bundle and the selection sync.
 
-Performance-Prinzipien: alles Wiederholte ist instanziert (Gebäude in einem
-InstancedMesh mit prozeduralem Fassaden-Shader, Fahrzeuge als geteilte
-Matrizen über Layer-Meshes, Bögen/Pulse als ein Draw-Call), Routen werden
-einmalig berechnet, Animation läuft auf der GPU oder über billige
-Matrix-Updates. Getestet bis in den Bereich zehntausender Kanten (Caps und
-LOD-Schwellen fangen Ausreißer).
+Performance principles: everything repeated is instanced (buildings in one
+InstancedMesh with a procedural facade shader, vehicles as shared matrices
+across layer meshes, arcs/pulses as one draw call), routes are computed
+once, animation runs on the GPU or via cheap matrix updates. Tested up to
+the range of tens of thousands of edges (caps and LOD thresholds catch
+outliers).
 
-## 8. Erarbeitete Design-Lektionen
+## 8. Design lessons learned
 
-- **Semantik in die Dachleuchte:** Ikonografie (gelbes Cab) und Bedeutung
-  (Farbe) lassen sich trennen — das Objekt bleibt lesbar, die Aussage auch.
-- **Zielen braucht eine stehende Welt:** Mausbewegung pausiert die
-  Kino-Rotation, gepickt wird bei *pointerdown* — sonst schießt jede
-  Selektion am driftenden Ziel vorbei.
-- **Kleine bewegliche Ziele klickt man im Screen-Space**, nicht per Raycast
-  (der verliert gegen die Plattform darunter).
-- **Overlays gehören nicht in den SSAO-Tiefenpass** (sonst werfen unsichtbare
-  Label-Quads „AO-Schatten" — die berüchtigten schwarzen Balken).
-- **Ein Verfolger-Lerp verträgt kein konkurrierendes Orbit-Damping** — beim
-  Verfolgen wird die Orbit-Steuerung komplett stummgeschaltet.
+- **Put the meaning into the roof light:** iconography (yellow cab) and
+  meaning (colour) can be separated — the object stays readable, and so does
+  the statement.
+- **Aiming needs a world that stands still:** moving the mouse pauses the
+  cinematic rotation, and picking happens on *pointerdown* — otherwise every
+  selection misses the drifting target.
+- **Small moving targets are clicked in screen space**, not by raycast
+  (which loses against the platform below).
+- **Overlays don't belong in the SSAO depth pass** (otherwise invisible
+  label quads cast "AO shadows" — the notorious black bars).
+- **A follow lerp cannot coexist with competing orbit damping** — while
+  following, orbit control is muted completely.
 
-## 9. Offene Ideen
+## 9. Open ideas
 
-- Paket-Aggregation der Bögen bei großer Distanz (weniger Spaghetti bei
-  Systemen mit tausenden Klassen).
-- Ampeln/Stau-Inszenierung an Hotspot-Kreuzungen; Kreuzungslast als Export.
-- Kino-Tour entlang der schlimmsten Verstöße („Architektur-Review-Rundflug").
-- Aggregierte Metrik-Zeitreihen (Stadt im Wandel über Commits).
+- Aggregate the arcs by package at large distances (less spaghetti in
+  systems with thousands of classes).
+- Traffic lights/traffic-jam staging at hotspot intersections; intersection
+  load as an export.
+- A cinematic tour along the worst violations ("architecture review
+  flight").
+- Aggregated metric time series (the city changing over commits).
