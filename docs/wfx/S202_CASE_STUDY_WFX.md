@@ -1,20 +1,4 @@
-# S202 Case Studies
-
-## Goal
-
-This document collects concrete case studies in which S202 is applied to real or realistic codebases. Each case study should show which architectural problem became visible and which refactoring decision can be derived from it.
-
-## Planned Structure per Case Study
-
-1. Initial system
-2. Observed structure
-3. Notable cycles or violations
-4. Interpretation of the findings
-5. What-if analysis
-6. Possible refactoring plan
-7. Result or expected effect
-
-## Case Study: Analyzing WFX
+# S202 Case Study: Analyzing WFX
 
 WFX is a useful case study because it is not a synthetic demo system. It is a
 real framework that was actively evolved while S202 itself was being extended.
@@ -67,7 +51,7 @@ is shown with orange dashed dependency paths. This is the kind of structure
 that makes a module hard to split: every element in the cycle depends, directly
 or indirectly, on the others.
 
-![WFX tangle cut candidates](top-tangle-cuts.png)
+![WFX tangle cut candidates](../top-tangle-cuts.png)
 
 The Top Tangles panel turns the visual cycle into concrete refactoring
 candidates. It lists cut candidates such as `RootArea -> ViewArea`,
@@ -119,8 +103,10 @@ The API section is built from multiple sources:
 
 - manual `Add To Api` and `Remove From Api` decisions;
 - JPMS `exports` from `module-info.class`;
-- package naming conventions such as `api` or `port`;
-- interface/API class naming heuristics.
+- `@S202Api` in `package-info.java`;
+- packages named `api`, `spi`, `port` or `ports`.
+
+Whether a type is an interface or how a class is named plays no role.
 
 This view was especially important for WFX. It made the intended module
 contracts visible before and during JPMS adoption. Classes such as
@@ -143,8 +129,13 @@ redirected through API classes or JPMS exports.
 
 ![WFX 3D dependency inspection](wfx-3dview-lookup-deps.png)
 
+*The screenshot shows the 3D view as it was at the time of this case study;
+since release 1.9.0 the 3D tab shows the 2D picture tilted back, with metrics
+as height and colour (see the [handbook](../handbook/3d-views.md)). Classes as
+buildings are now the domain of City3D.*
+
 The 3D view provides a different inspection mode. Instead of focusing on
-package boxes, it renders the architecture as a layered terrain with classes
+package boxes, it rendered the architecture as a layered terrain with classes
 as buildings. Selecting a class highlights its dependency fan-in or fan-out.
 In the screenshot the selected class is
 `io.softwareecg.wfx.lookup.api.Lookup`, and the green arcs show how broadly
@@ -178,8 +169,8 @@ Adapters            outside
 
 WFX packages or components become radial segments such as `main`, `platform`,
 `windowmanager`, `lookup`, `examplegui`, and `extension`. Classes are placed
-into the ring that best matches their calculated level and explicit
-architecture role. API classes from the Component View become port candidates;
+into rings by the architecture level of their package — each class inherits
+the ring of its package — unless an explicit architecture role says otherwise. API classes from the Component View become port candidates;
 explicit ports can be marked as inbound, outbound, or generic.
 
 Useful features in the prototype:
@@ -218,10 +209,3 @@ underlying dependency graph and calculated levels. WFX could therefore be
 iteratively improved without changing the meaning of the existing layered
 analysis. That consistency was essential while the framework was being moved
 toward a cleaner component architecture and JPMS-based module boundaries.
-
-## Candidates
-
-- Example JAR from the concept documentation
-- S202's own modules
-- Historically grown package structure with large SCCs
-- Target architecture that deliberately differs from the computed actual architecture

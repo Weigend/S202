@@ -498,8 +498,12 @@ Implementation details live in the subpackage `name.impl`.
 **Advantages:**
 - API types have natural, short import paths without `.api.` noise
 - Enforceable via `module-info.java`: `exports name` but not `exports name.impl`
-- Fits the existing structure — `reader.java`, `reader.python`, `reader.c`
-  are already natural impl subpackages, no renaming needed
+- Fits the existing structure — the readers for each language already were
+  natural impl subpackages
+
+Because S202's default rule takes `api`, `spi`, `port` and `ports` sub-packages
+as the public part of a component, S202 declares this layout explicitly: every
+component root carries `@S202Api` and `@S202Component` in its `package-info.java`.
 
 ### No JPMS — but a JPMS-compatible design
 
@@ -512,24 +516,29 @@ The package layout is, however, designed so that a later JPMS migration is
 possible without conceptual changes: API packages would be `exports`,
 `*.impl` packages would simply not be exported.
 
-### Applied to all components
+### Applied to all components (state of release 1.9.0)
 
 ```
-de.weigend.s202.reader          ← API: LanguageAnalyzer, AnalyzerRegistry
-de.weigend.s202.reader.java     ← impl (stays as today)
-de.weigend.s202.reader.python   ← impl (stays as today)
-de.weigend.s202.reader.c        ← impl (stays as today)
+de.weigend.s202.reader               ← API: LanguageAnalyzer, ProjectScanner, DependencyModel, EdgeKind, TypeUse
+de.weigend.s202.reader.impl.java     ← impl
+de.weigend.s202.reader.impl.python   ← impl
+de.weigend.s202.reader.impl.golang   ← impl
+de.weigend.s202.reader.impl.javascript ← impl
+de.weigend.s202.reader.impl.c        ← impl
 
-de.weigend.s202.domain          ← API: Architecture, DomainComputer,
-                                       ArchitectureStyle, DomainModel,
-                                       SCCFinder, StronglyConnectedComponent,
-                                       Violation, Tangle, Element, ...
-de.weigend.s202.domain.impl     ← impl: LevelCalculator, LocalLevelCalculator,
-                                        TarjanSCCFinder, all builders,
-                                        ComponentApiClassifier
+de.weigend.s202.domain               ← API: DomainComputer, DomainModel, SCCFinder,
+                                            StronglyConnectedComponent, ...
+de.weigend.s202.domain.architecture  ← API: Architecture, ArchitectureStyle,
+                                            Element, Tangle, Violation, ...
+de.weigend.s202.domain.impl          ← impl: LevelCalculator, ContainerLevelizer,
+                                             TarjanSCCFinder, all builders
 
-de.weigend.s202.project         ← API: ProjectStore, S202Project
-de.weigend.s202.project.impl    ← impl: S202ProjectStore, S202ProjectMapper
+de.weigend.s202.project              ← API: ProjectStore, ProjectMapper, S202Project
+de.weigend.s202.project.impl         ← impl: S202ProjectStore, S202ProjectMapper
 ```
+
+Since this case study, `analysis`, `report.quality` and `report.text` have become
+components too, and `LocalLevelCalculator` and `ComponentApiClassifier` have been
+replaced by `ContainerLevelizer` and `ComponentStructure` in `domain.impl`.
 
 ---

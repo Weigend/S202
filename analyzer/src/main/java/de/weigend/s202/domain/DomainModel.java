@@ -226,7 +226,7 @@ public class DomainModel {
     /**
      * Container tangles with at least one package member — the "package
      * cycles" of the orange overlay. Class-only tangles are the domain of the
-     * class-SCC (red) overlay and are left out here.
+     * class-SCC (purple) overlay and are left out here.
      */
     public List<Set<String>> getPackageTangles() {
         List<Set<String>> result = new ArrayList<>();

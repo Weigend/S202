@@ -274,7 +274,7 @@ The answer: a tiny annotation library — `s202-annotations`.
 <dependency>
     <groupId>de.weigend</groupId>
     <artifactId>s202-annotations</artifactId>
-    <version>1.0.0</version>
+    <version>1.9.0</version>
     <scope>provided</scope>
 </dependency>
 ```

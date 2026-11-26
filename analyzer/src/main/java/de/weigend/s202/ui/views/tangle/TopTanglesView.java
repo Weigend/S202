@@ -57,7 +57,9 @@ public class TopTanglesView implements View {
 
     /** Sealed model so the cell factory can render rows differently per level. */
     public sealed interface Row permits TangleRow, EdgeRow, KindRow, RefactoringPreviewRow, HotspotHeaderRow, HotspotEntryRow, HotspotCallerRow {}
+    /** A tangle, ranked by size. */
     public record TangleRow(int rank, Tangle tangle) implements Row {}
+    /** A class dependency inside a tangle: a proposed cut if it breaks the cycle, a preview if it is already cut. */
     public record EdgeRow(String from, String to, boolean cycleBreakEdge, boolean cutApplied) implements Row {}
     /** One relationship-kind line beneath an {@link EdgeRow}. */
     public record KindRow(EdgeKind kind, String detail) implements Row {}

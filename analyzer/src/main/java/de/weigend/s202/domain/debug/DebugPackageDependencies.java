@@ -22,6 +22,10 @@ import io.softwareecg.wfx.lookup.api.Lookup;
 import java.nio.file.Path;
 import java.util.*;
 
+/**
+ * Developer tool: reads the test-example JAR and prints the class and package
+ * dependencies of its {@code com.example} classes. Not part of the application.
+ */
 public class DebugPackageDependencies {
     public static void main(String[] args) throws Exception {
         String jarPath = "../test-example/target/test-example-1.9.0.jar";

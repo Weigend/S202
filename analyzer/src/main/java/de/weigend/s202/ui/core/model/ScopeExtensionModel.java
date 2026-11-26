@@ -31,6 +31,7 @@ public final class ScopeExtensionModel {
     private ScopeExtensionModel() {
     }
 
+    /** A package or class that can be added to the scope. */
     public record Candidate(String fullName, String kind, ArchitectureNode.NodeType type) {
         public String label() {
             return kind + "  " + fullName;

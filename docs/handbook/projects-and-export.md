@@ -12,7 +12,7 @@ again: the file contains the dependencies.
 | In the file | Not in the file |
 | --- | --- |
 | classes, packages and dependencies, as they were read, with what they use outside the analysis and the JAR of each class | levels, cycles and violations: they are computed on loading |
-| the tabs: layered, component, hexagonal, scope and tangle views | 3D, City3D and Quality Report tabs |
+| the tabs: layered, component, hexagonal, scope, tangle, physical and slice views | 3D, City3D and Quality Report tabs |
 | of each tab: Depth, zoom, position, open packages and its own switches, whether its [matrix](matrix-view.md) is open and how, with or without libraries; the selection of the active tab | where the tab was in the window; Show Icons and Show Arch Level, which are common to all tabs |
 | API marks, roles and ports, cuts; of each tab its moves and planned packages | |
 | the complexity and lines of code of each method; what the 3D tab shows as [heights and colours](3d-views.md#metrics) | |

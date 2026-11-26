@@ -204,6 +204,7 @@ public record ArchitectureAnnotations(
                 || childOrElement.startsWith(parentOrElement + ".");
     }
 
+    /** A component the user declared: its name and the package it is rooted in. */
     public record ComponentSpec(String id, String displayName, String rootPackageFqn) {
         public ComponentSpec {
             if (id == null || id.isBlank()) {
@@ -216,6 +217,7 @@ public record ArchitectureAnnotations(
         }
     }
 
+    /** A class the user declared as a port of a component or hexagon sector. */
     public record PortSpec(String id,
                            String componentOrSegmentId,
                            String classFqn,
@@ -231,12 +233,14 @@ public record ArchitectureAnnotations(
         }
     }
 
+    /** Whether a port is driven from outside (inbound), drives the outside (outbound), or neither is known. */
     public enum PortDirection {
         INBOUND,
         OUTBOUND,
         GENERIC
     }
 
+    /** The role the user gave a class or package. */
     public record ElementRoleMark(String elementFqn, ElementRole role) {
         public ElementRoleMark {
             if (elementFqn == null || elementFqn.isBlank()) {
@@ -246,6 +250,7 @@ public record ArchitectureAnnotations(
         }
     }
 
+    /** The architectural roles a user can give an element; they decide its place in the component and hexagonal views. */
     public enum ElementRole {
         NONE,
         API,

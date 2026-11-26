@@ -229,7 +229,7 @@ public final class ToolbarController {
         });
 
         showSccCheckbox = new CheckBox("Class SCCs");
-        showSccCheckbox.setTooltip(new Tooltip("Show strict class-level cycles (red)"));
+        showSccCheckbox.setTooltip(new Tooltip("Show strict class-level cycles (purple)"));
         showSccCheckbox.selectedProperty().addListener((obs, was, isNow) -> {
             if (boundView != null) boundView.setShowScc(isNow);
         });

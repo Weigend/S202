@@ -31,6 +31,7 @@ public interface ProjectScanner {
 
     ProjectScanResult scan(Path projectRoot) throws IOException;
 
+    /** The JARs found in a build, the modules whose artifact is missing, and how many modules were scanned. */
     record ProjectScanResult(List<Path> jars,
                              List<String> missingArtifactModules,
                              int scannedModuleCount) {}

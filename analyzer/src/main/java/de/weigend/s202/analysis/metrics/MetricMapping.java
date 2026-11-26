@@ -47,6 +47,7 @@ public record MetricMapping(Metric height, Scale scale, double heightPercent, Me
         palette = palette == null ? Palette.GREEN_RED : palette;
     }
 
+    /** How a value is mapped onto the height: linear, square root or logarithmic. */
     public enum Scale {
         LINEAR("lin"), SQRT("√"), LOG("log");
 
@@ -78,6 +79,7 @@ public record MetricMapping(Metric height, Scale scale, double heightPercent, Me
         }
     }
 
+    /** The colour ramps for the sides of the boxes. */
     public enum Palette {
         GREEN_RED("Green → red"), VIRIDIS("Viridis"), BLUE_RED("Blue → red");
 

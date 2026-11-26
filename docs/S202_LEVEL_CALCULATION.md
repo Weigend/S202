@@ -68,8 +68,9 @@ minimisation.
 
 Consequences:
 
-- **Violation = back-edge.** The dashed upward edges in the view are exactly the
-  class back-edges; there is no second notion.
+- **Violation = back-edge.** The red upward edges in the view are exactly the
+  class back-edges; there is no second notion. (Dashed means only that a line
+  lies on a package cycle.)
 - **Back-edges only inside tangles.** Outside cycles every dependency runs
   downward.
 - **No containment inflation.** A package's `architectureLevel` counts only
@@ -89,12 +90,12 @@ Consequences:
 
 ## Two Kinds of Cycles
 
-- **Class cycles (red overlay)**: SCCs of the flat class graph (Tarjan). Answer
+- **Class cycles (purple overlay)**: SCCs of the flat class graph (Tarjan). Answer
   *which classes* are entangled.
 - **Package cycles (orange overlay)**: container tangles with at least one
   package member (`DomainModel.getPackageTangles()`). Members are siblings of
   one container — packages covering their subtree, possibly together with
-  classes of that container. Class-only container tangles are left to the red
+  classes of that container. Class-only container tangles are left to the purple
   overlay (`getContainerTangles()` returns all of them).
 
 A package cycle can exist without any class cycle (two packages using each

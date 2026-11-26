@@ -34,7 +34,7 @@
 \title{Software-Architektur als Schichtendarstellung\\
   \large Analyse von Software-Architektur mit S202}
 \author{Johannes Weigend}
-\date{\"Uberarbeitete Fassung, 24.~November~2026}
+\date{\"Uberarbeitete Fassung, 26.~November~2026}
 
 \begin{document}
 
@@ -284,7 +284,7 @@ S202 unterscheidet zwei grundlegend verschiedene Arten von Zyklen und macht
 beide als getrennt schaltbare Overlays sichtbar:
 
 \begin{description}
-  \item[Klassenzyklen (rot)] Stark zusammenh\"angende Komponenten auf Klassenebene.
+  \item[Klassenzyklen (lila)] Stark zusammenh\"angende Komponenten auf Klassenebene.
         Zwei oder mehr Klassen, die direkt oder transitiv voneinander abh\"angen,
         bilden einen solchen Zyklus. Klassenzyklen zeigen implementierungsebene
         Kopplung, die eine strikt lineare Ordnung einzelner Klassen verhindert.
@@ -300,7 +300,7 @@ beide als getrennt schaltbare Overlays sichtbar:
         verantwortlich sind. Paketzyklen zeigen Kopplung auf architektonischer
         Ebene: Die Paketstruktur selbst hat zirkul\"are Abh\"angigkeiten.
         Ein Zyklus, der nur aus Klassen desselben Pakets besteht, ist kein
-        Paketzyklus; ihn zeigt das rote Overlay.
+        Paketzyklus; ihn zeigt das lila Overlay.
 \end{description}
 
 Der Unterschied ist wichtig, weil die beiden Arten verschiedene Fragen beantworten:
@@ -475,8 +475,9 @@ Geschwister.
 
 Daneben f\"uhrt S202 f\"ur jedes Element ein globales \emph{architectureLevel}.
 Es misst, wie tief die Abh\"angigkeitskette unter einem Element tats\"achlich
-ist, und ist damit ein Ma\ss{} f\"ur dessen Komplexit\"at; die H\"ohe in der
-3D-Darstellung und der Ring der hexagonalen Sicht beruhen darauf. Das
+ist, und ist damit ein Ma\ss{} f\"ur dessen Komplexit\"at; die voreingestellte
+H\"ohe in der 3D-Darstellung (dort ist jede andere Metrik w\"ahlbar) und der
+Ring der hexagonalen Sicht beruhen darauf. Das
 \emph{architectureLevel} einer Klasse ist ihre Longest-Path-Tiefe im
 Klassengraphen. Ausgeklammert werden dabei nur die \emph{Level-Schnitte}:
 Back-Edges, die innerhalb eines Klassenzyklus liegen. Eine Back-Edge, die
@@ -542,14 +543,14 @@ Paketordnung ist dann eine Verletzung im Bild, aber weiterhin Teil der
 tats\"achlichen Abh\"angigkeitstiefe ihrer Klasse.
 
 Alle Back-Edges werden als \emph{classBackEdge}-Befunde erfasst und bleiben als
-gestrichelte Verletzungskanten sichtbar.
+rote Verletzungskanten sichtbar.
 
 \begin{figure}[H]
   \centering
   \includegraphics[width=0.6\textwidth]{figures/s202-dependencies-cyclic.png}
-  \caption{Zyklisches Beispiel in der S202-Darstellung. Die gestrichelten Kanten sind Verletzungen:
+  \caption{Zyklisches Beispiel in der S202-Darstellung. Die roten Kanten sind Verletzungen:
   Sie laufen gegen die berechnete Container-Ordnung und bleiben als sichtbarer
-  Befund der Architekturhypothese erhalten. Alle vier gestrichelten Kanten sind
+  Befund der Architekturhypothese erhalten. Alle vier roten Kanten sind
   Back-Edges: Projektionen der im Container \texttt{sccs} geschnittenen
   Geschwisterkanten \texttt{core}$\to$\texttt{infra} und
   \texttt{service}$\to$\texttt{infra}.}
@@ -569,9 +570,10 @@ derselben Kanten:
         Ordnung nach oben l\"auft. Ma\ss{}geblich ist dabei die
         \emph{geschachtelte} Ordnung, nicht ein flaches globales Level: Verglichen
         wird die \emph{localLevel}-Kette beider Endpunkte vom \"au\ss{}ersten
-        gemeinsamen Container abw\"arts; die Richtung entscheidet der erste
-        Container, in dem sie sich unterscheiden (im Code \emph{visual rank}
-        genannt). Jede Verletzung ist eine Back-Edge, denn au\ss{}erhalb der
+        gemeinsamen Container abw\"arts, Eintrag f\"ur Eintrag; die Richtung
+        entscheidet der erste Eintrag, in dem sich die beiden Levels
+        unterscheiden (im Code \emph{visual rank} genannt). Endet eine Kette vor
+        einem solchen Eintrag, liegt keiner der Endpunkte \"uber dem anderen. Jede Verletzung ist eine Back-Edge, denn au\ss{}erhalb der
         geschnittenen Kanten laufen alle Geschwisterkanten nach unten.
         Umgekehrt l\"auft eine Back-Edge nach oben oder seitw\"arts; nur wenn
         innerhalb eines Tangles ein zweiter Pfad die Richtung ohnehin festlegt,
@@ -702,7 +704,7 @@ vorliegen, die diese Position begr\"unden.
   \item \textbf{SCCs erkennen:} Auf dem Klassengraphen werden stark
         zusammenh\"angende Komponenten mittels Tarjan ermittelt. Das Ergebnis
         ist noch kein Layout, sondern die Information, welche Klassen azyklisch
-        einordenbar sind und welche zu Zyklen geh\"oren (rotes Overlay).
+        einordenbar sind und welche zu Zyklen geh\"oren (lila Overlay).
   \item \textbf{Container ordnen:} Jede Klassenabh\"angigkeit wird auf die
         beiden Kinder des tiefsten gemeinsamen Containers projiziert und dort
         als gewichtete Geschwisterkante gez\"ahlt. Je Container werden die SCCs
@@ -712,7 +714,7 @@ vorliegen, die diese Position begr\"unden.
         Geschwisterkanten sind die Container-Back-Edges.
   \item \textbf{Klassen-Back-Edges ableiten:} Eine Klassenabh\"angigkeit ist
         eine Back-Edge, wenn ihre Projektion geschnitten wurde. Sie bleibt als
-        \emph{classBackEdge}-Befund erhalten und als gestrichelte
+        \emph{classBackEdge}-Befund erhalten und als rote
         Verletzungskante sichtbar.
   \item \textbf{Globale Levels berechnen:} Das \emph{architectureLevel}
         von Klassen entsteht per Longest-Path auf dem Klassengraphen ohne die
@@ -727,7 +729,7 @@ vorliegen, die diese Position begr\"unden.
 Kurz gefasst:
 
 \begin{lstlisting}
-Bytecode -> Klassengraph -> Klassen-SCCs (rotes Overlay)
+Bytecode -> Klassengraph -> Klassen-SCCs (lila Overlay)
          -> je Container: Geschwistergraph -> Tangles (orangenes Overlay)
                           -> Rank-Schnitt (Back-Edges) -> localLevel
          -> Klassen-Back-Edges -> Level-Schnitte
@@ -747,7 +749,7 @@ fertige Darstellung ihre eigene Aussage einh\"alt.
 Eine wichtige Entwurfsentscheidung ist die explizite Trennung zweier
 Zyklus-Arten. Klassenzyklen und Paketzyklen werden unabh\"angig voneinander
 erkannt, als getrennte Befunde gespeichert und \"uber separate Schalter in der
-Benutzeroberfl\"ache sichtbar gemacht. Klassenzyklen (rot) zeigen, welche
+Benutzeroberfl\"ache sichtbar gemacht. Klassenzyklen (lila) zeigen, welche
 konkreten Klassen zyklische Abh\"angigkeitsketten bilden; Paketzyklen (orange)
 zeigen, welche Pakete auf architektonischer Ebene gegenseitig abh\"angen. Da
 beide Ansichten gleichzeitig verf\"ugbar sind, kann das Werkzeug zwei

@@ -12,7 +12,7 @@
 | 3 | [Outline Explorer](#outline-explorer) | Packages, classes and methods as a tree. |
 | 4 | [Top Tangles](tangle-view.md#top-tangles) | The cycles of the analysis, and the planned cuts. |
 | 5 | [Quality](quality.md#the-quality-panel) | The analysis as a point between healthy and unhealthy. |
-| 6 | [Tabs](#tabs) | The views: layers, components, hexagon, tangles, scopes, reports, 3D. |
+| 6 | [Tabs](#tabs) | The views: layers, components, hexagon, tangles, scopes, physical view, slices, matrix, reports, 3D. |
 | 7 | [Dependencies](#dependencies), [From / To](#from--to), [Hotspots](#hotspots) | Violations and package tangles as a list; what lies between two elements; where to look first. |
 | 8 | [Dependency Details](#dependency-details) | What carries the selected line. |
 | 9 | [Status bar](#status-bar) | What was done last, and the progress of what is being done. |
@@ -28,7 +28,8 @@ keep showing it while you work in a panel.
 The **File** menu is shown in [Loading code](loading-code.md). **Edit** undoes and redoes
 [moves](layered-view.md#moving-boxes), [finds](layered-view.md#finding-a-class-or-package) a class
 or package and [resets](refactoring.md#undo-and-reset) all planned changes. **View** shows a panel
-that was closed, and opens the 3D, Component, Hexagonal and Physical View and horizontal slices.
+that was closed, and opens the 3D, Component, Hexagonal and Physical View, horizontal slices and the
+dependency matrix.
 **Windows** handles tabs and layout. All entries are listed in the
 [Reference](reference.md#menus).
 
@@ -135,6 +136,7 @@ trees contain what the active tab shows.
 | **◀ Users** | The left side becomes the right one: who uses that? |
 | **Uses ▶** | The right side becomes the left one: what does that use? |
 | **⇄** | The opposite direction. |
+| **Clear** | Selects nothing on either side. |
 
 What is selected on one side greys out on the other what it has nothing to do with. The number of
 dependencies stands above; [Dependency Details](#dependency-details) lists them. With **Users** and

@@ -279,15 +279,20 @@ Use **File → Open Source Code → Open Python Source…** to load a Python pro
 - **Maven 3.9+** — `.mvn/jvm.config` passes two JVM options to Maven so that Java 25 does not warn on every call about libraries Maven itself ships
 - **JavaFX 25.0.5.1** (loaded automatically via Maven)
 - **Python 3** (optional — only required for Python source analysis)
+- **Go** (optional — only required for Go source analysis)
+- **Node.js 18+** (optional — only required to build the City3D web bundle; `build-all` skips it without Node)
 
 ## Project Structure
 
 ```
 analyzer/src/main/java/de/weigend/s202/
-├── analysis/       # Algorithms (SCC, level strategies)
-├── domain/         # Core models (DomainModel, LevelCalculator)
-├── reader/         # JAR loading + Python source analysis
-│   └── python/     # CPython AST bridge (ExternalPythonAstProvider, ParsedPythonModule)
+├── analysis/       # Invariant checks, metrics, quality figures
+├── domain/         # Core models (DomainModel, architectures; LevelCalculator in domain/impl)
+├── project/        # Project files (.s202.json)
+├── reader/         # Reading code: JARs and sources
+│   └── impl/       # One reader per language: java, python, golang, javascript, c
+│       └── python/ # CPython AST bridge (ExternalPythonAstProvider, ParsedPythonModule)
+├── report/         # Quality report and text report
 └── ui/             # JavaFX UI
 ```
 

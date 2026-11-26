@@ -129,6 +129,7 @@ public record QualityReportModel(
         }
     }
 
+    /** The rating band of the overall score, from healthy to critical. */
     public enum QualityBand {
         HEALTHY("Healthy", "healthy"),
         WATCH("Watch", "watch"),

@@ -63,8 +63,10 @@ public record S202Project(
      */
     public static final int FORMAT_VERSION = 11;
 
+    /** The application and version that wrote the file. */
     public record CreatedWith(String app, String version) {}
 
+    /** What was analysed: the kind of input, its files, and the project root if there is one. */
     public record Source(String kind, List<String> paths, String projectRoot) {}
 
     /**

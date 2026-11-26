@@ -123,11 +123,11 @@ open the code again.
 | Preset | Height | Color | Question |
 | --- | --- | --- | --- |
 | Architecture levels | Level | 2D | The layers, as the tab first shows them. |
-| Risk | Cyclomatic complexity | Fan-in | High and red: complex and used by many. |
-| Stability | Fan-in | Instability | What many rely on should be stable. |
+| Risk: complexity × fan-in | Cyclomatic complexity | Fan-in | High and red: complex and used by many. |
+| Stability: fan-in × instability | Fan-in | Instability | What many rely on should be stable. |
 | Impact of a change | Transitive users | Cycle size | What a change can reach, and where cycles make it worse. |
-| Size | Lines of code | Max method complexity | Large classes, and the hard methods in them. |
-| Main sequence | Abstractness | Distance from main sequence | Concrete packages many rely on, and abstract ones no one uses. |
+| Size: lines × max complexity | Lines of code | Max method complexity | Large classes, and the hard methods in them. |
+| Main sequence: abstractness × distance | Abstractness | Distance from main sequence | Concrete packages many rely on, and abstract ones no one uses. |
 
 ## City3D
 

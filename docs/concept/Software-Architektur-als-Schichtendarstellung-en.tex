@@ -34,7 +34,7 @@
 \title{Software Architecture as a Layered Representation\\
   \large Analyzing Software Architecture with S202}
 \author{Johannes Weigend}
-\date{Revised version, November~24,~2026}
+\date{Revised version, November~26,~2026}
 
 \begin{document}
 
@@ -271,7 +271,7 @@ S202 distinguishes two fundamentally different kinds of cycles and makes both
 visible as separately toggled overlays:
 
 \begin{description}
-  \item[Class cycles (red)] Strongly connected components at the class level.
+  \item[Class cycles (purple)] Strongly connected components at the class level.
         Two or more classes that depend on each other directly or transitively
         form such a cycle. Class cycles reveal implementation-level coupling
         that prevents a strict linear order of individual classes. They are
@@ -285,7 +285,7 @@ visible as separately toggled overlays:
         concrete classes inside them are responsible. Package cycles reveal
         architectural-level coupling: the package structure itself has circular
         dependencies. A cycle consisting only of classes of the same package is
-        not a package cycle; the red overlay shows it.
+        not a package cycle; the purple overlay shows it.
 \end{description}
 
 The distinction matters because the two kinds answer different questions:
@@ -447,8 +447,9 @@ violations are measured. It is deliberately local: it compares siblings only.
 
 In addition, S202 maintains a global \emph{architectureLevel} for every
 element. It measures how deep the dependency chain below an element really is
-and is therefore a measure of its complexity; the height in the 3D view and
-the ring of the hexagonal view are based on it. The \emph{architectureLevel}
+and is therefore a measure of its complexity; the default height in the 3D
+view (where any other metric can be chosen) and the ring of the hexagonal view
+are based on it. The \emph{architectureLevel}
 of a class is its longest-path depth in the class graph. Only the
 \emph{level cuts} are set aside: back edges that lie inside a class cycle. A
 back edge that merely runs against the order of two packages, without closing
@@ -509,14 +510,14 @@ cycle arising. The edge against the package order is then a violation in the
 picture, but still part of the real dependency depth of its class.
 
 All back edges are recorded as \emph{classBackEdge} findings and remain
-visible as dashed violation edges.
+visible as red violation edges.
 
 \begin{figure}[H]
   \centering
   \includegraphics[width=0.6\textwidth]{figures/s202-dependencies-cyclic.png}
-  \caption{Cyclic example in the S202 representation. The dashed edges are
+  \caption{Cyclic example in the S202 representation. The red edges are
   violations: they run against the computed container order and remain visible
-  findings of the architectural hypothesis. All four dashed edges are back
+  findings of the architectural hypothesis. All four red edges are back
   edges: projections of the sibling edges \texttt{core}$\to$\texttt{infra} and
   \texttt{service}$\to$\texttt{infra} cut in the container \texttt{sccs}.}
   \label{fig:s202-cyclic}
@@ -532,9 +533,10 @@ The terms back edge and violation describe different roles of the same edges:
   \item[Violation] A concrete dependency that runs upward in the computed
         order. What counts here is the \emph{nested} order, not a flat global
         level: the \emph{localLevel} chains of both endpoints are compared from
-        the outermost shared container downward, and the direction is decided
-        by the first container in which they differ (called \emph{visual rank}
-        in the code). Every violation is a back edge, because outside the cut
+        the outermost shared container downward, entry by entry, and the
+        direction is decided by the first entry in which the two levels differ
+        (called \emph{visual rank} in the code); if one chain ends before such
+        an entry, neither endpoint lies above the other. Every violation is a back edge, because outside the cut
         edges all sibling edges run downward. Conversely, a back edge runs
         upward or sideways; only when a second path inside a tangle already
         fixes the direction can a cut edge end up pointing downward, and then it
@@ -658,7 +660,7 @@ information that justifies this position is available.
   \item \textbf{Detect SCCs:} Strongly connected components are determined on
         the class graph using Tarjan. The result is not yet a layout, but the
         information which classes can be ordered acyclically and which belong
-        to cycles (red overlay).
+        to cycles (purple overlay).
   \item \textbf{Order the containers:} Every class dependency is projected onto
         the two children of the deepest common container and counted there as a
         weighted sibling edge. Per container, the SCCs of the sibling graph are
@@ -668,7 +670,7 @@ information that justifies this position is available.
         back edges.
   \item \textbf{Derive class back edges:} A class dependency is a back edge
         when its projection was cut. It is kept as a \emph{classBackEdge}
-        finding and shown as a dashed violation edge.
+        finding and shown as a red violation edge.
   \item \textbf{Compute global levels:} The \emph{architectureLevel} of
         classes arises by longest-path on the class graph without the level
         cuts~-- the back edges inside class cycles~--, that of packages on the
@@ -681,7 +683,7 @@ information that justifies this position is available.
 In short:
 
 \begin{lstlisting}
-Bytecode -> class graph -> class SCCs (red overlay)
+Bytecode -> class graph -> class SCCs (purple overlay)
          -> per container: sibling graph -> tangles (orange overlay)
                            -> rank cut (back edges) -> localLevel
          -> class back edges -> level cuts
@@ -701,7 +703,7 @@ satisfies its own claim.
 A key design decision is the explicit separation of two kinds of cycles.
 Class cycles and package cycles are detected independently, stored as distinct
 findings, and exposed through separate toggle switches in the UI. Class cycles
-(red) show which concrete classes form cyclic dependency chains;
+(purple) show which concrete classes form cyclic dependency chains;
 package cycles (orange) show which packages are mutually dependent at the
 architectural level. Because both views are available simultaneously, the tool
 can answer two different questions at once: \emph{where} in the package

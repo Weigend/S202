@@ -72,13 +72,13 @@ On macOS the Cmd key takes the place of Ctrl.
 | --- | --- | --- |
 | any view | Click on a box | Selects it, or lifts the selection. |
 | | Ctrl and mouse wheel | Zoom. |
-| | Dragging the background, or with the right button | Moves the picture; a right-click without moving opens the menu. |
+| | Dragging the background, or with the right button | Moves the picture; a right-click without moving opens the menu. Not in the matrix; in the 3D tab dragging with the left button tilts and turns. |
 | | Mouse wheel, with Shift sideways | Moves the picture. |
 | | Click on an arrow, a violation or the line of a cycle | Selects it; see [Dependency Details](window.md#dependency-details). |
 | | Mouse over a class or closed package, with **Show Dependencies** | Its arrows stand out. |
 | matrix | Click on a cell, a name | Selects the dependency, the element. |
 | | Click on **+**, double-click on a name; click on a band | Opens the package; closes it. |
-| layered, scope, component and tangle views | Dragging a box | [Moves](layered-view.md#moving-boxes) it as a plan. |
+| layered, scope, component, tangle, physical and slice views | Dragging a box | [Moves](layered-view.md#moving-boxes) it as a plan. |
 | Top Tangles | Double-click on a tangle | Opens a [Tangle View](tangle-view.md). |
 | Dependencies | Double-click on a wrong-direction edge or a package tangle | Opens a Tangle View. |
 | Dependency Details | Click on a method or class | Shows it in the outline. |

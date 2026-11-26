@@ -34,7 +34,7 @@
 \title{Arquitetura de Software como Representa\c{c}\~ao em Camadas\\
   \large An\'alise de Arquitetura de Software com S202}
 \author{Johannes Weigend}
-\date{Vers\~ao revista, 24~de novembro de~2026}
+\date{Vers\~ao revista, 26~de novembro de~2026}
 
 \begin{document}
 
@@ -289,7 +289,7 @@ S202 distingue dois tipos fundamentalmente diferentes de ciclos e torna ambos
 vis\'iveis como overlays ativados separadamente:
 
 \begin{description}
-  \item[Ciclos de classes (vermelho)] Componentes fortemente conexas no n\'ivel
+  \item[Ciclos de classes (roxo)] Componentes fortemente conexas no n\'ivel
         de classes. Duas ou mais classes que dependem uma da outra direta ou
         transitivamente formam tal ciclo. Ciclos de classes revelam acoplamento
         no n\'ivel de implementa\c{c}\~ao que impede uma ordem linear estrita de
@@ -305,7 +305,7 @@ vis\'iveis como overlays ativados separadamente:
         respons\'aveis. Ciclos de pacotes revelam acoplamento no n\'ivel
         arquitetural: a pr\'opria estrutura de pacotes tem depend\^encias
         circulares. Um ciclo formado apenas por classes do mesmo pacote n\~ao
-        \'e um ciclo de pacotes; o overlay vermelho o mostra.
+        \'e um ciclo de pacotes; o overlay roxo o mostra.
 \end{description}
 
 A distin\c{c}\~ao importa porque os dois tipos respondem a perguntas diferentes:
@@ -480,8 +480,9 @@ irm\~aos.
 
 Al\'em disso, S202 mant\'em para cada elemento um \emph{architectureLevel}
 global. Ele mede qu\~ao profunda \'e, de fato, a cadeia de depend\^encias abaixo
-de um elemento e \'e, portanto, uma medida da sua complexidade; a altura na
-vista 3D e o anel da vista hexagonal baseiam-se nele. O
+de um elemento e \'e, portanto, uma medida da sua complexidade; a altura padr\~ao
+na vista 3D (onde qualquer outra m\'etrica pode ser escolhida) e o anel da
+vista hexagonal baseiam-se nele. O
 \emph{architectureLevel} de uma classe \'e sua profundidade longest-path no
 grafo de classes. S\~ao deixados de fora apenas os \emph{cortes de n\'ivel}:
 back edges que est\~ao dentro de um ciclo de classes. Um back edge que apenas
@@ -547,15 +548,15 @@ pacotes \'e ent\~ao uma viola\c{c}\~ao na imagem, mas continua fazendo parte da
 profundidade real de depend\^encia da sua classe.
 
 Todos os back edges s\~ao registrados como achados \emph{classBackEdge} e
-permanecem vis\'iveis como arestas de viola\c{c}\~ao tracejadas.
+permanecem vis\'iveis como arestas de viola\c{c}\~ao vermelhas.
 
 \begin{figure}[H]
   \centering
   \includegraphics[width=0.6\textwidth]{figures/s202-dependencies-cyclic.png}
   \caption{Exemplo c\'iclico na representa\c{c}\~ao de S202. As arestas
-  tracejadas s\~ao viola\c{c}\~oes: correm contra a ordem de cont\^einer calculada
+  vermelhas s\~ao viola\c{c}\~oes: correm contra a ordem de cont\^einer calculada
   e permanecem como achado vis\'ivel da hip\'otese arquitetural. Todas as quatro
-  arestas tracejadas s\~ao back edges: proje\c{c}\~oes das arestas entre irm\~aos
+  arestas vermelhas s\~ao back edges: proje\c{c}\~oes das arestas entre irm\~aos
   \texttt{core}$\to$\texttt{infra} e \texttt{service}$\to$\texttt{infra},
   cortadas no cont\^einer \texttt{sccs}.}
   \label{fig:s202-cyclic}
@@ -572,9 +573,11 @@ arestas:
   \item[Viola\c{c}\~ao] Uma depend\^encia concreta que corre para cima na ordem
         calculada. O que conta aqui \'e a ordem \emph{aninhada}, n\~ao um n\'ivel
         global plano: as cadeias de \emph{localLevel} das duas pontas s\~ao
-        comparadas a partir do cont\^einer comum mais externo para baixo, e a
-        dire\c{c}\~ao \'e decidida pelo primeiro cont\^einer em que diferem
-        (chamado \emph{visual rank} no c\'odigo). Toda viola\c{c}\~ao \'e um back
+        comparadas a partir do cont\^einer comum mais externo para baixo, entrada
+        por entrada, e a dire\c{c}\~ao \'e decidida pela primeira entrada em que
+        os dois n\'iveis diferem (chamado \emph{visual rank} no c\'odigo); se uma
+        cadeia termina antes de tal entrada, nenhuma das pontas fica acima da
+        outra. Toda viola\c{c}\~ao \'e um back
         edge, porque fora das arestas cortadas todas as arestas entre irm\~aos
         correm para baixo. Inversamente, um back edge corre para cima ou para o
         lado; s\'o quando um segundo caminho dentro de um tangle j\'a fixa a
@@ -706,7 +709,7 @@ estarem dispon\'iveis as informa\c{c}\~oes que justificam essa posi\c{c}\~ao.
   \item \textbf{Detectar SCCs:} No grafo de classes, componentes fortemente
         conexas s\~ao determinadas com Tarjan. O resultado ainda n\~ao \'e um
         layout, mas a informa\c{c}\~ao de quais classes podem ser ordenadas
-        aciclicamente e quais pertencem a ciclos (overlay vermelho).
+        aciclicamente e quais pertencem a ciclos (overlay roxo).
   \item \textbf{Ordenar os cont\^eineres:} Cada depend\^encia entre classes \'e
         projetada sobre os dois filhos do cont\^einer comum mais profundo e
         contada a\'i como aresta ponderada entre irm\~aos. Por cont\^einer, as
@@ -717,7 +720,7 @@ estarem dispon\'iveis as informa\c{c}\~oes que justificam essa posi\c{c}\~ao.
   \item \textbf{Derivar back edges de classes:} Uma depend\^encia entre classes
         \'e um back edge quando sua proje\c{c}\~ao foi cortada. Ela \'e mantida
         como achado \emph{classBackEdge} e mostrada como aresta de
-        viola\c{c}\~ao tracejada.
+        viola\c{c}\~ao vermelha.
   \item \textbf{Calcular n\'iveis globais:} O \emph{architectureLevel} de
         classes surge por longest-path no grafo de classes sem os cortes de
         n\'ivel~-- os back edges dentro de ciclos de classes~--, o de pacotes
@@ -731,7 +734,7 @@ estarem dispon\'iveis as informa\c{c}\~oes que justificam essa posi\c{c}\~ao.
 Em resumo:
 
 \begin{lstlisting}
-Bytecode -> grafo de classes -> SCCs de classes (overlay vermelho)
+Bytecode -> grafo de classes -> SCCs de classes (overlay roxo)
          -> por conteiner: grafo de irmaos -> tangles (overlay laranja)
                            -> corte por rank (back edges) -> localLevel
          -> back edges de classes -> cortes de nivel
@@ -753,7 +756,7 @@ afirma\c{c}\~ao.
 Uma decis\~ao de projeto fundamental \'e a separa\c{c}\~ao expl\'icita de dois
 tipos de ciclos. Ciclos de classes e ciclos de pacotes s\~ao detectados
 independentemente, armazenados como achados distintos e expostos por meio de
-chaves separadas na interface. Ciclos de classes (vermelho) mostram quais classes
+chaves separadas na interface. Ciclos de classes (roxo) mostram quais classes
 concretas formam cadeias c\'iclicas de depend\^encia; ciclos de pacotes (laranja)
 mostram quais pacotes s\~ao mutuamente dependentes no n\'ivel arquitetural. Como
 ambas as vis\~oes est\~ao dispon\'iveis simultaneamente, a ferramenta pode

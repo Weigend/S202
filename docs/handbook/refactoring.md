@@ -33,7 +33,7 @@ Steps 2 to 4 are repeated. Resolve tangles one by one: a resolved one often chan
 
 | Plan | Made by | Belongs to | Stored in the project file |
 | --- | --- | --- | --- |
-| Move of a class or package | dragging it in a layered, scope, component or tangle tab | the tab | yes |
+| Move of a class or package | dragging it in a layered, scope, component, tangle, physical or slice tab | the tab | yes |
 | Planned package | [Component View](component-view.md#moving-and-planning) | the tab | yes |
 | API mark | **Add To Api**, **Remove From Api**, or dragging | the analysis | yes |
 | Role or port | [Hexagonal View](hexagonal-view.md#roles-and-ports) | the analysis | yes |

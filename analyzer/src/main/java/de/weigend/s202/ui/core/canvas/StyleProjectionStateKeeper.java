@@ -37,6 +37,7 @@ import java.util.function.Supplier;
  */
 final class StyleProjectionStateKeeper {
 
+    /** Zoom, Scrollposition und Aufklappzustände, wie sie vor dem Rebuild waren. */
     record ViewState(
             double zoomFactor,
             double horizontalScroll,

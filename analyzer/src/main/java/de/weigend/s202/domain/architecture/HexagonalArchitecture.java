@@ -31,6 +31,7 @@ public interface HexagonalArchitecture extends Architecture {
 
     List<HexElement> elements();
 
+    /** One ring of the hexagon, from the core outwards. */
     record HexRing(String id, String label, RingRole role) {
         public HexRing {
             if (id == null || id.isBlank()) {
@@ -41,12 +42,17 @@ public interface HexagonalArchitecture extends Architecture {
         }
     }
 
+    /** Which ring an element belongs to: core, application with its ports, or adapters. */
     enum RingRole {
         CORE,
         APPLICATION,
         ADAPTER
     }
 
+    /**
+     * One sector of the hexagon: a theme or component, rooted in a package.
+     * {@code explicit} when it was declared, not derived from the package tree.
+     */
     record HexSegment(String id, String label, String rootFqn, boolean explicit) {
         public HexSegment {
             if (id == null || id.isBlank()) {
@@ -59,6 +65,7 @@ public interface HexagonalArchitecture extends Architecture {
         }
     }
 
+    /** A class declared as a port, in the sector it belongs to. */
     record HexPort(String id,
                    String classFqn,
                    String segmentId,

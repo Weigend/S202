@@ -24,6 +24,10 @@ import io.softwareecg.wfx.lookup.api.Lookup;
 import java.nio.file.Path;
 import java.util.List;
 
+/**
+ * Developer tool: reads the test-example JAR, computes the domain model and
+ * prints the architecture level of every package. Not part of the application.
+ */
 public class TestLevelCalculatorDebug {
     public static void main(String[] args) throws Exception {
         String jarPath = "../test-example/target/test-example-1.9.0.jar";

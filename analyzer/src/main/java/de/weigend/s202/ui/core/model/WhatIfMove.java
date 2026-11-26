@@ -27,7 +27,9 @@ public sealed interface WhatIfMove permits WhatIfMove.InRow, WhatIfMove.AsNewRow
     /** Dropped into the API area of a component. */
     boolean api();
 
+    /** Moved into an existing row of its container, at the given column. */
     record InRow(String fqn, String containerFqn, int rowIndex, int colIndex, boolean api) implements WhatIfMove {}
 
+    /** Moved into a new row of its own, inserted at the given row index. */
     record AsNewRow(String fqn, String containerFqn, int rowIndex, boolean api) implements WhatIfMove {}
 }
