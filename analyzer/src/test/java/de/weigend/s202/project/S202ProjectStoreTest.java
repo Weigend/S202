@@ -154,7 +154,8 @@ class S202ProjectStoreTest {
                 null,
                 null,
                 null,
-                current.savedAt());
+                current.savedAt(),
+                null);
 
         Path file = tempDir.resolve("legacy.s202.json");
         store.save(file, legacy);
@@ -219,7 +220,8 @@ class S202ProjectStoreTest {
                 current.architectureAnnotations(),
                 List.of(),
                 List.of(view),
-                current.savedAt());
+                current.savedAt(),
+                null);
 
         Path file = tempDir.resolve("version-four.s202.json");
         store.save(file, versionFour);
@@ -233,6 +235,44 @@ class S202ProjectStoreTest {
         S202Project.ViewDto loaded = store.load(file).views().get(0);
         assertFalse(loaded.limitBoxWidth());
         assertTrue(loaded.showDependencies(), "the rest of the tab is read as before");
+    }
+
+    @Test
+    void complexityLinesAndTheMetricMappingAreSaved() throws Exception {
+        DependencyModel rawModel = rawModel();
+        DependencyModel.MethodInfo run = rawModel.getClass("com.example.A").methods.get("run()V");
+        run.complexity = 7;
+        run.lines = 12;
+        S202Project.MetricMappingDto mapping = new S202Project.MetricMappingDto(
+                "COMPLEXITY", "LOG", 40, "FAN_IN", null, 40.0, "VIRIDIS", true);
+        S202ProjectMapper mapper = new S202ProjectMapper();
+        S202ProjectStore store = new S202ProjectStore();
+        Path file = tempDir.resolve("metrics.s202.json");
+        store.save(file, mapper.toProject("test", new S202Project.Source("JAR", List.of("/tmp/example.jar"), null),
+                rawModel, null, Set.of(), List.of(), mapping));
+
+        S202Project loaded = store.load(file);
+        DependencyModel.MethodInfo loadedRun =
+                mapper.toDependencyModel(loaded.dependencyModel()).getClass("com.example.A").methods.get("run()V");
+
+        assertEquals(7, loadedRun.complexity);
+        assertEquals(12, loadedRun.lines);
+        assertEquals(mapping, loaded.metricMapping());
+    }
+
+    @Test
+    void aMethodNotMeasuredStaysSoAndNeedsNoRoomInTheFile() throws Exception {
+        S202ProjectMapper mapper = new S202ProjectMapper();
+        S202ProjectStore store = new S202ProjectStore();
+        Path file = tempDir.resolve("unmeasured.s202.json");
+        store.save(file, mapper.toProject("test", new S202Project.Source("JAR", List.of("/tmp/example.jar"), null),
+                rawModel(), null, Set.of(), List.of()));
+
+        assertFalse(java.nio.file.Files.readString(file).contains("complexity"));
+        DependencyModel.MethodInfo run = mapper.toDependencyModel(store.load(file).dependencyModel())
+                .getClass("com.example.A").methods.get("run()V");
+        assertEquals(DependencyModel.MethodInfo.NOT_MEASURED, run.complexity);
+        assertEquals(null, store.load(file).metricMapping());
     }
 
     private static DependencyModel rawModel() {

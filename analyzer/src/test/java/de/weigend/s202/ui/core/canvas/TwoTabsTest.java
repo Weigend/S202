@@ -271,7 +271,7 @@ class TwoTabsTest {
     }
 
     private void showAnalysis(ArchitectureCanvas canvas) throws Exception {
-        DependencyModel raw = new InputAnalyzer().analyze("../test-example/target/test-example-1.8.0.jar");
+        DependencyModel raw = new InputAnalyzer().analyze("../test-example/target/test-example-1.9.0.jar");
         DomainModel domain = Lookup.lookup(DomainComputer.class).compute(raw);
         ArchitectureNode root = new ArchitectureNodeBuilder().build(domain);
         new HorizontalRowLayoutOptimizer().assignHorizontalLayoutOrders(root);

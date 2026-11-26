@@ -19,7 +19,7 @@ The pictures show the project [test-hexagon](../../test-hexagon), a bookshop. It
 root of the repository:
 
 ```bash
-mvn -pl test-hexagon -am package   # produces test-hexagon/target/test-hexagon-1.8.0.jar
+mvn -pl test-hexagon -am package   # produces test-hexagon/target/test-hexagon-1.9.0.jar
 ```
 
 ## Reading the picture

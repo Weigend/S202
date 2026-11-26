@@ -15,10 +15,11 @@
  */
 package de.weigend.s202.ui.views.threed;
 
-import de.weigend.s202.ui.views.threed.ArchitectureView3D;
-import de.weigend.s202.domain.architecture.Architecture;
 import de.weigend.s202.ui.core.canvas.ArchitectureCanvas;
+import de.weigend.s202.ui.core.graph.GraphSelection;
 import de.weigend.s202.ui.core.model.ArchitectureNode;
+import de.weigend.s202.ui.core.platform.AnalysisDocument;
+import de.weigend.s202.ui.core.platform.ArchitectureViewManager;
 import de.weigend.s202.ui.core.platform.ArchitectureWfxView;
 import de.weigend.s202.ui.core.events.NodeSelectionEvent;
 import io.softwareecg.wfx.lookup.api.Lookup;
@@ -26,26 +27,22 @@ import io.softwareecg.wfx.lookup.api.LookupContext;
 import io.softwareecg.wfx.platform.api.EventBus;
 import io.softwareecg.wfx.platform.api.Module;
 import io.softwareecg.wfx.platform.api.exceptions.PlatformException;
-import io.softwareecg.wfx.windowmanager.api.ApplicationWindow;
 import io.softwareecg.wfx.windowmanager.api.WindowManager;
 import jakarta.annotation.Priority;
 import jakarta.inject.Singleton;
 import javafx.application.Platform;
 import javafx.beans.value.ChangeListener;
-import javafx.geometry.Bounds;
 import javafx.scene.Parent;
-import javafx.stage.Stage;
 
 import java.util.EventObject;
-import java.util.Map;
 
 /**
  * WFX module that registers and drives {@link ArchitectureView3D}.
  *
- * <p>Tracks the focused {@link ArchitectureWfxView}. When the architecture
- * root changes, waits two JavaFX pulses (so the 2D layout is settled) and
- * then reads element footprints directly from the 2D view via
- * {@link ArchitectureCanvas#getElementFootprintBoundsInLayout()}.
+ * <p>Tracks the focused {@link ArchitectureWfxView}. Whenever its picture
+ * changes, waits two JavaFX pulses, so that the 2D layout is settled, and
+ * then reads the picture off the 2D view, {@link TopViewModel#read}. A view
+ * no one looks at waits until it is shown.
  */
 @Singleton
 @Priority(35)
@@ -56,10 +53,19 @@ public class Architecture3DModule implements Module {
     private ChangeListener<ArchitectureNode> rootListener;
     private ChangeListener<Boolean> showDependenciesListener;
     private ChangeListener<Boolean> showSccListener;
+    private ChangeListener<Boolean> showPackageSccListener;
     private ChangeListener<Boolean> showViolationsListener;
     private ChangeListener<Number> redrawTickListener;
+    /** How often in a row the picture was read without boxes, and how often that is tried. */
+    private int emptyReads;
+    private static final int MAX_EMPTY_READS = 5;
+    /** Whether the view missed a redraw while it was not shown. */
+    private boolean stale;
+    /** Whether a rebuild is already on its way. */
+    private boolean refreshQueued;
+    /** Whether the coming rebuild resets the camera. */
+    private boolean resetPending;
     private ChangeListener<Parent> activationListener;
-    private Stage stage;
     private LookupContext.Subscription activeViewSubscription;
 
     @Override
@@ -68,16 +74,32 @@ public class Architecture3DModule implements Module {
     @Override
     public void preload() throws PlatformException {
         view = new ArchitectureView3D();
-        view.setOnElementSelected(fqn -> eventBus().publish(new NodeSelectionEvent(fqn, view)));
+        view.setOnElementSelected(fqn -> {
+            if (fqn == null) {
+                // The arrows of the 2.5D view are those of 2D: they go when 2D no longer selects anything.
+                GraphSelection.clear();
+            } else {
+                eventBus().publish(new NodeSelectionEvent(fqn, view));
+            }
+        });
+        view.setOnPictureChanged(this::refreshFlat);
+        // The mapping belongs to the analysis and is saved with it.
+        view.setOnMappingChanged(mapping -> {
+            AnalysisDocument document = boundView == null ? null
+                    : Lookup.lookup(ArchitectureViewManager.class).documentOf(boundView);
+            if (document != null) {
+                document.setMetricMapping(mapping);
+            }
+        });
     }
 
     @Override
     @SuppressWarnings("unchecked")
     public void start() {
-        stage = Lookup.lookup(ApplicationWindow.class).getStage();
         WindowManager wm = Lookup.lookup(WindowManager.class);
         wm.register(view, false); // hidden at startup; visible via View menu on demand
         installActivationOnShow(wm);
+        installCatchUp();
         LookupContext active = wm.getActiveLookup();
         activeViewSubscription = active.observe(ArchitectureCanvas.class,
                 canvases -> rebindTo(canvases.isEmpty() ? null : canvases.get(0)));
@@ -112,33 +134,29 @@ public class Architecture3DModule implements Module {
 
         unbind();
         boundView = newBound;
-        syncOverlaySettings();
         scheduleRefresh(true);
 
         if (newBound != null) {
             rootListener = (obs, was, isNow) -> scheduleRefresh(true);
             newBound.architectureRootProperty().addListener(rootListener);
-            showDependenciesListener = (obs, was, isNow) -> view.setShowDependencies(isNow);
-            showSccListener = (obs, was, isNow) -> view.setShowScc(isNow);
-            showViolationsListener = (obs, was, isNow) -> view.setShowViolations(isNow);
+            // Switching arrows off only hides them in 2D, without a redraw: the 2.5D view reads them anew.
+            showDependenciesListener = (obs, was, isNow) -> refreshFlat();
+            showSccListener = (obs, was, isNow) -> refreshFlat();
+            showViolationsListener = (obs, was, isNow) -> refreshFlat();
             newBound.showDependenciesProperty().addListener(showDependenciesListener);
             newBound.showSccProperty().addListener(showSccListener);
+            showPackageSccListener = (obs, was, isNow) -> refreshFlat();
+            newBound.showPackageSccProperty().addListener(showPackageSccListener);
             newBound.showWhatIfViolationsProperty().addListener(showViolationsListener);
             redrawTickListener = (obs, was, isNow) -> scheduleRefresh(false);
             newBound.redrawTickProperty().addListener(redrawTickListener);
         }
     }
 
-    private void syncOverlaySettings() {
-        if (boundView == null) {
-            view.setOverlayVisibility(false, false, false);
-            return;
-        }
-        view.setOverlayVisibility(
-                boundView.isShowDependencies(),
-                boundView.isShowScc(),
-                boundView.isShowWhatIfViolations());
+    private void refreshFlat() {
+        scheduleRefresh(false);
     }
+
 
     /**
      * The View menu calls {@link WindowManager#showView(io.softwareecg.wfx.windowmanager.api.View)}.
@@ -169,22 +187,90 @@ public class Architecture3DModule implements Module {
      *                    camera position should be preserved.
      */
     private void scheduleRefresh(boolean resetCamera) {
+        resetPending |= resetCamera;
         if (boundView == null) {
-            view.setData(null, null, null, stage);
+            view.setPicture(null, true);
             return;
         }
+        // The 2D picture redraws often (selection, hover, layout); a 3D view no
+        // one looks at waits until it is shown, and several redraws make one rebuild.
+        if (!isShowing()) {
+            stale = true;
+            return;
+        }
+        if (refreshQueued) {
+            return;
+        }
+        refreshQueued = true;
         // Capture reference; boundView may change before the lambdas execute
         ArchitectureCanvas captured = boundView;
         Platform.runLater(() -> Platform.runLater(() -> {
+            refreshQueued = false;
             if (captured != boundView) return; // stale — a newer rebind won
-            Map<String, Bounds> bounds = captured.getElementFootprintBoundsInLayout();
-            ArchitectureNode root = captured.getArchitectureRoot();
-            Architecture architecture = captured.getWhatIfArchitecture() != null
-                    ? captured.getWhatIfArchitecture()
-                    : captured.getArchitecture();
-            Map<String, String> visibleParentByFqn = captured.getVisibleElementParentFqns();
-            view.setData(bounds, root, architecture, visibleParentByFqn, stage, resetCamera);
+            boolean reset = resetPending;
+            resetPending = false;
+            stale = false;
+            AnalysisDocument document = Lookup.lookup(ArchitectureViewManager.class).documentOf(captured);
+            view.setMetrics(captured.getRawDependencyModel(), captured.getArchitectureRoot(),
+                    document == null ? null : document.metricMapping());
+            TopViewModel picture = TopViewModel.read(captured);
+            view.setPicture(picture, reset);
+            // A tab just opened may not be laid out yet: read it again a little later.
+            if (picture.roots().isEmpty() && captured.getArchitectureRoot() != null && emptyReads++ < MAX_EMPTY_READS) {
+                Platform.runLater(() -> scheduleRefresh(false));
+            } else if (!picture.roots().isEmpty()) {
+                emptyReads = 0;
+            }
         }));
+    }
+
+    /** Whether the 3D view is in front: in a scene, and neither it nor anything around it hidden. */
+    private boolean isShowing() {
+        javafx.scene.Node node = view.getRootNode();
+        if (node.getScene() == null || node.getScene().getWindow() == null
+                || !node.getScene().getWindow().isShowing()) {
+            return false;
+        }
+        for (; node != null; node = node.getParent()) {
+            if (!node.isVisible()) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    /**
+     * Catches up when the view comes to the front. Choosing a tab makes its
+     * content visible, so the view watches the visibility of everything
+     * around it, and the chain anew whenever it is put somewhere else.
+     */
+    private void installCatchUp() {
+        javafx.beans.InvalidationListener check = obs -> {
+            if (stale && !refreshQueued && isShowing()) {
+                scheduleRefresh(false);
+            }
+        };
+        java.util.List<javafx.beans.Observable> watched = new java.util.ArrayList<>();
+        Runnable[] watch = new Runnable[1];
+        javafx.beans.InvalidationListener moved = obs -> {
+            watch[0].run();
+            check.invalidated(obs);
+        };
+        watch[0] = () -> {
+            watched.forEach(observable -> {
+                observable.removeListener(check);
+                observable.removeListener(moved);
+            });
+            watched.clear();
+            for (javafx.scene.Node node = view.getRootNode(); node != null; node = node.getParent()) {
+                node.visibleProperty().addListener(check);
+                node.parentProperty().addListener(moved);
+                watched.add(node.visibleProperty());
+                watched.add(node.parentProperty());
+            }
+        };
+        view.getRootNode().sceneProperty().addListener(moved);
+        watch[0].run();
     }
 
     private void unbind() {
@@ -197,6 +283,9 @@ public class Architecture3DModule implements Module {
         if (boundView != null && showSccListener != null) {
             boundView.showSccProperty().removeListener(showSccListener);
         }
+        if (boundView != null && showPackageSccListener != null) {
+            boundView.showPackageSccProperty().removeListener(showPackageSccListener);
+        }
         if (boundView != null && showViolationsListener != null) {
             boundView.showWhatIfViolationsProperty().removeListener(showViolationsListener);
         }
@@ -207,6 +296,7 @@ public class Architecture3DModule implements Module {
         rootListener = null;
         showDependenciesListener = null;
         showSccListener = null;
+        showPackageSccListener = null;
         showViolationsListener = null;
         redrawTickListener = null;
     }

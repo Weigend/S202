@@ -9,7 +9,7 @@ cd test-example
 mvn clean package
 ```
 
-The JAR is created at: `target/test-example-1.8.0.jar`
+The JAR is created at: `target/test-example-1.9.0.jar`
 
 ## Structure
 
@@ -29,5 +29,5 @@ com.example
 ```bash
 cd ..
 mvn javafx:run
-# File → Open JAR... → test-example/target/test-example-1.8.0.jar
+# File → Open JAR... → test-example/target/test-example-1.9.0.jar
 ```

@@ -604,6 +604,9 @@ public class InputAnalyzer implements LanguageAnalyzer {
 
             currentClassInfo.addMethod(member, descriptor);
             DependencyModel.MethodInfo methodInfo = currentClassInfo.getMethod(member, descriptor);
+            // Measured from here on: a method without code keeps 0.
+            methodInfo.complexity = 0;
+            methodInfo.lines = 0;
             return new MethodCallExtractor(currentClassInfo, methodInfo, typeUses);
         }
 
@@ -636,6 +639,8 @@ public class InputAnalyzer implements LanguageAnalyzer {
         private final DependencyModel.ClassInfo classInfo;
         private final DependencyModel.MethodInfo methodInfo;
         private final TypeUseRecorder typeUses;
+        /** The source lines the code of the method comes from. */
+        private final java.util.BitSet lines = new java.util.BitSet();
 
         public MethodCallExtractor(DependencyModel.ClassInfo classInfo,
                                    DependencyModel.MethodInfo methodInfo,
@@ -670,8 +675,64 @@ public class InputAnalyzer implements LanguageAnalyzer {
         public void visitTryCatchBlock(Label start, Label end, Label handler, String type) {
             if (type != null) { // finally catches everything
                 typeUses.typeInstruction(methodInfo, TypeUse.Kind.CATCH, type);
+                // A catch is a path of its own; a finally is not.
+                methodInfo.complexity++;
             }
             super.visitTryCatchBlock(start, end, handler, type);
+        }
+
+        // Cyclomatic complexity from the bytecode: one path through the method, and one
+        // more for every conditional jump, every case of a switch and every catch. The
+        // compiler adds branches the source does not show, e.g. for a switch on strings,
+        // so the number is near the one of the source, not the same.
+
+        @Override
+        public void visitCode() {
+            methodInfo.complexity = 1;
+            super.visitCode();
+        }
+
+        @Override
+        public void visitJumpInsn(int opcode, Label label) {
+            if (opcode != Opcodes.GOTO && opcode != Opcodes.JSR) {
+                methodInfo.complexity++;
+            }
+            super.visitJumpInsn(opcode, label);
+        }
+
+        @Override
+        public void visitTableSwitchInsn(int min, int max, Label dflt, Label... labels) {
+            methodInfo.complexity += cases(dflt, labels);
+            super.visitTableSwitchInsn(min, max, dflt, labels);
+        }
+
+        @Override
+        public void visitLookupSwitchInsn(Label dflt, int[] keys, Label[] labels) {
+            methodInfo.complexity += cases(dflt, labels);
+            super.visitLookupSwitchInsn(dflt, keys, labels);
+        }
+
+        /** The cases of a switch that do not go where the default goes; cases sharing a target count once. */
+        private static int cases(Label dflt, Label[] labels) {
+            java.util.Set<Label> targets = java.util.Collections.newSetFromMap(new java.util.IdentityHashMap<>());
+            for (Label label : labels) {
+                if (label != dflt) {
+                    targets.add(label);
+                }
+            }
+            return targets.size();
+        }
+
+        @Override
+        public void visitLineNumber(int line, Label start) {
+            lines.set(line);
+            super.visitLineNumber(line, start);
+        }
+
+        @Override
+        public void visitEnd() {
+            methodInfo.lines = lines.cardinality();
+            super.visitEnd();
         }
 
         @Override

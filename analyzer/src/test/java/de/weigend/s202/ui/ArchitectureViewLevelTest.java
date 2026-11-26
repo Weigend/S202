@@ -37,7 +37,7 @@ public class ArchitectureViewLevelTest {
         
         // Load test JAR
         String testJarPath = System.getProperty("user.dir")
-                + "/../test-example/target/test-example-1.8.0.jar";
+                + "/../test-example/target/test-example-1.9.0.jar";
         
         // Step 1: Analyze
         InputAnalyzer inputAnalyzer = new InputAnalyzer();

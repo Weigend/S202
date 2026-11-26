@@ -69,6 +69,8 @@ final class RenamedModel {
         info.typeUses.forEach((target, uses) -> copy.typeUses.put(rename(target), new HashSet<TypeUse>(uses)));
         info.methods.forEach((key, method) -> {
             DependencyModel.MethodInfo methodCopy = new DependencyModel.MethodInfo(method.name, method.descriptor);
+            methodCopy.complexity = method.complexity;
+            methodCopy.lines = method.lines;
             method.methodCalls.forEach((call, count) -> methodCopy.methodCalls.put(call(call), count));
             method.methodCallDescriptors.forEach((call, descriptors) ->
                     methodCopy.methodCallDescriptors.put(call(call), new HashSet<>(descriptors)));

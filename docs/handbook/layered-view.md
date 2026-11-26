@@ -30,7 +30,8 @@ drawn.
 | Ctrl and mouse wheel, **−** and **+** in the toolbar | Zoom, from 2 % to 300 %. |
 | **1:1** | Zoom 100 %. |
 | **Fit** | Zooms so that the whole picture fits into the window, as large as possible. |
-| Dragging the background | Moves the picture. |
+| Dragging the background, or anywhere with the right button | Moves the picture. A right-click without moving opens the menu. |
+| Mouse wheel, with Shift sideways | Moves the picture up and down, or sideways. |
 | Dragging a class or package | [Moves the box](#moving-boxes), as a plan. |
 | Mouse over a class or a closed package | Its [arrows](#dependencies) stand out. |
 | Click on an arrow, a violation or the line of a cycle | Selects it and fills [Dependency Details](window.md#dependency-details). |

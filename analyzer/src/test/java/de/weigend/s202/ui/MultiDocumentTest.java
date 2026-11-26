@@ -116,8 +116,8 @@ import static org.junit.jupiter.api.Assertions.fail;
 class MultiDocumentTest {
 
     private static final Duration FX_TIMEOUT = Duration.ofSeconds(20);
-    private static final String EXAMPLE_JAR = "../test-example/target/test-example-1.8.0.jar";
-    private static final String HEXAGON_JAR = "../test-hexagon/target/test-hexagon-1.8.0.jar";
+    private static final String EXAMPLE_JAR = "../test-example/target/test-example-1.9.0.jar";
+    private static final String HEXAGON_JAR = "../test-hexagon/target/test-hexagon-1.9.0.jar";
 
     private static boolean javaFxStarted;
     private static List<Module> panels;

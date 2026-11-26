@@ -34,12 +34,23 @@ public interface ProjectMapper {
      *                    serialisable form — what a tab is, is the business
      *                    of the UI, not of this mapper
      */
+    default S202Project toProject(String appVersion,
+                                  S202Project.Source source,
+                                  DependencyModel rawModel,
+                                  ArchitectureAnnotations annotations,
+                                  Set<DependencyEdge> previewCuts,
+                                  List<S202Project.ViewDto> views) {
+        return toProject(appVersion, source, rawModel, annotations, previewCuts, views, null);
+    }
+
+    /** @param metricMapping how the 3D view shows metrics; {@code null} for the default */
     S202Project toProject(String appVersion,
                           S202Project.Source source,
                           DependencyModel rawModel,
                           ArchitectureAnnotations annotations,
                           Set<DependencyEdge> previewCuts,
-                          List<S202Project.ViewDto> views);
+                          List<S202Project.ViewDto> views,
+                          S202Project.MetricMappingDto metricMapping);
 
     DependencyModel toDependencyModel(S202Project.DependencyModelDto dto);
 

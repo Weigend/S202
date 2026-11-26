@@ -72,7 +72,8 @@ On macOS the Cmd key takes the place of Ctrl.
 | --- | --- | --- |
 | any view | Click on a box | Selects it, or lifts the selection. |
 | | Ctrl and mouse wheel | Zoom. |
-| | Dragging the background | Moves the picture. |
+| | Dragging the background, or with the right button | Moves the picture; a right-click without moving opens the menu. |
+| | Mouse wheel, with Shift sideways | Moves the picture. |
 | | Click on an arrow, a violation or the line of a cycle | Selects it; see [Dependency Details](window.md#dependency-details). |
 | | Mouse over a class or closed package, with **Show Dependencies** | Its arrows stand out. |
 | matrix | Click on a cell, a name | Selects the dependency, the element. |
@@ -84,7 +85,8 @@ On macOS the Cmd key takes the place of Ctrl.
 | outline | Click on a package or class | Selects it in the view. |
 | title of a tab or panel | Dragging | Moves it to another place, or out of the window. |
 
-The keys of the 3D views are in [3D views](3d-views.md).
+The 3D Architecture tab is moved and zoomed in the same way and tilted and turned in addition; see
+[3D views](3d-views.md).
 
 ## Files
 

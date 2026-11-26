@@ -8,7 +8,7 @@
     <parent>
         <groupId>de.weigend</groupId>
         <artifactId>structure202-parent</artifactId>
-        <version>1.8.0</version>
+        <version>1.9.0</version>
         <relativePath>..</relativePath>
     </parent>
 
@@ -183,6 +183,24 @@
     </dependencies>
 
     <build>
+        <resources>
+            <!-- Keep generated artwork and source analyzers byte-for-byte intact. -->
+            <resource>
+                <directory>src/main/resources</directory>
+                <filtering>false</filtering>
+                <excludes>
+                    <exclude>splash/splash.fxml</exclude>
+                </excludes>
+            </resource>
+            <!-- The splash version follows the parent POM on every build. -->
+            <resource>
+                <directory>src/main/resources</directory>
+                <filtering>true</filtering>
+                <includes>
+                    <include>splash/splash.fxml</include>
+                </includes>
+            </resource>
+        </resources>
         <plugins>
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>

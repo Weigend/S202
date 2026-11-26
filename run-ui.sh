@@ -3,7 +3,7 @@
 # Optional: zu öffnende Dateien als Parameter — JARs, oder eine pom.xml bzw. ein
 # Gradle-Skript. Relative Pfade gelten relativ zum aktuellen Verzeichnis oder zum
 # Projekt-Root.
-# Beispiel: ./run-ui.sh test-example/target/test-example-1.8.0.jar
+# Beispiel: ./run-ui.sh test-example/target/test-example-1.9.0.jar
 # Beispiel: ./run-ui.sh /absolute/path/to/file.jar
 
 # Bestimme das absolute Root-Verzeichnis des Projekts

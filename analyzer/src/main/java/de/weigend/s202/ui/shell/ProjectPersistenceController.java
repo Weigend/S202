@@ -15,6 +15,8 @@
  */
 package de.weigend.s202.ui.shell;
 
+import de.weigend.s202.analysis.metrics.Metric;
+import de.weigend.s202.analysis.metrics.MetricMapping;
 import de.weigend.s202.domain.DependencyEdge;
 import de.weigend.s202.domain.architecture.ArchitectureAnnotations;
 import de.weigend.s202.project.ProjectMapper;
@@ -128,7 +130,8 @@ public final class ProjectPersistenceController {
                 document.rawModel(),
                 document.annotations(),
                 document.previewCuts(),
-                views);
+                views,
+                toMetricMappingDto(document.metricMapping()));
 
         try {
             projectStore().save(target, project);
@@ -192,6 +195,7 @@ public final class ProjectPersistenceController {
                 loaded.analysis().cycleBreakEdges());
         document.setAnnotations(loaded.annotations());
         document.addPreviewCuts(loaded.previewCuts());
+        document.setMetricMapping(toMetricMapping(loaded.project().metricMapping()));
 
         List<S202Project.ViewDto> views = loaded.project().views();
         if (views == null || views.isEmpty()) {
@@ -378,6 +382,36 @@ public final class ProjectPersistenceController {
     // being built and Lookup answers null.
     private static ProjectStore projectStore() {
         return Lookup.require(ProjectStore.class);
+    }
+
+    private static S202Project.MetricMappingDto toMetricMappingDto(MetricMapping mapping) {
+        if (mapping == null || mapping.equals(MetricMapping.DEFAULT)) {
+            return null;
+        }
+        return new S202Project.MetricMappingDto(mapping.height().name(), mapping.scale().name(), mapping.heightPercent(),
+                mapping.color() == null ? null : mapping.color().name(), mapping.colorMin(), mapping.colorMax(),
+                mapping.palette().name(), mapping.reversed());
+    }
+
+    /** Namen, die diese Version nicht kennt, werden zum Standard. */
+    private static MetricMapping toMetricMapping(S202Project.MetricMappingDto dto) {
+        if (dto == null) {
+            return MetricMapping.DEFAULT;
+        }
+        return new MetricMapping(named(Metric.class, dto.height()), named(MetricMapping.Scale.class, dto.scale()),
+                dto.heightPercent(), named(Metric.class, dto.color()), dto.colorMin(), dto.colorMax(),
+                named(MetricMapping.Palette.class, dto.palette()), dto.reversed());
+    }
+
+    private static <E extends Enum<E>> E named(Class<E> type, String name) {
+        if (name == null) {
+            return null;
+        }
+        try {
+            return Enum.valueOf(type, name);
+        } catch (IllegalArgumentException unknown) {
+            return null;
+        }
     }
 
     private static ProjectMapper projectMapper() {

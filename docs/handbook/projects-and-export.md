@@ -15,13 +15,15 @@ again: the file contains the dependencies.
 | the tabs: layered, component, hexagonal, scope and tangle views | 3D, City3D and Quality Report tabs |
 | of each tab: Depth, zoom, position, open packages and its own switches, whether its [matrix](matrix-view.md) is open and how, with or without libraries; the selection of the active tab | where the tab was in the window; Show Icons and Show Arch Level, which are common to all tabs |
 | API marks, roles and ports, cuts; of each tab its moves and planned packages | |
+| the complexity and lines of code of each method; what the 3D tab shows as [heights and colours](3d-views.md#metrics) | |
 
 A project keeps what was read when it was made. After a change of the code, or with a new version of
 S202 that reads more, open the code again.
 
 Files of earlier versions can be loaded, and their architecture is computed anew. They do not say
 which packages carry the annotations of S202, so components declared that way are missing. A file
-saved with this version cannot be opened with release 1.7.0 or older.
+saved with this version cannot be opened with release 1.8.0 or older. Files from before have no
+complexity and lines of code; open the code again for these.
 
 ## What is remembered
 

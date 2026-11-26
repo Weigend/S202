@@ -130,6 +130,17 @@ public class DependencyModel {
         public final String descriptor;
         public final Map<String, Integer> methodCalls = new HashMap<>();
         public final Map<String, Set<String>> methodCallDescriptors = new HashMap<>();
+        /**
+         * Cyclomatic complexity: 1 for a method with code, and one more for
+         * every branch, case and catch; 0 without code (abstract, native).
+         * {@link #NOT_MEASURED} where the reader does not measure it.
+         */
+        public int complexity = NOT_MEASURED;
+        /** Lines with code; {@link #NOT_MEASURED} where the reader does not count them. */
+        public int lines = NOT_MEASURED;
+
+        /** Complexity and lines of a method the reader did not measure. */
+        public static final int NOT_MEASURED = -1;
 
         public MethodInfo(String name, String descriptor) {
             this.name = name;

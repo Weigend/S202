@@ -45,7 +45,8 @@ public record S202Project(
         ArchitectureAnnotationsDto architectureAnnotations,
         List<CutDto> previewCuts,
         List<ViewDto> views,
-        String savedAt) {
+        String savedAt,
+        MetricMappingDto metricMapping) {
 
     public static final String FORMAT = "structure202-project";
     public static final int MIN_SUPPORTED_FORMAT_VERSION = 1;
@@ -57,9 +58,10 @@ public record S202Project(
      * added {@link ViewDto#moves()}, {@link ViewDto#plannedPackages()},
      * {@link ViewDto#hidePlan()}, {@link ViewDto#matrix()} and {@link ViewDto#matrixOpen()},
      * version 9 {@link ClassInfoDto#externalDependencies()}, {@link ClassInfoDto#origin()} and
-     * {@link ViewDto#matrixExternals()}, version 10 {@link ViewDto#physical()} and {@link ViewDto#slice()}.
+     * {@link ViewDto#matrixExternals()}, version 10 {@link ViewDto#physical()} and {@link ViewDto#slice()},
+     * version 11 {@link MethodInfoDto#complexity()}, {@link MethodInfoDto#lines()} and {@link #metricMapping()}.
      */
-    public static final int FORMAT_VERSION = 10;
+    public static final int FORMAT_VERSION = 11;
 
     public record CreatedWith(String app, String version) {}
 
@@ -105,11 +107,38 @@ public record S202Project(
             String descriptor,
             String detail) {}
 
+    /**
+     * @param complexity cyclomatic complexity, {@code null} where it was not measured:
+     *                   in files older than version 11 and for code not read from Java bytecode
+     * @param lines      lines with code, {@code null} where they were not counted
+     */
+    @JsonInclude(JsonInclude.Include.NON_NULL)
     public record MethodInfoDto(
             String name,
             String descriptor,
             Map<String, Integer> methodCalls,
-            Map<String, List<String>> methodCallDescriptors) {}
+            Map<String, List<String>> methodCallDescriptors,
+            Integer complexity,
+            Integer lines) {}
+
+    /**
+     * How the 3D view shows metrics; see {@code MetricMapping}. Names of metrics,
+     * scales and palettes this version does not know are read as the default.
+     *
+     * @param heightPercent height of the largest value in percent of the size of the picture
+     * @param color    {@code null} for the colours of 2D
+     * @param colorMin {@code null} for the smallest value shown
+     * @param colorMax {@code null} for the largest value shown
+     */
+    public record MetricMappingDto(
+            String height,
+            String scale,
+            double heightPercent,
+            String color,
+            Double colorMin,
+            Double colorMax,
+            String palette,
+            boolean reversed) {}
 
     public record PackageInfoDto(
             String fullName,

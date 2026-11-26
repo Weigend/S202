@@ -186,8 +186,6 @@ public class ArchitectureCanvas extends AbstractArchitectureCanvas {
             new ArchitectureProjectionModel(
                     this::getViewStyle, this::componentMoves, this::effectiveCuts,
                     this::replayMovesInModel, this::updateSccRendererTangles);
-    private final ElementBoundsExporter boundsExporter =
-            new ElementBoundsExporter(elementRegistry, () -> zoomableContent, this::getScene);
 
     public ArchitectureCanvas() {
         setupUI();
@@ -288,6 +286,28 @@ public class ArchitectureCanvas extends AbstractArchitectureCanvas {
         addEventHandler(BoxMenuEvent.BOX_MENU, event -> event.offer(boxMenuItems(event.fullName())));
     }
 
+    /** Moves the picture by screen pixels, as far as the scroll bars go. */
+    private void panBy(double dx, double dy) {
+        javafx.scene.Node content = scrollPane.getContent();
+        Bounds viewport = scrollPane.getViewportBounds();
+        if (content == null || viewport == null) {
+            return;
+        }
+        Bounds contentBounds = content.getBoundsInLocal();
+        double overflowX = contentBounds.getWidth() - viewport.getWidth();
+        double overflowY = contentBounds.getHeight() - viewport.getHeight();
+        if (overflowX > 0) {
+            double range = scrollPane.getHmax() - scrollPane.getHmin();
+            scrollPane.setHvalue(Math.clamp(scrollPane.getHvalue() - dx / overflowX * range,
+                    scrollPane.getHmin(), scrollPane.getHmax()));
+        }
+        if (overflowY > 0) {
+            double range = scrollPane.getVmax() - scrollPane.getVmin();
+            scrollPane.setVvalue(Math.clamp(scrollPane.getVvalue() - dy / overflowY * range,
+                    scrollPane.getVmin(), scrollPane.getVmax()));
+        }
+    }
+
     private void setupUI() {
         // Center: StackPane containing ScrollPane and Pane overlay for dependency arrows
         scrollPane = new ScrollPane();
@@ -311,6 +331,9 @@ public class ArchitectureCanvas extends AbstractArchitectureCanvas {
                 }
             }
         });
+
+        // The right button moves the picture when dragged and opens the context menu when clicked.
+        RightButton.install(scrollPane, this::panBy);
 
         // Create panes for drawing lines (initially empty, will be populated in setArchitectureRoot)
         dependencyPane = new Pane();
@@ -1264,24 +1287,6 @@ public class ArchitectureCanvas extends AbstractArchitectureCanvas {
     /** Redraws the dependency arrows, e.g. after the tangle scope's highlight changed. */
     public void redrawDependencyArrows() {
         arrowsCoalescer.markDirty();
-    }
-
-    /* ----- Bounds-Export (3D-Ansicht, Report-Screenshots) ------------------- */
-
-    public java.util.Map<String, javafx.geometry.Bounds> getElementBoundsInScene() {
-        return boundsExporter.elementBoundsInScene();
-    }
-
-    public java.util.Map<String, javafx.geometry.Bounds> getElementFootprintBoundsInScene() {
-        return boundsExporter.elementFootprintBoundsInScene();
-    }
-
-    public java.util.Map<String, javafx.geometry.Bounds> getElementFootprintBoundsInLayout() {
-        return boundsExporter.elementFootprintBoundsInLayout();
-    }
-
-    public java.util.Map<String, String> getVisibleElementParentFqns() {
-        return boundsExporter.visibleElementParentFqns();
     }
 
     /* ----- Status sink ----------------------------------------------------- */

@@ -16,6 +16,7 @@
 package de.weigend.s202.ui.core.platform;
 
 import de.weigend.s202.analysis.invariants.LayoutInvariantReport;
+import de.weigend.s202.analysis.metrics.MetricMapping;
 import de.weigend.s202.analysis.quality.QualityMetrics;
 import de.weigend.s202.domain.DependencyEdge;
 import de.weigend.s202.domain.DomainModel;
@@ -62,6 +63,7 @@ public final class AnalysisDocument {
     private final Set<DependencyEdge> cycleBreakEdges;
 
     private ArchitectureAnnotations annotations = ArchitectureAnnotations.empty();
+    private MetricMapping metricMapping = MetricMapping.DEFAULT;
     private final Set<DependencyEdge> previewCuts = new LinkedHashSet<>();
     private DerivedAnalysis physical;
     private final java.util.Map<Integer, DerivedAnalysis> slices = new java.util.HashMap<>();
@@ -166,6 +168,15 @@ public final class AnalysisDocument {
 
     public void setAnnotations(ArchitectureAnnotations annotations) {
         this.annotations = annotations == null ? ArchitectureAnnotations.empty() : annotations;
+    }
+
+    /** Wie die 3D-Sicht Metriken zeigt; wird mit dem Projekt gespeichert. */
+    public MetricMapping metricMapping() {
+        return metricMapping;
+    }
+
+    public void setMetricMapping(MetricMapping metricMapping) {
+        this.metricMapping = metricMapping == null ? MetricMapping.DEFAULT : metricMapping;
     }
 
     /**

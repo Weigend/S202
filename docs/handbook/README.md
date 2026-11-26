@@ -23,7 +23,7 @@ list of changes that can be given to the developers. The analyzed code is never 
 
 S202 finds the dependencies; the team decides which of them are wrong. The first pages explain this
 reasoning, the others describe every view, panel, menu and dialog with pictures of the running
-application. The handbook describes release 1.8.0.
+application. The handbook describes release 1.9.0.
 
 ![The main window of S202 with an analysis](images/window-overview.png)
 

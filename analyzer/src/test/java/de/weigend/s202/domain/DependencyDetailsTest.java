@@ -176,7 +176,7 @@ class DependencyDetailsTest {
     void theCallsOfRealBytecodeAddUpToTheWeightOfTheDependency() throws Exception {
         Lookup.init();
         try {
-            DependencyModel raw = new InputAnalyzer().analyze("../test-example/target/test-example-1.8.0.jar");
+            DependencyModel raw = new InputAnalyzer().analyze("../test-example/target/test-example-1.9.0.jar");
             DomainModel domain = new LevelCalculator().calculate(raw);
             int checked = 0;
             for (DomainModel.CalculatedElementInfo source : domain.getAllClasses().values()) {

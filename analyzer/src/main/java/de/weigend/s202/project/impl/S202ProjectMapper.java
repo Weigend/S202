@@ -54,7 +54,8 @@ public final class S202ProjectMapper implements ProjectMapper {
                                  DependencyModel rawModel,
                                  ArchitectureAnnotations annotations,
                                  Set<DependencyEdge> previewCuts,
-                                 List<S202Project.ViewDto> views) {
+                                 List<S202Project.ViewDto> views,
+                                 S202Project.MetricMappingDto metricMapping) {
         return new S202Project(
                 S202Project.FORMAT,
                 S202Project.FORMAT_VERSION,
@@ -64,7 +65,8 @@ public final class S202ProjectMapper implements ProjectMapper {
                 toArchitectureAnnotationsDto(annotations),
                 toCutDtos(previewCuts),
                 views == null ? List.of() : List.copyOf(views),
-                Instant.now().toString());
+                Instant.now().toString(),
+                metricMapping);
     }
 
     public DependencyModel toDependencyModel(S202Project.DependencyModelDto dto) {
@@ -92,6 +94,13 @@ public final class S202ProjectMapper implements ProjectMapper {
                                 methodDto.name(), methodDto.descriptor());
                         if (methodDto.methodCalls() != null) {
                             method.methodCalls.putAll(methodDto.methodCalls());
+                        }
+                        // Projects saved before version 11 have neither.
+                        if (methodDto.complexity() != null) {
+                            method.complexity = methodDto.complexity();
+                        }
+                        if (methodDto.lines() != null) {
+                            method.lines = methodDto.lines();
                         }
                         if (methodDto.methodCallDescriptors() != null) {
                             for (Map.Entry<String, List<String>> call : methodDto.methodCallDescriptors().entrySet()) {
@@ -313,7 +322,9 @@ public final class S202ProjectMapper implements ProjectMapper {
                     info.name,
                     info.descriptor,
                     new TreeMap<>(info.methodCalls),
-                    toMethodCallDescriptorsDto(info.methodCallDescriptors)));
+                    toMethodCallDescriptorsDto(info.methodCallDescriptors),
+                    info.complexity == DependencyModel.MethodInfo.NOT_MEASURED ? null : info.complexity,
+                    info.lines == DependencyModel.MethodInfo.NOT_MEASURED ? null : info.lines));
         }
         return result;
     }
