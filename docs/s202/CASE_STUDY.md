@@ -322,4 +322,4 @@ and visible to every developer who opens `package-info.java`.
 ---
 
 **→ [Back to README](../../README.md)**
-**→ [Full technical notes](../exploration/S202_COMPONENT_DESIGN.md)**
+**→ [Full technical notes](COMPONENT_DESIGN.md)**

@@ -48,7 +48,7 @@ import static org.junit.jupiter.api.Assertions.fail;
  * Back-Edges in die Codebase rutschen.
  *
  * <p>Die Budgets starten auf dem Ist-Stand des Refactoring-Konzepts
- * ({@code docs/REFACTORING_KONZEPT_CODEBASE.md}) und werden mit jedem
+ * und werden mit jedem
  * Zyklen-Fix abgesenkt, bis sie auf 0 stehen. Ein Budget darf nie wieder
  * erhöht werden — wer hier anschlägt, hat einen neuen Zyklus eingebaut.</p>
  */
@@ -120,7 +120,7 @@ public class SelfArchitectureTest {
     }
 
     /**
-     * Komponenten-Regeln aus docs/UI_KOMPONENTEN_KONZEPT.md §4: Die
+     * Komponenten-Regeln aus dem UI-Komponenten-Konzept, §4: Die
      * UI-Fachkomponenten unter {@code ui.views.*} sind geschlossen —
      * sie kennen einander nicht, kennen die Shell nicht, und der Kern
      * ({@code ui.core.*}) kennt niemanden über sich.

@@ -25,11 +25,11 @@ realen Codebasen leisten kann.
 
 ## 1. `reader` als Komponente mit versteckter Implementierung
 
-![Ist-Stand: alle Implementierungsklassen des reader-Pakets sind direkt sichtbar](component-images/01-1-reader-package.png)
+![Ist-Stand: alle Implementierungsklassen des reader-Pakets sind direkt sichtbar](images/01-1-reader-package.png)
 
-![reader als Komponente mit sichtbarer API-Grenze](component-images/01-2-reader-as-component.png)
+![reader als Komponente mit sichtbarer API-Grenze](images/01-2-reader-as-component.png)
 
-![Verletzungen der Komponentengrenze: externe Zugriffe auf reader-Implementierungsklassen](component-images/01-3-reader-as-component-violations.png)
+![Verletzungen der Komponentengrenze: externe Zugriffe auf reader-Implementierungsklassen](images/01-3-reader-as-component-violations.png)
 
 ### Problem
 
@@ -100,14 +100,14 @@ optional einen passenden `FileLoader` dazuregistrieren.
 
 ### Ergebnisnachweis
 
-![Schritt 1: Interfaces und API-Grenze eingeführt](component-images/01-4-commit-nach-einfuehrung-interfaces.png)
+![Schritt 1: Interfaces und API-Grenze eingeführt](images/01-4-commit-nach-einfuehrung-interfaces.png)
 
 `LanguageAnalyzer` und `AnalyzerRegistry` bilden die API. `AnalyzerRegistry`
 kennt jedoch noch die konkreten Analyzer — die gestrichelten Pfeile zeigen
 Abhängigkeiten aus der Impl-Ebene in die API, was eine zyklische Kopplung
 zwischen API und Impl bedeutet.
 
-![Schritt 2: AnalyzerRegistry durch Avaje-Lookup ersetzt, keine Cycles](component-images/01-5-1c-commit-no-violations.png)
+![Schritt 2: AnalyzerRegistry durch Avaje-Lookup ersetzt, keine Cycles](images/01-5-1c-commit-no-violations.png)
 
 `AnalyzerRegistry` ist verschwunden. Die konkrete Analyzer-Registrierung
 übernimmt Avaje Inject per Service-Lookup — die API kennt die Impl nicht
@@ -118,7 +118,7 @@ kein Pfeil geht in Gegenrichtung.
 
 ## 2. `SCCVisualizationHelper` — Altlast, kann gelöscht werden
 
-![S202 zeigt: SCCVisualizationHelper hat keine eingehenden Abhängigkeiten — toter Code](component-images/02-scc-visualizationhelper-no-incoming-dep.png)
+![S202 zeigt: SCCVisualizationHelper hat keine eingehenden Abhängigkeiten — toter Code](images/02-scc-visualizationhelper-no-incoming-dep.png)
 
 `de.weigend.s202.graph.SCCVisualizationHelper` hat keinen einzigen Aufrufer
 außerhalb seiner eigenen Klassendefinition. Die Klasse ist toter Code.
@@ -138,13 +138,13 @@ im Namen gehört nicht ins `graph`-Paket (Domain-Graph-Infrastruktur).
 
 ### Ergebnisnachweis
 
-![Nach Löschen von SCCVisualizationHelper: graph-Paket ohne toten Code](component-images/02-commit.png)
+![Nach Löschen von SCCVisualizationHelper: graph-Paket ohne toten Code](images/02-commit.png)
 
 ---
 
 ## 3. `SCCDAGBuilder` — Altlast, kann gelöscht werden
 
-![SCCDAGBuilder ohne Aufrufer im Produktionscode — toter Code](component-images/03-1-sccdagbuilder-no-incoming-dep.png)
+![SCCDAGBuilder ohne Aufrufer im Produktionscode — toter Code](images/03-1-sccdagbuilder-no-incoming-dep.png)
 
 `de.weigend.s202.graph.SCCDAGBuilder` wird im Produktionscode nirgendwo
 aufgerufen. Einziger Aufrufer ist `SCCDAGBuilderTest`, der die Klasse
@@ -159,13 +159,13 @@ beides nicht und würde allein keine korrekten Architekturlevels liefern.
 
 ### Ergebnisnachweis
 
-![Nach Löschen von SCCDAGBuilder: graph-Paket nur noch mit TarjanSCCFinder, EdgeClassification und StronglyConnectedComponent](component-images/03-commit.png)
+![Nach Löschen von SCCDAGBuilder: graph-Paket nur noch mit TarjanSCCFinder, EdgeClassification und StronglyConnectedComponent](images/03-commit.png)
 
 ---
 
 ## 4. `EdgeClassification` — verschieben, nicht löschen
 
-![EdgeClassification im graph-Paket, einziger Aufrufer LayoutInvariantChecker sitzt in analysis.invariants](component-images/04-1-edge-classification-wrong-package.png)
+![EdgeClassification im graph-Paket, einziger Aufrufer LayoutInvariantChecker sitzt in analysis.invariants](images/04-1-edge-classification-wrong-package.png)
 
 `de.weigend.s202.graph.EdgeClassification` hat genau einen Aufrufer im
 Produktionscode: `LayoutInvariantChecker`. Kein anderer Code braucht sie.
@@ -180,13 +180,13 @@ der Checker zu groß wird). Aus dem `graph`-Paket entfernen.
 
 ### Ergebnisnachweis
 
-![Nach Verschieben von EdgeClassification: graph-Paket enthält nur noch TarjanSCCFinder und StronglyConnectedComponent](component-images/04-commit.png)
+![Nach Verschieben von EdgeClassification: graph-Paket enthält nur noch TarjanSCCFinder und StronglyConnectedComponent](images/04-commit.png)
 
 ---
 
 ## 5. `graph`-Paket auflösen — Inhalt in `domain` überführen
 
-![graph-Inhalt als Unterpaket in der domain-Komponente](component-images/05-graph-in-domain.png)
+![graph-Inhalt als Unterpaket in der domain-Komponente](images/05-graph-in-domain.png)
 
 Nach den Löschungen aus Punkt 2–4 verbleiben im `graph`-Paket nur noch
 zwei Klassen: `TarjanSCCFinder` und `StronglyConnectedComponent`.
@@ -229,13 +229,13 @@ public interface SCCFinder {
 
 ### Ergebnisnachweis
 
-![Nach Auflösung des graph-Pakets: SCCFinder und StronglyConnectedComponent in der domain-API, TarjanSCCFinder in domain.impl](component-images/05-commit-nach-aufloesung-graph-pkg-commit.png)
+![Nach Auflösung des graph-Pakets: SCCFinder und StronglyConnectedComponent in der domain-API, TarjanSCCFinder in domain.impl](images/05-commit-nach-aufloesung-graph-pkg-commit.png)
 
 ---
 
 ## 6. `domain` als Komponente — API-Schnitt
 
-![Verletzungen der domain-Komponentengrenze: externe Zugriffe auf Impl-Klassen](component-images/06-domain-as-component-violations.png)
+![Verletzungen der domain-Komponentengrenze: externe Zugriffe auf Impl-Klassen](images/06-domain-as-component-violations.png)
 
 S202 hat die Komponentengrenze automatisch geschnitten. Die Darstellung
 zeigt, dass nahezu alle Klassen von der UI-Seite direkt verwendet werden.
@@ -312,7 +312,7 @@ ComponentApiClassifier                 ← intern in Buildern
 
 ### Ergebnisnachweis
 
-![Nach Einführung der domain-Komponentengrenze: saubere API mit 19 Klassen, alle Builder und Calculator in domain.impl versteckt](component-images/06-nach-commit.png)
+![Nach Einführung der domain-Komponentengrenze: saubere API mit 19 Klassen, alle Builder und Calculator in domain.impl versteckt](images/06-nach-commit.png)
 
 Diese Darstellung ist das Gegenstück zur Violations-Übersicht am Anfang von
 Abschnitt 6 — nahezu alle Violations sind verschwunden. Die einzige
@@ -325,7 +325,7 @@ eine Impl-Klasse. Das wird in einem Folgeschritt beseitigt.
 
 ## 7. `sealed Architecture` ablösen — offene Interface-Hierarchie
 
-![IST-Stand: domain-Komponente mit direkten Zugriffen auf Impl-Klassen und Violations zur Architecture-Hierarchie](component-images/07-vor-refactoring.png)
+![IST-Stand: domain-Komponente mit direkten Zugriffen auf Impl-Klassen und Violations zur Architecture-Hierarchie](images/07-vor-refactoring.png)
 
 ### Problem
 
@@ -388,7 +388,7 @@ sprechendere Namen wie `LayeredView`.
 
 ### Ergebnisnachweis
 
-![Nach Einführung der typisierten Sub-Interfaces: 18 API-Klassen, konkrete Impl-Klassen in domain.impl](component-images/07-after-architecture-interfaces.png)
+![Nach Einführung der typisierten Sub-Interfaces: 18 API-Klassen, konkrete Impl-Klassen in domain.impl](images/07-after-architecture-interfaces.png)
 
 Die konkreten Architekturklassen sind in `domain.impl` versteckt, die
 Interfaces bilden die saubere API. Es sind jedoch noch Paketzyklen
@@ -397,7 +397,7 @@ eine `TarjanSCCFinder`-Instanz und zog damit die API-Ebene in eine
 Abhängigkeit auf die Impl-Ebene. Das wurde im nächsten Schritt per
 Lookup-Pattern aufgelöst.
 
-![Nach Entkopplung via Lookup: alle Paketzyklen verschwunden, domain-Komponente ohne Violations](component-images/07-after-tarjan-fix.png)
+![Nach Entkopplung via Lookup: alle Paketzyklen verschwunden, domain-Komponente ohne Violations](images/07-after-tarjan-fix.png)
 
 ---
 
@@ -405,7 +405,7 @@ Lookup-Pattern aufgelöst.
 
 ### Ist-Stand
 
-![project-Paket: alle drei Klassen direkt sichtbar, keine API-Grenze](component-images/08-project-as-component.png)
+![project-Paket: alle drei Klassen direkt sichtbar, keine API-Grenze](images/08-project-as-component.png)
 
 Alle drei Klassen des `project`-Pakets sind direkt von außen importiert:
 
@@ -444,7 +444,7 @@ auch `S202Project` zum Implementierungsdetail. Das ist ein separater Schritt.
 
 ### Ergebnisnachweis
 
-![project-Komponente mit sauberer API-Grenze: ProjectMapper und ProjectStore in API, S202ProjectMapper und S202ProjectStore in impl](component-images/08-after-commit.png)
+![project-Komponente mit sauberer API-Grenze: ProjectMapper und ProjectStore in API, S202ProjectMapper und S202ProjectStore in impl](images/08-after-commit.png)
 
 Die Komponente hat eine klare API/Impl-Trennung. Die gestrichelten Linien
 zeigen jedoch noch Direktzugriffe von `S202Module` auf die Impl-Klassen
@@ -457,7 +457,7 @@ Das Ergebnis ist in der Gesamtansicht von Abschnitt 9 zu sehen.
 
 ## 9. UI — bewusst außerhalb dieses Schritts
 
-![Gesamtübersicht: Verletzungen aller vier Komponenten im aktuellen Stand](component-images/09-all-components-violations.png)
+![Gesamtübersicht: Verletzungen aller vier Komponenten im aktuellen Stand](images/09-all-components-violations.png)
 
 Die UI-Schicht (`de.weigend.s202.ui`) bleibt in diesem Schritt monolithisch.
 Sie wird nicht als Komponente neu geschnitten.
@@ -474,7 +474,7 @@ interne Struktur dabei nicht.
 
 ### Ergebnisnachweis
 
-![Finaler Zustand: alle vier Komponenten (project, analysis, domain, reader) ohne Component-Violations](component-images/09-after-commit-no-component-violations.png)
+![Finaler Zustand: alle vier Komponenten (project, analysis, domain, reader) ohne Component-Violations](images/09-after-commit-no-component-violations.png)
 
 Die Gesamtansicht bestätigt: alle Direktzugriffe auf Impl-Klassen sind
 beseitigt. Sämtliche Komponentengrenzen werden eingehalten — die Case
@@ -484,7 +484,7 @@ Study ist abgeschlossen.
 
 ## Abschluss: Komponentenarchitektur mit vollständigen Abhängigkeiten
 
-![Finale Komponentenarchitektur: project, analysis, domain und reader mit sauberen Schnittstellen und allen Abhängigkeiten](component-images/10-component-architecture-final-all-deps.png)
+![Finale Komponentenarchitektur: project, analysis, domain und reader mit sauberen Schnittstellen und allen Abhängigkeiten](images/10-component-architecture-final-all-deps.png)
 
 Die Darstellung zeigt die vier Komponenten in der Schichtenansicht mit allen
 eingehenden und ausgehenden Abhängigkeiten. Kein einziger Violations-Pfeil

@@ -20,8 +20,7 @@ import java.util.List;
 /**
  * Renderer-agnostic, JSON-serialisable snapshot of the analysed architecture,
  * consumed by the City3D (Three.js) renderer. This is the stable data contract
- * between the Java analysis pipeline and the JavaScript city renderer; see
- * {@code docs/exploration/CITY3D_WEBVIEW_SPEC.md} §5.
+ * between the Java analysis pipeline and the JavaScript city renderer.
  *
  * <p>Districts are packages, buildings are classes. {@code footprint} carries the
  * 2D layout rectangle when it is available (reused from the 2D architecture view);
