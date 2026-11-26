@@ -15,6 +15,7 @@
  */
 package de.weigend.s202.ui.features.whatif;
 
+import de.weigend.s202.domain.ShownNames;
 import de.weigend.s202.domain.DependencyDetails;
 import de.weigend.s202.domain.architecture.Architecture;
 import de.weigend.s202.domain.architecture.ComponentArchitecture;
@@ -166,6 +167,16 @@ public final class WhatIfDependenciesView implements View {
             }
         });
         upwardTree.setTooltip(new Tooltip(OPEN_HINT));
+        // In a Physical View the names carry their files; shown without them.
+        upwardTree.setCellFactory(tree -> new ShownTreeCell());
+        componentTree.setCellFactory(tree -> new ShownTreeCell());
+        sccList.setCellFactory(list -> new javafx.scene.control.ListCell<>() {
+            @Override
+            protected void updateItem(String item, boolean empty) {
+                super.updateItem(item, empty);
+                setText(empty || item == null ? null : ShownNames.shown(item));
+            }
+        });
 
         split = new SplitPane(upwardSection, sccSection);
         split.setOrientation(Orientation.VERTICAL);
@@ -543,9 +554,18 @@ public final class WhatIfDependenciesView implements View {
         return selectedFullName != null && !selectedFullName.isBlank();
     }
 
+    /** A row of the trees: its text without the files of a Physical View. */
+    private static final class ShownTreeCell extends javafx.scene.control.TreeCell<String> {
+        @Override
+        protected void updateItem(String item, boolean empty) {
+            super.updateItem(item, empty);
+            setText(empty || item == null ? null : ShownNames.shown(item));
+        }
+    }
+
     private String scopeSuffix() {
         if (hasSelection()) {
-            return " for " + selectedFullName;
+            return " for " + ShownNames.shown(selectedFullName);
         }
         return visibleClasses != null ? " in this view" : "";
     }

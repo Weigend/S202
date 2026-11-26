@@ -22,12 +22,15 @@
 | | Exit | Ctrl+Q | Ends S202, after a question. |
 | Edit | Undo | Ctrl+Z | Takes a [move](layered-view.md#moving-boxes) back. |
 | | Redo | Ctrl+Shift+Z | Makes it again. |
+| | Find Class or Package... | Ctrl+F | [Finds](layered-view.md#finding-a-class-or-package) a class or package of the tab by name. |
 | | Discard Moves of This View | | [Discards](refactoring.md#undo-and-reset) the moves of the tab. |
 | | Reset Refactorings... | | [Discards](refactoring.md#undo-and-reset) everything planned. |
 | View | Outline Explorer, Quality, Top Tangles, Dependencies, From / To, Hotspots, Dependency Details | | Shows the panel, also a closed one. |
 | | 3D Architecture | | Shows the [3D view](3d-views.md#3d-architecture). |
 | | Component View | | Opens a [Component View](component-view.md) of the active analysis. |
 | | Hexagonal View | | Opens a [Hexagonal View](hexagonal-view.md). |
+| | Physical View | | Opens the [Physical View](physical-view.md): the classes ordered by the JARs they were read from. |
+| | Horizontal Slice... | | Lists the depths of the packages and opens a [slice](slice-view.md) of one. |
 | | Dependency Matrix | | Opens the [matrix](matrix-view.md) of the active tab. |
 | Windows | New | Ctrl+N | An empty tab. |
 | | Close | Ctrl+W | Closes the focused tab or panel. |
@@ -45,7 +48,8 @@ On macOS the Cmd key takes the place of Ctrl.
 | Right-click on | Entries |
 | --- | --- |
 | a line between two classes | Cut, or Restore if it is cut |
-| a class or package in a view | Open Scope, Dependencies From Here, Dependencies To Here |
+| a class or package in a view | Open Scope, Dependencies From Here, Dependencies To Here, Mark Transitive Users, Mark Transitive Dependencies, Clear Marks |
+| the picture while marks are shown | Clear Marks |
 | a name in the matrix | the same, and Open or Close for a package |
 | a package in Hotspots | Open Scope, Dependencies From Here, Dependencies To Here |
 | a matrix cell that is one class dependency | Cut, or Restore if it is cut |
@@ -113,8 +117,10 @@ The keys of the 3D views are in [3D views](3d-views.md).
 | Layered Architecture View, Tangle View | Stable |
 | Dependencies, violations, class cycles, package tangles | Stable |
 | Dependency matrix, From / To, Plan | Beta |
+| Find, transitive users and dependencies | Beta |
 | Libraries outside the analysis, Hotspots | Beta |
 | Component View and component checks | Beta |
+| Physical View, Horizontal Slice | Beta |
 | Quality Report, layout invariants | Beta |
 | 3D Architecture, City3D | not rated |
 | Hexagonal View | PoC |

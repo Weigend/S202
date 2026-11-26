@@ -15,6 +15,7 @@
  */
 package de.weigend.s202.ui.features.quality;
 
+import de.weigend.s202.domain.ShownNames;
 import de.weigend.s202.analysis.quality.QualityMetrics;
 import io.softwareecg.wfx.windowmanager.api.Position;
 import io.softwareecg.wfx.windowmanager.api.View;
@@ -126,7 +127,7 @@ public class QualityView implements View {
         this.metrics = metrics;
         scopeLabel.setText(scopeName == null || scopeName.isEmpty()
                 ? "Scope: All classes"
-                : "Scope: " + scopeName);
+                : "Scope: " + ShownNames.shown(scopeName));
         redraw();
     }
 

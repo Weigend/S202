@@ -116,8 +116,8 @@ import static org.junit.jupiter.api.Assertions.fail;
 class MultiDocumentTest {
 
     private static final Duration FX_TIMEOUT = Duration.ofSeconds(20);
-    private static final String EXAMPLE_JAR = "../test-example/target/test-example-1.7.0.jar";
-    private static final String HEXAGON_JAR = "../test-hexagon/target/test-hexagon-1.7.0.jar";
+    private static final String EXAMPLE_JAR = "../test-example/target/test-example-1.8.0.jar";
+    private static final String HEXAGON_JAR = "../test-hexagon/target/test-hexagon-1.8.0.jar";
 
     private static boolean javaFxStarted;
     private static List<Module> panels;
@@ -679,7 +679,7 @@ class MultiDocumentTest {
         });
         awaitRoot(component.get());
         onFx(() -> scope.set(viewManager.open(example, new ViewDescriptor(ViewDescriptor.Kind.SCOPE,
-                "Scope example2", scopePackage, List.of(addedToScope), Set.of(), null, false))));
+                "Scope example2", scopePackage, List.of(addedToScope), Set.of(), null, false, false, 0))));
         awaitRoot(scope.get());
 
         Set<String> tangleMembers = someClassesOf(example);

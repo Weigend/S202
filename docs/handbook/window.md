@@ -26,8 +26,9 @@ keep showing it while you work in a panel.
 | --- | --- | --- |
 
 The **File** menu is shown in [Loading code](loading-code.md). **Edit** undoes and redoes
-[moves](layered-view.md#moving-boxes) and [resets](refactoring.md#undo-and-reset) all planned
-changes. **View** shows a panel that was closed, and opens the 3D, Component and Hexagonal View.
+[moves](layered-view.md#moving-boxes), [finds](layered-view.md#finding-a-class-or-package) a class
+or package and [resets](refactoring.md#undo-and-reset) all planned changes. **View** shows a panel
+that was closed, and opens the 3D, Component, Hexagonal and Physical View and horizontal slices.
 **Windows** handles tabs and layout. All entries are listed in the
 [Reference](reference.md#menus).
 

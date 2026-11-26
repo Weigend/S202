@@ -15,6 +15,7 @@
  */
 package de.weigend.s202.ui.core.platform;
 
+import de.weigend.s202.domain.ShownNames;
 import de.weigend.s202.domain.architecture.ArchitectureAnnotations;
 import de.weigend.s202.domain.architecture.ArchitectureKind;
 import de.weigend.s202.ui.core.canvas.ArchitectureCanvas;
@@ -56,6 +57,10 @@ public final class ArchitectureViewManager {
 
     /** Trennt im Tab-Titel den Namen des Dokuments von der Sicht darauf. */
     private static final String TITLE_SEPARATOR = " · ";
+    /** The label of the tab that orders the classes by their files. */
+    public static final String PHYSICAL_VIEW = "Physical View";
+    /** The label of a slice tab, followed by its depth. */
+    public static final String SLICE_VIEW = "Slice ";
 
     /**
      * Baut einen Tab einer Art auf. Die Schichten-, Projektions- und
@@ -184,11 +189,21 @@ public final class ArchitectureViewManager {
         if (!document.annotations().equals(canvas.getArchitectureAnnotations())) {
             canvas.setArchitectureAnnotations(document.annotations());
         }
-        // Raw model before domain model: setting the domain model builds the
-        // architecture projection, which reads the raw model.
-        canvas.setRawDependencyModel(document.rawModel());
-        canvas.setDomainModel(document.domainModel());
-        canvas.setCycleBreakEdges(document.cycleBreakEdges());
+        DerivedAnalysis derived = derived(document, wrapper.getDescriptor());
+        if (derived != null) {
+            // The same document with the classes ordered otherwise: its own
+            // models, and the cuts of the document under the names they have there.
+            canvas.setOwnName(derived.ownName());
+            canvas.setRawDependencyModel(derived.rawModel());
+            canvas.setDomainModel(derived.domainModel());
+            canvas.setCycleBreakEdges(derived.cycleBreakEdges());
+        } else {
+            // Raw model before domain model: setting the domain model builds the
+            // architecture projection, which reads the raw model.
+            canvas.setRawDependencyModel(document.rawModel());
+            canvas.setDomainModel(document.domainModel());
+            canvas.setCycleBreakEdges(document.cycleBreakEdges());
+        }
         canvas.setAppliedCutEdges(document.previewCuts());
         wrapper.setDocument(document);
     }
@@ -412,17 +427,75 @@ public final class ArchitectureViewManager {
      * @return {@code null}, wenn das Dokument das Paket nicht enthält
      */
     public ArchitectureNode rootFor(AnalysisDocument document, ViewDescriptor descriptor) {
+        DerivedAnalysis derived = derived(document, descriptor);
+        ArchitectureNode whole = derived != null ? derived.rootNode() : document.rootNode();
         if (descriptor.scope() == null) {
-            return document.rootNode();
+            return whole;
         }
-        ArchitectureNode root = filterPackageScope(document.rootNode(), descriptor.scope());
+        ArchitectureNode root = filterPackageScope(whole, descriptor.scope());
         if (root == null) {
             return null;
         }
         for (String extension : descriptor.scopeExtensions()) {
-            ScopeExtensionModel.addToScope(root, document.rootNode(), extension);
+            ScopeExtensionModel.addToScope(root, whole, extension);
         }
         return root;
+    }
+
+    /** Die Analyse in der Ordnung des Tabs; {@code null} für die nach Paketen. */
+    private static DerivedAnalysis derived(AnalysisDocument document, ViewDescriptor descriptor) {
+        if (descriptor.physical()) {
+            return document.physical();
+        }
+        return descriptor.slice() > 0 ? document.slice(descriptor.slice()) : null;
+    }
+
+    /**
+     * Öffnet einen horizontalen Schnitt des aktiven Dokuments: alle Pakete der
+     * Tiefe {@code depth} nebeneinander. Die Analyse dafür läuft beim ersten
+     * Mal im Hintergrund.
+     */
+    public void openSliceView(AnalysisDocument document, int depth) {
+        progress.progress("Slicing the packages at depth " + depth + "...", 0.5);
+        Thread worker = new Thread(() -> {
+            try {
+                document.slice(depth);
+                javafx.application.Platform.runLater(() -> open(document, ViewDescriptor.slice(SLICE_VIEW + depth, depth)));
+            } catch (RuntimeException e) {
+                javafx.application.Platform.runLater(() -> Dialogs.showError("Horizontal Slice", String.valueOf(e)));
+            }
+        }, "s202-slice-view");
+        worker.setDaemon(true);
+        worker.start();
+    }
+
+    /**
+     * Öffnet die Physical View des aktiven Dokuments: die Klassen nach den
+     * Dateien geordnet, aus denen sie gelesen wurden. Die Analyse dafür läuft
+     * beim ersten Mal im Hintergrund.
+     */
+    public void openPhysicalView() {
+        AnalysisDocument document = activeDocument();
+        if (document == null) {
+            progress.progress("No architecture loaded for a physical view", 1);
+            return;
+        }
+        if (!document.hasPhysicalView()) {
+            Dialogs.showError("Physical View",
+                    "All classes of " + document.name() + " come from one file: there is no physical structure to show.");
+            return;
+        }
+        progress.progress("Ordering the classes by their files...", 0.5);
+        Thread worker = new Thread(() -> {
+            try {
+                document.physical();
+                javafx.application.Platform.runLater(() -> open(document, ViewDescriptor.physical(PHYSICAL_VIEW)));
+            } catch (RuntimeException e) {
+                javafx.application.Platform.runLater(() -> Dialogs.showError("Physical View", String.valueOf(e)));
+            }
+        }, "s202-physical-view");
+        worker.setDaemon(true);
+        worker.start();
     }
 
     /**
@@ -511,11 +584,17 @@ public final class ArchitectureViewManager {
         if (scope == null || scope.isBlank()) {
             return;
         }
-        AnalysisDocument document = documentOf(requestedSourceView != null ? requestedSourceView : activeCanvas());
+        ArchitectureCanvas source = requestedSourceView != null ? requestedSourceView : activeCanvas();
+        AnalysisDocument document = documentOf(source);
         if (document == null) {
             return;
         }
-        ArchitectureWfxView opened = open(document, ViewDescriptor.scope("Scope " + simple(scope), scope));
+        // A package of a Physical View lies in a file, one of a slice in the
+        // slice: its scope stays in that order.
+        ArchitectureWfxView sourceWrapper = wrapperOf(source);
+        ArchitectureWfxView opened = open(document, ViewDescriptor.scope(
+                "Scope " + ShownNames.shown(simple(scope)), scope,
+                sourceWrapper == null ? ViewDescriptor.layered() : sourceWrapper.getDescriptor()));
         if (opened == null) {
             Dialogs.showError("Open Scope", "Package scope was not found in the focused architecture: " + scope);
         }

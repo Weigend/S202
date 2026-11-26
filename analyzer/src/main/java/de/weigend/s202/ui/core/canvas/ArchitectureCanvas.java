@@ -166,6 +166,11 @@ public class ArchitectureCanvas extends AbstractArchitectureCanvas {
     private final MatrixView matrixView = new MatrixView();
     private final MatrixController matrix;
     private final HoverController hover = new HoverController(this::boxHovered);
+    private final TraceController trace;
+    private final TraceBar traceBar;
+    private final FindBox findBox;
+    /** Document name of a class → its name in this view; see {@link #setOwnName}. */
+    private java.util.function.UnaryOperator<String> ownName = java.util.function.UnaryOperator.identity();
     private Consumer<String> openScopeSink = scope -> { /* no-op default */ };
     private BiConsumer<String, String> fromToSink = (from, to) -> { /* no-op default */ };
 
@@ -268,6 +273,16 @@ public class ArchitectureCanvas extends AbstractArchitectureCanvas {
                 extendedRoot -> keepingOverlays(() -> setArchitectureRoot(extendedRoot)),
                 this::selectByFullName,
                 this::scopeExtended);
+        findBox = new FindBox(() -> currentRootNode, this::reveal, this::requestFocus);
+        contentPane.getChildren().add(findBox);
+        StackPane.setAlignment(findBox, javafx.geometry.Pos.TOP_CENTER);
+        trace = new TraceController(elementRegistry, () -> currentRootNode, this::getShownModel,
+                arrowsCoalescer::markDirty);
+        traceBar = new TraceBar(trace::setMaxSteps, trace::clear);
+        trace.stateProperty().addListener((obs, was, isNow) -> {
+            traceBar.show(isNow);
+            setBottom(isNow == null ? null : traceBar);
+        });
         wirePropertyListeners();
         addEventHandler(ExpandChangedEvent.EXPAND_CHANGED, event -> arrowsCoalescer.markDirty());
         addEventHandler(BoxMenuEvent.BOX_MENU, event -> event.offer(boxMenuItems(event.fullName())));
@@ -345,6 +360,7 @@ public class ArchitectureCanvas extends AbstractArchitectureCanvas {
             if (box != null) {
                 menu.getItems().addAll(boxMenuItems(box));
             }
+            menu.getItems().addAll(traceMenuItems(box));
             menu.getItems().addAll(styleView().contextMenuItems());
             if (getScopeExtensionSourceRoot() != null) {
                 menu.getItems().add(scopeExtension.addToScopeMenuItem());
@@ -383,6 +399,99 @@ public class ArchitectureCanvas extends AbstractArchitectureCanvas {
         MenuItem to = new MenuItem("Dependencies To Here");
         to.setOnAction(action -> fromToSink.accept(null, fullName));
         return List.of(openScope, from, to);
+    }
+
+    /** Marking what a box reaches, and ending it; in the picture only, where the marks are seen. */
+    private List<MenuItem> traceMenuItems(String fullName) {
+        List<MenuItem> items = new java.util.ArrayList<>();
+        DomainModel model = getShownModel();
+        boolean known = fullName != null && model != null && currentRootNode != null
+                && !fullName.equals(currentRootNode.getFullName());
+        if (known) {
+            MenuItem users = new MenuItem("Mark Transitive Users");
+            users.setOnAction(action -> traceFrom(fullName, Trace.Direction.USERS));
+            MenuItem dependencies = new MenuItem("Mark Transitive Dependencies");
+            dependencies.setOnAction(action -> traceFrom(fullName, Trace.Direction.DEPENDENCIES));
+            items.addAll(List.of(new javafx.scene.control.SeparatorMenuItem(), users, dependencies));
+        }
+        if (trace.stateProperty().get() != null) {
+            MenuItem clear = new MenuItem("Clear Marks");
+            clear.setOnAction(action -> trace.clear());
+            if (!known) {
+                items.add(new javafx.scene.control.SeparatorMenuItem());
+            }
+            items.add(clear);
+        }
+        return items;
+    }
+
+    private boolean traceFrom(String fullName, Trace.Direction direction) {
+        if (!trace.trace(fullName, direction)) {
+            setStatus(fullName + " is not part of this view");
+            return false;
+        }
+        // The start is what the marks are about: selected, it stands out from them.
+        selection.selectForUser(fullName);
+        return true;
+    }
+
+    /**
+     * Marks every class that uses the element, directly or through others,
+     * and every package around one, and selects the element; the strip below
+     * the picture says how many there are and limits the steps.
+     *
+     * @param fullName a class or package of this view
+     * @param users    {@code true} for the users, {@code false} for what the element uses
+     * @return {@code false} when this view does not show the element
+     */
+    public boolean markTransitive(String fullName, boolean users) {
+        return traceFrom(fullName, users ? Trace.Direction.USERS : Trace.Direction.DEPENDENCIES);
+    }
+
+    /** Removes the marks of {@link #markTransitive}. */
+    public void clearMarks() {
+        trace.clear();
+    }
+
+    /** The classes and packages marked now; empty without marks. */
+    public Set<String> getMarked() {
+        TraceController.State state = trace.stateProperty().get();
+        return state == null ? Set.of() : state.trace().marked(state.maxSteps());
+    }
+
+    /**
+     * Shows the search over the picture (Ctrl+F): the hits are the classes
+     * and packages of this view, the one chosen is {@link #reveal revealed}.
+     */
+    public void showFind() {
+        findBox.open();
+    }
+
+    /** Types into the search, as the user would, and takes the best hit; for drivers and tests. */
+    public String find(String text) {
+        findBox.open();
+        findBox.type(text);
+        List<de.weigend.s202.ui.core.model.ElementSearch.Hit> hits = findBox.shownHits();
+        findBox.takeSelected();
+        return hits.isEmpty() ? null : hits.get(0).fullName();
+    }
+
+    /**
+     * Brings an element into the picture: opens the packages around it,
+     * selects it as if the user had clicked it and scrolls it into the middle.
+     *
+     * @return what was selected: the element or, where the view shows it only
+     *         as part of a larger box, that box; {@code null} when the view
+     *         does not show it
+     */
+    public String reveal(String fullName) {
+        String selected = selection.reveal(fullName);
+        if (selected == null) {
+            setStatus(fullName + " is not part of this view");
+        } else if (!selected.equals(fullName)) {
+            setStatus(fullName + " lies in " + selected);
+        }
+        return selected;
     }
 
     private void boxHovered(javafx.scene.Node box) {
@@ -487,6 +596,10 @@ public class ArchitectureCanvas extends AbstractArchitectureCanvas {
         limitBoxWidth.addListener((obs, was, isNow) -> applyLimitBoxWidth(isNow));
         hiddenEdgeKinds.addListener((obs, was, isNow) -> overlay.setEdgeFilter((from, to) ->
                 EdgeKindGroup.shows(isNow, projection.getRawDependencyModel(), from, to)));
+        // Another excerpt, another model or another plan: the trace asks again.
+        architectureRootProperty().addListener((obs, was, isNow) -> trace.recompute());
+        domainModelProperty().addListener((obs, was, isNow) -> trace.recompute());
+        planProperty().addListener((obs, was, isNow) -> trace.recompute());
     }
 
     /** Whether there is a matrix of what this view shows: of layers only. */
@@ -888,6 +1001,8 @@ public class ArchitectureCanvas extends AbstractArchitectureCanvas {
         if (getScene() == null || getScene().getRoot() == null) {
             return;
         }
+        // A marked package box has a wider border: mark before the layout.
+        trace.applyMarks();
         if (zoomableContent != null) {
             zoomableContent.requestLayout();
         }
@@ -1085,19 +1200,35 @@ public class ArchitectureCanvas extends AbstractArchitectureCanvas {
 
     /** Replace the refactoring-preview cuts shown by this view's dependency arrows. */
     public void setAppliedCutEdges(Set<DependencyEdge> appliedCutEdges) {
-        previewCuts.setAppliedCutEdges(appliedCutEdges);
+        previewCuts.setAppliedCutEdges(ownNames(appliedCutEdges));
     }
 
     public void applyEdgeCut(String from, String to) {
-        previewCuts.applyEdgeCut(from, to);
+        previewCuts.applyEdgeCut(ownName.apply(from), ownName.apply(to));
     }
 
     public void applyEdgeCuts(Collection<DependencyEdge> cuts) {
-        previewCuts.applyEdgeCuts(cuts);
+        previewCuts.applyEdgeCuts(ownNames(cuts));
     }
 
     public void restoreEdgeCut(String from, String to) {
-        previewCuts.restoreEdgeCut(from, to);
+        previewCuts.restoreEdgeCut(ownName.apply(from), ownName.apply(to));
+    }
+
+    /**
+     * How this view calls the classes the document names in its cuts. The
+     * cuts belong to the document and carry the names of the analysis; a view
+     * that orders the classes otherwise (the Physical View) names them
+     * otherwise. Set before the cuts are.
+     */
+    public void setOwnName(java.util.function.UnaryOperator<String> documentToOwn) {
+        ownName = documentToOwn == null ? java.util.function.UnaryOperator.identity() : documentToOwn;
+    }
+
+    private Set<DependencyEdge> ownNames(Collection<DependencyEdge> edges) {
+        Set<DependencyEdge> result = new java.util.LinkedHashSet<>();
+        edges.forEach(edge -> result.add(new DependencyEdge(ownName.apply(edge.from()), ownName.apply(edge.to()))));
+        return result;
     }
 
     private static String simple(String fqn) {

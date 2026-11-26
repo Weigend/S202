@@ -113,6 +113,14 @@ public abstract class MenuRequestEvent extends EventObject {
         public OpenHexagonalView(Object source) { super(source); }
     }
 
+    public static final class OpenPhysicalView extends MenuRequestEvent {
+        public OpenPhysicalView(Object source) { super(source); }
+    }
+
+    public static final class OpenSliceView extends MenuRequestEvent {
+        public OpenSliceView(Object source) { super(source); }
+    }
+
     public static final class OpenMatrix extends MenuRequestEvent {
         public OpenMatrix(Object source) { super(source); }
     }
@@ -123,6 +131,10 @@ public abstract class MenuRequestEvent extends EventObject {
 
     public static final class CloseAllViews extends MenuRequestEvent {
         public CloseAllViews(Object source) { super(source); }
+    }
+
+    public static final class Find extends MenuRequestEvent {
+        public Find(Object source) { super(source); }
     }
 
     public static final class RestoreDefaultLayout extends MenuRequestEvent {

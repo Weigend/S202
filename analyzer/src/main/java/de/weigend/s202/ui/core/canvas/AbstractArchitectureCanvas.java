@@ -15,6 +15,7 @@
  */
 package de.weigend.s202.ui.core.canvas;
 
+import de.weigend.s202.domain.ShownNames;
 import de.weigend.s202.ui.core.model.EdgeKindGroup;
 import de.weigend.s202.domain.architecture.ArchitectureKind;
 import de.weigend.s202.ui.core.model.ArchitectureNode;
@@ -85,7 +86,8 @@ public abstract class AbstractArchitectureCanvas extends BorderPane {
      */
     public void setStatus(String message) {
         Objects.requireNonNull(message, "message cannot be null");
-        statusSink.accept(message);
+        // In a Physical View the names carry their files; shown without them.
+        statusSink.accept(ShownNames.shown(message));
     }
 
     /**

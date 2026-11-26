@@ -20,6 +20,8 @@ import de.weigend.s202.ui.core.graph.ArchitectureDragController;
 import de.weigend.s202.ui.core.graph.LevelClassBox;
 import de.weigend.s202.ui.core.graph.LevelPackageBox;
 import de.weigend.s202.ui.core.layout.horizontal.HorizontalLayoutOrdering;
+import de.weigend.s202.domain.PhysicalHierarchy;
+import de.weigend.s202.domain.ShownNames;
 import de.weigend.s202.ui.core.model.ArchitectureNode;
 import de.weigend.s202.ui.core.model.ArchitectureNode.NodeType;
 import javafx.application.Platform;
@@ -56,6 +58,8 @@ public class ArchitectureTreeBuilder {
     private static final int ASYNC_BATCH_SIZE = 120;
 
     private final Map<String, Node> elementRegistry;
+    /** Physical View: package → the other files its package has classes in; empty elsewhere. */
+    private Map<String, java.util.Set<String>> splitPackages = Map.of();
     private final Consumer<String> selectionChangeSink;
     private boolean lazyCollapsedPackages;
     private boolean plainNodes;
@@ -176,6 +180,7 @@ public class ArchitectureTreeBuilder {
 
         // Clear registry for new tree
         elementRegistry.clear();
+        splitPackages = splitPackagesOf(rootNode);
 
         // Track package containers for hierarchy building
         Map<String, LevelPackageBox> packageContainers = new HashMap<>();
@@ -247,6 +252,7 @@ public class ArchitectureTreeBuilder {
 
         Runnable start = () -> {
             elementRegistry.clear();
+            splitPackages = splitPackagesOf(rootNode);
 
             Map<String, LevelPackageBox> packageContainers = new HashMap<>();
             Set<String> elementsAddedToParent = new HashSet<>();
@@ -371,6 +377,17 @@ public class ArchitectureTreeBuilder {
             parentContainer = rootLevel;
         }
 
+        if (child.getType() == NodeType.PACKAGE && passesThrough(child, parentPackage, packageContainers)) {
+            // See processArchitectureNode: no box, the content goes into the box around it.
+            packageContainers.put(child.getFullName(), parentContainer);
+            elementRegistry.put(child.getFullName(), parentContainer);
+            elementsAddedToParent.add(child.getFullName());
+            enqueueChildren(child, packageContainers, parentContainer, elementsAddedToParent, archRoot,
+                    currentDepth, maxDepth, queue, counter, progressSink);
+            reportProgress(counter, child, progressSink);
+            return;
+        }
+
         if (child.getType() == NodeType.PACKAGE) {
             if (!packageContainers.containsKey(child.getFullName())) {
                 Node ownBox = packageNodes.create(child, maxDepth - currentDepth);
@@ -468,6 +485,18 @@ public class ArchitectureTreeBuilder {
                 parentContainer = rootLevel;
             }
 
+            if (child.getType() == NodeType.PACKAGE && passesThrough(child, parentPackage, packageContainers)) {
+                // Like com.webshop at the top: inside a file of the Physical
+                // View a package that holds nothing but one other package gets
+                // no box; what lies in it goes into the box around it.
+                packageContainers.put(child.getFullName(), parentContainer);
+                elementRegistry.put(child.getFullName(), parentContainer);
+                elementsAddedToParent.add(child.getFullName());
+                processArchitectureNode(child, packageContainers, rootLevel, elementsAddedToParent, archRoot, false,
+                        currentDepth, maxDepth);
+                continue;
+            }
+
             if (child.getType() == NodeType.PACKAGE) {
                 // Create package container if not already created
                 if (!packageContainers.containsKey(child.getFullName())) {
@@ -507,6 +536,25 @@ public class ArchitectureTreeBuilder {
     }
 
     /**
+     * Whether {@code pkg} lies in a file of the Physical View, directly or
+     * below packages that pass through as well, and holds nothing but one
+     * other package.
+     */
+    private static boolean passesThrough(ArchitectureNode pkg, String parentPackage,
+                                         Map<String, LevelPackageBox> packageContainers) {
+        if (pkg.getChildren().size() != 1 || pkg.getChildren().get(0).getType() != NodeType.PACKAGE) {
+            return false;
+        }
+        if (PhysicalHierarchy.isFile(parentPackage)) {
+            return true;
+        }
+        // A package that passed through is registered with the box of its parent.
+        LevelPackageBox container = packageContainers.get(parentPackage);
+        return container != null && !parentPackage.equals(container.getFullName())
+                && PhysicalHierarchy.isFile(container.getFullName());
+    }
+
+    /**
      * Leaves {@code packageBox} without children for now. The deferred build
      * runs the regular synchronous path for this package only: it creates the
      * direct children, and sub-packages are again collapsed and deferred
@@ -536,7 +584,34 @@ public class ArchitectureTreeBuilder {
     }
 
     private LevelPackageBox createPackageBox(ArchitectureNode node) {
-        return createPackageBox(node.getSimpleName(), node.getLevel(), node.getFullName(), node.getArchitectureLevel());
+        java.util.Set<String> otherFiles = splitPackages.get(node.getFullName());
+        if (otherFiles == null) {
+            return createPackageBox(node.getSimpleName(), node.getLevel(), node.getFullName(), node.getArchitectureLevel());
+        }
+        // A split package: the same package has classes in other files as well.
+        LevelPackageBox box = createPackageBox(node.getSimpleName() + "  \u29C9 split", node.getLevel(),
+                node.getFullName(), node.getArchitectureLevel());
+        javafx.scene.control.Tooltip.install(box, new javafx.scene.control.Tooltip(
+                "Split package: " + ShownNames.toLogical(node.getFullName())
+                        + " also has classes in " + String.join(", ", otherFiles)));
+        return box;
+    }
+
+    /** The split packages of a Physical View, from the packages of the tree that hold classes. */
+    private static Map<String, java.util.Set<String>> splitPackagesOf(ArchitectureNode root) {
+        if (root.getChildren().stream().noneMatch(child -> PhysicalHierarchy.isFile(child.getFullName()))) {
+            return Map.of();
+        }
+        java.util.List<String> withClasses = new java.util.ArrayList<>();
+        java.util.Deque<ArchitectureNode> open = new java.util.ArrayDeque<>(java.util.List.of(root));
+        while (!open.isEmpty()) {
+            ArchitectureNode node = open.pop();
+            if (node.getChildren().stream().anyMatch(child -> child.getType() == NodeType.CLASS)) {
+                withClasses.add(node.getFullName());
+            }
+            open.addAll(node.getChildren());
+        }
+        return PhysicalHierarchy.split(withClasses);
     }
 
     private LevelPackageBox createPackageBox(String simpleName,

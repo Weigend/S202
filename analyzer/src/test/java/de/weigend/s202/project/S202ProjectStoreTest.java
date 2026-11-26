@@ -209,7 +209,7 @@ class S202ProjectStoreTest {
                 "LAYERED", null, null, List.of(), List.of(), null, false,
                 3, true, false, false, false, true, List.of(),
                 1.0, 0.0, 0.0, java.util.Map.of(), null, true,
-                List.of(), List.of(), false, false, List.of(), false);
+                List.of(), List.of(), false, false, List.of(), false, false, 0);
         S202Project versionFour = new S202Project(
                 S202Project.FORMAT,
                 4,

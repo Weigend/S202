@@ -57,9 +57,9 @@ public record S202Project(
      * added {@link ViewDto#moves()}, {@link ViewDto#plannedPackages()},
      * {@link ViewDto#hidePlan()}, {@link ViewDto#matrix()} and {@link ViewDto#matrixOpen()},
      * version 9 {@link ClassInfoDto#externalDependencies()}, {@link ClassInfoDto#origin()} and
-     * {@link ViewDto#matrixExternals()}.
+     * {@link ViewDto#matrixExternals()}, version 10 {@link ViewDto#physical()} and {@link ViewDto#slice()}.
      */
-    public static final int FORMAT_VERSION = 9;
+    public static final int FORMAT_VERSION = 10;
 
     public record CreatedWith(String app, String version) {}
 
@@ -197,6 +197,10 @@ public record S202Project(
      * @param matrixOpen       the packages that are open in the matrix
      * @param matrixExternals  whether the matrix shows the libraries used; files
      *                         older than version 9 do not have it
+     * @param physical         whether the tab orders the classes by the files they
+     *                         were read from; files older than version 10 do not have it
+     * @param slice            the depth of a horizontal slice, 0 for none; files older
+     *                         than version 10 do not have it
      */
     public record ViewDto(
             String kind,
@@ -224,5 +228,7 @@ public record S202Project(
             boolean hidePlan,
             boolean matrix,
             List<String> matrixOpen,
-            boolean matrixExternals) {}
+            boolean matrixExternals,
+            boolean physical,
+            int slice) {}
 }

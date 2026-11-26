@@ -15,6 +15,7 @@
  */
 package de.weigend.s202.ui.features.between;
 
+import de.weigend.s202.domain.ShownNames;
 import de.weigend.s202.ui.core.model.ArchitectureNode;
 import javafx.css.PseudoClass;
 import javafx.scene.control.TextField;
@@ -241,7 +242,7 @@ final class ElementTree extends BorderPane {
             setGraphic(icon);
             setTooltip(new Tooltip(external ? (Between.EXTERNAL.equals(node.getFullName())
                     ? "Used outside the analysis: the JDK, frameworks, other libraries"
-                    : node.getFullName() + "\noutside the analysis") : node.getFullName()));
+                    : node.getFullName() + "\noutside the analysis") : ShownNames.shown(node.getFullName())));
         }
     }
 }

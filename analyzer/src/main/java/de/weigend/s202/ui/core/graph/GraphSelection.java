@@ -48,6 +48,10 @@ public final class GraphSelection {
         default void setConnected(boolean connected) {
         }
 
+        /** Marks the box as reached by a trace of users or dependencies. */
+        default void setTraced(boolean traced) {
+        }
+
         default Consumer<String> selectionChangeSink() {
             return null;
         }

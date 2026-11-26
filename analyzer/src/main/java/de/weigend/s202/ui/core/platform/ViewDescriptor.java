@@ -42,6 +42,12 @@ import java.util.Set;
  * @param tangleKey       der Schlüssel, unter dem der Tangle-Tab
  *                        wiederverwendet wird (nur {@link Kind#TANGLE})
  * @param tangleContext   ob der Tangle-Tab den Kontext der Mitglieder zeigt
+ * @param physical        ob der Tab die Klassen nach den Dateien ordnet, aus
+ *                        denen sie gelesen wurden, statt nach ihren Paketen
+ *                        (Physical View); Scope und Tangle-Mitglieder sind
+ *                        dann Namen dieser Ordnung
+ * @param slice           die Tiefe eines horizontalen Schnitts: alle Pakete
+ *                        dieser Tiefe nebeneinander; 0 für keinen
  */
 public record ViewDescriptor(Kind kind,
                              String label,
@@ -49,7 +55,9 @@ public record ViewDescriptor(Kind kind,
                              List<String> scopeExtensions,
                              Set<String> tangleMembers,
                              String tangleKey,
-                             boolean tangleContext) {
+                             boolean tangleContext,
+                             boolean physical,
+                             int slice) {
 
     /** Die Arten von Architektur-Tabs. */
     public enum Kind {
@@ -72,23 +80,51 @@ public record ViewDescriptor(Kind kind,
 
     /** Die Schichten-Sicht des ganzen Dokuments. */
     public static ViewDescriptor layered() {
-        return new ViewDescriptor(Kind.LAYERED, null, null, List.of(), Set.of(), null, false);
+        return new ViewDescriptor(Kind.LAYERED, null, null, List.of(), Set.of(), null, false, false, 0);
     }
 
-    /** Eine Stil-Projektion des Ausschnitts, den {@code base} zeigt. */
+    /** Die Schichten-Sicht des ganzen Dokuments, nach Dateien geordnet. */
+    public static ViewDescriptor physical(String label) {
+        return new ViewDescriptor(Kind.LAYERED, label, null, List.of(), Set.of(), null, false, true, 0);
+    }
+
+    /** Die Schichten-Sicht des ganzen Dokuments als horizontaler Schnitt der Tiefe {@code depth}. */
+    public static ViewDescriptor slice(String label, int depth) {
+        return new ViewDescriptor(Kind.LAYERED, label, null, List.of(), Set.of(), null, false, false, depth);
+    }
+
+    /** Ob der Tab die Klassen anders ordnet als nach ihren Paketen: nach Dateien oder als Schnitt. */
+    public boolean derived() {
+        return physical || slice > 0;
+    }
+
+    /**
+     * Eine Stil-Projektion des Ausschnitts, den {@code base} zeigt. Komponenten
+     * und Hexagon ordnen Pakete; aus einer Physical View geht sie vom ganzen
+     * Dokument aus.
+     */
     public static ViewDescriptor projection(ArchitectureKind style, String label, ViewDescriptor base) {
         Kind kind = style == ArchitectureKind.HEXAGONAL ? Kind.HEXAGONAL : Kind.COMPONENT;
-        return new ViewDescriptor(kind, label, base.scope(), base.scopeExtensions(), Set.of(), null, false);
+        return base.derived()
+                ? new ViewDescriptor(kind, label, null, List.of(), Set.of(), null, false, false, 0)
+                : new ViewDescriptor(kind, label, base.scope(), base.scopeExtensions(), Set.of(), null, false, false, 0);
     }
 
     /** Die Schichten-Sicht des Pakets {@code scope}. */
     public static ViewDescriptor scope(String label, String scope) {
-        return new ViewDescriptor(Kind.SCOPE, label, scope, List.of(), Set.of(), null, false);
+        return new ViewDescriptor(Kind.SCOPE, label, scope, List.of(), Set.of(), null, false, false, 0);
+    }
+
+    /** Die Schichten-Sicht von {@code scope}, in der Ordnung von {@code base}: nach Dateien, als Schnitt oder nach Paketen. */
+    public static ViewDescriptor scope(String label, String scope, ViewDescriptor base) {
+        return new ViewDescriptor(Kind.SCOPE, label, scope, List.of(), Set.of(), null, false,
+                base.physical(), base.slice());
     }
 
     /** Der Tangle aus {@code members}, gesucht in dem Ausschnitt, den {@code base} zeigt. */
     public static ViewDescriptor tangle(String label, Set<String> members, String key, ViewDescriptor base) {
-        return new ViewDescriptor(Kind.TANGLE, label, base.scope(), base.scopeExtensions(), members, key, false);
+        return new ViewDescriptor(Kind.TANGLE, label, base.scope(), base.scopeExtensions(), members, key, false,
+                base.physical(), base.slice());
     }
 
     /** Der Darstellungs-Stil, den ein Tab dieser Art benutzt. */
@@ -103,6 +139,6 @@ public record ViewDescriptor(Kind kind,
     /** Dieselbe Beschreibung mit dem Stand, den der Tab jetzt hat. */
     public ViewDescriptor withState(List<String> currentScopeExtensions, boolean currentTangleContext) {
         return new ViewDescriptor(kind, label, scope, currentScopeExtensions, tangleMembers, tangleKey,
-                currentTangleContext);
+                currentTangleContext, physical, slice);
     }
 }

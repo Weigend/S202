@@ -38,6 +38,17 @@ public interface ContainerBox {
     /** Ob der Inhalt zu sehen ist. */
     boolean isExpanded();
 
+    /** Klappt den Container auf oder zu. */
+    void setExpanded(boolean expanded);
+
+    /**
+     * Öffnet den Container so weit, dass {@code descendant}, ein Knoten
+     * irgendwo in seinem Inhalt, zu sehen ist.
+     */
+    default void reveal(javafx.scene.Node descendant) {
+        setExpanded(true);
+    }
+
     /**
      * Der Zeilenstapel, der die Kinder aufnimmt. Was noch nicht gebaut ist
      * (zugeklappte Pakete), wird dafür gebaut.

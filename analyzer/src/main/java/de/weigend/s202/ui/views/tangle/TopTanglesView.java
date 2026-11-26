@@ -15,6 +15,7 @@
  */
 package de.weigend.s202.ui.views.tangle;
 
+import de.weigend.s202.domain.ShownNames;
 import de.weigend.s202.domain.DependencyEdge;
 import de.weigend.s202.reader.EdgeKind;
 import io.softwareecg.wfx.windowmanager.api.Position;
@@ -141,7 +142,7 @@ public class TopTanglesView implements View {
                         List<HotspotEntryRow> hotspots) {
         scopeLabel.setText(scopeName == null || scopeName.isEmpty()
                 ? "Scope: All classes"
-                : "Scope: " + scopeName);
+                : "Scope: " + ShownNames.shown(scopeName));
 
         TreeItem<Row> rootItem = new TreeItem<>(null);
         for (RefactoringPreviewEdge edge : refactoringPreviewEdges) {
@@ -337,6 +338,8 @@ public class TopTanglesView implements View {
                     getStyleClass().add("top-tangles-hotspot-caller-row");
                 }
             }
+            // In a Physical View the names carry their files; shown without them.
+            setText(ShownNames.shown(getText()));
         }
 
         private ContextMenu edgeContextMenu(EdgeRow row) {

@@ -18,6 +18,7 @@ package de.weigend.s202.ui.views.tangle;
 import de.weigend.s202.ui.core.model.TangleFilter;
 import de.weigend.s202.domain.DependencyDetails;
 import de.weigend.s202.domain.DependencyEdge;
+import de.weigend.s202.domain.ShownNames;
 import de.weigend.s202.reader.DependencyModel;
 import de.weigend.s202.ui.core.arrows.DependencySelection;
 import de.weigend.s202.ui.core.arrows.TangleEdgeScope;
@@ -240,33 +241,46 @@ public final class TangleTabController {
 
     /** @return {@code false}, wenn sich an den Cuts des Dokuments nichts geändert hat */
     public boolean applyPreviewCut(AnalysisDocument document, String from, String to) {
-        if (document == null || !document.addPreviewCut(new DependencyEdge(from, to))) {
+        // A cut made in a Physical View carries the names of its files; the
+        // document and every tab get it under the names of the analysis.
+        DependencyEdge cut = logical(new DependencyEdge(from, to));
+        if (document == null || !document.addPreviewCut(cut)) {
             return false;
         }
         for (ArchitectureWfxView wrapper : viewManager.viewsOf(document)) {
-            wrapper.getArchitectureView().applyEdgeCut(from, to);
+            wrapper.getArchitectureView().applyEdgeCut(cut.from(), cut.to());
         }
         return true;
     }
 
+    private static DependencyEdge logical(DependencyEdge edge) {
+        return new DependencyEdge(ShownNames.toLogical(edge.from()), ShownNames.toLogical(edge.to()));
+    }
+
     /** @return {@code false}, wenn sich an den Cuts des Dokuments nichts geändert hat */
     public boolean applyPreviewCuts(AnalysisDocument document, Set<DependencyEdge> edges) {
-        if (document == null || edges == null || edges.isEmpty() || !document.addPreviewCuts(edges)) {
+        if (document == null || edges == null || edges.isEmpty()) {
+            return false;
+        }
+        Set<DependencyEdge> cuts = new java.util.LinkedHashSet<>();
+        edges.forEach(edge -> cuts.add(logical(edge)));
+        if (!document.addPreviewCuts(cuts)) {
             return false;
         }
         for (ArchitectureWfxView wrapper : viewManager.viewsOf(document)) {
-            wrapper.getArchitectureView().applyEdgeCuts(edges);
+            wrapper.getArchitectureView().applyEdgeCuts(cuts);
         }
         return true;
     }
 
     /** @return {@code false}, wenn sich an den Cuts des Dokuments nichts geändert hat */
     public boolean restorePreviewCut(AnalysisDocument document, String from, String to) {
-        if (document == null || !document.removePreviewCut(new DependencyEdge(from, to))) {
+        DependencyEdge cut = logical(new DependencyEdge(from, to));
+        if (document == null || !document.removePreviewCut(cut)) {
             return false;
         }
         for (ArchitectureWfxView wrapper : viewManager.viewsOf(document)) {
-            wrapper.getArchitectureView().restoreEdgeCut(from, to);
+            wrapper.getArchitectureView().restoreEdgeCut(cut.from(), cut.to());
         }
         return true;
     }

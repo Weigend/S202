@@ -15,6 +15,8 @@
  */
 package de.weigend.s202.ui.core.canvas;
 
+import de.weigend.s202.ui.core.graph.BoxVisibility;
+import de.weigend.s202.ui.core.graph.ContainerBox;
 import de.weigend.s202.ui.core.graph.ElementLookup;
 import de.weigend.s202.ui.core.graph.GraphSelection;
 import de.weigend.s202.ui.core.graph.PulseCoalescer;
@@ -118,6 +120,64 @@ final class SelectionController {
         }
         selectByFullName(fullName);
         nodeSelectionSink.accept(fullName);
+    }
+
+    /**
+     * Holt ein Element ins Bild: klappt die Pakete und Komponenten um es auf,
+     * wählt es aus, als hätte der Benutzer es angeklickt, und scrollt es in
+     * die Mitte. Wo eine Ansicht das Element nicht als eigene Box zeigt,
+     * kommt die Box dran, die für es steht.
+     *
+     * @return the element selected, the one asked for or the box standing for
+     *         it; {@code null} when the view does not show it at all
+     */
+    String reveal(String fullName) {
+        Node node = ElementLookup.materialize(elementRegistry, fullName);
+        if (node == null) {
+            return null;
+        }
+        for (Node parent = node.getParent(); parent != null; parent = parent.getParent()) {
+            if (parent instanceof ContainerBox box) {
+                box.reveal(node);
+            }
+        }
+        Node content = scrollPane.getContent();
+        Node shown = BoxVisibility.isShown(node, content) ? node
+                : BoxVisibility.visibleEndpoint(elementRegistry, fullName, content);
+        if (!(shown instanceof GraphSelection.Selectable target)) {
+            return null;
+        }
+        runWithoutSelectionSink(() -> GraphSelection.ensureSelected(target));
+        nodeSelectionSink.accept(target.getFullName());
+        // Opened packages have no bounds before the next layout pass.
+        Platform.runLater(() -> {
+            if (scrollPane.getScene() != null) {
+                scrollPane.getScene().getRoot().applyCss();
+                scrollPane.getScene().getRoot().layout();
+            }
+            centerOn(shown);
+        });
+        return target.getFullName();
+    }
+
+    private void centerOn(Node target) {
+        Node content = scrollPane.getContent();
+        Bounds viewport = scrollPane.getViewportBounds();
+        if (content == null || viewport == null) {
+            return;
+        }
+        Bounds contentBounds = content.getBoundsInLocal();
+        Bounds targetInContent = content.sceneToLocal(target.localToScene(target.getBoundsInLocal()));
+        double overflowX = Math.max(0, contentBounds.getWidth() - viewport.getWidth());
+        double overflowY = Math.max(0, contentBounds.getHeight() - viewport.getHeight());
+        if (overflowX > 0) {
+            double minX = targetInContent.getCenterX() - viewport.getWidth() / 2 - contentBounds.getMinX();
+            scrollPane.setHvalue(clamp01(minX / overflowX));
+        }
+        if (overflowY > 0) {
+            double minY = targetInContent.getCenterY() - viewport.getHeight() / 2 - contentBounds.getMinY();
+            scrollPane.setVvalue(clamp01(minY / overflowY));
+        }
     }
 
     /** Auswahl nach einem Rebuild wiederherstellen, ohne den Viewport zu bewegen. */

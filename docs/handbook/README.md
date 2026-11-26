@@ -23,7 +23,7 @@ list of changes that can be given to the developers. The analyzed code is never 
 
 S202 finds the dependencies; the team decides which of them are wrong. The first pages explain this
 reasoning, the others describe every view, panel, menu and dialog with pictures of the running
-application. The handbook describes release 1.7.0.
+application. The handbook describes release 1.8.0.
 
 ![The main window of S202 with an analysis](images/window-overview.png)
 
@@ -59,6 +59,8 @@ application. The handbook describes release 1.7.0.
 | Top Tangles, the Tangle View, cutting dependencies | [Tangles](tangle-view.md) |
 | API and implementation, violations of the boundary, planned packages | [Component View](component-view.md) |
 | Core, application and adapters, ports | [Hexagonal View](hexagonal-view.md) |
+| The modules a system is built into: their layers, cycles between JARs, split packages | [Physical View](physical-view.md) |
+| All packages of one depth side by side; which tangles lie in the grouping and which in the code | [Horizontal Slice](slice-view.md) |
 | The architecture in three dimensions, in the window and as a city in the browser | [3D views](3d-views.md) |
 | The fat/tangled plot and the Quality Report | [Quality](quality.md) |
 | From a finding to a list of changes; the reports, undo and reset | [Planning a refactoring](refactoring.md) |

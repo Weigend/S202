@@ -30,6 +30,7 @@ import de.weigend.s202.reader.LanguageAnalyzer;
 import de.weigend.s202.reader.ProjectScanner;
 import de.weigend.s202.ui.core.canvas.ArchitectureCanvas;
 import de.weigend.s202.ui.core.graph.ArchitectureViewSettings;
+import de.weigend.s202.ui.core.graph.BoxVisibility;
 import de.weigend.s202.ui.views.city3d.CityModelSerializer;
 import de.weigend.s202.ui.views.city3d.CityView3DServer;
 import de.weigend.s202.domain.architecture.ArchitectureKind;
@@ -308,13 +309,36 @@ public class S202Module implements Module {
         bus.subscribe(MenuRequestEvent.NewView.class, ev -> { viewManager.newArchitectureWindow(); return true; });
         bus.subscribe(MenuRequestEvent.OpenComponentView.class, ev -> { viewManager.openStyleView(ArchitectureKind.COMPONENT); return true; });
         bus.subscribe(MenuRequestEvent.OpenHexagonalView.class, ev -> { viewManager.openStyleView(ArchitectureKind.HEXAGONAL); return true; });
+        bus.subscribe(MenuRequestEvent.OpenPhysicalView.class, ev -> { viewManager.openPhysicalView(); return true; });
+        bus.subscribe(MenuRequestEvent.OpenSliceView.class, ev -> { openSlice(); return true; });
         bus.subscribe(MenuRequestEvent.OpenMatrix.class, ev -> { openMatrix(); return true; });
         bus.subscribe(MenuRequestEvent.CloseFocusedView.class, ev -> { viewManager.closeFocusedView(); return true; });
         bus.subscribe(MenuRequestEvent.CloseAllViews.class, ev -> { viewManager.closeAllViews(); return true; });
         bus.subscribe(MenuRequestEvent.RestoreDefaultLayout.class, ev -> { restoreDefaultLayout(); return true; });
         bus.subscribe(MenuRequestEvent.Undo.class, ev -> { if (toolbar.boundView() != null) toolbar.boundView().undoWhatIf(); return true; });
         bus.subscribe(MenuRequestEvent.DiscardMoves.class, ev -> { if (toolbar.boundView() != null) toolbar.boundView().discardMoves(); return true; });
+        bus.subscribe(MenuRequestEvent.Find.class, ev -> { find(); return true; });
         bus.subscribe(MenuRequestEvent.Redo.class, ev -> { if (toolbar.boundView() != null) toolbar.boundView().redoWhatIf(); return true; });
+    }
+
+    /** View → Horizontal Slice: which depth, with how the depths compare, then the tab. */
+    private void openSlice() {
+        AnalysisDocument document = viewManager.activeDocument();
+        if (document == null) {
+            publishProgress("No architecture loaded for a horizontal slice", 1);
+            return;
+        }
+        javafx.stage.Window owner = Lookup.lookup(ApplicationWindow.class).getStage();
+        SliceDialog.chooseDepth(owner, document.name(), document.sliceLevels())
+                .ifPresent(depth -> viewManager.openSliceView(document, depth));
+    }
+
+    /** Edit → Find: the search over the picture in front; a matrix has none. */
+    private void find() {
+        ArchitectureCanvas view = viewManager.activeCanvas();
+        if (view != null && view.getScene() != null && BoxVisibility.isShown(view, null)) {
+            view.showFind();
+        }
     }
 
     private void openMatrix() {

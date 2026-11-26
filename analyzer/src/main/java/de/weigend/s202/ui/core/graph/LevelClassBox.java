@@ -169,6 +169,12 @@ public class LevelClassBox extends HBox implements GraphSelection.Selectable {
     }
 
     private static final PseudoClass CONNECTED = PseudoClass.getPseudoClass("connected");
+    private static final PseudoClass TRACED = PseudoClass.getPseudoClass("traced");
+
+    @Override
+    public void setTraced(boolean traced) {
+        pseudoClassStateChanged(TRACED, traced);
+    }
 
     @Override
     public void setConnected(boolean connected) {

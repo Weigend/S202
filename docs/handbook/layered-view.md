@@ -26,6 +26,7 @@ drawn.
 | --- | --- |
 | **−** or **+** in a package | Closes or opens it. |
 | Click on a class or package | Selects it; another click lifts the selection. |
+| Ctrl+F, **Edit → Find Class or Package...** | [Finds](#finding-a-class-or-package) it by name and brings it into the picture. |
 | Ctrl and mouse wheel, **−** and **+** in the toolbar | Zoom, from 2 % to 300 %. |
 | **1:1** | Zoom 100 %. |
 | **Fit** | Zooms so that the whole picture fits into the window, as large as possible. |
@@ -34,12 +35,26 @@ drawn.
 | Mouse over a class or a closed package | Its [arrows](#dependencies) stand out. |
 | Click on an arrow, a violation or the line of a cycle | Selects it and fills [Dependency Details](window.md#dependency-details). |
 | Right-click on a line between two classes | [Cut or Restore](tangle-view.md#cutting). |
-| Right-click on a class or package | **Open Scope**, and what it [depends on](window.md#from--to) or is used by. |
+| Right-click on a class or package | **Open Scope**, what it [depends on](window.md#from--to) or is used by, and [marks](#transitive-users-and-dependencies) for what it reaches. |
 
 Lines are drawn over the boxes, and a click on a place where one runs selects the line. If that
 happens instead of selecting a class, click its edge or select it in the outline. The arrows of
 **Show Dependencies** are thin: zoom in to hit one. One line is selected at a time, whichever kind
 it is.
+
+### Finding a class or package
+
+Ctrl+F opens a field at the top of the picture. While you type, it lists the classes and packages
+of the view whose name fits: the name itself first, then names that start with what you typed,
+then CamelCase initials (`PS` finds `PaymentService`), then names that contain it. With a dot in
+it, the full name counts as well: `payment.api` finds the package.
+
+![Find with "Pay"](images/layered-find.png)
+
+The arrow keys choose a hit, Enter or a click takes it: the packages around it open, it is selected
+as if you had clicked it, and the picture scrolls it into the middle. The panels follow the
+selection. Escape or a click elsewhere puts the field away. Only what the tab shows is found: in a
+[scope](#scopes), the classes of the scope.
 
 ### Package depth
 
@@ -93,6 +108,34 @@ that at least one runs up; `5 / 2↑` means five, of which two run up.
 ![Closed packages with counted arrows](images/layered-collapsed.png)
 
 In the picture the red `1` is the dependency of `payment` on `order`.
+
+### Transitive users and dependencies
+
+An arrow shows one step. Whether a class can be taken out, or what a change to it reaches, depends
+on all the steps behind it. Right-click on a class or package:
+
+| Entry | Effect |
+| --- | --- |
+| **Mark Transitive Users** | Marks every class that uses it, directly or through other classes. |
+| **Mark Transitive Dependencies** | Marks every class it uses, directly or through other classes. |
+| **Clear Marks** | Removes the marks. |
+
+The marked classes turn turquoise, the packages around them get a turquoise frame, and a closed
+package turns turquoise as a whole when it holds one. What you started from is selected. For a
+package, everything in it is the start: its users are the classes outside it that reach it.
+
+![What uses PaymentService](images/layered-trace.png)
+
+Above, everything that uses `PaymentService`: `CardPayments` implements it, `OrderProcessor` and
+`OrderServiceImpl` use it. `OrderValidator` reaches it through `OrderProcessor`, and
+`RefundScreen` through `CardPayments`, past the API of `payment`. The strip below the picture
+counts the classes and packages. **Steps** limits how far the marks go: 1 is only the direct users,
+the last entry is all of them. **Clear** removes the marks.
+
+The way leads through the whole analysis, also through classes the tab does not show; in a scope,
+the strip counts the classes outside it, which cannot be marked. Every kind of dependency counts,
+also one that [Edge Kinds](#edge-kinds) does not draw. With the [plan](refactoring.md) switched on,
+a planned cut takes its dependency away, and the marks follow.
 
 ### Edge kinds
 

@@ -33,7 +33,7 @@ public class ArchitectureViewPackageLevelsTest {
 
     @Test
     public void testPackageLevelsInArchitectureNode() throws Exception {
-        String jarPath = "../test-example/target/test-example-1.7.0.jar";
+        String jarPath = "../test-example/target/test-example-1.8.0.jar";
         
         // Step 1: Analyze
         InputAnalyzer analyzer = new InputAnalyzer();

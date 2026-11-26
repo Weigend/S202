@@ -15,6 +15,7 @@
  */
 package de.weigend.s202.ui.features.hotspots;
 
+import de.weigend.s202.domain.ShownNames;
 import de.weigend.s202.analysis.quality.Hotspots.Hotspot;
 import de.weigend.s202.domain.Origins.Origin;
 import io.softwareecg.wfx.windowmanager.api.Position;
@@ -254,9 +255,11 @@ public final class HotspotsView implements View {
             @Override
             protected void updateItem(String item, boolean empty) {
                 super.updateItem(item, empty);
-                setText(empty ? null : item);
+                // In a Physical View the names carry their files; shown without them.
+                String shown = empty ? null : ShownNames.shown(item);
+                setText(shown);
                 setTextOverrun(OverrunStyle.LEADING_ELLIPSIS);
-                setTooltip(empty || item == null || item.isEmpty() ? null : new Tooltip(item));
+                setTooltip(shown == null || shown.isEmpty() ? null : new Tooltip(shown));
             }
         });
         return column;

@@ -15,6 +15,7 @@
  */
 package de.weigend.s202.ui.core.matrix;
 
+import de.weigend.s202.domain.ShownNames;
 import de.weigend.s202.domain.DependencyEdge;
 import de.weigend.s202.domain.EdgeCycleClassifier.CycleKind;
 import de.weigend.s202.domain.architecture.DependencyMatrix;
@@ -379,7 +380,8 @@ public final class MatrixView extends BorderPane {
             case CELL -> matrix.cell(place.row(), place.column()) == null ? Cursor.DEFAULT : Cursor.HAND;
             default -> Cursor.HAND;
         });
-        String text = describe(place);
+        // In a Physical View the names carry their files; shown without them.
+        String text = ShownNames.shown(describe(place));
         tooltip.setText(text);
         tooltip.setOpacity(text.isEmpty() ? 0 : 1);
         if (place.row() != hoverRow || place.column() != hoverColumn) {

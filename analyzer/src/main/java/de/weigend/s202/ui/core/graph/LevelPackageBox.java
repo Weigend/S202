@@ -54,6 +54,13 @@ public class LevelPackageBox extends VBox implements GraphSelection.Selectable, 
             "-fx-background-color: #fff3a0; -fx-border-color: #1d4ed8; -fx-border-width: 3;";
     private static final String STYLE_CONNECTED =
             "-fx-background-color: #dcefdc; -fx-border-color: #2e7d32; -fx-border-width: 1;";
+    // Reached by a trace: closed, the package stands for its classes and takes their colour.
+    private static final String STYLE_TRACED_COLLAPSED =
+            "-fx-background-color: #80deea; -fx-border-color: #00838f; -fx-border-width: 2;";
+    private static final String STYLE_TRACED_EXPANDED =
+            "-fx-background-color: #fffacd; -fx-border-color: #00838f; -fx-border-width: 2;";
+    private static final String STYLE_TRACED_PLAIN =
+            "-fx-background-color: transparent; -fx-border-color: #00838f; -fx-border-width: 2;";
     private static final String STYLE_TRANSPARENT =
             "-fx-background-color: transparent; -fx-border-width: 0;";
     // A plain package is icon and name only; opened, a thin frame holds its content together.
@@ -87,6 +94,7 @@ public class LevelPackageBox extends VBox implements GraphSelection.Selectable, 
     private boolean selected;
     private boolean virtuallyMoved;
     private boolean connected;
+    private boolean traced;
     private Consumer<String> selectionChangeSink;
     /** Builds the child boxes on first use; {@code null} once they exist. */
     private Runnable lazyContent;
@@ -196,6 +204,8 @@ public class LevelPackageBox extends VBox implements GraphSelection.Selectable, 
             this.setStyle(STYLE_SELECTED);
         } else if (connected) {
             this.setStyle(STYLE_CONNECTED);
+        } else if (traced) {
+            this.setStyle(plain ? STYLE_TRACED_PLAIN : isExpanded ? STYLE_TRACED_EXPANDED : STYLE_TRACED_COLLAPSED);
         } else if (plain) {
             this.setStyle(isExpanded ? STYLE_PLAIN_EXPANDED : STYLE_PLAIN_COLLAPSED);
         } else {
@@ -370,6 +380,7 @@ public class LevelPackageBox extends VBox implements GraphSelection.Selectable, 
         builder.run();
     }
 
+    @Override
     public void setExpanded(boolean expanded) {
         if (this.isExpanded != expanded) {
             toggleExpanded();
@@ -389,8 +400,8 @@ public class LevelPackageBox extends VBox implements GraphSelection.Selectable, 
             contentContainer.setVisible(false);
             contentContainer.setManaged(false);
         }
-        if (plain) {
-            applyBaseStyle(); // the frame comes and goes with the content
+        if (plain || traced) {
+            applyBaseStyle(); // the frame or the colour comes and goes with the content
         }
 
         ExpandChangedEvent.fireFrom(this);
@@ -468,6 +479,14 @@ public class LevelPackageBox extends VBox implements GraphSelection.Selectable, 
     public void setConnected(boolean connected) {
         if (this.connected != connected) {
             this.connected = connected;
+            applyBaseStyle();
+        }
+    }
+
+    @Override
+    public void setTraced(boolean traced) {
+        if (this.traced != traced) {
+            this.traced = traced;
             applyBaseStyle();
         }
     }

@@ -295,7 +295,9 @@ public final class ProjectPersistenceController {
                 !canvas.isShowPlan(),
                 matrixOpen,
                 canvas.getMatrix().getOpen().stream().sorted().toList(),
-                canvas.getMatrix().isShowingExternals());
+                canvas.getMatrix().isShowingExternals(),
+                descriptor.physical(),
+                descriptor.slice());
     }
 
     private static S202Project.MoveDto toMoveDto(WhatIfMove move) {
@@ -321,7 +323,9 @@ public final class ProjectPersistenceController {
                 dto.scopeExtensions(),
                 dto.tangleMembers() == null ? Set.of() : new LinkedHashSet<>(dto.tangleMembers()),
                 dto.tangleKey(),
-                dto.tangleContext());
+                dto.tangleContext(),
+                dto.physical(),
+                dto.slice());
     }
 
     /** Bringt einen frisch gebauten Tab in den Zustand, in dem er gespeichert wurde. */
@@ -352,7 +356,7 @@ public final class ProjectPersistenceController {
         return new S202Project.ViewDto(
                 ViewDescriptor.Kind.LAYERED.name(), null, null, List.of(), List.of(), null, false,
                 ArchitectureCanvas.DEFAULT_PACKAGE_DEPTH, false, false, false, false, false, List.of(),
-                1.0, 0.0, 0.0, Map.of(), null, true, List.of(), List.of(), false, false, List.of(), false);
+                1.0, 0.0, 0.0, Map.of(), null, true, List.of(), List.of(), false, false, List.of(), false, false, 0);
     }
 
     /** Schließt das aktive Dokument mit allen seinen Tabs; die anderen bleiben offen. */

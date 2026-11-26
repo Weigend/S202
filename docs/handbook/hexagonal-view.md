@@ -19,7 +19,7 @@ The pictures show the project [test-hexagon](../../test-hexagon), a bookshop. It
 root of the repository:
 
 ```bash
-mvn -pl test-hexagon -am package   # produces test-hexagon/target/test-hexagon-1.7.0.jar
+mvn -pl test-hexagon -am package   # produces test-hexagon/target/test-hexagon-1.8.0.jar
 ```
 
 ## Reading the picture
@@ -37,6 +37,9 @@ mvn -pl test-hexagon -am package   # produces test-hexagon/target/test-hexagon-1
 cross closes it.
 
 ![Opened cards](images/hexagonal-expanded.png)
+
+[Find](layered-view.md#finding-a-class-or-package) selects the box a class lies in; its card
+stays closed. [Marks](layered-view.md#transitive-users-and-dependencies) are shown on the boxes.
 
 A click on a box selects its package. With **Show Dependencies** only the dependencies of this
 package are drawn, also those of its boxes in other sectors: below, the package `service`, selected
@@ -108,4 +111,4 @@ Role**, the name of a theme the same for the *Segment*.
 Marked ports have an orange frame in the card. Roles and ports are kept with the analysis, stored
 in the project file and listed in the [refactoring report](refactoring.md#refactoring-report).
 
-[Next: 3D views →](3d-views.md)
+[Next: Physical View →](physical-view.md)

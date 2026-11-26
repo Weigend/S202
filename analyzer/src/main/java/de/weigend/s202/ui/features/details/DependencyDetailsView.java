@@ -15,6 +15,7 @@
  */
 package de.weigend.s202.ui.features.details;
 
+import de.weigend.s202.domain.ShownNames;
 import de.weigend.s202.ui.features.details.DetailContent.Place;
 import de.weigend.s202.ui.features.details.DetailContent.Row;
 import de.weigend.s202.ui.features.details.DetailContent.Style;
@@ -97,8 +98,9 @@ public final class DependencyDetailsView implements View {
     void show(DetailContent content) {
         header.setVisible(content != null);
         header.setManaged(content != null);
-        title.setText(content == null ? "" : content.title());
-        summary.setText(content == null ? "" : content.summary());
+        // In a Physical View the names carry their files; shown without them.
+        title.setText(content == null ? "" : ShownNames.shown(content.title()));
+        summary.setText(content == null ? "" : ShownNames.shown(content.summary()));
         shown = content;
         fill();
     }
@@ -185,8 +187,8 @@ public final class DependencyDetailsView implements View {
                 setTooltip(null);
                 return;
             }
-            setText(text.apply(row));
-            setTooltip(row.tooltip() == null ? null : new Tooltip(row.tooltip()));
+            setText(ShownNames.shown(text.apply(row)));
+            setTooltip(row.tooltip() == null ? null : new Tooltip(ShownNames.shown(row.tooltip())));
             getStyleClass().add(styleClass(row.style()));
         }
     }

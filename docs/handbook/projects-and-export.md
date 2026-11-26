@@ -21,7 +21,7 @@ S202 that reads more, open the code again.
 
 Files of earlier versions can be loaded, and their architecture is computed anew. They do not say
 which packages carry the annotations of S202, so components declared that way are missing. A file
-saved with this version cannot be opened with release 1.6.0 or older.
+saved with this version cannot be opened with release 1.7.0 or older.
 
 ## What is remembered
 

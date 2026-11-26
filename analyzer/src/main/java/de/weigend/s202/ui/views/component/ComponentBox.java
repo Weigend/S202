@@ -52,6 +52,8 @@ public class ComponentBox extends VBox implements GraphSelection.Selectable, de.
     private static final String STYLE_SELECTED =
             "-fx-background-color: #f7fbff; -fx-border-color: #ff8a00; -fx-border-width: 3;"
           + " -fx-background-radius: 7; -fx-border-radius: 7;";
+    /** Reached by a trace: the border of {@code .class-box:traced}. */
+    private static final String TRACED_BORDER = " -fx-border-color: #00838f; -fx-border-width: 3;";
     private static final String API_STYLE_NORMAL =
             "-fx-background-color: #d9ecff; -fx-border-color: #9bc5ef;"
           + " -fx-border-width: 1; -fx-background-radius: 5; -fx-border-radius: 5;";
@@ -72,6 +74,8 @@ public class ComponentBox extends VBox implements GraphSelection.Selectable, de.
     private Consumer<String> selectionChangeSink;
     private String styleNormal = STYLE_NORMAL;
     private String styleSelected = STYLE_SELECTED;
+    private boolean selected;
+    private boolean traced;
 
     public ComponentBox(String displayName, String fullName, int apiCount) {
         this.fullName = fullName;
@@ -174,6 +178,7 @@ public class ComponentBox extends VBox implements GraphSelection.Selectable, de.
         return componentExpanded;
     }
 
+    @Override
     public void setExpanded(boolean expanded) {
         if (componentExpanded != expanded) {
             toggleComponentExpanded();
@@ -241,20 +246,46 @@ public class ComponentBox extends VBox implements GraphSelection.Selectable, de.
         return limitRowWidth ? Math.max(prefWidth(height), MAX_ROW_FILL_WIDTH) : Double.MAX_VALUE;
     }
 
+    /** Opens the component and, for an element of its API, the API area too. */
+    @Override
+    public void reveal(Node descendant) {
+        setExpanded(true);
+        for (Node node = descendant; node != null && node != this; node = node.getParent()) {
+            if (node == apiRowsContainer) {
+                setApiExpanded(true);
+                return;
+            }
+        }
+    }
+
     public void setCustomStyles(String normalStyle, String selectedStyle) {
         this.styleNormal = normalStyle;
         this.styleSelected = selectedStyle;
-        setStyle(styleNormal);
+        applyStyle();
     }
 
     @Override
     public void applySelectedStyle() {
-        setStyle(styleSelected);
+        selected = true;
+        applyStyle();
     }
 
     @Override
     public void applyUnselectedStyle() {
-        setStyle(styleNormal);
+        selected = false;
+        applyStyle();
+    }
+
+    @Override
+    public void setTraced(boolean traced) {
+        if (this.traced != traced) {
+            this.traced = traced;
+            applyStyle();
+        }
+    }
+
+    private void applyStyle() {
+        setStyle(selected ? styleSelected : traced ? styleNormal + TRACED_BORDER : styleNormal);
     }
 
     private void toggleComponentExpanded() {

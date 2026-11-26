@@ -19,6 +19,9 @@ import de.weigend.s202.analysis.invariants.LayoutInvariantReport;
 import de.weigend.s202.analysis.quality.QualityMetrics;
 import de.weigend.s202.domain.DependencyEdge;
 import de.weigend.s202.domain.DomainModel;
+import de.weigend.s202.domain.PhysicalHierarchy;
+import de.weigend.s202.domain.SliceHierarchy;
+import de.weigend.s202.domain.ShownNames;
 import de.weigend.s202.domain.architecture.ArchitectureAnnotations;
 import de.weigend.s202.project.S202Project;
 import de.weigend.s202.reader.DependencyModel;
@@ -60,6 +63,10 @@ public final class AnalysisDocument {
 
     private ArchitectureAnnotations annotations = ArchitectureAnnotations.empty();
     private final Set<DependencyEdge> previewCuts = new LinkedHashSet<>();
+    private DerivedAnalysis physical;
+    private final java.util.Map<Integer, DerivedAnalysis> slices = new java.util.HashMap<>();
+    private java.util.List<SliceHierarchy.Level> sliceLevels;
+    private Integer files;
 
     public AnalysisDocument(String name,
                             S202Project.Source source,
@@ -115,6 +122,42 @@ public final class AnalysisDocument {
         return cycleBreakEdges;
     }
 
+    /** Whether the classes come from at least two files: only then has the Physical View something to show. */
+    public synchronized boolean hasPhysicalView() {
+        if (files == null) {
+            files = PhysicalHierarchy.files(rawModel);
+        }
+        return files >= 2;
+    }
+
+    /**
+     * The analysis with the classes ordered by their files; computed when it
+     * is asked for the first time, which takes as long as the analysis did.
+     */
+    public synchronized DerivedAnalysis physical() {
+        if (physical == null) {
+            physical = DerivedAnalysis.physical(rawModel);
+        }
+        return physical;
+    }
+
+    /**
+     * The analysis with the packages of {@code depth} side by side, a
+     * horizontal slice; computed when it is asked for the first time.
+     */
+    public synchronized DerivedAnalysis slice(int depth) {
+        return slices.computeIfAbsent(depth, d -> DerivedAnalysis.slice(rawModel, d));
+    }
+
+    /** Every depth of the packages, with how many there are and how tangled they are. */
+    public synchronized java.util.List<SliceHierarchy.Level> sliceLevels() {
+        if (sliceLevels == null) {
+            sliceLevels = SliceHierarchy.levels(rawModel,
+                    io.softwareecg.wfx.lookup.api.Lookup.require(de.weigend.s202.domain.SCCFinder.class));
+        }
+        return sliceLevels;
+    }
+
     /* ----- Veränderlicher, von allen Tabs geteilter Zustand ----------------- */
 
     public ArchitectureAnnotations annotations() {
@@ -125,24 +168,32 @@ public final class AnalysisDocument {
         this.annotations = annotations == null ? ArchitectureAnnotations.empty() : annotations;
     }
 
-    /** Die im Refactoring-Preview „geschnittenen“ Kanten dieses Dokuments. */
+    /**
+     * Die im Refactoring-Preview „geschnittenen“ Kanten dieses Dokuments,
+     * unter den Namen der Analyse - auch wenn sie in einer Physical View
+     * geschnitten wurden.
+     */
     public Set<DependencyEdge> previewCuts() {
         return Collections.unmodifiableSet(previewCuts);
     }
 
     /** @return {@code false}, wenn die Kante schon geschnitten war */
     public boolean addPreviewCut(DependencyEdge edge) {
-        return previewCuts.add(edge);
+        return previewCuts.add(logical(edge));
     }
 
     /** @return {@code false}, wenn keine der Kanten neu war */
     public boolean addPreviewCuts(Collection<DependencyEdge> edges) {
-        return previewCuts.addAll(edges);
+        return previewCuts.addAll(edges.stream().map(AnalysisDocument::logical).toList());
     }
 
     /** @return {@code false}, wenn die Kante nicht geschnitten war */
     public boolean removePreviewCut(DependencyEdge edge) {
-        return previewCuts.remove(edge);
+        return previewCuts.remove(logical(edge));
+    }
+
+    private static DependencyEdge logical(DependencyEdge edge) {
+        return new DependencyEdge(ShownNames.toLogical(edge.from()), ShownNames.toLogical(edge.to()));
     }
 
     public void clearPreviewCuts() {

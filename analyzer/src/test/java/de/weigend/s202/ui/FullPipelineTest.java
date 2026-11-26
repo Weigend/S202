@@ -32,7 +32,7 @@ public class FullPipelineTest {
     public void testPackageLevelsPropagateToUI() throws Exception {
         // Step 1: Analyze bytecode
         InputAnalyzer analyzer = new InputAnalyzer();
-        DependencyModel rawModel = analyzer.analyze("../test-example/target/test-example-1.7.0.jar");
+        DependencyModel rawModel = analyzer.analyze("../test-example/target/test-example-1.8.0.jar");
         
         System.out.println("[TEST] Raw model packages: " + rawModel.getAllPackageNames());
         

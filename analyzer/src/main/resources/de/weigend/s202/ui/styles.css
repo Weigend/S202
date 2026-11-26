@@ -761,6 +761,14 @@
     -fx-min-width: 0;
 }
 
+/* Reached by a trace of users or dependencies; the hover marks win. */
+.class-box:traced {
+    -fx-border-color: #00838f;
+    -fx-border-width: 2;
+    -fx-padding: 0 2;
+    -fx-background-color: #80deea;
+}
+
 .class-box:connected {
     -fx-border-color: #2e7d32;
     -fx-background-color: #dcefdc;
@@ -853,6 +861,43 @@
 .between-button {
     -fx-font-size: 11px;
     -fx-padding: 2 8;
+}
+
+/* ===== Find (Ctrl+F) over a picture: dark like the panels ===== */
+.find-box .text-field {
+    -fx-font-size: 12px;
+    -fx-background-color: #2b3038;
+    -fx-text-fill: #e0e0e0;
+    -fx-prompt-text-fill: #8a9bb0;
+}
+
+.find-box .list-view {
+    -fx-background-color: #1a1a1a;
+    -fx-control-inner-background: #1a1a1a;
+    -fx-border-color: #555a60;
+}
+
+.find-box .list-cell {
+    -fx-font-size: 12px;
+    -fx-padding: 2 6;
+    -fx-background-color: transparent;
+}
+
+.find-box .list-cell:hover {
+    -fx-background-color: #2b3e50;
+}
+
+.find-box .list-cell:filled:selected {
+    -fx-background-color: #3d5a80;
+}
+
+.find-box .find-hit-name {
+    -fx-font-weight: bold;
+    -fx-text-fill: #e0e0e0;
+}
+
+.find-box .find-hit-location {
+    -fx-text-fill: #8a9bb0;
 }
 
 .between-tree {

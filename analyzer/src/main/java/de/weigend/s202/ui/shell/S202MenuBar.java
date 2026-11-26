@@ -73,6 +73,8 @@ public class S202MenuBar {
     private static final String VIEW_MENU_TITLE = "View";
     private static final String COMPONENT_VIEW_ITEM_ID = "view.componentView";
     private static final String HEXAGONAL_VIEW_ITEM_ID = "view.hexagonalView";
+    private static final String PHYSICAL_VIEW_ITEM_ID = "view.physicalView";
+    private static final String SLICE_VIEW_ITEM_ID = "view.sliceView";
     private static final String MATRIX_ITEM_ID = "view.matrix";
 
     private final ApplicationWindow applicationWindow;
@@ -117,7 +119,11 @@ public class S202MenuBar {
                 "edit.discardMoves", "Discard Moves of This View",
                 e -> publish(new MenuRequestEvent.DiscardMoves(this)));
         discardMovesItem.disableProperty().bind(canUndo.not());
-        editMenu.getItems().addAll(undoItem, redoItem, new SeparatorMenuItem(), discardMovesItem, resetItem);
+        MenuItem findItem = MenuUtil.createMenuItem(
+                "edit.find", "Find Class or Package...", e -> publish(new MenuRequestEvent.Find(this)));
+        findItem.setAccelerator(new KeyCodeCombination(KeyCode.F, KeyCombination.SHORTCUT_DOWN));
+        editMenu.getItems().addAll(undoItem, redoItem, new SeparatorMenuItem(), findItem,
+                new SeparatorMenuItem(), discardMovesItem, resetItem);
         applicationWindow.getMenu().add(1, editMenu);
     }
 
@@ -264,6 +270,16 @@ public class S202MenuBar {
                     e -> publish(new MenuRequestEvent.OpenHexagonalView(this)));
             viewMenu.getItems().add(hexagonalViewItem);
         }
+        if (!containsMenuItem(viewMenu, PHYSICAL_VIEW_ITEM_ID)) {
+            viewMenu.getItems().add(MenuUtil.createMenuItem(
+                    PHYSICAL_VIEW_ITEM_ID, "Physical View",
+                    e -> publish(new MenuRequestEvent.OpenPhysicalView(this))));
+        }
+        if (!containsMenuItem(viewMenu, SLICE_VIEW_ITEM_ID)) {
+            viewMenu.getItems().add(MenuUtil.createMenuItem(
+                    SLICE_VIEW_ITEM_ID, "Horizontal Slice...",
+                    e -> publish(new MenuRequestEvent.OpenSliceView(this))));
+        }
         if (!containsMenuItem(viewMenu, MATRIX_ITEM_ID)) {
             viewMenu.getItems().add(MenuUtil.createMenuItem(
                     MATRIX_ITEM_ID, "Dependency Matrix",
@@ -279,6 +295,8 @@ public class S202MenuBar {
         viewMenu.getItems().addListener((ListChangeListener<MenuItem>) change -> {
             if (!containsMenuItem(viewMenu, COMPONENT_VIEW_ITEM_ID)
                     || !containsMenuItem(viewMenu, HEXAGONAL_VIEW_ITEM_ID)
+                    || !containsMenuItem(viewMenu, PHYSICAL_VIEW_ITEM_ID)
+                    || !containsMenuItem(viewMenu, SLICE_VIEW_ITEM_ID)
                     || !containsMenuItem(viewMenu, MATRIX_ITEM_ID)) {
                 Platform.runLater(this::ensureArchitectureViewMenuItems);
             }
