@@ -1,0 +1,561 @@
+{
+  "maxLevel" : 4,
+  "districts" : [ {
+    "fullName" : "com",
+    "simpleName" : "com",
+    "parentFullName" : null,
+    "architectureLevel" : 2,
+    "localLevel" : 0,
+    "nestingDepth" : 0,
+    "horizontalOrder" : 0,
+    "inCycle" : false,
+    "footprint" : null
+  }, {
+    "fullName" : "com.example",
+    "simpleName" : "example",
+    "parentFullName" : "com",
+    "architectureLevel" : 0,
+    "localLevel" : 0,
+    "nestingDepth" : 1,
+    "horizontalOrder" : 0,
+    "inCycle" : false,
+    "footprint" : null
+  }, {
+    "fullName" : "com.example1",
+    "simpleName" : "example1",
+    "parentFullName" : "com",
+    "architectureLevel" : 0,
+    "localLevel" : 0,
+    "nestingDepth" : 1,
+    "horizontalOrder" : 1,
+    "inCycle" : false,
+    "footprint" : null
+  }, {
+    "fullName" : "com.example2",
+    "simpleName" : "example2",
+    "parentFullName" : "com",
+    "architectureLevel" : 1,
+    "localLevel" : 1,
+    "nestingDepth" : 1,
+    "horizontalOrder" : 0,
+    "inCycle" : false,
+    "footprint" : null
+  }, {
+    "fullName" : "com.example3",
+    "simpleName" : "example3",
+    "parentFullName" : "com",
+    "architectureLevel" : 2,
+    "localLevel" : 0,
+    "nestingDepth" : 1,
+    "horizontalOrder" : 2,
+    "inCycle" : false,
+    "footprint" : null
+  }, {
+    "fullName" : "com.example3.sub1",
+    "simpleName" : "sub1",
+    "parentFullName" : "com.example3",
+    "architectureLevel" : 0,
+    "localLevel" : 0,
+    "nestingDepth" : 2,
+    "horizontalOrder" : 0,
+    "inCycle" : true,
+    "footprint" : null
+  }, {
+    "fullName" : "com.example3.sub2",
+    "simpleName" : "sub2",
+    "parentFullName" : "com.example3",
+    "architectureLevel" : 1,
+    "localLevel" : 1,
+    "nestingDepth" : 2,
+    "horizontalOrder" : 0,
+    "inCycle" : true,
+    "footprint" : null
+  }, {
+    "fullName" : "sccs",
+    "simpleName" : "sccs",
+    "parentFullName" : null,
+    "architectureLevel" : 4,
+    "localLevel" : 0,
+    "nestingDepth" : 0,
+    "horizontalOrder" : 1,
+    "inCycle" : false,
+    "footprint" : null
+  }, {
+    "fullName" : "sccs.api",
+    "simpleName" : "api",
+    "parentFullName" : "sccs",
+    "architectureLevel" : 2,
+    "localLevel" : 2,
+    "nestingDepth" : 1,
+    "horizontalOrder" : 0,
+    "inCycle" : true,
+    "footprint" : null
+  }, {
+    "fullName" : "sccs.app",
+    "simpleName" : "app",
+    "parentFullName" : "sccs",
+    "architectureLevel" : 4,
+    "localLevel" : 4,
+    "nestingDepth" : 1,
+    "horizontalOrder" : 0,
+    "inCycle" : false,
+    "footprint" : null
+  }, {
+    "fullName" : "sccs.core",
+    "simpleName" : "core",
+    "parentFullName" : "sccs",
+    "architectureLevel" : 0,
+    "localLevel" : 0,
+    "nestingDepth" : 1,
+    "horizontalOrder" : 0,
+    "inCycle" : true,
+    "footprint" : null
+  }, {
+    "fullName" : "sccs.infra",
+    "simpleName" : "infra",
+    "parentFullName" : "sccs",
+    "architectureLevel" : 3,
+    "localLevel" : 3,
+    "nestingDepth" : 1,
+    "horizontalOrder" : 0,
+    "inCycle" : true,
+    "footprint" : null
+  }, {
+    "fullName" : "sccs.platform",
+    "simpleName" : "platform",
+    "parentFullName" : "sccs",
+    "architectureLevel" : 0,
+    "localLevel" : 0,
+    "nestingDepth" : 1,
+    "horizontalOrder" : 1,
+    "inCycle" : false,
+    "footprint" : null
+  }, {
+    "fullName" : "sccs.service",
+    "simpleName" : "service",
+    "parentFullName" : "sccs",
+    "architectureLevel" : 1,
+    "localLevel" : 1,
+    "nestingDepth" : 1,
+    "horizontalOrder" : 0,
+    "inCycle" : true,
+    "footprint" : null
+  } ],
+  "buildings" : [ {
+    "fullName" : "com.example.C",
+    "simpleName" : "C",
+    "districtFullName" : "com.example",
+    "architectureLevel" : 2,
+    "localLevel" : 2,
+    "nestingDepth" : 2,
+    "horizontalOrder" : 0,
+    "footprint" : null,
+    "fanIn" : 0,
+    "fanOut" : 1,
+    "methodCount" : 3,
+    "isInterface" : false,
+    "inCycle" : false
+  }, {
+    "fullName" : "com.example.B",
+    "simpleName" : "B",
+    "districtFullName" : "com.example",
+    "architectureLevel" : 1,
+    "localLevel" : 1,
+    "nestingDepth" : 2,
+    "horizontalOrder" : 0,
+    "footprint" : null,
+    "fanIn" : 2,
+    "fanOut" : 1,
+    "methodCount" : 3,
+    "isInterface" : false,
+    "inCycle" : false
+  }, {
+    "fullName" : "com.example.A",
+    "simpleName" : "A",
+    "districtFullName" : "com.example",
+    "architectureLevel" : 0,
+    "localLevel" : 0,
+    "nestingDepth" : 2,
+    "horizontalOrder" : 0,
+    "footprint" : null,
+    "fanIn" : 1,
+    "fanOut" : 0,
+    "methodCount" : 2,
+    "isInterface" : false,
+    "inCycle" : false
+  }, {
+    "fullName" : "com.example1.X",
+    "simpleName" : "X",
+    "districtFullName" : "com.example1",
+    "architectureLevel" : 0,
+    "localLevel" : 0,
+    "nestingDepth" : 2,
+    "horizontalOrder" : 0,
+    "footprint" : null,
+    "fanIn" : 1,
+    "fanOut" : 0,
+    "methodCount" : 2,
+    "isInterface" : false,
+    "inCycle" : false
+  }, {
+    "fullName" : "com.example2.E",
+    "simpleName" : "E",
+    "districtFullName" : "com.example2",
+    "architectureLevel" : 3,
+    "localLevel" : 3,
+    "nestingDepth" : 2,
+    "horizontalOrder" : 0,
+    "footprint" : null,
+    "fanIn" : 0,
+    "fanOut" : 3,
+    "methodCount" : 2,
+    "isInterface" : false,
+    "inCycle" : false
+  }, {
+    "fullName" : "com.example2.C",
+    "simpleName" : "C",
+    "districtFullName" : "com.example2",
+    "architectureLevel" : 1,
+    "localLevel" : 1,
+    "nestingDepth" : 2,
+    "horizontalOrder" : 1,
+    "footprint" : null,
+    "fanIn" : 1,
+    "fanOut" : 1,
+    "methodCount" : 2,
+    "isInterface" : false,
+    "inCycle" : false
+  }, {
+    "fullName" : "com.example2.D",
+    "simpleName" : "D",
+    "districtFullName" : "com.example2",
+    "architectureLevel" : 0,
+    "localLevel" : 0,
+    "nestingDepth" : 2,
+    "horizontalOrder" : 0,
+    "footprint" : null,
+    "fanIn" : 2,
+    "fanOut" : 0,
+    "methodCount" : 2,
+    "isInterface" : false,
+    "inCycle" : false
+  }, {
+    "fullName" : "com.example2.A",
+    "simpleName" : "A",
+    "districtFullName" : "com.example2",
+    "architectureLevel" : 2,
+    "localLevel" : 2,
+    "nestingDepth" : 2,
+    "horizontalOrder" : 0,
+    "footprint" : null,
+    "fanIn" : 1,
+    "fanOut" : 2,
+    "methodCount" : 2,
+    "isInterface" : false,
+    "inCycle" : false
+  }, {
+    "fullName" : "com.example2.B",
+    "simpleName" : "B",
+    "districtFullName" : "com.example2",
+    "architectureLevel" : 1,
+    "localLevel" : 1,
+    "nestingDepth" : 2,
+    "horizontalOrder" : 0,
+    "footprint" : null,
+    "fanIn" : 1,
+    "fanOut" : 1,
+    "methodCount" : 2,
+    "isInterface" : false,
+    "inCycle" : false
+  }, {
+    "fullName" : "com.example3.sub1.A",
+    "simpleName" : "A",
+    "districtFullName" : "com.example3.sub1",
+    "architectureLevel" : 2,
+    "localLevel" : 1,
+    "nestingDepth" : 3,
+    "horizontalOrder" : 0,
+    "footprint" : null,
+    "fanIn" : 1,
+    "fanOut" : 2,
+    "methodCount" : 2,
+    "isInterface" : false,
+    "inCycle" : false
+  }, {
+    "fullName" : "com.example3.sub1.B",
+    "simpleName" : "B",
+    "districtFullName" : "com.example3.sub1",
+    "architectureLevel" : 0,
+    "localLevel" : 0,
+    "nestingDepth" : 3,
+    "horizontalOrder" : 0,
+    "footprint" : null,
+    "fanIn" : 2,
+    "fanOut" : 0,
+    "methodCount" : 2,
+    "isInterface" : false,
+    "inCycle" : false
+  }, {
+    "fullName" : "com.example3.sub2.C",
+    "simpleName" : "C",
+    "districtFullName" : "com.example3.sub2",
+    "architectureLevel" : 1,
+    "localLevel" : 0,
+    "nestingDepth" : 3,
+    "horizontalOrder" : 0,
+    "footprint" : null,
+    "fanIn" : 1,
+    "fanOut" : 1,
+    "methodCount" : 2,
+    "isInterface" : false,
+    "inCycle" : false
+  }, {
+    "fullName" : "com.example3.sub2.D",
+    "simpleName" : "D",
+    "districtFullName" : "com.example3.sub2",
+    "architectureLevel" : 3,
+    "localLevel" : 0,
+    "nestingDepth" : 3,
+    "horizontalOrder" : 1,
+    "footprint" : null,
+    "fanIn" : 0,
+    "fanOut" : 1,
+    "methodCount" : 2,
+    "isInterface" : false,
+    "inCycle" : false
+  }, {
+    "fullName" : "sccs.api.PaymentController",
+    "simpleName" : "PaymentController",
+    "districtFullName" : "sccs.api",
+    "architectureLevel" : 2,
+    "localLevel" : 0,
+    "nestingDepth" : 2,
+    "horizontalOrder" : 1,
+    "footprint" : null,
+    "fanIn" : 1,
+    "fanOut" : 2,
+    "methodCount" : 2,
+    "isInterface" : false,
+    "inCycle" : false
+  }, {
+    "fullName" : "sccs.api.NotificationController",
+    "simpleName" : "NotificationController",
+    "districtFullName" : "sccs.api",
+    "architectureLevel" : 2,
+    "localLevel" : 0,
+    "nestingDepth" : 2,
+    "horizontalOrder" : 0,
+    "footprint" : null,
+    "fanIn" : 1,
+    "fanOut" : 2,
+    "methodCount" : 2,
+    "isInterface" : false,
+    "inCycle" : false
+  }, {
+    "fullName" : "sccs.app.AppMain",
+    "simpleName" : "AppMain",
+    "districtFullName" : "sccs.app",
+    "architectureLevel" : 4,
+    "localLevel" : 0,
+    "nestingDepth" : 2,
+    "horizontalOrder" : 0,
+    "footprint" : null,
+    "fanIn" : 0,
+    "fanOut" : 2,
+    "methodCount" : 2,
+    "isInterface" : false,
+    "inCycle" : false
+  }, {
+    "fullName" : "sccs.core.Event",
+    "simpleName" : "Event",
+    "districtFullName" : "sccs.core",
+    "architectureLevel" : 0,
+    "localLevel" : 0,
+    "nestingDepth" : 2,
+    "horizontalOrder" : 0,
+    "footprint" : null,
+    "fanIn" : 2,
+    "fanOut" : 1,
+    "methodCount" : 2,
+    "isInterface" : false,
+    "inCycle" : true
+  }, {
+    "fullName" : "sccs.core.Order",
+    "simpleName" : "Order",
+    "districtFullName" : "sccs.core",
+    "architectureLevel" : 0,
+    "localLevel" : 0,
+    "nestingDepth" : 2,
+    "horizontalOrder" : 1,
+    "footprint" : null,
+    "fanIn" : 2,
+    "fanOut" : 1,
+    "methodCount" : 2,
+    "isInterface" : false,
+    "inCycle" : true
+  }, {
+    "fullName" : "sccs.infra.MessageQueue",
+    "simpleName" : "MessageQueue",
+    "districtFullName" : "sccs.infra",
+    "architectureLevel" : 3,
+    "localLevel" : 0,
+    "nestingDepth" : 2,
+    "horizontalOrder" : 0,
+    "footprint" : null,
+    "fanIn" : 3,
+    "fanOut" : 3,
+    "methodCount" : 3,
+    "isInterface" : false,
+    "inCycle" : true
+  }, {
+    "fullName" : "sccs.infra.PaymentRepository",
+    "simpleName" : "PaymentRepository",
+    "districtFullName" : "sccs.infra",
+    "architectureLevel" : 3,
+    "localLevel" : 0,
+    "nestingDepth" : 2,
+    "horizontalOrder" : 1,
+    "footprint" : null,
+    "fanIn" : 3,
+    "fanOut" : 3,
+    "methodCount" : 4,
+    "isInterface" : false,
+    "inCycle" : true
+  }, {
+    "fullName" : "sccs.platform.Infrastructure",
+    "simpleName" : "Infrastructure",
+    "districtFullName" : "sccs.platform",
+    "architectureLevel" : 0,
+    "localLevel" : 0,
+    "nestingDepth" : 2,
+    "horizontalOrder" : 0,
+    "footprint" : null,
+    "fanIn" : 2,
+    "fanOut" : 0,
+    "methodCount" : 2,
+    "isInterface" : false,
+    "inCycle" : false
+  }, {
+    "fullName" : "sccs.service.NotificationService",
+    "simpleName" : "NotificationService",
+    "districtFullName" : "sccs.service",
+    "architectureLevel" : 1,
+    "localLevel" : 0,
+    "nestingDepth" : 2,
+    "horizontalOrder" : 0,
+    "footprint" : null,
+    "fanIn" : 2,
+    "fanOut" : 2,
+    "methodCount" : 2,
+    "isInterface" : false,
+    "inCycle" : true
+  }, {
+    "fullName" : "sccs.service.PaymentService",
+    "simpleName" : "PaymentService",
+    "districtFullName" : "sccs.service",
+    "architectureLevel" : 1,
+    "localLevel" : 0,
+    "nestingDepth" : 2,
+    "horizontalOrder" : 1,
+    "footprint" : null,
+    "fanIn" : 2,
+    "fanOut" : 2,
+    "methodCount" : 2,
+    "isInterface" : false,
+    "inCycle" : true
+  } ],
+  "dependencies" : [ {
+    "from" : "com.example.C",
+    "to" : "com.example.B"
+  }, {
+    "from" : "com.example.B",
+    "to" : "com.example.A"
+  }, {
+    "from" : "com.example2.E",
+    "to" : "com.example1.X"
+  }, {
+    "from" : "com.example2.E",
+    "to" : "com.example.B"
+  }, {
+    "from" : "com.example2.E",
+    "to" : "com.example2.A"
+  }, {
+    "from" : "com.example2.C",
+    "to" : "com.example2.D"
+  }, {
+    "from" : "com.example2.A",
+    "to" : "com.example2.C"
+  }, {
+    "from" : "com.example2.A",
+    "to" : "com.example2.B"
+  }, {
+    "from" : "com.example2.B",
+    "to" : "com.example2.D"
+  }, {
+    "from" : "com.example3.sub1.A",
+    "to" : "com.example3.sub2.C"
+  }, {
+    "from" : "com.example3.sub1.A",
+    "to" : "com.example3.sub1.B"
+  }, {
+    "from" : "com.example3.sub2.C",
+    "to" : "com.example3.sub1.B"
+  }, {
+    "from" : "com.example3.sub2.D",
+    "to" : "com.example3.sub1.A"
+  }, {
+    "from" : "sccs.api.PaymentController",
+    "to" : "sccs.platform.Infrastructure"
+  }, {
+    "from" : "sccs.api.PaymentController",
+    "to" : "sccs.service.PaymentService"
+  }, {
+    "from" : "sccs.api.NotificationController",
+    "to" : "sccs.service.NotificationService"
+  }, {
+    "from" : "sccs.api.NotificationController",
+    "to" : "sccs.platform.Infrastructure"
+  }, {
+    "from" : "sccs.app.AppMain",
+    "to" : "sccs.infra.MessageQueue"
+  }, {
+    "from" : "sccs.app.AppMain",
+    "to" : "sccs.infra.PaymentRepository"
+  }, {
+    "from" : "sccs.core.Event",
+    "to" : "sccs.infra.MessageQueue"
+  }, {
+    "from" : "sccs.core.Order",
+    "to" : "sccs.infra.PaymentRepository"
+  }, {
+    "from" : "sccs.infra.MessageQueue",
+    "to" : "sccs.service.NotificationService"
+  }, {
+    "from" : "sccs.infra.MessageQueue",
+    "to" : "sccs.api.NotificationController"
+  }, {
+    "from" : "sccs.infra.MessageQueue",
+    "to" : "sccs.core.Event"
+  }, {
+    "from" : "sccs.infra.PaymentRepository",
+    "to" : "sccs.api.PaymentController"
+  }, {
+    "from" : "sccs.infra.PaymentRepository",
+    "to" : "sccs.service.PaymentService"
+  }, {
+    "from" : "sccs.infra.PaymentRepository",
+    "to" : "sccs.core.Order"
+  }, {
+    "from" : "sccs.service.NotificationService",
+    "to" : "sccs.infra.MessageQueue"
+  }, {
+    "from" : "sccs.service.NotificationService",
+    "to" : "sccs.core.Event"
+  }, {
+    "from" : "sccs.service.PaymentService",
+    "to" : "sccs.core.Order"
+  }, {
+    "from" : "sccs.service.PaymentService",
+    "to" : "sccs.infra.PaymentRepository"
+  } ]
+}

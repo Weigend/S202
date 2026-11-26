@@ -1,0 +1,67 @@
+name: Pages
+
+# Publishes the S202 website (site/) on GitHub Pages: software-architektur.com.
+#
+# The site has no screenshots of its own where the docs already have them:
+# site/docs is a symlink to docs/, so the page, the README and the handbook show
+# the same pictures and cannot drift apart. Only the files the page references
+# are copied into the published site, not the whole docs folder.
+#
+# View locally:  python3 -m http.server -d site   ->  http://localhost:8000
+#
+# Needed once (repository settings, not in this file):
+#   Settings -> Pages -> Source: "GitHub Actions", custom domain
+#   software-architektur.com. With Actions deployments GitHub reads no CNAME
+#   file from the repository.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "site/**"
+      - "docs/**"
+      - ".github/workflows/pages.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# Never two deployments at once; a running one is not cancelled, otherwise the
+# site could end up half deployed.
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    # Only the public repository publishes the site.
+    if: github.repository == 'Weigend/S202'
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Assemble the site
+        run: |
+          cp -r site _site
+          rm -f _site/docs
+          # Only what the pages reference from docs/.
+          grep -ohE '(src|href|content)="(https://software-architektur.com/)?docs/[^"#]+"' $(find site -name '*.html' -not -path 'site/docs/*') \
+            | sed -E 's/^[a-z]+="(https:\/\/software-architektur.com\/)?//; s/"$//' | sort -u \
+            | while read -r f; do
+                [ -f "$f" ] || { echo "missing: $f"; exit 1; }
+                mkdir -p "_site/$(dirname "$f")"
+                cp "$f" "_site/$f"
+              done
+          du -sh _site
+
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: _site
+      - id: deployment
+        uses: actions/deploy-pages@v4

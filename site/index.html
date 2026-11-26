@@ -1,0 +1,991 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>S202 — See the Architecture Behind Any Codebase. Without Reading Code.</title>
+  <meta name="description" content="S202 is a free, open-source architecture review tool: it turns Java bytecode and Python, Go, JavaScript and C source into a checkable architecture model — layers, cycles, components, metrics — without reading a single line of source code.">
+  <meta property="og:title" content="S202 Code Analyzer">
+  <meta property="og:description" content="Visualize software architecture. Detect cycles. Fix tangles. No source code needed.">
+  <meta property="og:image" content="https://software-architektur.com/docs/main.png">
+  <meta property="og:url" content="https://software-architektur.com/">
+  <link rel="canonical" href="https://software-architektur.com/">
+  <link rel="icon" type="image/svg+xml" href="favicon.svg">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <style>
+    *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+
+    :root {
+      --bg: #080c14;
+      --bg-alt: #0d1424;
+      --bg-card: #111827;
+      --bg-card-hover: #1a2640;
+      --border: #1e2d45;
+      --border-light: #2a3d5a;
+      --text: #e2e8f0;
+      --text-muted: #94a3b8;
+      --text-dim: #64748b;
+      --accent: #3b82f6;
+      --accent-light: #60a5fa;
+      --accent-glow: rgba(59,130,246,0.15);
+      --accent2: #06b6d4;
+      --accent3: #8b5cf6;
+      --green: #10b981;
+      --orange: #f97316;
+      --red: #ef4444;
+      --font: 'Inter', -apple-system, sans-serif;
+      --mono: 'JetBrains Mono', 'Fira Code', monospace;
+      --radius: 12px;
+      --radius-lg: 20px;
+      --shadow: 0 4px 24px rgba(0,0,0,0.5);
+      --shadow-lg: 0 12px 48px rgba(0,0,0,0.6);
+      --transition: 0.25s ease;
+    }
+
+    html { scroll-behavior: smooth; font-size: 16px; }
+    body { font-family: var(--font); background: var(--bg); color: var(--text); line-height: 1.7; -webkit-font-smoothing: antialiased; overflow-x: hidden; }
+    a { text-decoration: none; color: inherit; }
+    img { max-width: 100%; display: block; }
+
+    .container { max-width: 1100px; margin: 0 auto; padding: 0 24px; }
+
+    /* ── NAVBAR ── */
+    nav {
+      position: fixed; top: 0; left: 0; right: 0; z-index: 100;
+      background: rgba(8,12,20,0.85); backdrop-filter: blur(20px);
+      border-bottom: 1px solid transparent;
+      transition: border-color var(--transition), box-shadow var(--transition);
+    }
+    nav.scrolled { border-bottom-color: var(--border); box-shadow: 0 2px 20px rgba(0,0,0,0.4); }
+    .nav-inner {
+      max-width: 1100px; margin: 0 auto; padding: 0 24px;
+      height: 64px; display: flex; align-items: center; justify-content: space-between;
+    }
+    .nav-logo { display: flex; align-items: center; gap: 10px; font-weight: 700; font-size: 1.15rem; letter-spacing: -0.02em; }
+    .nav-logo .s-badge {
+      width: 32px; height: 32px; border-radius: 8px;
+      background: linear-gradient(135deg, var(--accent), var(--accent2));
+      display: flex; align-items: center; justify-content: center;
+      font-size: 0.85rem; font-weight: 800; color: #fff;
+    }
+    .nav-links { display: flex; align-items: center; gap: 8px; }
+    .nav-link { white-space: nowrap; padding: 6px 14px; border-radius: 8px; font-size: 0.9rem; color: var(--text-muted); transition: color var(--transition), background var(--transition); }
+    .nav-link:hover { color: var(--text); background: rgba(255,255,255,0.05); }
+    .nav-cta {
+      padding: 8px 18px; border-radius: 8px; font-size: 0.875rem; font-weight: 600;
+      background: var(--accent); color: #fff; transition: background var(--transition), transform var(--transition);
+      display: flex; align-items: center; gap: 6px;
+    }
+    .nav-cta:hover { background: var(--accent-light); transform: translateY(-1px); }
+    .lang-switcher { display: flex; gap: 4px; margin-left: 8px; }
+    .lang-btn { background: none; border: 1px solid var(--border); color: var(--text-muted); padding: 4px 10px; border-radius: 6px; font-size: 0.8rem; cursor: pointer; font-family: var(--font); transition: all var(--transition); }
+    .lang-btn.active, .lang-btn:hover { background: var(--accent); border-color: var(--accent); color: #fff; }
+
+    /* ── HERO ── */
+    .hero {
+      min-height: 100vh; display: flex; align-items: center;
+      padding: 120px 0 80px;
+      background: radial-gradient(ellipse 80% 50% at 50% -10%, rgba(59,130,246,0.12) 0%, transparent 70%);
+      position: relative; overflow: hidden;
+    }
+    .hero::before {
+      content: ''; position: absolute; inset: 0;
+      background: url("data:image/svg+xml,%3Csvg width='60' height='60' viewBox='0 0 60 60' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='none' fill-rule='evenodd'%3E%3Cg fill='%231e2d45' fill-opacity='0.3'%3E%3Cpath d='M36 34v-4h-2v4h-4v2h4v4h2v-4h4v-2h-4zm0-30V0h-2v4h-4v2h4v4h2V6h4V4h-4zM6 34v-4H4v4H0v2h4v4h2v-4h4v-2H6zM6 4V0H4v4H0v2h4v4h2V6h4V4H6z'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E");
+      opacity: 0.4;
+    }
+    .hero-content { position: relative; text-align: center; }
+    .hero-badge {
+      display: inline-flex; align-items: center; gap: 8px;
+      background: rgba(59,130,246,0.1); border: 1px solid rgba(59,130,246,0.3);
+      padding: 6px 16px; border-radius: 100px; font-size: 0.8rem; font-weight: 500;
+      color: var(--accent-light); margin-bottom: 24px;
+    }
+    .hero-badge .dot { width: 6px; height: 6px; border-radius: 50%; background: var(--green); animation: pulse 2s infinite; }
+    @keyframes pulse { 0%,100%{opacity:1;transform:scale(1)} 50%{opacity:0.6;transform:scale(1.3)} }
+    .hero h1 {
+      font-size: clamp(2.2rem, 5vw, 3.8rem); font-weight: 800; line-height: 1.15;
+      letter-spacing: -0.03em; margin-bottom: 20px;
+      background: linear-gradient(135deg, #e2e8f0 0%, #94a3b8 100%);
+      -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text;
+    }
+    .hero h1 em { font-style: normal; background: linear-gradient(135deg, var(--accent), var(--accent2)); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text; }
+    .hero-sub { font-size: clamp(1rem, 2vw, 1.2rem); color: var(--text-muted); max-width: 600px; margin: 0 auto 40px; }
+    .hero-ctas { display: flex; gap: 12px; justify-content: center; flex-wrap: wrap; margin-bottom: 64px; }
+    .btn-primary {
+      display: inline-flex; align-items: center; gap: 8px;
+      padding: 14px 28px; border-radius: 12px; font-size: 1rem; font-weight: 600;
+      background: var(--accent); color: #fff;
+      transition: background var(--transition), transform var(--transition), box-shadow var(--transition);
+      box-shadow: 0 4px 20px rgba(59,130,246,0.35);
+    }
+    .btn-primary:hover { background: var(--accent-light); transform: translateY(-2px); box-shadow: 0 8px 32px rgba(59,130,246,0.5); }
+    .btn-secondary {
+      display: inline-flex; align-items: center; gap: 8px;
+      padding: 14px 28px; border-radius: 12px; font-size: 1rem; font-weight: 600;
+      background: rgba(255,255,255,0.05); border: 1px solid var(--border-light); color: var(--text);
+      transition: background var(--transition), transform var(--transition);
+    }
+    .btn-secondary:hover { background: rgba(255,255,255,0.1); transform: translateY(-2px); }
+
+    .hero-screenshot {
+      position: relative; max-width: 900px; margin: 0 auto;
+      border-radius: var(--radius-lg); overflow: hidden;
+      border: 1px solid var(--border-light);
+      box-shadow: 0 24px 80px rgba(0,0,0,0.7), 0 0 60px rgba(59,130,246,0.1);
+    }
+    .hero-screenshot img { width: 100%; display: block; }
+    .hero-screenshot::before {
+      content: ''; position: absolute; inset: 0;
+      background: linear-gradient(to bottom, transparent 70%, var(--bg) 100%);
+      pointer-events: none; z-index: 1;
+    }
+
+    /* ── STATS BAR ── */
+    .stats-bar { background: var(--bg-alt); border-top: 1px solid var(--border); border-bottom: 1px solid var(--border); padding: 32px 0; }
+    .stats-grid { display: flex; align-items: center; justify-content: center; gap: 0; flex-wrap: wrap; }
+    .stat { text-align: center; padding: 12px 32px; position: relative; }
+    .stat + .stat::before { content: ''; position: absolute; left: 0; top: 50%; transform: translateY(-50%); height: 40px; width: 1px; background: var(--border); }
+    .stat-num { font-size: 1.8rem; font-weight: 800; color: var(--accent-light); line-height: 1.2; letter-spacing: -0.02em; }
+    .stat-label { font-size: 0.82rem; color: var(--text-dim); margin-top: 4px; }
+
+    /* ── SECTIONS ── */
+    section { padding: 96px 0; }
+    .section-label { font-size: 0.8rem; font-weight: 600; letter-spacing: 0.12em; text-transform: uppercase; color: var(--accent); margin-bottom: 12px; }
+    .section-title { font-size: clamp(1.6rem, 3vw, 2.4rem); font-weight: 700; line-height: 1.25; letter-spacing: -0.02em; margin-bottom: 16px; }
+    .section-sub { font-size: 1.05rem; color: var(--text-muted); max-width: 580px; }
+    .section-header { margin-bottom: 56px; }
+    .text-center { text-align: center; }
+    .text-center .section-sub { margin: 0 auto; }
+
+    /* ── QUOTE ── */
+    .quote-section {
+      padding: 72px 0;
+      background: linear-gradient(135deg, rgba(59,130,246,0.07) 0%, rgba(6,182,212,0.07) 100%);
+      border-top: 1px solid var(--border); border-bottom: 1px solid var(--border);
+    }
+    .quote-inner { max-width: 760px; margin: 0 auto; text-align: center; }
+    .quote-mark { font-size: 4rem; line-height: 1; color: var(--accent); opacity: 0.4; margin-bottom: -8px; }
+    blockquote { font-size: clamp(1.15rem, 2.2vw, 1.5rem); font-weight: 500; line-height: 1.6; color: var(--text); margin: 0 0 20px; }
+    blockquote em { font-style: normal; color: var(--accent-light); }
+    .quote-source { font-size: 0.85rem; color: var(--text-muted); }
+    .quote-source strong { color: var(--text); }
+
+    /* ── FEATURES ── */
+    .features-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 20px; }
+    .feature-card {
+      background: var(--bg-card); border: 1px solid var(--border);
+      border-radius: var(--radius-lg); padding: 28px;
+      transition: border-color var(--transition), background var(--transition), transform var(--transition);
+    }
+    .feature-card:hover { border-color: var(--border-light); background: var(--bg-card-hover); transform: translateY(-3px); }
+    .feature-icon {
+      width: 44px; height: 44px; border-radius: 10px; margin-bottom: 16px;
+      display: flex; align-items: center; justify-content: center; font-size: 1.3rem;
+    }
+    .fi-blue { background: rgba(59,130,246,0.15); }
+    .fi-cyan { background: rgba(6,182,212,0.15); }
+    .fi-purple { background: rgba(139,92,246,0.15); }
+    .fi-green { background: rgba(16,185,129,0.15); }
+    .fi-orange { background: rgba(249,115,22,0.15); }
+    .fi-red { background: rgba(239,68,68,0.15); }
+    .feature-card h3 { font-size: 1.05rem; font-weight: 600; margin-bottom: 8px; }
+    .feature-card p { font-size: 0.9rem; color: var(--text-muted); line-height: 1.6; }
+    .feature-tag {
+      display: inline-block; margin-top: 12px; padding: 3px 10px; border-radius: 6px;
+      font-size: 0.75rem; font-weight: 600;
+      background: rgba(16,185,129,0.12); color: var(--green);
+    }
+    .feature-tag.beta { background: rgba(251,191,36,0.1); color: #fbbf24; }
+    .feature-tag.poc { background: rgba(139,92,246,0.1); color: #a78bfa; }
+
+    /* ── SCREENSHOT SHOWCASE ── */
+    .showcase {
+      display: grid; grid-template-columns: 1fr 1fr; gap: 16px;
+      max-width: 1100px; margin: 0 auto;
+    }
+    .showcase-item {
+      border-radius: var(--radius); overflow: hidden; border: 1px solid var(--border);
+      background: var(--bg-card); position: relative; cursor: pointer;
+      transition: border-color var(--transition), transform var(--transition), box-shadow var(--transition);
+    }
+    .showcase-item:hover { border-color: var(--accent); transform: translateY(-4px); box-shadow: var(--shadow-lg); }
+    .showcase-item.span2 { grid-column: span 2; }
+    .showcase-img { width: 100%; display: block; aspect-ratio: 16/9; object-fit: cover; object-position: top; }
+    .showcase-caption {
+      padding: 12px 16px 14px; border-top: 1px solid var(--border); background: var(--bg-card);
+    }
+    .showcase-img.contain { object-fit: contain; object-position: center; background: #f5f5f0; }
+    .showcase-caption h4 { font-size: 0.9rem; font-weight: 600; margin-bottom: 2px; }
+    .showcase-caption p { font-size: 0.78rem; color: var(--text-muted); }
+
+    /* ── CITY3D TEASER ── */
+    .city-banner {
+      display: block; position: relative;
+      border-radius: var(--radius-lg); overflow: hidden;
+      border: 1px solid var(--border-light);
+      box-shadow: 0 24px 80px rgba(0,0,0,0.7), 0 0 60px rgba(59,130,246,0.12);
+      transition: border-color var(--transition), transform var(--transition), box-shadow var(--transition);
+    }
+    .city-banner:hover { border-color: var(--accent); transform: translateY(-4px); box-shadow: 0 32px 96px rgba(0,0,0,0.8), 0 0 80px rgba(59,130,246,0.25); }
+    .city-banner img { width: 100%; display: block; aspect-ratio: 16/9; object-fit: cover; }
+    .city-overlay {
+      position: absolute; inset: 0; z-index: 1;
+      display: flex; flex-direction: column; justify-content: flex-end; align-items: flex-start;
+      padding: 40px 44px;
+      background: linear-gradient(to top, rgba(8,12,20,0.94) 0%, rgba(8,12,20,0.55) 40%, transparent 72%);
+    }
+    .city-badge {
+      display: inline-flex; align-items: center; gap: 8px;
+      background: rgba(6,182,212,0.12); border: 1px solid rgba(6,182,212,0.4);
+      padding: 5px 14px; border-radius: 100px; font-size: 0.78rem; font-weight: 600;
+      color: var(--accent2); margin-bottom: 16px; letter-spacing: 0.04em;
+    }
+    .city-overlay h2 {
+      font-size: clamp(1.5rem, 3.2vw, 2.4rem); font-weight: 800; line-height: 1.2;
+      letter-spacing: -0.02em; margin-bottom: 12px; color: #fff;
+    }
+    .city-overlay h2 em { font-style: normal; background: linear-gradient(135deg, var(--accent-light), var(--accent2)); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text; }
+    .city-overlay p { font-size: 0.975rem; color: var(--text-muted); max-width: 620px; margin-bottom: 24px; }
+    @media (max-width: 768px) {
+      .city-overlay { position: static; padding: 20px; background: var(--bg-card); }
+      .city-banner img { aspect-ratio: 16/10; }
+      .city-overlay p { display: none; }
+    }
+
+    /* ── STORY SECTION ── */
+    .story-section { background: var(--bg-alt); border-top: 1px solid var(--border); border-bottom: 1px solid var(--border); }
+    .story-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 64px; align-items: start; }
+    .story-text .section-title { margin-bottom: 20px; }
+    .story-text p { color: var(--text-muted); margin-bottom: 16px; font-size: 0.975rem; }
+    .story-text p strong { color: var(--text); }
+    .finding-list { list-style: none; margin: 24px 0; display: flex; flex-direction: column; gap: 10px; }
+    .finding-list li {
+      display: flex; align-items: flex-start; gap: 10px;
+      background: var(--bg-card); border: 1px solid var(--border); border-radius: 10px; padding: 12px 14px;
+      font-size: 0.875rem;
+    }
+    .finding-num { font-family: var(--mono); font-size: 0.75rem; color: var(--accent); background: rgba(59,130,246,0.1); padding: 2px 7px; border-radius: 5px; flex-shrink: 0; margin-top: 1px; }
+    .demo-shot { max-width: 1000px; margin: 0 auto; border-radius: var(--radius-lg); overflow: hidden; border: 1px solid var(--border); box-shadow: var(--shadow-lg); }
+    .demo-shot img { width: 100%; display: block; }
+    .story-screenshot { border-radius: var(--radius-lg); overflow: hidden; border: 1px solid var(--border); box-shadow: var(--shadow-lg); }
+    .story-screenshot img { width: 100%; display: block; }
+
+    /* ── LANGUAGE SUPPORT ── */
+    .lang-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 16px; }
+    .lang-card {
+      background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius); padding: 20px;
+      display: flex; align-items: center; gap: 14px;
+      transition: border-color var(--transition), background var(--transition);
+    }
+    .lang-card:hover { border-color: var(--border-light); background: var(--bg-card-hover); }
+    .lang-icon { font-size: 1.8rem; flex-shrink: 0; }
+    .lang-info h4 { font-size: 0.95rem; font-weight: 600; margin-bottom: 2px; }
+    .lang-badge { font-size: 0.72rem; font-weight: 600; padding: 2px 8px; border-radius: 5px; display: inline-block; }
+    .lb-stable { background: rgba(16,185,129,0.12); color: var(--green); }
+    .lb-alpha { background: rgba(251,191,36,0.1); color: #fbbf24; }
+    .lb-poc { background: rgba(139,92,246,0.1); color: #a78bfa; }
+    .lb-planned { background: rgba(100,116,139,0.15); color: var(--text-dim); }
+
+    /* ── QUICKSTART ── */
+    .quickstart-section { background: var(--bg-alt); border-top: 1px solid var(--border); border-bottom: 1px solid var(--border); }
+    .qs-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 48px; align-items: center; }
+    .qs-steps { counter-reset: step; display: flex; flex-direction: column; gap: 20px; }
+    .qs-step { display: flex; gap: 16px; align-items: flex-start; counter-increment: step; }
+    .qs-num {
+      width: 32px; height: 32px; border-radius: 50%; flex-shrink: 0;
+      background: linear-gradient(135deg, var(--accent), var(--accent2));
+      display: flex; align-items: center; justify-content: center;
+      font-size: 0.85rem; font-weight: 700; color: #fff;
+    }
+    .qs-step h4 { font-size: 0.95rem; font-weight: 600; margin-bottom: 4px; }
+    .qs-step p { font-size: 0.875rem; color: var(--text-muted); }
+    .code-block {
+      background: #060a10; border: 1px solid var(--border); border-radius: var(--radius);
+      padding: 20px 24px; font-family: var(--mono); font-size: 0.82rem;
+      color: #a9d7f7; line-height: 1.8; overflow-x: auto;
+    }
+    .code-block .comment { color: var(--text-dim); }
+    .code-block .cmd { color: #7dd3fc; }
+    .code-block .arg { color: #86efac; }
+
+    /* ── CTA SECTION ── */
+    .cta-section {
+      text-align: center; padding: 96px 0;
+      background: radial-gradient(ellipse 60% 60% at 50% 50%, rgba(59,130,246,0.1) 0%, transparent 70%);
+    }
+    .cta-section .section-title { font-size: clamp(1.8rem, 3.5vw, 2.8rem); margin-bottom: 16px; }
+    .cta-section p { color: var(--text-muted); font-size: 1.05rem; max-width: 520px; margin: 0 auto 40px; }
+    .cta-buttons { display: flex; gap: 12px; justify-content: center; flex-wrap: wrap; }
+    .github-btn {
+      display: inline-flex; align-items: center; gap: 10px;
+      padding: 16px 32px; border-radius: 12px; font-size: 1rem; font-weight: 700;
+      background: #fff; color: #0d1117;
+      transition: transform var(--transition), box-shadow var(--transition);
+      box-shadow: 0 4px 20px rgba(255,255,255,0.1);
+    }
+    .github-btn:hover { transform: translateY(-2px); box-shadow: 0 8px 32px rgba(255,255,255,0.2); }
+    .github-btn svg { width: 22px; height: 22px; }
+
+    /* ── FOOTER ── */
+    footer { border-top: 1px solid var(--border); padding: 40px 0; }
+    .footer-inner { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 16px; }
+    .footer-logo { display: flex; align-items: center; gap: 10px; font-weight: 700; }
+    .footer-links { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px 24px; }
+    .footer-links a { font-size: 0.875rem; color: var(--text-muted); transition: color var(--transition); }
+    .footer-links a:hover { color: var(--text); }
+    .footer-copy { font-size: 0.8rem; color: var(--text-dim); }
+
+    /* ── LIGHTBOX ── */
+    .lightbox { display: none; position: fixed; inset: 0; z-index: 1000; background: rgba(0,0,0,0.92); align-items: center; justify-content: center; padding: 24px; }
+    .lightbox.open { display: flex; }
+    .lightbox img { max-width: 100%; max-height: 90vh; border-radius: var(--radius); box-shadow: 0 24px 80px rgba(0,0,0,0.8); }
+    .lightbox-close { position: absolute; top: 20px; right: 24px; background: rgba(255,255,255,0.1); border: none; color: #fff; width: 40px; height: 40px; border-radius: 50%; font-size: 1.2rem; cursor: pointer; display: flex; align-items: center; justify-content: center; }
+    .lightbox-close:hover { background: rgba(255,255,255,0.2); }
+
+    /* ── RESPONSIVE ── */
+    @media (max-width: 768px) {
+      .story-grid, .qs-grid, .showcase { grid-template-columns: 1fr; }
+      .showcase-item.span2 { grid-column: span 1; }
+      .nav-links .nav-link { display: none; }
+      .stat + .stat::before { display: none; }
+      .stats-grid { gap: 4px; }
+      .stat { padding: 12px 16px; }
+      .footer-inner { flex-direction: column; text-align: center; }
+    }
+
+    /* ── i18n hidden ── */
+    [lang-en], [lang-de] { display: none; }
+
+    /* scroll reveal */
+    .reveal { opacity: 0; transform: translateY(24px); transition: opacity 0.6s ease, transform 0.6s ease; }
+    .reveal.visible { opacity: 1; transform: none; }
+  </style>
+</head>
+<body>
+
+<!-- NAVBAR -->
+<nav id="navbar">
+  <div class="nav-inner">
+    <a href="#" class="nav-logo">
+      <div class="s-badge"><svg width="18" height="18" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg"><polygon points="10,1 17.8,5.5 17.8,14.5 10,19 2.2,14.5 2.2,5.5" stroke="white" stroke-width="1.5" fill="none" stroke-linejoin="round"/><circle cx="10" cy="10" r="3.5" stroke="white" stroke-width="1.5" fill="none"/></svg></div>
+      <span>S202</span>
+    </a>
+    <div class="nav-links">
+      <a href="#ai" class="nav-link" data-en="Why S202" data-de="Warum S202" data-pt="Por que S202">Why S202</a>
+      <a href="#features" class="nav-link" data-en="Features" data-de="Features" data-pt="Recursos">Features</a>
+      <a href="#views" class="nav-link" data-en="Views" data-de="Ansichten" data-pt="Visões">Views</a>
+      <a href="#metrics25d" class="nav-link" style="color: var(--accent2);">2.5D ✦</a>
+      <a href="#city3d" class="nav-link">City3D</a>
+      <a href="#quickstart" class="nav-link" data-en="Download" data-de="Download" data-pt="Download">Download</a>
+      <a href="https://github.com/Weigend/S202/blob/main/docs/handbook/README.md" target="_blank" rel="noopener" class="nav-link" data-en="Handbook" data-de="Handbuch" data-pt="Manual">Handbook</a>
+      <div class="lang-switcher">
+        <button class="lang-btn active" onclick="setLang('en')">EN</button>
+        <button class="lang-btn" onclick="setLang('de')">DE</button>
+        <button class="lang-btn" onclick="setLang('pt')">PT</button>
+      </div>
+      <a href="https://github.com/Weigend/S202" target="_blank" rel="noopener" class="nav-cta">
+        <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0 0 16 8c0-4.42-3.58-8-8-8z"/></svg>
+        GitHub
+      </a>
+    </div>
+  </div>
+</nav>
+
+<!-- HERO -->
+<section class="hero">
+  <div class="container hero-content">
+    <div class="hero-badge">
+      <span class="dot"></span>
+      <span data-en="Open Source · Release 1.9.0 · Java, Python, Go, JavaScript &amp; C" data-de="Open Source · Release 1.9.0 · Java, Python, Go, JavaScript &amp; C" data-pt="Open Source · Versão 1.9.0 · Java, Python, Go, JavaScript &amp; C">Open Source · Release 1.9.0 · Java, Python, Go, JavaScript &amp; C</span>
+    </div>
+    <h1 data-en="See the <em>Architecture</em> Behind Any Codebase.<br>Without Reading Code." data-de="Verstehe die <em>Architektur</em> hinter jeder Codebasis.<br>Ohne Code zu lesen." data-pt="Veja a <em>Arquitetura</em> por trás de qualquer base de código.<br>Sem ler código.">
+      See the <em>Architecture</em> Behind Any Codebase.<br>Without Reading Code.
+    </h1>
+    <p class="hero-sub" data-en="S202 turns Java bytecode and Python, Go, JavaScript and C source into a checkable architecture model — dependency layers, cycles, components, metrics and a concrete refactoring plan in minutes. Whether the code was written by your team or generated by an AI agent." data-de="S202 überführt Java-Bytecode sowie Python-, Go-, JavaScript- und C-Quellcode in ein prüfbares Architekturmodell — Abhängigkeitsschichten, Zyklen, Komponenten, Metriken und einen konkreten Refactoring-Plan in Minuten. Egal ob der Code vom Team oder von einem KI-Agenten stammt." data-pt="O S202 transforma bytecode Java e código Python, Go, JavaScript e C em um modelo de arquitetura verificável — camadas de dependência, ciclos, componentes, métricas e um plano concreto de refatoração em minutos. Seja o código escrito pela sua equipe ou gerado por um agente de IA.">
+      S202 turns Java bytecode and Python, Go, JavaScript and C source into a checkable architecture model — dependency layers, cycles, components, metrics and a concrete refactoring plan in minutes. Whether the code was written by your team or generated by an AI agent.
+    </p>
+    <div class="hero-ctas">
+      <a href="https://github.com/Weigend/S202" target="_blank" rel="noopener" class="btn-primary">
+        <svg width="18" height="18" viewBox="0 0 16 16" fill="currentColor"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0 0 16 8c0-4.42-3.58-8-8-8z"/></svg>
+        <span data-en="Get S202 on GitHub" data-de="S202 auf GitHub" data-pt="Obtenha o S202 no GitHub">Get S202 on GitHub</span>
+      </a>
+      <a href="https://sourceforge.net/projects/s202/files/latest/download" target="_blank" rel="noopener" class="btn-secondary">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M5 21h14"/></svg>
+        <span data-en="Download S202" data-de="S202 herunterladen" data-pt="Baixar o S202">Download S202</span>
+      </a>
+      <a href="#features" class="btn-secondary">
+        <span data-en="Explore Features" data-de="Features erkunden" data-pt="Explorar Recursos">Explore Features</span>
+        <span>↓</span>
+      </a>
+    </div>
+    <div class="hero-screenshot reveal">
+      <img src="docs/main.png" alt="S202 with the layered view of an example shop, its dependencies and the Quality Report">
+    </div>
+  </div>
+</section>
+
+<!-- STATS BAR -->
+<div class="stats-bar">
+  <div class="stats-grid">
+    <div class="stat">
+      <div class="stat-num">5</div>
+      <div class="stat-label" data-en="Languages Supported" data-de="Unterstützte Sprachen" data-pt="Linguagens Suportadas">Languages Supported</div>
+    </div>
+    <div class="stat">
+      <div class="stat-num">9</div>
+      <div class="stat-label" data-en="Architecture Views" data-de="Architektur-Ansichten" data-pt="Visões de Arquitetura">Architecture Views</div>
+    </div>
+    <div class="stat">
+      <div class="stat-num">0</div>
+      <div class="stat-label" data-en="Source Lines Read" data-de="Quellcode-Zeilen gelesen" data-pt="Linhas de Código Lidas">Source Lines Read</div>
+    </div>
+    <div class="stat">
+      <div class="stat-num">&lt;1 min</div>
+      <div class="stat-label" data-en="Time to First Insight" data-de="Zeit bis zur ersten Erkenntnis" data-pt="Tempo até o Primeiro Insight">Time to First Insight</div>
+    </div>
+  </div>
+</div>
+
+<!-- DEMO -->
+<section id="demo" style="padding-bottom:0;">
+  <div class="container">
+    <div class="section-header text-center reveal">
+      <div class="section-label" data-en="S202 in 25 seconds" data-de="S202 in 25 Sekunden" data-pt="S202 em 25 segundos">S202 in 25 seconds</div>
+      <h2 class="section-title" data-en="Levels, dependencies, violations —<br>then tilt it into 2.5D" data-de="Levels, Abhängigkeiten, Verletzungen —<br>dann ins 2.5D kippen" data-pt="Níveis, dependências, violações —<br>depois incline para 2.5D">Levels, dependencies, violations —<br>then tilt it into 2.5D</h2>
+    </div>
+    <div class="demo-shot reveal">
+      <img src="docs/s202-demo.gif" alt="S202 demo: layered view, dependencies of a class, violations, and the 2.5D view with metrics as height and colour" loading="lazy">
+    </div>
+  </div>
+</section>
+
+<!-- AI-ASSISTED DEVELOPMENT -->
+<section id="ai">
+  <div class="container">
+    <div class="section-header text-center reveal">
+      <div class="section-label" data-en="Built for AI-Assisted Development" data-de="Für KI-gestützte Entwicklung gebaut" data-pt="Construído para Desenvolvimento Assistido por IA">Built for AI-Assisted Development</div>
+      <h2 class="section-title" data-en="AI writes code faster than<br>teams can understand it" data-de="KI schreibt Code schneller, als<br>Teams ihn verstehen können" data-pt="A IA escreve código mais rápido do que<br>as equipes conseguem entendê-lo">AI writes code faster than<br>teams can understand it</h2>
+      <p class="section-sub" data-en="AI assistants generate a feature, a REST API, a data model and tests in minutes. With the code, architecture and technical debt grow just as fast. The result is often locally clean — plausible names, passing tests — but architecture is not a local property." data-de="KI-Assistenten erzeugen ein Feature, eine REST-Schnittstelle, ein Datenmodell und Tests in Minuten. Mit dem Code wachsen Architektur und technische Schulden genauso schnell. Das Ergebnis ist oft lokal sauber — plausible Namen, grüne Tests — aber Architektur ist keine lokale Eigenschaft." data-pt="Assistentes de IA geram um recurso, uma API REST, um modelo de dados e testes em minutos. Com o código, a arquitetura e a dívida técnica crescem na mesma velocidade. O resultado costuma ser localmente limpo — nomes plausíveis, testes passando — mas arquitetura não é uma propriedade local.">AI assistants generate a feature, a REST API, a data model and tests in minutes. With the code, architecture and technical debt grow just as fast. The result is often locally clean — plausible names, passing tests — but architecture is not a local property.</p>
+    </div>
+    <div class="features-grid">
+      <div class="feature-card reveal">
+        <div class="feature-icon fi-blue">🤖</div>
+        <h3 data-en="Locally clean, structurally blurry" data-de="Lokal sauber, strukturell unscharf" data-pt="Localmente limpo, estruturalmente impreciso">Locally clean, structurally blurry</h3>
+        <p data-en="An AI builds one feature after another and never says &quot;stop, we need an architecture decision.&quot; Each class grows, each service gains one more responsibility — and dependencies quietly start pointing the wrong way." data-de="Eine KI baut ein Feature nach dem anderen ein und sagt nie: &quot;Stop, wir brauchen eine Architekturentscheidung.&quot; Jede Klasse wächst, jeder Service bekommt eine weitere Verantwortung — und Abhängigkeiten zeigen unbemerkt in die falsche Richtung." data-pt="Uma IA implementa um recurso após o outro e nunca diz: &quot;Pare, precisamos de uma decisão de arquitetura.&quot; Cada classe cresce, cada serviço ganha mais uma responsabilidade — e as dependências silenciosamente começam a apontar na direção errada.">An AI builds one feature after another and never says &quot;stop, we need an architecture decision.&quot; Each class grows, each service gains one more responsibility — and dependencies quietly start pointing the wrong way.</p>
+      </div>
+      <div class="feature-card reveal">
+        <div class="feature-icon fi-cyan">🔍</div>
+        <h3 data-en="Review the diagram, not 4,000 lines" data-de="Review am Diagramm, nicht an 4.000 Zeilen" data-pt="Revise o diagrama, não 4.000 linhas">Review the diagram, not 4,000 lines</h3>
+        <p data-en="A 4,000-line AI pull request can't be judged file by file. What matters: which dependencies and components appeared, what got coupled or decoupled, which cycles formed, and which classes landed in the wrong place." data-de="Ein KI-Pull-Request mit 4.000 Zeilen lässt sich nicht Datei für Datei bewerten. Wichtig ist: Welche Abhängigkeiten und Komponenten sind entstanden, was wurde gekoppelt oder entkoppelt, welche Zyklen sind entstanden und welche Klassen liegen falsch?" data-pt="Um pull request de IA com 4.000 linhas não pode ser avaliado arquivo por arquivo. O que importa: quais dependências e componentes surgiram, o que foi acoplado ou desacoplado, quais ciclos se formaram e quais classes ficaram no lugar errado.">A 4,000-line AI pull request can't be judged file by file. What matters: which dependencies and components appeared, what got coupled or decoupled, which cycles formed, and which classes landed in the wrong place.</p>
+      </div>
+      <div class="feature-card reveal">
+        <div class="feature-icon fi-green">🔁</div>
+        <h3 data-en="A short, measurable loop" data-de="Ein kurzer, messbarer Regelkreis" data-pt="Um ciclo curto e mensurável">A short, measurable loop</h3>
+        <p data-en="Make the architecture rule explicit, check it against the code, refactor with AI help, then measure again. The human sets the target, the AI executes, and the model verifies the structure actually improved." data-de="Die Architekturregel explizit machen, gegen den Code prüfen, mit KI-Hilfe umbauen, dann erneut messen. Der Mensch gibt das Ziel vor, die KI setzt um, und das Modell prüft, ob die Struktur wirklich besser wurde." data-pt="Torne a regra de arquitetura explícita, verifique-a contra o código, refatore com a ajuda da IA e meça novamente. O humano define o objetivo, a IA executa, e o modelo verifica se a estrutura realmente melhorou.">Make the architecture rule explicit, check it against the code, refactor with AI help, then measure again. The human sets the target, the AI executes, and the model verifies the structure actually improved.</p>
+      </div>
+    </div>
+    <p class="reveal" style="max-width:800px;margin:48px auto 0;text-align:center;font-size:1.15rem;line-height:1.65;color:var(--text);border-top:1px solid var(--border);padding-top:36px;" data-en="Whether the code was written by your team, generated by an agent, or belongs to third-party software you simply need to understand — S202 makes its structure visible, checkable, and safe to change." data-de="Ob der Code vom eigenen Team stammt, von einem Agenten generiert wurde oder zu fremder Software gehört, die man nur verstehen will — S202 macht ihre Struktur sichtbar, prüfbar und gefahrlos veränderbar." data-pt="Seja o código escrito pela sua própria equipe, gerado por um agente ou pertencente a software de terceiros que você só precisa entender — o S202 torna sua estrutura visível, verificável e segura de modificar.">Whether the code was written by your team, generated by an agent, or belongs to third-party software you simply need to understand — S202 makes its structure visible, checkable, and safe to change.</p>
+  </div>
+</section>
+
+<!-- ETCD REAL-WORLD -->
+<section class="story-section">
+  <div class="container">
+    <div class="story-grid">
+      <div class="story-text reveal">
+        <div class="section-label" data-en="Real-World Proof" data-de="Praxis-Beweis" data-pt="Prova na Prática">Real-World Proof</div>
+        <h2 class="section-title" data-en="We pointed S202 at etcd —<br>code we'd never seen" data-de="Wir haben S202 auf etcd angesetzt —<br>Code, den wir nie gesehen hatten" data-pt="Apontamos o S202 para o etcd —<br>código que nunca tínhamos visto">We pointed S202 at etcd —<br>code we'd never seen</h2>
+        <p data-en="etcd is the distributed key-value store behind Kubernetes. With the Go reader, S202 turned its source into a dependency model and a full quality report <strong>in seconds</strong> — without reading a single line of code." data-de="etcd ist der verteilte Key-Value-Store hinter Kubernetes. Mit dem Go-Reader überführte S202 den Quellcode <strong>in Sekunden</strong> in ein Abhängigkeitsmodell und einen vollständigen Qualitätsreport — ohne eine einzige Zeile Code zu lesen." data-pt="O etcd é o key-value store distribuído por trás do Kubernetes. Com o reader de Go, o S202 transformou seu código-fonte <strong>em segundos</strong> em um modelo de dependências e um relatório de qualidade completo — sem ler uma única linha de código.">etcd is the distributed key-value store behind Kubernetes. With the Go reader, S202 turned its source into a dependency model and a full quality report <strong>in seconds</strong> — without reading a single line of code.</p>
+        <ul class="finding-list">
+          <li><span class="finding-num">59/100</span><span data-en="Overall quality score — band <strong>Risk</strong>, &quot;needs attention&quot;" data-de="Gesamt-Qualitätsscore — Stufe <strong>Risk</strong>, &quot;needs attention&quot;" data-pt="Pontuação geral de qualidade — faixa <strong>Risk</strong>, &quot;needs attention&quot;">Overall quality score — band <strong>Risk</strong>, &quot;needs attention&quot;</span></li>
+          <li><span class="finding-num">763</span><span data-en="classes in 57 packages, 1,204 internal dependencies" data-de="Klassen in 57 Paketen, 1.204 interne Abhängigkeiten" data-pt="classes em 57 pacotes, 1.204 dependências internas">classes in 57 packages, 1,204 internal dependencies</span></li>
+          <li><span class="finding-num">56</span><span data-en="layered violations breaking the calculated layering" data-de="Schichtverletzungen, die die berechnete Schichtung brechen" data-pt="violações de camada que quebram a estratificação calculada">layered violations breaking the calculated layering</span></li>
+          <li><span class="finding-num">1 / 10</span><span data-en="package cycle and class cycles" data-de="Paketzyklus und Klassenzyklen" data-pt="ciclo de pacote e ciclos de classe">package cycle and class cycles</span></li>
+          <li><span class="finding-num">0.16 / 0.03</span><span data-en="fat and tangled coupling indices for the whole codebase" data-de="Fat- und Tangled-Kopplungsindizes über die gesamte Codebasis" data-pt="índices de acoplamento fat e tangled em toda a base de código">fat and tangled coupling indices for the whole codebase</span></li>
+        </ul>
+        <p data-en="This is no verdict against etcd — it is functionally mature and battle-tested. It shows that even a cloud-native flagship carries structural debt nobody had systematically looked at, because making it visible used to be too expensive." data-de="Das ist kein Urteil gegen etcd — das Projekt ist funktional ausgereift und betrieblich bewährt. Es zeigt, dass selbst ein Aushängeschild der Cloud-Native-Welt strukturelle Schulden trägt, die noch nie jemand systematisch angesehen hat, weil das Sichtbarmachen bisher zu aufwendig war." data-pt="Isto não é um veredito contra o etcd — o projeto é funcionalmente maduro e comprovado em produção. Mostra que até um carro-chefe do mundo cloud-native carrega dívida estrutural que ninguém havia analisado sistematicamente, porque torná-la visível costumava ser caro demais.">This is no verdict against etcd — it is functionally mature and battle-tested. It shows that even a cloud-native flagship carries structural debt nobody had systematically looked at, because making it visible used to be too expensive.</p>
+        <a href="etcd-report/index.html" target="_blank" rel="noopener" class="btn-secondary" style="display:inline-flex; margin-top:20px;">
+          <span data-en="Open the full etcd report →" data-de="Vollständigen etcd-Report öffnen →" data-pt="Abrir o relatório completo do etcd →">Open the full etcd report →</span>
+        </a>
+      </div>
+      <a class="story-screenshot reveal" href="etcd-report/index.html" target="_blank" rel="noopener" title="Open the full interactive report">
+        <img src="images/etcd-quality-report.png" alt="S202 Quality Report for etcd — score 59 of 100">
+      </a>
+    </div>
+  </div>
+</section>
+
+<!-- QUOTE -->
+<div class="quote-section">
+  <div class="container">
+    <div class="quote-inner">
+      <div class="quote-mark">&ldquo;</div>
+      <blockquote data-en="We ran S202 on its own codebase. <em>No source code was read. No grep. No IDE navigation.</em> Dead code, wrong packages, missing interfaces — every finding came from looking at arrows in a diagram." data-de="Wir haben S202 auf die eigene Codebasis angewandt. <em>Kein Quellcode gelesen. Kein Grep. Keine IDE-Navigation.</em> Toter Code, falsche Pakete, fehlende Interfaces — jeder Fund kam vom Betrachten der Pfeile in einem Diagramm." data-pt="Aplicamos o S202 à nossa própria base de código. <em>Nenhum código-fonte lido. Nenhum grep. Nenhuma navegação na IDE.</em> Código morto, pacotes errados, interfaces faltando — cada achado veio de observar as setas em um diagrama.">
+        We ran S202 on its own codebase. <em>No source code was read. No grep. No IDE navigation.</em> Dead code, wrong packages, missing interfaces — every finding came from looking at arrows in a diagram.
+      </blockquote>
+      <div class="quote-source" data-en="<strong>The Tool That Fixed Itself</strong> — S202 Case Study" data-de="<strong>Das Tool, das sich selbst reparierte</strong> — S202 Fallstudie" data-pt="<strong>A ferramenta que consertou a si mesma</strong> — Estudo de Caso S202">
+        <strong>The Tool That Fixed Itself</strong> — S202 Case Study
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- FEATURES -->
+<section id="features">
+  <div class="container">
+    <div class="section-header text-center reveal">
+      <div class="section-label" data-en="What S202 Does" data-de="Was S202 macht" data-pt="O que o S202 faz">What S202 Does</div>
+      <h2 class="section-title" data-en="Architecture analysis that<br>actually tells you what's wrong" data-de="Architektur-Analyse, die dir<br>wirklich sagt, was falsch ist" data-pt="Análise de arquitetura que<br>realmente diz o que está errado">Architecture analysis that<br>actually tells you what's wrong</h2>
+      <p class="section-sub" data-en="No configuration files. No annotations to add. Load a JAR, a Maven or Gradle build, or Python, Go, JavaScript or C source, and S202 gives you an instant architectural X-ray." data-de="Keine Konfigurationsdateien. Keine Annotations hinzufügen. Lade ein JAR, einen Maven- oder Gradle-Build oder Python-, Go-, JavaScript- oder C-Quellcode, und S202 gibt dir sofort ein architektonisches Röntgenbild." data-pt="Nenhum arquivo de configuração. Nenhuma anotação a adicionar. Carregue um JAR, um build Maven ou Gradle, ou código Python, Go, JavaScript ou C, e o S202 lhe dá instantaneamente um raio-X arquitetural.">No configuration files. No annotations to add. Load a JAR, a Maven or Gradle build, or Python, Go, JavaScript or C source, and S202 gives you an instant architectural X-ray.</p>
+    </div>
+    <div class="features-grid">
+      <div class="feature-card reveal">
+        <div class="feature-icon fi-blue">🏗️</div>
+        <h3 data-en="Layered Architecture View" data-de="Schichtenarchitektur-Ansicht" data-pt="Visão de Arquitetura em Camadas">Layered Architecture View</h3>
+        <p data-en="Packages ordered by dependency depth. Every backward arrow is a layering violation — shown in red, immediately actionable." data-de="Pakete nach Abhängigkeitstiefe geordnet. Jeder rückwärtige Pfeil ist eine Schichtverletzung — rot markiert, sofort actionierbar." data-pt="Pacotes ordenados pela profundidade de dependência. Cada seta para trás é uma violação de camada — marcada em vermelho, imediatamente acionável.">Packages ordered by dependency depth. Every backward arrow is a layering violation — shown in red, immediately actionable.</p>
+        <span class="feature-tag">Stable</span>
+      </div>
+      <div class="feature-card reveal">
+        <div class="feature-icon fi-orange">🔀</div>
+        <h3 data-en="Tangle Detection + Cut Function" data-de="Tangle-Erkennung + Schnitt-Funktion" data-pt="Detecção de Tangle + Função de Corte">Tangle Detection + Cut Function</h3>
+        <p data-en="Cyclic dependencies visualized as tangles. The cut function pinpoints exact method calls to remove — giving you a method-level refactoring backlog." data-de="Zyklische Abhängigkeiten als Tangles visualisiert. Die Schnitt-Funktion zeigt genau, welche Methodenaufrufe entfernt werden müssen — als konkreten Refactoring-Backlog." data-pt="Dependências cíclicas visualizadas como tangles. A função de corte indica exatamente quais chamadas de método remover — como um backlog concreto de refatoração.">Cyclic dependencies visualized as tangles. The cut function pinpoints exact method calls to remove — giving you a method-level refactoring backlog.</p>
+        <span class="feature-tag">Stable</span>
+      </div>
+      <div class="feature-card reveal">
+        <div class="feature-icon fi-cyan">📦</div>
+        <h3 data-en="Component View" data-de="Komponenten-Ansicht" data-pt="Visão de Componentes">Component View</h3>
+        <p data-en="API vs. implementation split with explicit boundary checks. A package with an api, spi or port sub-package is a component — or declare one with JPMS exports or @S202Api. Detects cross-component access and API-on-impl coupling." data-de="API vs. Implementierung mit expliziten Grenzprüfungen. Ein Paket mit einem Unterpaket api, spi oder port ist eine Komponente — oder man erklärt sie über JPMS-Exports oder @S202Api. Erkennt komponentenübergreifenden Zugriff und API-on-Impl-Kopplung." data-pt="API vs. implementação com verificações explícitas de fronteira. Um pacote com um subpacote api, spi ou port é um componente — ou declare-o com exports do JPMS ou @S202Api. Detecta acesso entre componentes e acoplamento API-sobre-impl.">API vs. implementation split with explicit boundary checks. A package with an api, spi or port sub-package is a component — or declare one with JPMS exports or @S202Api. Detects cross-component access and API-on-impl coupling.</p>
+        <span class="feature-tag beta">Beta</span>
+      </div>
+      <div class="feature-card reveal">
+        <div class="feature-icon fi-purple">⬡</div>
+        <h3 data-en="Hexagonal View" data-de="Hexagonale Ansicht" data-pt="Visão Hexagonal">Hexagonal View</h3>
+        <p data-en="An experimental ports-and-adapters projection: domain core in the center, application ring around it, adapters on the outside. Packages exposing a port are marked with API / SPI sockets." data-de="Eine experimentelle Ports-and-Adapters-Projektion: Domänenkern im Zentrum, Anwendungsring darum, Adapter außen. Pakete mit einem Port werden mit API-/SPI-Sockets markiert." data-pt="Uma projeção experimental de ports-and-adapters: núcleo de domínio no centro, anel de aplicação ao redor, adaptadores na borda. Pacotes que expõem uma porta são marcados com sockets API / SPI.">An experimental ports-and-adapters projection: domain core in the center, application ring around it, adapters on the outside. Packages exposing a port are marked with API / SPI sockets.</p>
+        <span class="feature-tag poc" data-en="Experimental · PoC" data-de="Experimentell · PoC" data-pt="Experimental · PoC">Experimental · PoC</span>
+      </div>
+      <div class="feature-card reveal">
+        <div class="feature-icon fi-purple">📊</div>
+        <h3 data-en="Quality Report" data-de="Qualitätsbericht" data-pt="Relatório de Qualidade">Quality Report</h3>
+        <p data-en="A one-page structural health summary: overall score 0–100, tangle density, violation count, and a prioritized recommended focus list." data-de="Eine einseitige strukturelle Gesundheitszusammenfassung: Gesamtpunktzahl 0–100, Tangle-Dichte, Verletzungsanzahl und eine priorisierte Empfehlungsliste." data-pt="Um resumo de uma página sobre a saúde estrutural: pontuação geral 0–100, densidade de tangles, contagem de violações e uma lista priorizada de focos recomendados.">A one-page structural health summary: overall score 0–100, tangle density, violation count, and a prioritized recommended focus list.</p>
+        <span class="feature-tag beta">Beta</span>
+      </div>
+      <div class="feature-card reveal">
+        <div class="feature-icon fi-green">🐍</div>
+        <h3 data-en="Python, Go, JavaScript &amp; C" data-de="Python, Go, JavaScript &amp; C" data-pt="Python, Go, JavaScript &amp; C">Python, Go, JavaScript &amp; C</h3>
+        <p data-en="Dependency graphs straight from source — imports, calls, inheritance, type references. The same layered, component and matrix views as for Java." data-de="Abhängigkeitsgraphen direkt aus dem Quellcode — Importe, Aufrufe, Vererbung, Typverweise. Dieselben Schichten-, Komponenten- und Matrixansichten wie bei Java." data-pt="Grafos de dependências direto do código-fonte — imports, chamadas, herança, referências de tipo. As mesmas visões em camadas, de componentes e de matriz do Java.">Dependency graphs straight from source — imports, calls, inheritance, type references. The same layered, component and matrix views as for Java.</p>
+        <span class="feature-tag beta" style="background:rgba(251,191,36,0.1);color:#fbbf24;">Alpha</span>
+      </div>
+      <div class="feature-card reveal">
+        <div class="feature-icon fi-red">⚡</div>
+        <h3 data-en="Zero Configuration" data-de="Null Konfiguration" data-pt="Zero Configuração">Zero Configuration</h3>
+        <p data-en="Open a JAR, a Maven or Gradle project, or a source directory. No YAML, no config file, no project setup. Architecture in seconds — and the whole analysis, with your decisions, saved as one project file." data-de="Öffne ein JAR, ein Maven- oder Gradle-Projekt oder ein Quellverzeichnis. Kein YAML, keine Config, kein Setup. Architektur in Sekunden — und die ganze Analyse samt deinen Entscheidungen als eine Projektdatei gespeichert." data-pt="Abra um JAR, um projeto Maven ou Gradle, ou um diretório de código-fonte. Sem YAML, sem config, sem setup. Arquitetura em segundos — e toda a análise, com suas decisões, salva em um único arquivo de projeto.">Open a JAR, a Maven or Gradle project, or a source directory. No YAML, no config file, no project setup. Architecture in seconds — and the whole analysis, with your decisions, saved as one project file.</p>
+        <span class="feature-tag">Stable</span>
+      </div>
+      <div class="feature-card reveal">
+        <div class="feature-icon fi-cyan">⛰️</div>
+        <h3 data-en="2.5D Metric Projection" data-de="2.5D-Metrikprojektion" data-pt="Projeção Métrica 2.5D">2.5D Metric Projection</h3>
+        <p data-en="Tilt the architecture diagram back: classes stand as high as a metric says, their sides take the colour of another — complexity, fan-in, instability, change impact. Tilt it back and it is the diagram from before." data-de="Das Architekturdiagramm nach hinten kippen: Klassen stehen so hoch, wie eine Metrik sagt, ihre Seiten tragen die Farbe einer anderen — Komplexität, Fan-in, Instabilität, Reichweite einer Änderung. Zurückgekippt ist es wieder das Diagramm von vorher." data-pt="Incline o diagrama de arquitetura para trás: as classes ficam tão altas quanto uma métrica indica, e suas laterais ganham a cor de outra — complexidade, fan-in, instabilidade, impacto de uma mudança. Incline de volta e é o diagrama de antes.">Tilt the architecture diagram back: classes stand as high as a metric says, their sides take the colour of another — complexity, fan-in, instability, change impact. Tilt it back and it is the diagram from before.</p>
+        <span class="feature-tag" data-en="New in 1.9.0" data-de="Neu in 1.9.0" data-pt="Novo na 1.9.0">New in 1.9.0</span>
+      </div>
+      <div class="feature-card reveal">
+        <div class="feature-icon fi-blue">▦</div>
+        <h3 data-en="Dependency Matrix" data-de="Abhängigkeitsmatrix" data-pt="Matriz de Dependências">Dependency Matrix</h3>
+        <p data-en="A DSM of every tab, packages and classes, with call counts, libraries and cuts. Where arrows get too many, the matrix stays readable." data-de="Eine DSM zu jedem Tab, für Pakete und Klassen, mit Aufrufzahlen, Bibliotheken und Schnitten. Wo es zu viele Pfeile werden, bleibt die Matrix lesbar." data-pt="Uma DSM de cada aba, pacotes e classes, com contagem de chamadas, bibliotecas e cortes. Onde há setas demais, a matriz continua legível.">A DSM of every tab, packages and classes, with call counts, libraries and cuts. Where arrows get too many, the matrix stays readable.</p>
+        <span class="feature-tag beta">Beta</span>
+      </div>
+      <div class="feature-card reveal">
+        <div class="feature-icon fi-orange">🧭</div>
+        <h3 data-en="Find, Trace, From / To, Hotspots" data-de="Suche, Trace, From / To, Hotspots" data-pt="Busca, Trace, From / To, Hotspots">Find, Trace, From / To, Hotspots</h3>
+        <p data-en="Find any class with Ctrl+F, mark everything it reaches or that reaches it, ask what lies between two elements, and see where to look first." data-de="Jede Klasse mit Ctrl+F finden, alles markieren, was sie erreicht oder sie erreicht, fragen, was zwischen zwei Elementen liegt, und sehen, wo man zuerst hinschauen sollte." data-pt="Encontre qualquer classe com Ctrl+F, marque tudo o que ela alcança ou que a alcança, pergunte o que há entre dois elementos e veja por onde começar.">Find any class with Ctrl+F, mark everything it reaches or that reaches it, ask what lies between two elements, and see where to look first.</p>
+        <span class="feature-tag beta">Beta</span>
+      </div>
+      <div class="feature-card reveal">
+        <div class="feature-icon fi-purple">🗂️</div>
+        <h3 data-en="Physical View &amp; Horizontal Slice" data-de="Physical View &amp; horizontaler Schnitt" data-pt="Visão Física &amp; Corte Horizontal">Physical View &amp; Horizontal Slice</h3>
+        <p data-en="See the same code by JAR instead of by package, or cut the package tree at one depth and look at that layer alone." data-de="Denselben Code nach JARs statt nach Paketen sehen, oder den Paketbaum in einer Tiefe schneiden und nur diese Ebene betrachten." data-pt="Veja o mesmo código por JAR em vez de por pacote, ou corte a árvore de pacotes em uma profundidade e olhe só essa camada.">See the same code by JAR instead of by package, or cut the package tree at one depth and look at that layer alone.</p>
+        <span class="feature-tag beta">Beta</span>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- VIEWS SHOWCASE -->
+<section id="views" style="background: var(--bg-alt); border-top: 1px solid var(--border); border-bottom: 1px solid var(--border);">
+  <div class="container">
+    <div class="section-header text-center reveal">
+      <div class="section-label" data-en="Nine Perspectives, One Model" data-de="Neun Perspektiven, ein Modell" data-pt="Nove Perspectivas, Um Modelo">Nine Perspectives, One Model</div>
+      <h2 class="section-title" data-en="Every view reveals something different" data-de="Jede Ansicht zeigt etwas anderes" data-pt="Cada visão revela algo diferente">Every view reveals something different</h2>
+    </div>
+    <div class="showcase">
+      <div class="showcase-item span2 reveal" onclick="openLightbox(this)">
+        <img class="showcase-img" src="docs/handbook/images/3d-metrics.png" alt="2.5D view with metrics as height and colour" style="aspect-ratio:2/1;" loading="lazy">
+        <div class="showcase-caption">
+          <h4 data-en="2.5D Architectural Metric Projection" data-de="2.5D Architectural Metric Projection" data-pt="2.5D Architectural Metric Projection">2.5D Architectural Metric Projection</h4>
+          <p data-en="The 2D picture tilted back: height and side colour from any metric. Same layout, one more dimension." data-de="Das 2D-Bild nach hinten gekippt: Höhe und Seitenfarbe aus beliebigen Metriken. Dasselbe Layout, eine Dimension mehr." data-pt="A imagem 2D inclinada para trás: altura e cor lateral a partir de qualquer métrica. O mesmo layout, uma dimensão a mais.">The 2D picture tilted back: height and side colour from any metric. Same layout, one more dimension.</p>
+        </div>
+      </div>
+      <div class="showcase-item reveal" onclick="openLightbox(this)">
+        <img class="showcase-img" src="docs/handbook/images/layered-violations.png" alt="Layered Architecture View" loading="lazy">
+        <div class="showcase-caption">
+          <h4 data-en="Layered Architecture View" data-de="Schichtenarchitektur-Ansicht" data-pt="Visão de Arquitetura em Camadas">Layered Architecture View</h4>
+          <p data-en="Ordered by dependency depth. Red = against the layers. Orange = package cycle. Purple = class cycle." data-de="Nach Abhängigkeitstiefe geordnet. Rot = gegen die Schichten. Orange = Paketzyklus. Lila = Klassenzyklus." data-pt="Ordenada pela profundidade de dependência. Vermelho = contra as camadas. Laranja = ciclo de pacote. Roxo = ciclo de classe.">Ordered by dependency depth. Red = against the layers. Orange = package cycle. Purple = class cycle.</p>
+        </div>
+      </div>
+      <div class="showcase-item reveal" onclick="openLightbox(this)">
+        <img class="showcase-img" src="docs/handbook/images/tangle-cut.png" alt="Tangle View with a cut" loading="lazy">
+        <div class="showcase-caption">
+          <h4 data-en="Tangle View" data-de="Tangle-Ansicht" data-pt="Visão de Tangle">Tangle View</h4>
+          <p data-en="A cycle isolated, its back-edges proposed for cutting, the cut previewed." data-de="Ein Zyklus isoliert, seine Back-Edges zum Schnitt vorgeschlagen, der Schnitt in der Vorschau." data-pt="Um ciclo isolado, suas back-edges propostas para corte, o corte em pré-visualização.">A cycle isolated, its back-edges proposed for cutting, the cut previewed.</p>
+        </div>
+      </div>
+      <div class="showcase-item reveal" onclick="openLightbox(this)">
+        <img class="showcase-img" src="docs/component-view-s202.png" alt="Component View of S202 itself" loading="lazy">
+        <div class="showcase-caption">
+          <h4 data-en="Component View" data-de="Komponenten-Ansicht" data-pt="Visão de Componentes">Component View</h4>
+          <p data-en="S202 on itself: six components, API (blue) and implementation (yellow), no violations." data-de="S202 auf sich selbst: sechs Komponenten, API (blau) und Implementierung (gelb), keine Verletzungen." data-pt="O S202 sobre si mesmo: seis componentes, API (azul) e implementação (amarelo), sem violações.">S202 on itself: six components, API (blue) and implementation (yellow), no violations.</p>
+        </div>
+      </div>
+      <div class="showcase-item reveal" onclick="openLightbox(this)">
+        <img class="showcase-img contain" src="docs/handbook/images/matrix.png" alt="Dependency matrix" loading="lazy">
+        <div class="showcase-caption">
+          <h4 data-en="Dependency Matrix" data-de="Abhängigkeitsmatrix" data-pt="Matriz de Dependências">Dependency Matrix</h4>
+          <p data-en="Packages and classes as a DSM, with call counts and cycles marked." data-de="Pakete und Klassen als DSM, mit Aufrufzahlen und markierten Zyklen." data-pt="Pacotes e classes como DSM, com contagem de chamadas e ciclos marcados.">Packages and classes as a DSM, with call counts and cycles marked.</p>
+        </div>
+      </div>
+      <div class="showcase-item reveal" onclick="openLightbox(this)">
+        <img class="showcase-img" src="docs/S202-Quality-Report.png" alt="Quality Report" loading="lazy">
+        <div class="showcase-caption">
+          <h4 data-en="Quality Report" data-de="Qualitätsbericht" data-pt="Relatório de Qualidade">Quality Report</h4>
+          <p data-en="Structural health score with assessment drivers and a prioritized focus list." data-de="Struktureller Gesundheitsscore mit Bewertungsgründen und priorisierter Fokusliste." data-pt="Pontuação de saúde estrutural com fatores de avaliação e lista priorizada de focos.">Structural health score with assessment drivers and a prioritized focus list.</p>
+        </div>
+      </div>
+      <div class="showcase-item reveal" onclick="openLightbox(this)">
+        <img class="showcase-img contain" src="docs/handbook/images/hexagonal-view.png" alt="Hexagonal View" loading="lazy">
+        <div class="showcase-caption">
+          <h4 data-en="Hexagonal View · Experimental" data-de="Hexagonale Ansicht · Experimentell" data-pt="Visão Hexagonal · Experimental">Hexagonal View · Experimental</h4>
+          <p data-en="Core, application and adapters as rings; the ring of a package comes from its level." data-de="Kern, Anwendung und Adapter als Ringe; der Ring eines Pakets folgt aus seinem Level." data-pt="Núcleo, aplicação e adaptadores como anéis; o anel de um pacote vem do seu nível.">Core, application and adapters as rings; the ring of a package comes from its level.</p>
+        </div>
+      </div>
+      <div class="showcase-item span2 reveal" onclick="openLightbox(this)">
+        <img class="showcase-img" src="docs/handbook/images/physical-view.png" alt="Physical View" style="aspect-ratio:21/9;" loading="lazy">
+        <div class="showcase-caption">
+          <h4 data-en="Physical View" data-de="Physical View" data-pt="Visão Física">Physical View</h4>
+          <p data-en="The same code by JAR: which archive uses which." data-de="Derselbe Code nach JARs: welches Archiv welches nutzt." data-pt="O mesmo código por JAR: qual arquivo usa qual.">The same code by JAR: which archive uses which.</p>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- 2.5D METRIC PROJECTION -->
+<section id="metrics25d" class="story-section">
+  <div class="container">
+    <div class="story-grid">
+      <div class="story-text reveal">
+        <div class="section-label" data-en="New in 1.9.0" data-de="Neu in 1.9.0" data-pt="Novo na 1.9.0">New in 1.9.0</div>
+        <h2 class="section-title" data-en="2.5D Architectural<br>Metric Projection" data-de="2.5D Architectural<br>Metric Projection" data-pt="2.5D Architectural<br>Metric Projection">2.5D Architectural<br>Metric Projection</h2>
+        <p data-en="From above, the 3D view is exactly the architecture diagram you know. Tilt it back and a further dimension appears: classes stand on their packages, as high as a metric says, and their sides take the colour of another. Change the metric and only the heights change. Tilt it back and you have the original diagram again." data-de="Von oben ist die 3D-Sicht genau das gewohnte Architekturdiagramm. Kippt man es nach hinten, erscheint eine weitere Dimension: Klassen stehen auf ihren Paketen, so hoch wie eine Metrik sagt, und ihre Seiten tragen die Farbe einer anderen. Ein Metrikwechsel ändert nur die Höhen. Zurückgekippt ist es wieder das ursprüngliche Diagramm." data-pt="Vista de cima, a visão 3D é exatamente o diagrama de arquitetura que você conhece. Incline-a para trás e surge uma dimensão a mais: as classes ficam sobre seus pacotes, tão altas quanto uma métrica indica, e suas laterais ganham a cor de outra. Troque a métrica e só as alturas mudam. Incline de volta e você tem o diagrama original.">From above, the 3D view is exactly the architecture diagram you know. Tilt it back and a further dimension appears: classes stand on their packages, as high as a metric says, and their sides take the colour of another. Change the metric and only the heights change. Tilt it back and you have the original diagram again.</p>
+        <p data-en="It is a metric extension of an existing layout, not a new layout. You work in 2D and add the third dimension only when a question needs it." data-de="Es ist eine metrische Erweiterung eines bestehenden Layouts, kein neues Layout. Man arbeitet in 2D und nimmt die dritte Dimension nur dazu, wenn eine Frage sie braucht." data-pt="É uma extensão métrica de um layout existente, não um novo layout. Você trabalha em 2D e acrescenta a terceira dimensão só quando uma pergunta exige.">It is a metric extension of an existing layout, not a new layout. You work in 2D and add the third dimension only when a question needs it.</p>
+        <ul class="finding-list">
+          <li><span class="finding-num">15</span><span data-en="metrics: level, size, lines of code, cyclomatic complexity, fan-in, fan-out, instability, abstractness, distance from the main sequence, change impact, cycle size …" data-de="Metriken: Level, Größe, Codezeilen, zyklomatische Komplexität, Fan-in, Fan-out, Instabilität, Abstraktheit, Abstand zur Hauptreihe, Reichweite einer Änderung, Zyklusgröße …" data-pt="métricas: nível, tamanho, linhas de código, complexidade ciclomática, fan-in, fan-out, instabilidade, abstração, distância da sequência principal, impacto de mudança, tamanho de ciclo …">metrics: level, size, lines of code, cyclomatic complexity, fan-in, fan-out, instability, abstractness, distance from the main sequence, change impact, cycle size …</span></li>
+          <li><span class="finding-num">6</span><span data-en="presets — architecture levels, risk, stability, change impact, size, main sequence" data-de="Presets — Architekturlevels, Risiko, Stabilität, Reichweite einer Änderung, Größe, Hauptreihe" data-pt="presets — níveis de arquitetura, risco, estabilidade, impacto de mudança, tamanho, sequência principal">presets — architecture levels, risk, stability, change impact, size, main sequence</span></li>
+          <li><span class="finding-num">1:1</span><span data-en="the same clicks, arrows, menus and cuts as in 2D — sharp text at any zoom" data-de="dieselben Klicks, Pfeile, Menüs und Schnitte wie in 2D — scharfe Schrift in jedem Zoom" data-pt="os mesmos cliques, setas, menus e cortes do 2D — texto nítido em qualquer zoom">the same clicks, arrows, menus and cuts as in 2D — sharp text at any zoom</span></li>
+        </ul>
+        <a href="https://github.com/Weigend/S202/blob/main/docs/handbook/3d-views.md" target="_blank" rel="noopener" class="btn-secondary" style="display:inline-flex; margin-top:20px;">
+          <span data-en="Read about the 3D views →" data-de="Mehr zu den 3D-Sichten →" data-pt="Saiba mais sobre as visões 3D →">Read about the 3D views →</span>
+        </a>
+      </div>
+      <div class="story-screenshot reveal">
+        <img src="docs/handbook/images/3d-metrics.png" alt="S202 2.5D view: classes as high as their cyclomatic complexity, coloured by fan-in" loading="lazy">
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- CITY3D TEASER -->
+<section id="city3d">
+  <div class="container">
+    <div class="section-header text-center reveal">
+      <div class="section-label" data-en="City3D" data-de="City3D" data-pt="City3D">City3D</div>
+      <h2 class="section-title" data-en="Walk through your architecture — literally" data-de="Geh durch deine Architektur — wortwörtlich" data-pt="Caminhe pela sua arquitetura — literalmente">Walk through your architecture — literally</h2>
+    </div>
+    <a href="city3d/" class="city-banner reveal">
+      <img src="images/city3d-teaser.jpg" alt="City3D — the S202 architecture model rendered as an interactive 3D software city" loading="lazy">
+      <div class="city-overlay">
+        <span class="city-badge" data-en="✦ Interactive 3D · WebGL · runs in your browser" data-de="✦ Interaktives 3D · WebGL · läuft direkt im Browser" data-pt="✦ 3D Interativo · WebGL · roda no seu navegador">✦ Interactive 3D · WebGL · runs in your browser</span>
+        <h2 data-en="Your codebase as a <em>living city</em>" data-de="Deine Codebasis als <em>lebendige Stadt</em>" data-pt="Sua base de código como uma <em>cidade viva</em>">Your codebase as a <em>living city</em></h2>
+        <p data-en="City3D turns the S202 architecture model into a night-time metropolis you can fly through: classes become buildings, methods become floors, dependencies become traffic — and every red beacon marks an architecture violation. Take a cinematic tour or a taxi ride along a real dependency." data-de="City3D verwandelt das S202-Architekturmodell in eine nächtliche Metropole zum Durchfliegen: Klassen werden zu Gebäuden, Methoden zu Stockwerken, Abhängigkeiten zu Verkehr — und jedes rote Leuchtsignal markiert eine Architekturverletzung. Starte die Kino-Rundfahrt oder fahr im Taxi eine echte Abhängigkeit entlang." data-pt="O City3D transforma o modelo de arquitetura do S202 em uma metrópole noturna para sobrevoar: classes viram prédios, métodos viram andares, dependências viram tráfego — e cada sinal vermelho marca uma violação de arquitetura. Faça o tour cinematográfico ou pegue um táxi ao longo de uma dependência real.">City3D turns the S202 architecture model into a night-time metropolis you can fly through: classes become buildings, methods become floors, dependencies become traffic — and every red beacon marks an architecture violation. Take a cinematic tour or a taxi ride along a real dependency.</p>
+        <span class="btn-primary">
+          <span data-en="Fly through the Software City" data-de="Flieg durch die Software City" data-pt="Sobrevoe a Software City">Fly through the Software City</span>
+          <span>→</span>
+        </span>
+      </div>
+    </a>
+  </div>
+</section>
+
+<!-- CASE STUDY -->
+<section id="case-study">
+  <div class="container">
+    <div class="story-grid">
+      <div class="story-text reveal">
+        <div class="section-label" data-en="Case Study" data-de="Fallstudie" data-pt="Estudo de Caso">Case Study</div>
+        <h2 class="section-title" data-en="The Tool That Fixed Itself" data-de="Das Tool, das sich selbst reparierte" data-pt="A ferramenta que consertou a si mesma">The Tool That Fixed Itself</h2>
+        <p data-en="We pointed S202 at its own codebase. No source code was read. Here's what it found before a single line was touched:" data-de="Wir haben S202 auf die eigene Codebasis gerichtet. Kein Quellcode wurde gelesen. Das wurde gefunden, bevor eine einzige Zeile angefasst wurde:" data-pt="Apontamos o S202 para sua própria base de código. Nenhum código-fonte foi lido. Eis o que ele encontrou antes de uma única linha ser tocada:">
+          We pointed S202 at its own codebase. No source code was read. Here's what it found before a single line was touched:
+        </p>
+        <ul class="finding-list">
+          <li><span class="finding-num">#1</span><span data-en="<strong>reader</strong> — all implementations directly visible, no API boundary" data-de="<strong>reader</strong> — alle Implementierungen direkt sichtbar, keine API-Grenze" data-pt="<strong>reader</strong> — todas as implementações diretamente visíveis, sem fronteira de API"><strong>reader</strong> — all implementations directly visible, no API boundary</span></li>
+          <li><span class="finding-num">#2</span><span data-en="<strong>SCCVisualizationHelper</strong> — zero callers (dead code)" data-de="<strong>SCCVisualizationHelper</strong> — null Aufrufer (toter Code)" data-pt="<strong>SCCVisualizationHelper</strong> — zero chamadores (código morto)"><strong>SCCVisualizationHelper</strong> — zero callers (dead code)</span></li>
+          <li><span class="finding-num">#3</span><span data-en="<strong>SCCDAGBuilder</strong> — only kept alive by its own test" data-de="<strong>SCCDAGBuilder</strong> — nur durch den eigenen Test am Leben erhalten" data-pt="<strong>SCCDAGBuilder</strong> — mantido vivo apenas pelo próprio teste"><strong>SCCDAGBuilder</strong> — only kept alive by its own test</span></li>
+          <li><span class="finding-num">#4</span><span data-en="<strong>EdgeClassification</strong> — wrong package, one caller elsewhere" data-de="<strong>EdgeClassification</strong> — falsches Paket, ein Aufrufer woanders" data-pt="<strong>EdgeClassification</strong> — pacote errado, um chamador em outro lugar"><strong>EdgeClassification</strong> — wrong package, one caller elsewhere</span></li>
+          <li><span class="finding-num">#5</span><span data-en="<strong>domain</strong> — no API boundary at all" data-de="<strong>domain</strong> — keinerlei API-Grenze" data-pt="<strong>domain</strong> — nenhuma fronteira de API"><strong>domain</strong> — no API boundary at all</span></li>
+          <li><span class="finding-num">#6</span><span data-en="<strong>project</strong> — three public classes, no interface" data-de="<strong>project</strong> — drei öffentliche Klassen, kein Interface" data-pt="<strong>project</strong> — três classes públicas, nenhuma interface"><strong>project</strong> — three public classes, no interface</span></li>
+        </ul>
+        <p data-en="<strong>Every single item came from looking at arrows in a diagram.</strong> Then each was fixed — and verified again in S202." data-de="<strong>Jeder einzelne Fund kam vom Betrachten von Pfeilen in einem Diagramm.</strong> Dann wurde jeder behoben — und in S202 erneut verifiziert." data-pt="<strong>Cada item veio de observar setas em um diagrama.</strong> Em seguida, cada um foi corrigido — e verificado novamente no S202.">
+          <strong>Every single item came from looking at arrows in a diagram.</strong> Then each was fixed — and verified again in S202.
+        </p>
+        <a href="https://github.com/Weigend/S202/blob/main/docs/s202/CASE_STUDY.md" target="_blank" rel="noopener" class="btn-secondary" style="display:inline-flex; margin-top:20px;">
+          <span data-en="Read the full case study →" data-de="Vollständige Fallstudie lesen →" data-pt="Ler o estudo de caso completo →">Read the full case study →</span>
+        </a>
+      </div>
+      <div class="story-screenshot reveal">
+        <img src="docs/component-view-s202.png" alt="S202 Component View of itself today — six components, no violations">
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- LANGUAGE SUPPORT -->
+<section style="background: var(--bg-alt); border-top: 1px solid var(--border); border-bottom: 1px solid var(--border);">
+  <div class="container">
+    <div class="section-header text-center reveal">
+      <div class="section-label" data-en="Language Support" data-de="Sprachunterstützung" data-pt="Suporte a Linguagens">Language Support</div>
+      <h2 class="section-title" data-en="Your stack. Analyzed." data-de="Dein Stack. Analysiert." data-pt="Sua stack. Analisada.">Your stack. Analyzed.</h2>
+    </div>
+    <div class="lang-grid">
+      <div class="lang-card reveal">
+        <div class="lang-icon">☕</div>
+        <div class="lang-info">
+          <h4>Java (JAR)</h4>
+          <span class="lang-badge lb-stable">Stable</span>
+        </div>
+      </div>
+      <div class="lang-card reveal">
+        <div class="lang-icon">📦</div>
+        <div class="lang-info">
+          <h4>Maven</h4>
+          <span class="lang-badge lb-stable">Stable</span>
+        </div>
+      </div>
+      <div class="lang-card reveal">
+        <div class="lang-icon">🐘</div>
+        <div class="lang-info">
+          <h4>Gradle</h4>
+          <span class="lang-badge" style="background:rgba(251,191,36,0.1);color:#fbbf24;">Beta</span>
+        </div>
+      </div>
+      <div class="lang-card reveal">
+        <div class="lang-icon">🐍</div>
+        <div class="lang-info">
+          <h4>Python</h4>
+          <span class="lang-badge lb-alpha">Alpha</span>
+        </div>
+      </div>
+      <div class="lang-card reveal">
+        <div class="lang-icon">⚙️</div>
+        <div class="lang-info">
+          <h4>C</h4>
+          <span class="lang-badge lb-poc">PoC</span>
+        </div>
+      </div>
+      <div class="lang-card reveal">
+        <div class="lang-icon">🐹</div>
+        <div class="lang-info">
+          <h4>Go</h4>
+          <span class="lang-badge lb-alpha">Alpha</span>
+        </div>
+      </div>
+      <div class="lang-card reveal">
+        <div class="lang-icon">🟨</div>
+        <div class="lang-info">
+          <h4>JavaScript</h4>
+          <span class="lang-badge lb-alpha" data-en="Preview" data-de="Vorschau" data-pt="Prévia">Preview</span>
+        </div>
+      </div>
+      <div class="lang-card reveal" style="opacity:0.6;">
+        <div class="lang-icon">🔷</div>
+        <div class="lang-info">
+          <h4>TypeScript</h4>
+          <span class="lang-badge lb-planned" data-en="Planned" data-de="Geplant" data-pt="Planejado">Planned</span>
+        </div>
+      </div>
+      <div class="lang-card reveal" style="opacity:0.6;">
+        <div class="lang-icon">🦀</div>
+        <div class="lang-info">
+          <h4>Rust</h4>
+          <span class="lang-badge lb-planned" data-en="On Request" data-de="Auf Anfrage" data-pt="Sob Solicitação">On Request</span>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- QUICKSTART -->
+<section id="quickstart" class="quickstart-section">
+  <div class="container">
+    <div class="qs-grid">
+      <div class="reveal">
+        <div class="section-label" data-en="Quick Start" data-de="Schnellstart" data-pt="Início Rápido">Quick Start</div>
+        <h2 class="section-title" data-en="Download, unpack,<br>see your architecture" data-de="Herunterladen, entpacken,<br>Architektur sehen" data-pt="Baixe, descompacte,<br>veja sua arquitetura">Download, unpack,<br>see your architecture</h2>
+        <p style="color:var(--text-muted); margin-bottom:32px; font-size:0.95rem;" data-en="Ready-to-run archives for Linux x64, Windows x64 and macOS (Apple Silicon) bring their own Java runtime — nothing to install. To build from source you need Java 25+ and Maven 3.9+; the bootstrap script sets up WFX, the UI platform." data-de="Fertige Archive für Linux x64, Windows x64 und macOS (Apple Silicon) bringen ihre eigene Java-Laufzeit mit — nichts zu installieren. Zum Bauen aus den Quellen braucht es Java 25+ und Maven 3.9+; das Bootstrap-Skript richtet WFX, die UI-Plattform, ein." data-pt="Arquivos prontos para Linux x64, Windows x64 e macOS (Apple Silicon) trazem seu próprio runtime Java — nada a instalar. Para compilar a partir do código são necessários Java 25+ e Maven 3.9+; o script de bootstrap configura o WFX, a plataforma de UI.">
+          Ready-to-run archives for Linux x64, Windows x64 and macOS (Apple Silicon) bring their own Java runtime — nothing to install. To build from source you need Java 25+ and Maven 3.9+; the bootstrap script sets up WFX, the UI platform.
+        </p>
+        <div class="qs-steps">
+          <div class="qs-step">
+            <div class="qs-num">1</div>
+            <div>
+              <h4 data-en="Download" data-de="Herunterladen" data-pt="Baixar">Download</h4>
+              <p data-en="The archive for your system from GitHub Releases or SourceForge" data-de="Das Archiv für dein System von GitHub Releases oder SourceForge" data-pt="O arquivo para o seu sistema no GitHub Releases ou no SourceForge">The archive for your system from GitHub Releases or SourceForge</p>
+            </div>
+          </div>
+          <div class="qs-step">
+            <div class="qs-num">2</div>
+            <div>
+              <h4 data-en="Unpack &amp; start" data-de="Entpacken &amp; starten" data-pt="Descompactar &amp; iniciar">Unpack &amp; start</h4>
+              <p data-en="S202/bin/S202, S202\S202.exe or S202.app" data-de="S202/bin/S202, S202\S202.exe oder S202.app" data-pt="S202/bin/S202, S202\S202.exe ou S202.app">S202/bin/S202, S202\S202.exe or S202.app</p>
+            </div>
+          </div>
+          <div class="qs-step">
+            <div class="qs-num">3</div>
+            <div>
+              <h4 data-en="Open your project" data-de="Dein Projekt öffnen" data-pt="Abra seu projeto">Open your project</h4>
+              <p data-en="File → Open JAR / Maven Project / Gradle Project / Source Code" data-de="File → Open JAR / Maven Project / Gradle Project / Source Code" data-pt="File → Open JAR / Maven Project / Gradle Project / Source Code">File → Open JAR / Maven Project / Gradle Project / Source Code</p>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="reveal">
+        <div class="code-block">
+          <span class="comment"># or build from source — Linux / macOS</span><br>
+          git clone https://github.com/Weigend/S202.git<br>
+          cd S202<br>
+          chmod +x build-all.sh && ./build-all.sh<br><br>
+          <span class="comment"># start the UI</span><br>
+          ./run-ui.sh<br><br>
+          <span class="comment"># or analyze your JAR directly:</span><br>
+          ./run-ui.sh path/to/your-app.jar<br><br>
+          <span class="comment"># Windows</span><br>
+          build-all.bat<br>
+          run-ui.bat
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- CTA -->
+<section class="cta-section">
+  <div class="container">
+    <div class="reveal">
+      <div class="section-label" data-en="Free &amp; Open Source" data-de="Kostenlos &amp; Open Source" data-pt="Gratuito &amp; Open Source">Free &amp; Open Source</div>
+      <h2 class="section-title" data-en="Ready to see your architecture?" data-de="Bereit, deine Architektur zu sehen?" data-pt="Pronto para ver sua arquitetura?">Ready to see your architecture?</h2>
+      <p data-en="S202 is free and open source under the Apache 2.0 license. No sign-up. No telemetry. Just drop your JAR and see." data-de="S202 ist kostenlos und Open Source unter der Apache-2.0-Lizenz. Keine Registrierung. Kein Telemetry. Einfach JAR laden und sehen." data-pt="O S202 é gratuito e open source sob a licença Apache 2.0. Sem cadastro. Sem telemetria. Basta carregar seu JAR e ver.">
+        S202 is free and open source under the Apache 2.0 license. No sign-up. No telemetry. Just drop your JAR and see.
+      </p>
+      <div class="cta-buttons">
+        <a href="https://github.com/Weigend/S202" target="_blank" rel="noopener" class="github-btn">
+          <svg viewBox="0 0 16 16" fill="currentColor"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0 0 16 8c0-4.42-3.58-8-8-8z"/></svg>
+          <span data-en="View on GitHub" data-de="Auf GitHub ansehen" data-pt="Ver no GitHub">View on GitHub</span>
+        </a>
+        <a href="https://sourceforge.net/projects/s202/files/latest/download" target="_blank" rel="noopener" class="btn-secondary">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M5 21h14"/></svg>
+          <span data-en="Download (SourceForge)" data-de="Download (SourceForge)" data-pt="Download (SourceForge)">Download (SourceForge)</span>
+        </a>
+        <a href="https://github.com/Weigend/S202/releases/latest" target="_blank" rel="noopener" class="btn-secondary">
+          <span data-en="Download (GitHub)" data-de="Download (GitHub)" data-pt="Download (GitHub)">Download (GitHub)</span>
+        </a>
+        <a href="https://github.com/Weigend/S202/blob/main/docs/handbook/README.md" target="_blank" rel="noopener" class="btn-secondary">
+          <span data-en="Handbook" data-de="Handbuch" data-pt="Manual">Handbook</span>
+        </a>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- FOOTER -->
+<footer>
+  <div class="container">
+    <div class="footer-inner">
+      <div class="footer-logo">
+        <div class="s-badge"><svg width="18" height="18" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg"><polygon points="10,1 17.8,5.5 17.8,14.5 10,19 2.2,14.5 2.2,5.5" stroke="white" stroke-width="1.5" fill="none" stroke-linejoin="round"/><circle cx="10" cy="10" r="3.5" stroke="white" stroke-width="1.5" fill="none"/></svg></div>
+        <span>S202 Code Analyzer</span>
+      </div>
+      <div class="footer-links">
+        <a href="https://github.com/Weigend/S202" target="_blank" rel="noopener">GitHub</a>
+        <a href="https://sourceforge.net/projects/s202/" target="_blank" rel="noopener">SourceForge</a>
+        <a href="https://github.com/Weigend/S202/blob/main/docs/s202/CASE_STUDY.md" target="_blank" rel="noopener" data-en="Case Study" data-de="Fallstudie" data-pt="Estudo de Caso">Case Study</a>
+        <a href="https://github.com/Weigend/S202/blob/main/docs/handbook/README.md" target="_blank" rel="noopener" data-en="Handbook" data-de="Handbuch" data-pt="Manual">Handbook</a>
+        <a href="https://weigend.de" target="_blank" rel="noopener">weigend.de</a>
+        <a href="https://weigend.com.br" target="_blank" rel="noopener">weigend.com.br</a>
+      </div>
+      <div class="footer-copy" data-en="Apache 2.0 License · Built by Johannes Weigend" data-de="Apache-2.0-Lizenz · Entwickelt von Johannes Weigend" data-pt="Licença Apache 2.0 · Desenvolvido por Johannes Weigend">Apache 2.0 License · Built by Johannes Weigend</div>
+    </div>
+  </div>
+</footer>
+
+<!-- LIGHTBOX -->
+<div class="lightbox" id="lightbox" onclick="closeLightbox(event)">
+  <button class="lightbox-close" onclick="closeLightbox()">✕</button>
+  <img id="lightboxImg" src="" alt="">
+</div>
+
+<script>
+  // Navbar scroll
+  const nav = document.getElementById('navbar');
+  window.addEventListener('scroll', () => { nav.classList.toggle('scrolled', window.scrollY > 20); });
+
+  // Lightbox
+  function openLightbox(el) {
+    const img = el.querySelector('img');
+    document.getElementById('lightboxImg').src = img.src;
+    document.getElementById('lightboxImg').alt = img.alt;
+    document.getElementById('lightbox').classList.add('open');
+    document.body.style.overflow = 'hidden';
+  }
+  function closeLightbox(e) {
+    if (!e || e.target !== document.getElementById('lightboxImg')) {
+      document.getElementById('lightbox').classList.remove('open');
+      document.body.style.overflow = '';
+    }
+  }
+  document.addEventListener('keydown', e => { if (e.key === 'Escape') closeLightbox(); });
+
+  // Scroll reveal
+  const observer = new IntersectionObserver(entries => {
+    entries.forEach(e => { if (e.isIntersecting) { e.target.classList.add('visible'); observer.unobserve(e.target); } });
+  }, { threshold: 0.1, rootMargin: '0px 0px -40px 0px' });
+  document.querySelectorAll('.reveal').forEach(el => observer.observe(el));
+
+  // i18n
+  let currentLang = 'en';
+  function setLang(lang) {
+    currentLang = lang;
+    document.documentElement.lang = lang;
+    document.querySelectorAll('.lang-btn').forEach(b => b.classList.toggle('active', b.textContent.trim().toLowerCase() === lang));
+    document.querySelectorAll('[data-en]').forEach(el => {
+      const val = el.getAttribute('data-' + lang) || el.getAttribute('data-en');
+      if (el.tagName === 'INPUT' || el.tagName === 'BUTTON') el.value = val;
+      else el.innerHTML = val;
+    });
+    localStorage.setItem('weigend-lang', lang);
+  }
+  // Honor the shared language preference (same key as the main site)
+  const savedLang = localStorage.getItem('weigend-lang');
+  const browserLang = navigator.language.slice(0, 2);
+  setLang(['de', 'en', 'pt'].includes(savedLang) ? savedLang : (['de', 'en', 'pt'].includes(browserLang) ? browserLang : 'en'));
+</script>
+</body>
+</html>

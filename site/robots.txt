@@ -1,0 +1,5 @@
+# robots.txt for software-architektur.com
+User-agent: *
+Allow: /
+
+Sitemap: https://software-architektur.com/sitemap.xml
