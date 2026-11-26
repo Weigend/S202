@@ -109,6 +109,17 @@ final class SelectionController {
         selectedFullName.set(fullName);
     }
 
+    /** Wählt aus, was der Benutzer anderswo als im Bild angeklickt hat; {@code null} hebt die Auswahl auf. */
+    void selectForUser(String fullName) {
+        if (fullName == null) {
+            GraphSelection.clear();
+            selectedFullName.set(null);
+            return;
+        }
+        selectByFullName(fullName);
+        nodeSelectionSink.accept(fullName);
+    }
+
     /** Auswahl nach einem Rebuild wiederherstellen, ohne den Viewport zu bewegen. */
     void restoreSelectionWithoutScrolling(String fullName) {
         Node node = ElementLookup.materialize(elementRegistry, fullName);

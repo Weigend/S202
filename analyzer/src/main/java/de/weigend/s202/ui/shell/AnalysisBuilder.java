@@ -17,6 +17,7 @@ package de.weigend.s202.ui.shell;
 
 import de.weigend.s202.analysis.invariants.LayoutInvariantChecker;
 import de.weigend.s202.analysis.invariants.LayoutInvariantReport;
+import de.weigend.s202.analysis.quality.QualityCalculator;
 import de.weigend.s202.analysis.quality.QualityMetrics;
 import de.weigend.s202.domain.DependencyEdge;
 import de.weigend.s202.domain.DomainComputer;
@@ -70,7 +71,7 @@ final class AnalysisBuilder {
         ArchitectureConsistencyDevHook.runIfEnabled(calculated, root);
 
         progress.progress("Preparing quality metrics...", 0.90);
-        QualityMetrics metrics = QualityMetrics.compute(calculated);
+        QualityMetrics metrics = QualityCalculator.measure(calculated);
 
         // Layout invariant check runs on the same background thread so
         // findings reach the FX thread together with the rest of the result.

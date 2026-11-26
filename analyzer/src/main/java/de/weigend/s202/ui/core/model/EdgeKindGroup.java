@@ -53,6 +53,9 @@ public enum EdgeKindGroup {
         }
         DependencyModel.ClassInfo source = model == null ? null : model.getClass(from);
         Set<EdgeKind> kinds = source == null ? null : source.dependencyKinds.get(to);
+        if (kinds == null && source != null) {
+            kinds = source.externalDependencies.get(to);
+        }
         if (kinds == null || kinds.isEmpty()) {
             return true;
         }

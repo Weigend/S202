@@ -308,11 +308,20 @@ public class S202Module implements Module {
         bus.subscribe(MenuRequestEvent.NewView.class, ev -> { viewManager.newArchitectureWindow(); return true; });
         bus.subscribe(MenuRequestEvent.OpenComponentView.class, ev -> { viewManager.openStyleView(ArchitectureKind.COMPONENT); return true; });
         bus.subscribe(MenuRequestEvent.OpenHexagonalView.class, ev -> { viewManager.openStyleView(ArchitectureKind.HEXAGONAL); return true; });
+        bus.subscribe(MenuRequestEvent.OpenMatrix.class, ev -> { openMatrix(); return true; });
         bus.subscribe(MenuRequestEvent.CloseFocusedView.class, ev -> { viewManager.closeFocusedView(); return true; });
         bus.subscribe(MenuRequestEvent.CloseAllViews.class, ev -> { viewManager.closeAllViews(); return true; });
         bus.subscribe(MenuRequestEvent.RestoreDefaultLayout.class, ev -> { restoreDefaultLayout(); return true; });
         bus.subscribe(MenuRequestEvent.Undo.class, ev -> { if (toolbar.boundView() != null) toolbar.boundView().undoWhatIf(); return true; });
+        bus.subscribe(MenuRequestEvent.DiscardMoves.class, ev -> { if (toolbar.boundView() != null) toolbar.boundView().discardMoves(); return true; });
         bus.subscribe(MenuRequestEvent.Redo.class, ev -> { if (toolbar.boundView() != null) toolbar.boundView().redoWhatIf(); return true; });
+    }
+
+    private void openMatrix() {
+        ArchitectureCanvas active = viewManager.activeCanvas();
+        if (active == null || viewManager.openMatrix(active) == null) {
+            publishStatus("Layered, scope and tangle views have a dependency matrix");
+        }
     }
 
     /**

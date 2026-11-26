@@ -25,9 +25,12 @@ A JavaFX-based tool for analyzing code across multiple languages and visualizing
 
 - **Readers**: Java bytecode (ASM 9.11.1), Maven and Gradle multi-module projects, Python source (CPython AST), JavaScript source (ES modules), C source (PoC), Go source (Alpha); TypeScript, Rust planned
 - **Dependency detection**: Class/module and package dependencies — imports, calls, inheritance, type annotations
-- **Class cycle detection**: SCCs at class level (red overlay)
+- **Class cycle detection**: SCCs at class level (purple overlay)
 - **Package tangle detection**: Mutual package dependencies (orange overlay); both overlays are independently togglable
 - **View: Layered Architecture**: Topological ordering by dependency depth; backward dependencies highlighted as violations
+- **View: Dependency matrix**: The same dependencies as a matrix in layer order, from packages down to classes; in a tab of its own beside layered, scope and tangle views
+- **From / To**: What lies between two packages or classes, what an element uses and what uses it
+- **Plan**: Moves, planned packages and cuts as a plan that can be switched on and off, the same in all views and panels, and saved with the project
 - **View: Tangle**: Focused cycle visualization with method-level cut function for concrete refactoring plans
 - **View: Component**: API/impl split with explicit boundary; checks for cross-component access and API-on-impl coupling
 - **View: Hexagonal**: Port/adapter layout derived from annotations and naming conventions (PoC)
@@ -54,7 +57,7 @@ A JavaFX-based tool for analyzing code across multiple languages and visualizing
 <tr><td><small><b>View: Hexagonal</b></small></td><td><small>Port/adapter layout from annotations and naming conventions</small></td><td><small><b>PoC</b></small></td></tr>
 <tr><td><small><b>View: Quality Report</b></small></td><td><small>Structural health score with assessment drivers and recommended focus</small></td><td><small><b>Beta</b></small></td></tr>
 <tr><td><small><b>Analysis: Dependencies</b></small></td><td><small>Class/package dependencies (imports, calls, inheritance, annotations)</small></td><td><small><b>Stable</b></small></td></tr>
-<tr><td><small><b>Analysis: Class cycles</b></small></td><td><small>SCCs at class level (red overlay)</small></td><td><small><b>Stable</b></small></td></tr>
+<tr><td><small><b>Analysis: Class cycles</b></small></td><td><small>SCCs at class level (purple overlay)</small></td><td><small><b>Stable</b></small></td></tr>
 <tr><td><small><b>Analysis: Package tangles</b></small></td><td><small>Mutual package dependencies (orange overlay)</small></td><td><small><b>Stable</b></small></td></tr>
 <tr><td><small><b>Analysis: Violations</b></small></td><td><small>Backward dependencies across layer boundaries</small></td><td><small><b>Stable</b></small></td></tr>
 <tr><td><small><b>Analysis: Component checks</b></small></td><td><small>Cross-component impl access and API-on-impl coupling</small></td><td><small><b>Beta</b></small></td></tr>
@@ -133,9 +136,9 @@ The **Layered Architecture View** is the default view after loading a JAR or pro
 
 **What the view checks:**
 
-- **Direction**: Every valid dependency points downward. An arrow that points upward or sideways is a layering violation and is highlighted in red as a dashed arrow.
+- **Direction**: Every valid dependency points downward. An arrow that points upward or sideways is a layering violation and is drawn as a red arrow with **Show Violations**.
 - **Violations**: Backward dependencies (calls from a lower layer to a higher layer) are displayed prominently so they can be identified and resolved.
-- **Class cycles** (red): classes that form SCCs — shows which concrete class dependencies create the cycle.
+- **Class cycles** (purple): classes that form SCCs — shows which concrete class dependencies create the cycle.
 - **Package cycles** (orange): packages that are mutually dependent as a group — shows where package boundaries themselves are broken. Both overlays are toggled independently; activating both at once reveals where in the package structure the circular coupling sits and which class edges cause it.
 
 **Navigating dependencies:**
@@ -230,7 +233,7 @@ The screenshot shows the bundled **test-hexagon** example (the *paperwhale* book
 To try it, build and load the example project under [`test-hexagon`](test-hexagon):
 
 ```bash
-mvn -pl test-hexagon -am install    # produces test-hexagon/target/test-hexagon-1.6.0.jar
+mvn -pl test-hexagon -am install    # produces test-hexagon/target/test-hexagon-1.7.0.jar
 ```
 
 Then **File → Open Maven Project…** on `test-hexagon/pom.xml` (or **Open JAR…** on the produced JAR) and switch to **View → Hexagonal View**.
@@ -297,7 +300,7 @@ The bundled Python AST helper (`s202_py_ast.py`) lives in `analyzer/src/main/res
 2. **Analyze**: Packages and modules are analyzed automatically; a layout invariant check reports plausibility alerts to the developer
 3. **Navigate**: Expand and collapse packages or component boxes, inspect dependencies
 4. **Change views**: Open **View -> Component View** to inspect API-vs-implementation boundaries
-5. **Violations**: Bold dashed arrows show architectural problems (package aggregates use a filled circle to bundle the call count); for pipeline bugs, a reproducer dialog opens with a copy button
+5. **Violations**: Red arrows show architectural problems (package aggregates use a filled circle to bundle the call count); for pipeline bugs, a reproducer dialog opens with a copy button
 
 **Several analyses at once.** Every `Open …` and `Load Project…` adds an analysis in a tab of its own; the ones already open stay. `Close Project` closes the analysis you are working on with all its tabs, `Windows -> Close All` closes every analysis. All tabs of an analysis carry its name — `app.jar`, `app.jar · Component View`, `app.jar · Tangle …` — and the window title names the analysis you are working on. Outline, Top Tangles, Quality, Dependencies and Dependency Details show that analysis, also while you work in one of them, and the View menu, Save Project and the Quality Report act on it. Preview cuts and API annotations stay with the analysis they were made in.
 

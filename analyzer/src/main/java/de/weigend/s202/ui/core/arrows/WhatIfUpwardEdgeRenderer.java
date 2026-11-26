@@ -17,6 +17,7 @@ package de.weigend.s202.ui.core.arrows;
 
 import de.weigend.s202.ui.core.graph.BoxVisibility;
 import de.weigend.s202.ui.core.graph.ElementLookup;
+import de.weigend.s202.domain.DependencyEdge;
 import de.weigend.s202.domain.architecture.Architecture;
 import de.weigend.s202.domain.architecture.EndpointPair;
 import de.weigend.s202.domain.architecture.ViolationKind;
@@ -40,6 +41,7 @@ import javafx.scene.text.TextAlignment;
 
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.EnumSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -61,15 +63,12 @@ import java.util.function.BiPredicate;
  */
 public final class WhatIfUpwardEdgeRenderer {
 
-    private static final Color UPWARD_COLOR = Color.BLACK;
-    private static final Color BADGE_BG = Color.rgb(30, 60, 120);
+    static final String OVERLAY = "violations";
+
     private static final Color BADGE_FG = Color.WHITE;
     private static final double LINE_WIDTH = 1.2;
     private static final double ARROW_SIZE = 8.0;
-    private static final double DASH_ON = 6.0;
-    private static final double DASH_OFF = 4.0;
-    private static final double DOT_ON = 1.2;
-    private static final double DOT_OFF = 4.0;
+    private static final double HIT_WIDTH = 8.0;
     /** Horizontal control-point offset as a fraction of the vertical span. */
     private static final double CURVE_BOW = 0.18;
     private static final Font BADGE_FONT = Font.font(null, FontWeight.BOLD, 10.0);
@@ -82,6 +81,7 @@ public final class WhatIfUpwardEdgeRenderer {
     private Pane zoomableContent;
     private Pane overlayPane;
     private BiPredicate<String, String> edgeFilter = (from, to) -> true;
+    private LineSelection selection = new LineSelection(status -> { });
 
     public WhatIfUpwardEdgeRenderer(Pane pane, Map<String, Node> elementRegistry) {
         this.pane = Objects.requireNonNull(pane, "pane");
@@ -98,8 +98,14 @@ public final class WhatIfUpwardEdgeRenderer {
         this.edgeFilter = edgeFilter == null ? (from, to) -> true : edgeFilter;
     }
 
+    /** Shares the selected line with the other overlays. */
+    public void setLineSelection(LineSelection selection) {
+        this.selection = Objects.requireNonNull(selection, "selection");
+    }
+
     public void clear() {
         pane.getChildren().clear();
+        selection.cleared(OVERLAY);
     }
 
     public void redraw(Architecture arch) {
@@ -116,14 +122,69 @@ public final class WhatIfUpwardEdgeRenderer {
                     && violation.target() instanceof LevelClassBox;
             String badge = bothClasses ? null : Integer.toString(violation.classEdges().size());
             if (violation.source() == violation.target()) {
-                drawSelfLoop(violation.source(), badge == null
+                drawSelfLoop(violation, badge == null
                         ? Integer.toString(violation.classEdges().size())
-                        : badge,
-                        violation.containsBackEdge());
+                        : badge);
             } else {
-                drawCurvedArrow(violation.source(), violation.target(), badge, violation.containsBackEdge());
+                drawCurvedArrow(violation, badge);
             }
         }
+    }
+
+    /**
+     * Against the layers is red, and dotted if only a move made it so; a broken
+     * rule of another style is black.
+     */
+    private static Color colorOf(Violation violation) {
+        return violation.kinds().contains(ViolationKind.UPWARD) ? LineColors.AGAINST_LAYERS : LineColors.BROKEN_RULE;
+    }
+
+    /** Adds the line of a violation with its head and number, and lets the user select and cut it. */
+    private void add(Violation violation, QuadCurve curve, List<Line> head, Group badge) {
+        Color color = colorOf(violation);
+        curve.setFill(null);
+        if (violation.kinds().contains(ViolationKind.UPWARD) && !violation.containsBackEdge()) {
+            LineColors.dot(curve);
+        }
+        LineSelection.Look look = new LineSelection.Look() {
+            @Override
+            public void selected(boolean selected) {
+                stroke(selected ? LineColors.SELECTED : color, selected ? LINE_WIDTH * 2 : LINE_WIDTH);
+            }
+
+            @Override
+            public void hovered(boolean hovered) {
+                stroke(color, hovered ? LINE_WIDTH * 2 : LINE_WIDTH);
+            }
+
+            private void stroke(Color stroke, double width) {
+                curve.setStroke(stroke);
+                curve.setStrokeWidth(width);
+                head.forEach(part -> {
+                    part.setStroke(stroke);
+                    part.setStrokeWidth(width);
+                });
+            }
+        };
+        look.selected(false);
+        QuadCurve area = LineSelection.hitArea(new QuadCurve(curve.getStartX(), curve.getStartY(),
+                curve.getControlX(), curve.getControlY(), curve.getEndX(), curve.getEndY()), HIT_WIDTH);
+        LineSelection.Key key = new LineSelection.Key(OVERLAY, violation.from(), violation.to(),
+                violation.classEdges().stream().map(e -> new DependencyEdge(e.source(), e.target())).toList());
+        List<Node> catching = badge == null ? List.of(area, curve) : List.of(area, curve, badge);
+        for (Node node : catching) {
+            selection.install(node, key, look);
+            if (violation.source() instanceof LevelClassBox && violation.target() instanceof LevelClassBox) {
+                selection.installCutMenu(node, violation.from(), violation.to());
+            }
+        }
+        head.forEach(part -> part.setMouseTransparent(true));
+        pane.getChildren().addAll(area, curve);
+        pane.getChildren().addAll(head);
+        if (badge != null) {
+            pane.getChildren().add(badge);
+        }
+        selection.drawn(key, look);
     }
 
     /**
@@ -151,17 +212,20 @@ public final class WhatIfUpwardEdgeRenderer {
                 continue;
             }
             List<ClassEdge> edges = new ArrayList<>(entry.getValue().size());
+            Set<ViolationKind> found = EnumSet.noneOf(ViolationKind.class);
             boolean containsBackEdge = false;
             for (de.weigend.s202.domain.architecture.Violation v : entry.getValue()) {
                 if (edgeFilter.test(v.sourceFqn(), v.targetFqn())) {
                     edges.add(new ClassEdge(v.sourceFqn(), v.targetFqn(), 1));
                     containsBackEdge |= v.backEdge();
+                    found.add(v.kind());
                 }
             }
             if (edges.isEmpty()) {
                 continue;
             }
-            result.add(new Violation(src, tgt, Collections.unmodifiableList(edges), containsBackEdge));
+            result.add(new Violation(entry.getKey().source(), entry.getKey().target(), src, tgt,
+                    Collections.unmodifiableList(edges), found, containsBackEdge));
         }
         return result;
     }
@@ -217,8 +281,8 @@ public final class WhatIfUpwardEdgeRenderer {
      * curves up and over, and re-enters from the right with an arrowhead
      * pointing down into the box.
      */
-    private void drawSelfLoop(Node box, String badge, boolean containsBackEdge) {
-        double[] b = boundsInPane(box);
+    private void drawSelfLoop(Violation violation, String badge) {
+        double[] b = boundsInPane(violation.source());
         if (b == null) {
             return;
         }
@@ -232,11 +296,6 @@ public final class WhatIfUpwardEdgeRenderer {
         double controlY = topY - loopHeight;
 
         QuadCurve curve = new QuadCurve(startX, topY, controlX, controlY, endX, topY);
-        curve.setStroke(UPWARD_COLOR);
-        curve.setStrokeWidth(LINE_WIDTH);
-        curve.setFill(null);
-        applyLinePattern(curve, containsBackEdge);
-        curve.setMouseTransparent(true);
 
         double tangentX = endX - controlX;
         double tangentY = topY - controlY;
@@ -247,21 +306,13 @@ public final class WhatIfUpwardEdgeRenderer {
         double ay2 = topY - ARROW_SIZE * Math.sin(angle + Math.PI / 6);
         Line arrow1 = new Line(endX, topY, ax1, ay1);
         Line arrow2 = new Line(endX, topY, ax2, ay2);
-        for (Line a : new Line[]{arrow1, arrow2}) {
-            a.setStroke(UPWARD_COLOR);
-            a.setStrokeWidth(LINE_WIDTH);
-            a.setMouseTransparent(true);
-        }
-
-        pane.getChildren().addAll(curve, arrow1, arrow2);
-        if (badge != null) {
-            pane.getChildren().add(buildBadge(badge, controlX, controlY));
-        }
+        add(violation, curve, List.of(arrow1, arrow2),
+                badge == null ? null : buildBadge(badge, controlX, controlY, colorOf(violation)));
     }
 
-    private void drawCurvedArrow(Node source, Node target, String badge, boolean containsBackEdge) {
-        double[] srcBounds = boundsInPane(source);
-        double[] tgtBounds = boundsInPane(target);
+    private void drawCurvedArrow(Violation violation, String badge) {
+        double[] srcBounds = boundsInPane(violation.source());
+        double[] tgtBounds = boundsInPane(violation.target());
         if (srcBounds == null || tgtBounds == null) {
             return;
         }
@@ -286,11 +337,6 @@ public final class WhatIfUpwardEdgeRenderer {
         double controlY = midY;
 
         QuadCurve curve = new QuadCurve(startX, startY, controlX, controlY, endX, endY);
-        curve.setStroke(UPWARD_COLOR);
-        curve.setStrokeWidth(LINE_WIDTH);
-        curve.setFill(null);
-        applyLinePattern(curve, containsBackEdge);
-        curve.setMouseTransparent(true);
 
         // Arrowhead tangent at the end of the curve (towards target). For a
         // quadratic Bezier the end tangent is endpoint - control.
@@ -303,35 +349,18 @@ public final class WhatIfUpwardEdgeRenderer {
         double ay2 = endY - ARROW_SIZE * Math.sin(angle + Math.PI / 6);
         Line arrow1 = new Line(endX, endY, ax1, ay1);
         Line arrow2 = new Line(endX, endY, ax2, ay2);
-        for (Line a : new Line[]{arrow1, arrow2}) {
-            a.setStroke(UPWARD_COLOR);
-            a.setStrokeWidth(LINE_WIDTH);
-            a.setMouseTransparent(true);
-        }
-
-        pane.getChildren().addAll(curve, arrow1, arrow2);
-
-        if (badge != null) {
-            pane.getChildren().add(buildBadge(badge, controlX, controlY));
-        }
-    }
-
-    private static void applyLinePattern(QuadCurve curve, boolean containsBackEdge) {
-        if (containsBackEdge) {
-            curve.getStrokeDashArray().setAll(DASH_ON, DASH_OFF);
-        } else {
-            curve.getStrokeDashArray().setAll(DOT_ON, DOT_OFF);
-        }
+        add(violation, curve, List.of(arrow1, arrow2),
+                badge == null ? null : buildBadge(badge, controlX, controlY, colorOf(violation)));
     }
 
     /**
-     * Build a small dark-blue filled circle with the count rendered in
+     * Build a small filled circle with the count rendered in
      * white at its centre. The circle's radius scales with the text so
      * two- or three-digit counts still fit, and the constant fill ensures
      * the number stays readable even when the badge ends up over another
      * arrow.
      */
-    private static Group buildBadge(String text, double cx, double cy) {
+    private static Group buildBadge(String text, double cx, double cy, Color color) {
         Text label = new Text(text);
         label.setFont(BADGE_FONT);
         label.setFill(BADGE_FG);
@@ -342,7 +371,7 @@ public final class WhatIfUpwardEdgeRenderer {
         double radius = Math.max(BADGE_MIN_RADIUS, Math.max(textW, textH) / 2.0 + BADGE_PADDING);
 
         Circle circle = new Circle(0, 0, radius);
-        circle.setFill(BADGE_BG);
+        circle.setFill(color);
         circle.setStroke(null);
 
         label.setX(-textW / 2.0);
@@ -351,7 +380,6 @@ public final class WhatIfUpwardEdgeRenderer {
         Group group = new Group(circle, label);
         group.setLayoutX(cx);
         group.setLayoutY(cy);
-        group.setMouseTransparent(true);
         return group;
     }
 
@@ -392,5 +420,6 @@ public final class WhatIfUpwardEdgeRenderer {
     }
 
     /** A class edge pair after rollup to currently-visible boxes. */
-    public record Violation(Node source, Node target, List<ClassEdge> classEdges, boolean containsBackEdge) {}
+    public record Violation(String from, String to, Node source, Node target, List<ClassEdge> classEdges,
+                            Set<ViolationKind> kinds, boolean containsBackEdge) {}
 }

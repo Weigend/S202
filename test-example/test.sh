@@ -18,7 +18,7 @@ echo
 
 # 2. JAR Info
 echo "📂 JAR-Datei erstellt:"
-JAR_FILE="target/s202-code-analyzer-1.6.0.jar"
+JAR_FILE="target/s202-code-analyzer-1.7.0.jar"
 ls -lh "$JAR_FILE"
 echo
 
@@ -44,7 +44,7 @@ echo "║                                                                ║"
 echo "║  2️⃣  Im Tool: Klick auf '📂 Load JAR'                          ║"
 echo "║                                                                ║"
 echo "║  3️⃣  Wähle eine JAR zum Analysieren:                           ║"
-echo "║      • target/s202-code-analyzer-1.6.0.jar (das Tool selbst) ║"
+echo "║      • target/s202-code-analyzer-1.7.0.jar (das Tool selbst) ║"
 echo "║      • /usr/lib/jvm/java-17-openjdk/lib/modules (Java Core)  ║"
 echo "║                                                                ║"
 echo "╚════════════════════════════════════════════════════════════════╝"

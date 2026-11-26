@@ -15,7 +15,6 @@
  */
 package de.weigend.s202.ui.core.canvas;
 
-import de.weigend.s202.domain.DependencyEdge;
 import de.weigend.s202.domain.DomainModel;
 import de.weigend.s202.domain.EdgeCycleClassifier;
 import de.weigend.s202.domain.SCCFinder;
@@ -24,11 +23,14 @@ import de.weigend.s202.domain.architecture.ArchitectureKind;
 import de.weigend.s202.domain.architecture.ViolationKind;
 import de.weigend.s202.domain.architecture.WhatIfArchitecture;
 import de.weigend.s202.ui.core.model.ArchitectureNode;
+import de.weigend.s202.ui.core.model.PlanState;
 import de.weigend.s202.ui.core.arrows.DependencyRenderer;
 import de.weigend.s202.ui.core.arrows.DependencyRendererStrategy;
+import de.weigend.s202.ui.core.arrows.LineSelection;
 import de.weigend.s202.ui.core.arrows.SCCRenderer;
 import de.weigend.s202.ui.core.arrows.TangleEdgeScope;
 import de.weigend.s202.ui.core.arrows.WhatIfUpwardEdgeRenderer;
+import de.weigend.s202.ui.core.graph.GraphSelection;
 import de.weigend.s202.ui.core.graph.PulseCoalescer;
 import io.softwareecg.wfx.lookup.api.Lookup;
 import javafx.beans.property.BooleanProperty;
@@ -62,8 +64,8 @@ final class OverlayRenderCoordinator {
     private final PulseCoalescer arrowsCoalescer;
     private BiPredicate<String, String> edgeFilter = (from, to) -> true;
     private final de.weigend.s202.ui.core.arrows.DependencyEdgeActions edgeActions;
-    /** The refactoring-preview cuts; a cycle they break is no longer one. */
-    private final Supplier<Set<DependencyEdge>> appliedCuts;
+    /** What is planned and shown; a cycle the cuts break is no longer one. */
+    private final Supplier<PlanState> plan;
     private final ArchitectureProjectionModel projection;
     private final Supplier<ArchitectureNode> currentRoot;
     private final Supplier<de.weigend.s202.ui.core.spi.StyleView> styleView;
@@ -78,6 +80,9 @@ final class OverlayRenderCoordinator {
     private SCCRenderer sccRenderer;
     private WhatIfUpwardEdgeRenderer whatIfRenderer;
 
+    /** The boxes at the other ends of the arrows of the box under the mouse. */
+    private List<Node> connected = List.of();
+
     // Lines need redraw after zoom/scroll changes (perf optimization).
     private boolean linesNeedUpdate = false;
 
@@ -85,7 +90,7 @@ final class OverlayRenderCoordinator {
     // model or the preview cuts change.
     private EdgeCycleClassifier edgeCycles;
     private DomainModel edgeCyclesModel;
-    private Set<DependencyEdge> edgeCyclesCuts = Set.of();
+    private PlanState edgeCyclesPlan;
 
     // Non-null in a tangle view.
     private TangleEdgeScope tangleScope;
@@ -103,7 +108,7 @@ final class OverlayRenderCoordinator {
                              BooleanProperty showWhatIfViolations,
                              PulseCoalescer arrowsCoalescer,
                              de.weigend.s202.ui.core.arrows.DependencyEdgeActions edgeActions,
-                             Supplier<Set<DependencyEdge>> appliedCuts,
+                             Supplier<PlanState> plan,
                              ArchitectureProjectionModel projection,
                              Supplier<ArchitectureNode> currentRoot,
                              Supplier<de.weigend.s202.ui.core.spi.StyleView> styleView,
@@ -120,7 +125,7 @@ final class OverlayRenderCoordinator {
         this.showWhatIfViolations = showWhatIfViolations;
         this.arrowsCoalescer = arrowsCoalescer;
         this.edgeActions = edgeActions;
-        this.appliedCuts = appliedCuts;
+        this.plan = plan;
         this.projection = projection;
         this.currentRoot = currentRoot;
         this.styleView = styleView;
@@ -131,16 +136,21 @@ final class OverlayRenderCoordinator {
 
     /** Erzeugt alle Renderer für den frisch gebauten Content neu. */
     void rebuildRenderers(Pane zoomableContent, StackPane overlayPane, ScrollPane scrollPane) {
+        LineSelection lineSelection = new LineSelection(status);
+        connected = List.of();
         classicRenderer = new DependencyRenderer(dependencyPane, elementRegistry, status);
+        classicRenderer.setLineSelection(lineSelection);
         classicRenderer.setCoordinateContext(zoomableContent, overlayPane, scrollPane);
         classicRenderer.setEdgeActions(edgeActions);
         dependencyRenderer = classicRenderer;
 
         sccRenderer = new SCCRenderer(sccPane, elementRegistry, status);
+        sccRenderer.setLineSelection(lineSelection);
         sccRenderer.setCoordinateContext(zoomableContent, overlayPane, scrollPane);
         updateSccRendererTangles();
 
         whatIfRenderer = new WhatIfUpwardEdgeRenderer(whatIfPane, elementRegistry);
+        whatIfRenderer.setLineSelection(lineSelection);
         whatIfRenderer.setCoordinateContext(zoomableContent, overlayPane);
         applyEdgeFilter();
 
@@ -173,6 +183,23 @@ final class OverlayRenderCoordinator {
     void highlightSccEdge(String from, String to) {
         if (sccRenderer != null) {
             sccRenderer.highlightEdge(from, to);
+        }
+    }
+
+    /**
+     * Lets the arrows of the box stand out, and the boxes they connect it
+     * with, as long as the arrows are shown; {@code null} for none.
+     */
+    void emphasise(Node box) {
+        connected.forEach(node -> setConnected(node, false));
+        connected = classicRenderer == null ? List.of()
+                : classicRenderer.emphasise(showDependencies.get() ? box : null);
+        connected.forEach(node -> setConnected(node, true));
+    }
+
+    private static void setConnected(Node node, boolean isConnected) {
+        if (node instanceof GraphSelection.Selectable selectable) {
+            selectable.setConnected(isConnected);
         }
     }
 
@@ -284,18 +311,18 @@ final class OverlayRenderCoordinator {
     /* ----- Zyklen-Wissen des Modells und Tangle-Sicht ------------------------- */
 
     /** What the model, minus the preview cuts, knows about each class dependency; null without a model. */
-    private EdgeCycleClassifier edgeCycles() {
+    EdgeCycleClassifier edgeCycles() {
         DomainModel model = projection.getDomainModel();
         if (model == null) {
             edgeCycles = null;
             edgeCyclesModel = null;
             return null;
         }
-        Set<DependencyEdge> cuts = appliedCuts.get();
-        if (edgeCycles == null || model != edgeCyclesModel || !edgeCyclesCuts.equals(cuts)) {
-            edgeCycles = EdgeCycleClassifier.of(model, cuts, Lookup.lookup(SCCFinder.class));
+        PlanState state = plan.get();
+        if (edgeCycles == null || model != edgeCyclesModel || !state.equals(edgeCyclesPlan)) {
+            edgeCycles = EdgeCycleClassifier.of(model, state.cuts(), Lookup.lookup(SCCFinder.class), state.placement());
             edgeCyclesModel = model;
-            edgeCyclesCuts = Set.copyOf(cuts);
+            edgeCyclesPlan = state;
         }
         return edgeCycles;
     }

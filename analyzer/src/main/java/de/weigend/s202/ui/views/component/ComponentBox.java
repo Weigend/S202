@@ -169,6 +169,7 @@ public class ComponentBox extends VBox implements GraphSelection.Selectable, de.
         implementationContainer.getChildren().setAll(node);
     }
 
+    @Override
     public boolean isExpanded() {
         return componentExpanded;
     }

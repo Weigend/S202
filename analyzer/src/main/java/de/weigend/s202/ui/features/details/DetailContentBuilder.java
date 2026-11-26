@@ -21,6 +21,7 @@ import de.weigend.s202.domain.DependencyDetails;
 import de.weigend.s202.domain.DependencyEdge;
 import de.weigend.s202.domain.EdgeCycleClassifier;
 import de.weigend.s202.domain.EdgeCycleClassifier.CycleKind;
+import de.weigend.s202.domain.Externals;
 import de.weigend.s202.reader.DependencyModel;
 import de.weigend.s202.reader.EdgeKind;
 import de.weigend.s202.reader.TypeUse;
@@ -70,6 +71,10 @@ final class DetailContentBuilder {
     private DetailContent classDependency(String title, DependencyEdge edge) {
         boolean cut = cuts.contains(edge);
         List<String> summary = new ArrayList<>();
+        if (isExternal(edge)) {
+            summary.add("outside the analysis, counts for no layer and no cycle");
+            return new DetailContent(title, String.join(" \u00b7 ", summary), carriers(edge, true));
+        }
         if (isBackEdge(edge)) {
             summary.add("back-edge");
         }
@@ -81,6 +86,11 @@ final class DetailContentBuilder {
             addReturnPath(rows, cycles.returnPath(edge.from(), edge.to()));
         }
         return new DetailContent(title, String.join(" \u00b7 ", summary), rows);
+    }
+
+    /** A dependency on a class outside the analysis. */
+    private boolean isExternal(DependencyEdge edge) {
+        return Externals.of(rawModel).isExternalClass(edge.to());
     }
 
     private DetailContent aggregate(String title, DependencySelection selection) {
@@ -96,6 +106,13 @@ final class DetailContentBuilder {
 
         List<String> summary = new ArrayList<>();
         summary.add(edges.size() == 1 ? "1 class dependency" : edges.size() + " class dependencies");
+        if (!edges.isEmpty() && edges.stream().allMatch(this::isExternal)) {
+            summary.add("outside the analysis");
+            List<Row> rows = new ArrayList<>();
+            edges.stream().sorted(Comparator.comparing(DependencyEdge::from).thenComparing(DependencyEdge::to))
+                    .forEach(edge -> rows.add(edgeRow(edge, edges.size() == 1)));
+            return new DetailContent(title, String.join(" \u00b7 ", summary), rows);
+        }
         if (backEdges > 0) {
             summary.add(backEdges == 1 ? "1 back-edge" : backEdges + " back-edges");
         }
@@ -125,7 +142,7 @@ final class DetailContentBuilder {
     private CycleReturnPath packageReturnPath(List<DependencyEdge> edges) {
         Set<String> asked = new HashSet<>();
         for (DependencyEdge edge : edges) {
-            ContainerProjection.Projection p = ContainerProjection.project(edge.from(), edge.to());
+            ContainerProjection.Projection p = cycles.projectionOf(edge.from(), edge.to());
             if (p == null || cuts.contains(edge) || !asked.add(p.key())) {
                 continue;
             }

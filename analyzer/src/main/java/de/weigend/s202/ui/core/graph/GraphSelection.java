@@ -44,6 +44,10 @@ public final class GraphSelection {
         void applySelectedStyle();
         void applyUnselectedStyle();
 
+        /** Marks the box as the other end of an arrow of the box under the mouse. */
+        default void setConnected(boolean connected) {
+        }
+
         default Consumer<String> selectionChangeSink() {
             return null;
         }

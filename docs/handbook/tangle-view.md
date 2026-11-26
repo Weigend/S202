@@ -47,7 +47,7 @@ The members are arranged in layers as usual, but drawn as a graph: icon and name
 | Dashed | It lies on a package cycle only. Moving a class may be enough. |
 | Light grey | It lies on no cycle. |
 | Blue | Selected. |
-| Green and dashed | Cut. |
+| Light green and dotted | Cut. |
 
 Opening the packages with **+**, the sub-packages too, shows the classes behind the arrows, but only
 those that take part in the tangle.
@@ -103,8 +103,8 @@ from a [scope](layered-view.md#scopes) tab only the part within the scope appear
 
 ## Cutting
 
-A right-click on an arrow between two classes offers **Cut**, in a Tangle View and on the arrows of
-**Show Dependencies** in every other view.
+A right-click on an arrow between two classes offers **Cut**, in a Tangle View and on the lines of
+every other view, and so does a [matrix](matrix-view.md) cell that is one class dependency.
 
 ![The menu of an arrow](images/tangle-cut-menu.png)
 
@@ -126,8 +126,10 @@ runs through classes outside the tangle.
 | **Cut All** on a tangle | Cuts all its back-edges in one step. |
 | **Edit → Reset Refactorings...** | Takes back all cuts, and everything else that was planned. |
 
-Cuts belong to the analysis: all its tabs show them, and they are stored in the project file. They
-do not change the layout, the violations or the panel Dependencies, which show the code as it is.
+Cuts belong to the analysis: all its tabs show them, and they are stored in the project file. A cut
+dependency counts no more, for violations, cycles, tangles and quality alike. The layout stays as it
+was analyzed. With [Plan](refactoring.md#the-code-and-the-plan) off, a tab shows the code without
+the cuts.
 
 ## Which one to cut
 

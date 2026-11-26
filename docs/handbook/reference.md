@@ -22,11 +22,13 @@
 | | Exit | Ctrl+Q | Ends S202, after a question. |
 | Edit | Undo | Ctrl+Z | Takes a [move](layered-view.md#moving-boxes) back. |
 | | Redo | Ctrl+Shift+Z | Makes it again. |
+| | Discard Moves of This View | | [Discards](refactoring.md#undo-and-reset) the moves of the tab. |
 | | Reset Refactorings... | | [Discards](refactoring.md#undo-and-reset) everything planned. |
-| View | Outline Explorer, Quality, Top Tangles, Dependencies, Dependency Details | | Shows the panel, also a closed one. |
+| View | Outline Explorer, Quality, Top Tangles, Dependencies, From / To, Hotspots, Dependency Details | | Shows the panel, also a closed one. |
 | | 3D Architecture | | Shows the [3D view](3d-views.md#3d-architecture). |
 | | Component View | | Opens a [Component View](component-view.md) of the active analysis. |
 | | Hexagonal View | | Opens a [Hexagonal View](hexagonal-view.md). |
+| | Dependency Matrix | | Opens the [matrix](matrix-view.md) of the active tab. |
 | Windows | New | Ctrl+N | An empty tab. |
 | | Close | Ctrl+W | Closes the focused tab or panel. |
 | | Close All | Ctrl+Shift+W | Closes all analyses and reports. |
@@ -42,7 +44,11 @@ On macOS the Cmd key takes the place of Ctrl.
 
 | Right-click on | Entries |
 | --- | --- |
-| an arrow between two classes (of **Show Dependencies** or a Tangle View) | Cut, or Restore if it is cut |
+| a line between two classes | Cut, or Restore if it is cut |
+| a class or package in a view | Open Scope, Dependencies From Here, Dependencies To Here |
+| a name in the matrix | the same, and Open or Close for a package |
+| a package in Hotspots | Open Scope, Dependencies From Here, Dependencies To Here |
+| a matrix cell that is one class dependency | Cut, or Restore if it is cut |
 | a package in the outline | Open Scope |
 | the picture of a scope tab | Add to Scope... |
 | a tangle in Top Tangles | Cut All |
@@ -63,7 +69,10 @@ On macOS the Cmd key takes the place of Ctrl.
 | any view | Click on a box | Selects it, or lifts the selection. |
 | | Ctrl and mouse wheel | Zoom. |
 | | Dragging the background | Moves the picture. |
-| | Click on an arrow of **Show Dependencies** or a Tangle View | Selects it; see [Dependency Details](window.md#dependency-details). |
+| | Click on an arrow, a violation or the line of a cycle | Selects it; see [Dependency Details](window.md#dependency-details). |
+| | Mouse over a class or closed package, with **Show Dependencies** | Its arrows stand out. |
+| matrix | Click on a cell, a name | Selects the dependency, the element. |
+| | Click on **+**, double-click on a name; click on a band | Opens the package; closes it. |
 | layered, scope, component and tangle views | Dragging a box | [Moves](layered-view.md#moving-boxes) it as a plan. |
 | Top Tangles | Double-click on a tangle | Opens a [Tangle View](tangle-view.md). |
 | Dependencies | Double-click on a wrong-direction edge or a package tangle | Opens a Tangle View. |
@@ -103,6 +112,8 @@ The keys of the 3D views are in [3D views](3d-views.md).
 | Reading C | PoC |
 | Layered Architecture View, Tangle View | Stable |
 | Dependencies, violations, class cycles, package tangles | Stable |
+| Dependency matrix, From / To, Plan | Beta |
+| Libraries outside the analysis, Hotspots | Beta |
 | Component View and component checks | Beta |
 | Quality Report, layout invariants | Beta |
 | 3D Architecture, City3D | not rated |

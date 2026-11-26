@@ -28,24 +28,24 @@ drawn.
 | Click on a class or package | Selects it; another click lifts the selection. |
 | Ctrl and mouse wheel, **−** and **+** in the toolbar | Zoom, from 2 % to 300 %. |
 | **1:1** | Zoom 100 %. |
+| **Fit** | Zooms so that the whole picture fits into the window, as large as possible. |
 | Dragging the background | Moves the picture. |
 | Dragging a class or package | [Moves the box](#moving-boxes), as a plan. |
-| Click on an arrow | Selects it and fills [Dependency Details](window.md#dependency-details). |
-| Right-click on an arrow between two classes | [Cut or Restore](tangle-view.md#cutting). |
+| Mouse over a class or a closed package | Its [arrows](#dependencies) stand out. |
+| Click on an arrow, a violation or the line of a cycle | Selects it and fills [Dependency Details](window.md#dependency-details). |
+| Right-click on a line between two classes | [Cut or Restore](tangle-view.md#cutting). |
+| Right-click on a class or package | **Open Scope**, and what it [depends on](window.md#from--to) or is used by. |
 
-Arrows are drawn over the boxes, and a click on a place where one runs selects the arrow. If that
+Lines are drawn over the boxes, and a click on a place where one runs selects the line. If that
 happens instead of selecting a class, click its edge or select it in the outline. The arrows of
-this view are thin: zoom in to hit one.
-
-Only the arrows of **Show Dependencies** can be clicked. The black arrows of **Show Violations** and
-the red and orange lines of the cycles cannot; a click goes to the box below. To look into a
-violation, double-click it in the panel [Dependencies](window.md#dependencies).
+**Show Dependencies** are thin: zoom in to hit one. One line is selected at a time, whichever kind
+it is.
 
 ### Package depth
 
 **Depth** says how many levels of packages are open after the picture was built: 3 at first, 0
-closes everything, 10 is the most. A new value is applied with **Refresh**. Refresh also
-discards the [moves](#moving-boxes) of the tab and goes back to 100 % zoom.
+closes everything, 10 is the most. A new value is applied with **Refresh**. Zoom, position and
+[moves](#moving-boxes) stay.
 
 ### Box width
 
@@ -69,8 +69,16 @@ shows S202 itself, without and with it:
 
 ![All dependencies](images/layered-dependencies.png)
 
-That is the answer to *how entangled is this*, hardly to anything else. Two things make it
-readable.
+That is the answer to *how entangled is this*, and to where the dependencies go: a class nobody
+points to may be dead, one that many point to is a foundation, one that points everywhere knows too
+much. Three things make it readable; where they do not suffice, the [matrix](matrix-view.md) shows
+the same dependencies without lines.
+
+**Pointing.** The arrows of the class or closed package under the mouse get thicker, dark what it
+uses, green what uses it, and the boxes at their other ends turn green. The other arrows step back,
+but stay.
+
+![The arrows of Money, with the mouse on it](images/layered-hover.png)
 
 **Selecting.** With a class or package selected, only its dependencies are drawn: grey what it
 uses, green what uses it. Below, the package `payment` is selected. One of the grey arrows leads
@@ -79,12 +87,12 @@ up to `OrderService`, which is the violation.
 ![The dependencies of the package payment](images/layered-selected-package.png)
 
 **Closing packages.** An arrow of a closed package stands for all dependencies of its classes. The
-number in the circle counts them. A green circle means that all of them run down, an orange one
+number in the circle counts them. A green circle means that all of them run down, a red one
 that at least one runs up; `5 / 2↑` means five, of which two run up.
 
 ![Closed packages with counted arrows](images/layered-collapsed.png)
 
-In the picture the orange `1` is the dependency of `payment` on `order`.
+In the picture the red `1` is the dependency of `payment` on `order`.
 
 ### Edge kinds
 
@@ -112,8 +120,8 @@ Here *Inheritance* and *Imports* are chosen.
 
 ## Violations
 
-**Show Violations** draws the dependencies that run against the layers, also when the other arrows
-are off.
+**Show Violations** draws the dependencies that run against the layers in red, also when the other
+arrows are off.
 
 ![The violations of the web shop](images/layered-violations.png)
 
@@ -130,31 +138,32 @@ The fifth defect of the sample, `RefundScreen` → `CardPayments`, is not among 
 downwards, which is right for layers. It breaks the boundary of a component and is found in the
 [Component View](component-view.md#violations).
 
-If an end of the arrow is in a closed package, the arrow leads to the package, and a dark blue
-circle counts the dependencies. If both ends are in the same closed package, it is a loop above
-it. A dashed arrow is a back-edge, a dotted one is not; dotted arrows come from moves.
+If an end of the arrow is in a closed package, the arrow leads to the package, and a circle counts
+the dependencies. If both ends are in the same closed package, it is a loop above it. A solid arrow
+is a back-edge of the code, a dotted one comes from a move.
 
 ## Cycles
 
-**Class SCCs** draws the dependencies that lie on a class cycle in red, **Package Cycles** those of a
-package cycle in orange. With both on, a dependency that is red is not drawn in orange as well; with
-Package Cycles alone, a class cycle between two packages is orange too. (SCC is the term of graph
+**Class SCCs** draws the dependencies that lie on a class cycle in purple, **Package Cycles** those of
+a package cycle in orange and dashed. With both on, a dependency that is purple is not drawn in orange
+as well; with Package Cycles alone, a class cycle between two packages is orange too. (SCC is the term of graph
 theory: *strongly connected component*.)
 
-![Class cycles red, package cycles orange](images/layered-cycles.png)
+![Class cycles purple, package cycles orange](images/layered-cycles.png)
 
-Two class cycles are red, `OrderProcessor` ↔ `OrderValidator` and `Customer` ↔ `AuditLog`. The
+Two class cycles are purple, `OrderProcessor` ↔ `OrderValidator` and `Customer` ↔ `AuditLog`. The
 orange lines are the three package cycles: `order` with `payment`, `catalog.api` with
 `catalog.impl`, and `common` with `customer`. Between `common` and `customer` both colours meet:
-the red line is the reason, the orange ones only make the cycle heavier.
+the purple line is the reason, the orange ones only make the cycle heavier.
 
-Lines are drawn between classes that are visible; open the packages to see them. The status bar
-says how many there are. What to do with a cycle is the subject of [Tangles](tangle-view.md).
+If a class is in a closed package, the line leads to the package, and a circle counts the
+dependencies if there are several. Such a line is purple if one of them lies on a class cycle. Cycles
+within a closed package are a loop at its upper right corner. The status bar says how many there are. What to do with a cycle is the subject of [Tangles](tangle-view.md).
 
 ## Scopes
 
-A large system is easier to understand in pieces. **Open Scope** in the menu of a package in the
-[outline](window.md#outline-explorer) opens a tab with this package alone. It is a full layered
+A large system is easier to understand in pieces. **Open Scope** in the menu of a package, in the
+picture or in the [outline](window.md#outline-explorer), opens a tab with this package alone. It is a full layered
 view, with all switches and panels of its own.
 
 More can be added: right-click into the picture, choose **Add to Scope...** and select a package
@@ -199,12 +208,13 @@ still use each other, but within one package, where they can stay in one row.
 
 | Action | Effect |
 | --- | --- |
-| Ctrl+Z, **Edit → Undo** | Takes the last move back. The picture is built anew, at 100 % zoom and with the packages open as **Depth** says. |
+| Ctrl+Z, **Edit → Undo** | Takes the last move back. Zoom and open packages stay. |
 | Ctrl+Shift+Z, **Edit → Redo** | Makes it again. |
-| **Refresh** | Discards all moves of the tab. |
+| **Edit → Discard Moves of This View** | Discards all moves of the tab. |
 | **Edit → Reset Refactorings...** | Discards everything planned in the analysis. |
+| **Plan** in the toolbar | [Off](refactoring.md#the-code-and-the-plan): shows the code as it was analyzed. The moves are kept. |
 
-Moves are listed in the [refactoring report](refactoring.md#refactoring-report). They are not
-stored in a project file, and Top Tangles does not follow them.
+Moves are listed in the [refactoring report](refactoring.md#refactoring-report) and stored in the
+[project file](projects-and-export.md#project-files). All panels follow them.
 
-[Next: Tangles →](tangle-view.md)
+[Next: Dependency matrix →](matrix-view.md)

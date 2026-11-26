@@ -94,6 +94,10 @@ public interface StyleView {
         return Map.of();
     }
 
+    /** Stellt geplante Pakete eines gespeicherten Projekts wieder her; Id → Name. */
+    default void restorePlanned(Map<String, String> plannedPackages) {
+    }
+
     /** Verwirft, was der Benutzer in dieser Ansicht geplant hat. */
     default void resetPlanned() {
     }

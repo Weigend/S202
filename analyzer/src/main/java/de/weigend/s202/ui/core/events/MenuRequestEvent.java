@@ -77,6 +77,10 @@ public abstract class MenuRequestEvent extends EventObject {
         public ExportViolations(Object source) { super(source); }
     }
 
+    public static final class DiscardMoves extends MenuRequestEvent {
+        public DiscardMoves(Object source) { super(source); }
+    }
+
     public static final class ResetRefactorings extends MenuRequestEvent {
         public ResetRefactorings(Object source) { super(source); }
     }
@@ -107,6 +111,10 @@ public abstract class MenuRequestEvent extends EventObject {
 
     public static final class OpenHexagonalView extends MenuRequestEvent {
         public OpenHexagonalView(Object source) { super(source); }
+    }
+
+    public static final class OpenMatrix extends MenuRequestEvent {
+        public OpenMatrix(Object source) { super(source); }
     }
 
     public static final class CloseFocusedView extends MenuRequestEvent {

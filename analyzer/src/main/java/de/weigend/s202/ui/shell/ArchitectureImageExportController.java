@@ -15,6 +15,7 @@ import de.weigend.s202.ui.core.platform.ArchitecturePngExporter;
 import de.weigend.s202.ui.core.platform.ArchitectureViewManager;
 import de.weigend.s202.ui.core.platform.ArchitectureWfxView;
 import de.weigend.s202.ui.core.platform.Dialogs;
+import de.weigend.s202.ui.core.platform.MatrixWfxView;
 import de.weigend.s202.ui.core.platform.ProgressPublisher;
 import de.weigend.s202.ui.core.platform.RecentDirectories;
 import de.weigend.s202.ui.core.platform.SnapshotView;
@@ -50,8 +51,10 @@ final class ArchitectureImageExportController {
 
     /** Exports the focused 3D view, otherwise the architecture view the user works in. */
     void exportCurrentGraphic() {
-        SnapshotView snapshotView =
-                Lookup.lookup(WindowManager.class).getFocusedView() instanceof SnapshotView focused ? focused : null;
+        // The focused 3D view, or the matrix the user works in, also from a panel.
+        WindowManager wm = Lookup.lookup(WindowManager.class);
+        SnapshotView snapshotView = wm.getFocusedView() instanceof SnapshotView focused
+                ? focused : wm.getActiveLookup().lookup(MatrixWfxView.class);
         ArchitectureCanvas canvas = viewManager.activeCanvas();
         if (snapshotView == null && canvas == null) {
             Dialogs.showError("Export Image", "No architecture view is active.");
@@ -90,6 +93,9 @@ final class ArchitectureImageExportController {
     /** The title of the tab, so the views of one analysis get different files. */
     private String titleOf(SnapshotView snapshotView, ArchitectureCanvas canvas) {
         AnalysisDocument document = viewManager.activeDocument();
+        if (snapshotView instanceof MatrixWfxView) {
+            return snapshotView.getTitle();
+        }
         if (snapshotView != null) {
             return (document == null ? "" : document.name() + " ") + snapshotView.getTitle();
         }

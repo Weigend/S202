@@ -51,6 +51,8 @@ import java.util.function.Supplier;
  * @param refreshView         Stil-Projektion neu aufbauen (Statusmeldung optional)
  * @param whatIfMoves         effektive What-If-Moves der Session (für Reports)
  * @param appliedCutEdges     aktuell geschnittene Preview-Kanten (für Reports)
+ * @param planShown           zeigt die Ansicht den Plan (Moves, geplante Pakete, Schnitte)?
+ * @param showPlan            lässt die Ansicht den Plan zeigen
  */
 public record ViewServices(
         Map<String, Node> elementRegistry,
@@ -67,5 +69,7 @@ public record ViewServices(
         Consumer<String> status,
         Consumer<String> refreshView,
         Supplier<List<WhatIfMove>> whatIfMoves,
-        Supplier<Set<DependencyEdge>> appliedCutEdges) {
+        Supplier<Set<DependencyEdge>> appliedCutEdges,
+        Supplier<Boolean> planShown,
+        Runnable showPlan) {
 }

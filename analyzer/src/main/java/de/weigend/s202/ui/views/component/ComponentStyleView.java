@@ -89,7 +89,7 @@ final class ComponentStyleView implements StyleView {
 
     @Override
     public void afterContentBuilt(VBox topLevelContainer) {
-        if (planner.hasPlannedPackages()) {
+        if (planner.hasPlannedPackages() && services.planShown().get()) {
             planner.injectPlannedPackagesIntoScene(topLevelContainer);
         }
     }
@@ -97,6 +97,11 @@ final class ComponentStyleView implements StyleView {
     @Override
     public Map<String, String> plannedPackages() {
         return planner.plannedPackages();
+    }
+
+    @Override
+    public void restorePlanned(Map<String, String> plannedPackages) {
+        planner.restore(plannedPackages);
     }
 
     @Override

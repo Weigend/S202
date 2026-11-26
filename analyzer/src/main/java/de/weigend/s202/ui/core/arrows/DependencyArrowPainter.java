@@ -20,16 +20,12 @@ import javafx.geometry.Bounds;
 import javafx.geometry.VPos;
 import javafx.scene.Group;
 import javafx.scene.Node;
-import javafx.scene.control.ContextMenu;
-import javafx.scene.control.MenuItem;
-import javafx.scene.input.MouseButton;
 import javafx.scene.layout.Pane;
 import javafx.scene.paint.Color;
 import javafx.scene.shape.Circle;
 import javafx.scene.shape.Line;
 import javafx.scene.shape.Rectangle;
 import javafx.scene.shape.Shape;
-import javafx.scene.shape.StrokeLineCap;
 import javafx.scene.text.Font;
 import javafx.scene.text.FontWeight;
 import javafx.scene.text.Text;
@@ -71,20 +67,15 @@ final class DependencyArrowPainter {
                  String weight, ArrowStyle style) {
     }
 
-    private static final Color OUTGOING_DEPENDENCY_COLOR = Color.rgb(90, 94, 98);  // Anthrazit
-    private static final Color INCOMING_DEPENDENCY_COLOR = Color.rgb(0, 128, 0);  // Grün
-    private static final Color CUT_DEPENDENCY_COLOR = Color.web("#2ecc71");       // refactoring-preview cut
+    static final String OVERLAY = "dependencies";
+
     private static final double DEPENDENCY_WIDTH = 0.6;
 
     private static final Color BADGE_BG           = Color.rgb(0, 140, 0);    // normal direction
-    private static final Color BADGE_BG_VIOLATION = Color.rgb(210, 105, 0); // wrong direction
     private static final Color BADGE_FG  = Color.WHITE;
     private static final Font  BADGE_FONT = Font.font(null, FontWeight.BOLD, 5.0);
     private static final double BADGE_PADDING    = 1.5;
     private static final double BADGE_MIN_RADIUS = 4.0;
-
-    private static final double STYLE_DASH_ON = 4.0;
-    private static final double STYLE_DASH_OFF = 2.5;
 
     /**
      * How wide the invisible area is that catches the mouse for an arrow of a
@@ -94,6 +85,9 @@ final class DependencyArrowPainter {
     private static final double HIT_WIDTH = 12.0;
     private static final double MAX_HIT_WIDTH = 16.0;
     private static final double HOVER_WIDTH_FACTOR = 2.0;
+    /** The arrows of the box under the mouse, and what becomes of the others. */
+    private static final double EMPHASIS_WIDTH_FACTOR = 2.2;
+    private static final double OTHERS_OPACITY = 0.35;
 
     /** Distance between the two arrows of a mutual dependency. */
     private static final double OPPOSED_GAP = 6.0;
@@ -106,32 +100,127 @@ final class DependencyArrowPainter {
     private static final Color WEIGHT_BACKGROUND = Color.web("#f5f5f0");
 
     private final Pane dependencyPane;
-    private final Consumer<String> statusCallback;
+    private LineSelection selection;
 
-    private final List<Shape> dependencyLines = new ArrayList<>();
+    private final List<Drawn> drawn = new ArrayList<>();
+    /** The box whose arrows stand out; {@code null} for none. */
+    private Node emphasised;
     /** The mouse areas of the arrows, below all lines: a line hit directly wins over a neighbour's area. */
     private final Group hitAreas = new Group();
-    private Shape selectedLine = null;
-    private DependencyEdgeActions edgeActions;
+
+    /** An arrow in the picture, and how it looks when nothing is the matter with it. */
+    private final class Drawn implements LineSelection.Look {
+        private final Arrow arrow;
+        private final Shape line;
+        private final List<Line> head;
+        private final List<Node> labels = new ArrayList<>();
+        private final Color color;
+        private final double width;
+        private final double opacity;
+
+        private Drawn(Arrow arrow, Shape line, List<Line> head, Color color, double width, double opacity) {
+            this.arrow = arrow;
+            this.line = line;
+            this.head = head;
+            this.color = color;
+            this.width = width;
+            this.opacity = opacity;
+        }
+
+        @Override
+        public void selected(boolean selected) {
+            if (selected) {
+                stroke(LineColors.SELECTED, Math.max(width, DEPENDENCY_WIDTH) * 2);
+                opacity(1.0);
+            } else {
+                normal();
+            }
+        }
+
+        /** The colours have a meaning: an arrow under the mouse only gets thicker. */
+        @Override
+        public void hovered(boolean hovered) {
+            stroke(color, width * (hovered ? HOVER_WIDTH_FACTOR : 1.0));
+        }
+
+        /** As it is when not selected: its own look, or that the box under the mouse gives it. */
+        private void normal() {
+            if (emphasised == null) {
+                stroke(color, width);
+                opacity(opacity);
+                return;
+            }
+            boolean outgoing = arrow.source() == emphasised;
+            boolean incoming = arrow.target() == emphasised;
+            if (outgoing || incoming) {
+                boolean plain = color.equals(LineColors.USES) || color.equals(LineColors.USED_BY);
+                stroke(!plain ? color : outgoing ? LineColors.USES : LineColors.USED_BY, width * EMPHASIS_WIDTH_FACTOR);
+                opacity(1.0);
+            } else {
+                stroke(color, width);
+                opacity(Math.min(opacity, OTHERS_OPACITY));
+            }
+        }
+
+        private void stroke(Color newColor, double newWidth) {
+            line.setStroke(newColor);
+            line.setStrokeWidth(newWidth);
+            head.forEach(part -> {
+                part.setStroke(newColor);
+                part.setStrokeWidth(newWidth);
+            });
+        }
+
+        private void opacity(double newOpacity) {
+            line.setOpacity(newOpacity);
+            head.forEach(part -> part.setOpacity(newOpacity));
+            labels.forEach(label -> label.setOpacity(newOpacity));
+        }
+    }
 
     DependencyArrowPainter(Pane dependencyPane, Consumer<String> statusCallback) {
         this.dependencyPane = Objects.requireNonNull(dependencyPane, "dependencyPane cannot be null");
-        this.statusCallback = Objects.requireNonNull(statusCallback, "statusCallback cannot be null");
+        this.selection = new LineSelection(statusCallback);
+    }
+
+    /** Shares the selection with the other overlays of the view. */
+    void setSelection(LineSelection selection) {
+        this.selection = Objects.requireNonNull(selection, "selection cannot be null");
     }
 
     /** Selection handling for all arrows, cut and restore for class-to-class ones; {@code null} disables it. */
     void setEdgeActions(DependencyEdgeActions edgeActions) {
-        this.edgeActions = edgeActions;
+        selection.setActions(edgeActions);
     }
 
-    /**
-     * Removes all drawn arrows and resets the selection.
-     */
+    /** Removes all drawn arrows. */
     void clear() {
         dependencyPane.getChildren().clear();
         hitAreas.getChildren().clear();
-        dependencyLines.clear();
-        selectedLine = null;
+        drawn.clear();
+        selection.cleared(OVERLAY);
+    }
+
+    /**
+     * Lets the arrows of {@code box} stand out; the others step back, but stay
+     * in the picture. {@code null} gives all of them their look back.
+     *
+     * @return the boxes at the other ends of its arrows
+     */
+    List<Node> emphasise(Node box) {
+        emphasised = box;
+        List<Node> connected = new ArrayList<>();
+        for (Drawn arrow : drawn) {
+            if (!selection.isSelected(arrow)) {
+                arrow.normal();
+            }
+            if (box != null && arrow.arrow.source() == box) {
+                connected.add(arrow.arrow.target());
+            } else if (box != null && arrow.arrow.target() == box) {
+                connected.add(arrow.arrow.source());
+            }
+        }
+        return connected;
     }
 
     /**
@@ -197,14 +286,13 @@ final class DependencyArrowPainter {
                 }
             }
 
-            DependencyEdgeActions actions = classEdge ? edgeActions : null;
-            boolean cut = actions != null && actions.isCut(sourceName, targetName);
+            boolean cut = classEdge && selection.isCut(sourceName, targetName);
 
             // A cut dependency has its own color; a tangle view styles the
             // arrow by what the dependency is; otherwise the direction decides.
-            Color lineColor = cut ? CUT_DEPENDENCY_COLOR
+            Color lineColor = cut ? LineColors.CUT
                     : style != null ? style.color()
-                    : isIncoming ? INCOMING_DEPENDENCY_COLOR : OUTGOING_DEPENDENCY_COLOR;
+                    : isIncoming ? LineColors.USED_BY : LineColors.USES;
             double opacity = style != null ? style.opacity() : 1.0;
 
             // Create the line
@@ -215,16 +303,9 @@ final class DependencyArrowPainter {
             line.setStrokeWidth(scaledWidth);
             line.setOpacity(opacity);
             if (cut) {
-                line.getStrokeDashArray().setAll(3.0, 3.0);
+                LineColors.dot(line);
             } else if (style != null && style.dashed()) {
-                line.getStrokeDashArray().setAll(STYLE_DASH_ON, STYLE_DASH_OFF);
-            }
-
-            installInteraction(line, line, arrow, cut);
-            // A highlight pushes the others back; those must not be in the way of the mouse.
-            boolean easyToHit = style != null && style.opacity() == 1.0;
-            if (easyToHit) {
-                addHitArea(route.toShape(), line, arrow, cut);
+                LineColors.dash(line);
             }
 
             // Create arrowhead
@@ -247,10 +328,14 @@ final class DependencyArrowPainter {
             arrow1.setMouseTransparent(true);
             arrow2.setMouseTransparent(true);
 
-            // Store the arrowhead lines and what a deselect has to restore:
-            // {arrow1, arrow2, color, width, selection color}
-            line.setUserData(new Object[]{arrow1, arrow2, lineColor, scaledWidth,
-                    style != null ? ArrowStyle.SELECTED_COLOR : Color.RED});
+            Drawn look = new Drawn(arrow, line, List.of(arrow1, arrow2), lineColor, scaledWidth, opacity);
+            LineSelection.Key key = new LineSelection.Key(OVERLAY, sourceName, targetName, arrow.edges());
+            installInteraction(line, key, look);
+            // A highlight pushes the others back; those must not be in the way of the mouse.
+            boolean easyToHit = style != null && style.opacity() == 1.0;
+            if (easyToHit) {
+                addHitArea(route.toShape(), key, look);
+            }
 
             dependencyPane.getChildren().addAll(line, arrow1, arrow2);
 
@@ -265,10 +350,10 @@ final class DependencyArrowPainter {
                 double offset = BADGE_MIN_RADIUS + 2.0;
                 double badgeX = midX + (-dy / len) * offset;
                 double badgeY = midY + ( dx / len) * offset;
-                Color badgeBg = !containsWrongDirection ? BADGE_BG
-                        : style != null ? ArrowStyle.BACK_EDGE_COLOR : BADGE_BG_VIOLATION;
+                Color badgeBg = containsWrongDirection ? LineColors.AGAINST_LAYERS : BADGE_BG;
                 Group badgeNode = buildBadge(badge, badgeX, badgeY, badgeBg);
                 badgeNode.setOpacity(opacity);
+                look.labels.add(badgeNode);
                 dependencyPane.getChildren().add(badgeNode);
             }
 
@@ -276,68 +361,34 @@ final class DependencyArrowPainter {
                 double[] at = route.at(opposed ? OPPOSED_WEIGHT_POSITION : WEIGHT_POSITION);
                 Group weightNode = buildWeight(arrow.weight(), at[0], at[1], lineColor);
                 weightNode.setOpacity(opacity);
+                look.labels.add(weightNode);
                 if (easyToHit) {
                     weightNode.setMouseTransparent(false);
-                    installInteraction(weightNode, line, arrow, cut);
+                    installInteraction(weightNode, key, look);
                 }
                 dependencyPane.getChildren().add(weightNode);
             }
 
-            dependencyLines.add(line);
+            drawn.add(look);
+            if (emphasised != null) {
+                look.normal();
+            }
+            selection.drawn(key, look);
 
         } catch (Exception e) {
             // Ignore drawing errors for elements not in scene
         }
     }
 
-    /** Lets {@code target} — the line itself or what stands for it — react to the mouse for the arrow. */
-    private void installInteraction(Node target, Shape line, Arrow arrow, boolean cut) {
-        target.setOnMouseEntered(e -> {
-            setHovered(line, arrow.style() != null, true);
-            target.setCursor(javafx.scene.Cursor.HAND);
-        });
-        target.setOnMouseExited(e -> {
-            setHovered(line, arrow.style() != null, false);
-            target.setCursor(javafx.scene.Cursor.DEFAULT);
-        });
-        // Click handler for selection (primary button; the secondary one opens the menu)
-        target.setOnMouseClicked(e -> {
-            if (e.getButton() != MouseButton.PRIMARY) {
-                return;
-            }
-            selectShape(line, arrow.sourceName(), arrow.targetName());
-            if (edgeActions != null) {
-                edgeActions.selected(selectedLine == line
-                        ? new DependencySelection(arrow.sourceName(), arrow.targetName(), arrow.edges())
-                        : DependencySelection.NONE);
-            }
-            e.consume();
-        });
-        if (arrow.classEdge() && edgeActions != null) {
-            installCutMenu(target, edgeActions, arrow.sourceName(), arrow.targetName(), cut);
+    private void installInteraction(Node target, LineSelection.Key key, Drawn look) {
+        selection.install(target, key, look);
+        if (look.arrow.classEdge()) {
+            selection.installCutMenu(target, look.arrow.sourceName(), look.arrow.targetName());
         }
     }
 
-    /** A tangle view thickens the arrow under the mouse — its colours have a meaning; others turn grey. */
-    private void setHovered(Shape line, boolean styled, boolean hovered) {
-        if (line == selectedLine) {
-            return;
-        }
-        Object[] userData = (Object[]) line.getUserData();
-        Color color = (Color) userData[2];
-        if (styled) {
-            applyStroke(line, userData, color, baseWidth(userData) * (hovered ? HOVER_WIDTH_FACTOR : 1.0));
-        } else {
-            line.setStroke(hovered ? Color.GRAY : color);
-        }
-    }
-
-    private void addHitArea(Shape area, Shape line, Arrow arrow, boolean cut) {
-        area.setStroke(Color.TRANSPARENT);
-        area.setStrokeWidth(hitWidth());
-        // The area ends with the arrow; it must not reach over the boxes.
-        area.setStrokeLineCap(StrokeLineCap.BUTT);
-        installInteraction(area, line, arrow, cut);
+    private void addHitArea(Shape area, LineSelection.Key key, Drawn look) {
+        installInteraction(LineSelection.hitArea(area, hitWidth()), key, look);
         if (hitAreas.getParent() != dependencyPane) {
             hitAreas.getChildren().clear();
             dependencyPane.getChildren().add(0, hitAreas);
@@ -348,24 +399,6 @@ final class DependencyArrowPainter {
     private double hitWidth() {
         double scale = dependencyPane.getLocalToSceneTransform().getMxx();
         return scale > 0 ? Math.min(MAX_HIT_WIDTH, HIT_WIDTH / scale) : HIT_WIDTH;
-    }
-
-    /** Context menu of a class-to-class arrow: "Cut", or "Restore" once it is cut. */
-    private static void installCutMenu(Node line, DependencyEdgeActions actions,
-                                       String sourceClass, String targetClass, boolean cut) {
-        line.setOnContextMenuRequested(e -> {
-            MenuItem item = new MenuItem(cut ? "Restore" : "Cut");
-            item.setOnAction(action -> {
-                if (cut) {
-                    actions.restore(sourceClass, targetClass);
-                } else {
-                    actions.cut(sourceClass, targetClass);
-                }
-            });
-            new ContextMenu(item).show(line, e.getScreenX(), e.getScreenY());
-            // Keep the canvas-wide context menu from opening as well.
-            e.consume();
-        });
     }
 
     /** The straight line, or an arc around the boxes that lie on it. */
@@ -457,60 +490,6 @@ final class DependencyArrowPainter {
         group.setLayoutY(cy);
         group.setMouseTransparent(true);
         return group;
-    }
-
-    /**
-     * Selects a dependency shape (line or curve) and highlights it.
-     * The shape's userData holds {arrow1, arrow2, color, width, selection color}.
-     */
-    private void selectShape(Shape shape, String sourceName, String targetName) {
-        // Deselect previous shape
-        if (selectedLine != null && selectedLine != shape) {
-            restore(selectedLine);
-        }
-
-        // Toggle selection
-        if (selectedLine == shape) {
-            restore(shape);
-            selectedLine = null;
-            statusCallback.accept("Ready");
-        } else {
-            Object[] userData = (Object[]) shape.getUserData();
-            Color selectedColor = userData != null && userData.length > 4 ? (Color) userData[4] : Color.RED;
-            double selectedWidth = Math.max(baseWidth(userData), getScaledLineWidth()) * 2;
-            applyStroke(shape, userData, selectedColor, selectedWidth);
-            selectedLine = shape;
-
-            // Show dependency info in status bar
-            String simpleSource = sourceName.contains(".") ?
-                    sourceName.substring(sourceName.lastIndexOf('.') + 1) : sourceName;
-            String simpleTarget = targetName.contains(".") ?
-                    targetName.substring(targetName.lastIndexOf('.') + 1) : targetName;
-            statusCallback.accept("Dependency: " + simpleSource + " → " + simpleTarget);
-        }
-    }
-
-    /** Gives a deselected shape and its arrowhead their own color and width back. */
-    private void restore(Shape shape) {
-        Object[] userData = (Object[]) shape.getUserData();
-        Color originalColor = userData != null && userData.length > 2 ? (Color) userData[2] : OUTGOING_DEPENDENCY_COLOR;
-        applyStroke(shape, userData, originalColor, baseWidth(userData));
-    }
-
-    private double baseWidth(Object[] userData) {
-        return userData != null && userData.length > 3 ? (Double) userData[3] : getScaledLineWidth();
-    }
-
-    private static void applyStroke(Shape shape, Object[] userData, Color color, double width) {
-        shape.setStroke(color);
-        shape.setStrokeWidth(width);
-        if (userData != null && userData.length >= 2) {
-            for (int i = 0; i < 2; i++) {
-                Line arrow = (Line) userData[i];
-                arrow.setStroke(color);
-                arrow.setStrokeWidth(width);
-            }
-        }
     }
 
     /**

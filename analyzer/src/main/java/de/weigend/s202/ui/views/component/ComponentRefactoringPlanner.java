@@ -55,7 +55,12 @@ final class ComponentRefactoringPlanner {
     }
 
     Map<String, String> plannedPackages() {
-        return Map.copyOf(plannedPackageNames);
+        return new LinkedHashMap<>(plannedPackageNames);
+    }
+
+    void restore(Map<String, String> plannedPackages) {
+        plannedPackageNames.clear();
+        plannedPackageNames.putAll(plannedPackages);
     }
 
     void reset() {
@@ -93,6 +98,7 @@ final class ComponentRefactoringPlanner {
                 .ifPresent(name -> {
                     String fqn = "virtual-pkg-" + java.util.UUID.randomUUID().toString().replace("-", "");
                     plannedPackageNames.put(fqn, name);
+                    services.showPlan().run();
                     services.refreshView().accept("Added planned package: " + name);
                 });
     }

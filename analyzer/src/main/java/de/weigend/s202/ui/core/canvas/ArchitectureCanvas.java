@@ -19,13 +19,14 @@ import de.weigend.s202.ui.core.model.EdgeKindGroup;
 import de.weigend.s202.ui.core.model.WhatIfMove;
 import de.weigend.s202.ui.core.canvas.WhatIfEditController;
 import de.weigend.s202.ui.core.graph.ArchitectureDragController;
+import de.weigend.s202.ui.core.graph.BoxMenuEvent;
 import de.weigend.s202.ui.core.graph.ExpandChangedEvent;
 import de.weigend.s202.ui.core.graph.GraphSelection;
 import de.weigend.s202.ui.core.graph.LevelClassBox;
 import de.weigend.s202.ui.core.graph.ContainerBox;
 import de.weigend.s202.ui.core.graph.LevelPackageBox;
 import de.weigend.s202.ui.core.graph.PulseCoalescer;
-import de.weigend.s202.analysis.quality.QualityMetrics;
+import de.weigend.s202.domain.ContainerProjection;
 import de.weigend.s202.domain.DependencyEdge;
 import de.weigend.s202.domain.DomainModel;
 import de.weigend.s202.domain.architecture.Architecture;
@@ -40,8 +41,10 @@ import de.weigend.s202.domain.architecture.LayeredArchitecture;
 import de.weigend.s202.domain.architecture.ViolationKind;
 import de.weigend.s202.domain.architecture.WhatIfArchitecture;
 import de.weigend.s202.reader.DependencyModel;
+import de.weigend.s202.ui.core.matrix.MatrixView;
 import de.weigend.s202.ui.core.model.ArchitectureNode;
 import de.weigend.s202.ui.core.model.ArchitectureNodeCloner;
+import de.weigend.s202.ui.core.model.PlanState;
 import de.weigend.s202.ui.core.model.ScopeExtensionModel;
 import de.weigend.s202.ui.core.arrows.DependencyRenderer;
 import de.weigend.s202.ui.core.arrows.DependencyRendererStrategy;
@@ -70,6 +73,7 @@ import javafx.beans.property.SimpleBooleanProperty;
 import javafx.beans.property.SimpleIntegerProperty;
 import javafx.beans.property.SimpleObjectProperty;
 import javafx.geometry.Bounds;
+import javafx.geometry.Insets;
 import javafx.geometry.Pos;
 import javafx.scene.control.ButtonBar;
 import javafx.scene.control.ButtonType;
@@ -123,6 +127,9 @@ public class ArchitectureCanvas extends AbstractArchitectureCanvas {
     public record ViewSnapshot(double zoom, double horizontalScroll, double verticalScroll,
                                Map<String, Boolean> packageExpansion) {}
 
+    /** Keeps rounding from bringing the scroll bars back after {@link #zoomToFit()}. */
+    private static final double FIT_MARGIN = 2.0;
+
     private ScrollPane scrollPane;
     private Pane dependencyPane;   // Container for dependency lines
     private Pane sccPane;          // Container for SCC lines
@@ -155,6 +162,12 @@ public class ArchitectureCanvas extends AbstractArchitectureCanvas {
     private final PreviewCutController previewCuts;
     private final WhatIfEditController whatIfEdit;
     private final ScopeExtensionController scopeExtension;
+    private final PlanController plan;
+    private final MatrixView matrixView = new MatrixView();
+    private final MatrixController matrix;
+    private final HoverController hover = new HoverController(this::boxHovered);
+    private Consumer<String> openScopeSink = scope -> { /* no-op default */ };
+    private BiConsumer<String, String> fromToSink = (from, to) -> { /* no-op default */ };
 
     // Pulses every time the arrow overlay finishes a redraw. WFX side panels
     // (e.g. the Dependencies module) can subscribe to refresh themselves.
@@ -166,7 +179,8 @@ public class ArchitectureCanvas extends AbstractArchitectureCanvas {
 
     private final ArchitectureProjectionModel projection =
             new ArchitectureProjectionModel(
-                    this::getViewStyle, this::componentMoves, this::updateSccRendererTangles);
+                    this::getViewStyle, this::componentMoves, this::effectiveCuts,
+                    this::replayMovesInModel, this::updateSccRendererTangles);
     private final ElementBoundsExporter boundsExporter =
             new ElementBoundsExporter(elementRegistry, () -> zoomableContent, this::getScene);
 
@@ -177,7 +191,8 @@ public class ArchitectureCanvas extends AbstractArchitectureCanvas {
         stateKeeper = new StyleProjectionStateKeeper(
                 scrollPane, () -> zoomController, () -> whatIfRootContainer, zoomFactor::get, arrowsCoalescer,
                 this::styleView);
-        previewCuts = new PreviewCutController(this::setStatus, arrowsCoalescer::markDirty);
+        previewCuts = new PreviewCutController(this::setStatus, this::planChanged);
+        previewCuts.setPlan(showPlan::get, () -> showPlan.set(true));
         whatIfEdit = new WhatIfEditController(
                 this,
                 elementRegistry,
@@ -204,22 +219,29 @@ public class ArchitectureCanvas extends AbstractArchitectureCanvas {
                         return projection.componentOf(fqn);
                     }
                 },
-                this::resetVisualLayout,
-                showWhatIfViolations);
-        whatIfEdit.undoManager().setOnChange(this::componentMovesChanged);
+                this::rebuildWithMoves,
+                showPlan);
+        whatIfEdit.undoManager().setOnChange(this::planChanged);
+        plan = new PlanController(showPlan, this::getWhatIfMoves, this::getPlannedPackages,
+                previewCuts::appliedCutEdges, projection::getDomainModel);
         overlay = new OverlayRenderCoordinator(
                 dependencyPane, sccPane, whatIfPane,
                 elementRegistry,
                 showDependencies, showScc, showPackageScc, showWhatIfViolations,
                 arrowsCoalescer,
                 previewCuts,
-                previewCuts::appliedCutEdges,
+                plan::plan,
                 projection,
                 () -> currentRootNode,
                 this::styleView,
                 selection::getSelectedFullName,
                 this::setStatus,
                 whatIfEdit::applyVirtuallyMovedDecorations);
+        matrix = new MatrixController(matrixView, projection, () -> currentRootNode, plan::plan,
+                this::getWhatIfMoves, this::getHiddenEdgeKinds, overlay::tangleScope, overlay::edgeCycles);
+        matrixView.setActions(previewCuts);
+        matrixView.setOnElementSelected(selection::selectForUser);
+        matrixView.setElementMenu(this::boxMenuItems);
         viewServices = new de.weigend.s202.ui.core.spi.ViewServices(
                 elementRegistry,
                 graphSelectionSink,
@@ -235,7 +257,9 @@ public class ArchitectureCanvas extends AbstractArchitectureCanvas {
                 this::setStatus,
                 this::refreshStyleProjection,
                 () -> whatIfEdit.undoManager().effectiveMoves(),
-                previewCuts::appliedCutEdges);
+                previewCuts::appliedCutEdges,
+                showPlan::get,
+                () -> showPlan.set(true));
         scopeExtension = new ScopeExtensionController(
                 this::setStatus,
                 () -> currentRootNode,
@@ -246,6 +270,7 @@ public class ArchitectureCanvas extends AbstractArchitectureCanvas {
                 this::scopeExtended);
         wirePropertyListeners();
         addEventHandler(ExpandChangedEvent.EXPAND_CHANGED, event -> arrowsCoalescer.markDirty());
+        addEventHandler(BoxMenuEvent.BOX_MENU, event -> event.offer(boxMenuItems(event.fullName())));
     }
 
     private void setupUI() {
@@ -280,13 +305,11 @@ public class ArchitectureCanvas extends AbstractArchitectureCanvas {
         dependencyPane.setManaged(false);
 
         sccPane = new Pane();
-        sccPane.setMouseTransparent(true);
         sccPane.setPickOnBounds(false);
         sccPane.setVisible(false);
         sccPane.setManaged(false);
 
         whatIfPane = new Pane();
-        whatIfPane.setMouseTransparent(true);
         whatIfPane.setPickOnBounds(false);
         whatIfPane.setVisible(false);
         whatIfPane.setManaged(false);
@@ -311,17 +334,17 @@ public class ArchitectureCanvas extends AbstractArchitectureCanvas {
     }
 
     /**
-     * Kontextmenü des Canvas: stil-spezifische Einträge der aktiven StyleView
-     * plus „Add to Scope…“, wenn diese View eine Scope-Erweiterung hat.
+     * Kontextmenü des Canvas: was mit der Box unter der Maus geht, dann die
+     * stil-spezifischen Einträge der aktiven StyleView und „Add to Scope…“,
+     * wenn diese View eine Scope-Erweiterung hat.
      */
     private void installContextMenu(javafx.scene.Node target) {
-        boolean hasStyleItems = !styleView().contextMenuItems().isEmpty();
-        if (!hasStyleItems && getScopeExtensionSourceRoot() == null) {
-            target.setOnContextMenuRequested(null);
-            return;
-        }
         target.setOnContextMenuRequested(event -> {
             ContextMenu menu = new ContextMenu();
+            String box = elementAt(event.getTarget() instanceof javafx.scene.Node node ? node : null);
+            if (box != null) {
+                menu.getItems().addAll(boxMenuItems(box));
+            }
             menu.getItems().addAll(styleView().contextMenuItems());
             if (getScopeExtensionSourceRoot() != null) {
                 menu.getItems().add(scopeExtension.addToScopeMenuItem());
@@ -331,6 +354,39 @@ public class ArchitectureCanvas extends AbstractArchitectureCanvas {
                 event.consume();
             }
         });
+    }
+
+    private static String elementAt(javafx.scene.Node node) {
+        for (javafx.scene.Node n = node; n != null; n = n.getParent()) {
+            if (n instanceof GraphSelection.Selectable selectable && selectable.getFullName() != null) {
+                return selectable.getFullName();
+            }
+        }
+        return null;
+    }
+
+    /** What can be done with a class or package in every view. */
+    private List<MenuItem> boxMenuItems(String fullName) {
+        DomainModel model = getDomainModel();
+        if (model == null) {
+            return List.of();
+        }
+        boolean isClass = model.getClass(fullName) != null;
+        String scope = isClass ? ContainerProjection.parentOf(fullName) : fullName;
+        if (model.getPackage(scope) == null) {
+            return List.of();
+        }
+        MenuItem openScope = new MenuItem(isClass ? "Open Scope " + simple(scope) : "Open Scope");
+        openScope.setOnAction(action -> openScopeSink.accept(scope));
+        MenuItem from = new MenuItem("Dependencies From Here");
+        from.setOnAction(action -> fromToSink.accept(fullName, null));
+        MenuItem to = new MenuItem("Dependencies To Here");
+        to.setOnAction(action -> fromToSink.accept(null, fullName));
+        return List.of(openScope, from, to);
+    }
+
+    private void boxHovered(javafx.scene.Node box) {
+        overlay.emphasise(box);
     }
 
     /** Die StyleView des aktiven Stils — pro Stil einmal erzeugt (SPI-Lookup). */
@@ -344,6 +400,9 @@ public class ArchitectureCanvas extends AbstractArchitectureCanvas {
     }
 
     private ComponentMoves componentMoves() {
+        if (!showPlan.get()) {
+            return ComponentMoves.none();
+        }
         return new ComponentMoves(
                 getWhatIfMoves().stream()
                         .map(move -> new ComponentMoves.Move(move.fqn(), move.containerFqn(), move.api()))
@@ -351,12 +410,49 @@ public class ArchitectureCanvas extends AbstractArchitectureCanvas {
                 getPlannedPackages().keySet());
     }
 
-    /** Verschieben, Undo und Redo ändern in der Component-Ansicht die Verstöße — ohne Neuaufbau der Szene. */
-    private void componentMovesChanged() {
-        if (viewStyle == ArchitectureKind.COMPONENT) {
-            projection.rebuildArchitectureProjection();
-            arrowsCoalescer.markDirty();
+    private Set<DependencyEdge> effectiveCuts() {
+        return previewCuts.effectiveCutEdges();
+    }
+
+    private void replayMovesInModel(WhatIfArchitecture fresh) {
+        whatIfEdit.replayMovesInModel(fresh);
+    }
+
+    /**
+     * Something was planned or taken back. Cuts change every architecture, moves
+     * only that of the component view - the other one is moved along. The scene
+     * stays: a box that was dragged is where it belongs already.
+     */
+    private void planChanged() {
+        if (plan == null) {
+            return; // while the canvas is being made
         }
+        PlanState next = plan.current();
+        if (viewStyle == ArchitectureKind.COMPONENT || !next.cuts().equals(plan.plan().cuts())) {
+            projection.rebuildArchitectureProjection();
+        }
+        plan.publish(next);
+        arrowsCoalescer.markDirty();
+    }
+
+    /** The plan was switched on or off: other models and, with moves, another picture. */
+    private void planSwitched() {
+        projection.rebuildArchitectureProjection();
+        plan.publish(plan.current());
+        if (!getWhatIfMoves().isEmpty() || !getPlannedPackages().isEmpty()) {
+            rebuildScene(true, null);
+        }
+        arrowsCoalescer.markDirty();
+        setStatus(showPlan.get() ? "Plan: everything planned is applied" : "The code as it was analyzed");
+    }
+
+    /** What this view shows: the analyzed code or the plan. Changes after the architecture has. */
+    public ReadOnlyObjectProperty<PlanState> planProperty() {
+        return plan.planProperty();
+    }
+
+    public PlanState getPlan() {
+        return plan.plan();
     }
 
     /** Gemeinsamer Handler für Annotations-Änderungen aus den Stil-Buildern. */
@@ -378,9 +474,33 @@ public class ArchitectureCanvas extends AbstractArchitectureCanvas {
         showScc.addListener((obs, was, isNow) -> overlay.applyShowScc(isNow));
         showPackageScc.addListener((obs, was, isNow) -> overlay.applyShowPackageScc(isNow));
         showWhatIfViolations.addListener((obs, was, isNow) -> overlay.applyShowWhatIfViolations(isNow));
+        showPlan.addListener((obs, was, isNow) -> planSwitched());
+        selection.selectedFullNameProperty().addListener((obs, was, isNow) -> {
+            matrixView.setSelectedElement(isNow);
+            matrixView.reveal(isNow);
+            String origin = originOf(isNow);
+            if (origin != null) {
+                setStatus(isNow + " - read from " + origin);
+            }
+        });
+        matrixView.setOriginOf(this::originOf);
         limitBoxWidth.addListener((obs, was, isNow) -> applyLimitBoxWidth(isNow));
         hiddenEdgeKinds.addListener((obs, was, isNow) -> overlay.setEdgeFilter((from, to) ->
                 EdgeKindGroup.shows(isNow, projection.getRawDependencyModel(), from, to)));
+    }
+
+    /** Whether there is a matrix of what this view shows: of layers only. */
+    public boolean hasMatrix() {
+        return viewStyle == ArchitectureKind.LAYERED;
+    }
+
+    /**
+     * The dependency matrix of what this view shows: the same classes, filters,
+     * plan and selection. Whoever shows it puts it into a scene; it keeps up
+     * with this view as long as it is in one.
+     */
+    public MatrixView getMatrix() {
+        return matrixView;
     }
 
     /**
@@ -410,10 +530,13 @@ public class ArchitectureCanvas extends AbstractArchitectureCanvas {
      * Sets the ArchitectureNode root for level-based layout display.
      * Populates the ScrollPane with a LevelPackageBox hierarchy.
      * The synthetic "root" node is hidden - only its children are displayed.
+     * Moves made in this view are made again: the root may be a larger or
+     * smaller excerpt of the same code.
      */
     public void setArchitectureRoot(ArchitectureNode rootNode) {
         Objects.requireNonNull(rootNode, "rootNode cannot be null");
         setArchitectureRoot(rootNode, null);
+        whatIfEdit.replayMovesInScene();
     }
 
     public void setArchitectureRootAsync(ArchitectureNode rootNode,
@@ -448,18 +571,28 @@ public class ArchitectureCanvas extends AbstractArchitectureCanvas {
     }
 
     private void refreshStyleProjection(String statusMessage) {
+        // A planned package may have been added or deleted, with moves into it.
+        planChanged();
+        rebuildScene(true, statusMessage);
+    }
+
+    /**
+     * Builds the boxes anew and makes the moves that are shown again. Zoom,
+     * position, overlays and selection stay as the user left them.
+     *
+     * @param keepOpenPackages whether the packages stay open and closed, too;
+     *                         otherwise the package depth decides
+     */
+    private void rebuildScene(boolean keepOpenPackages, String statusMessage) {
         if (currentRootNode == null) {
             return;
         }
-        StyleProjectionStateKeeper.ViewState viewState = stateKeeper.capture();
-        // A planned package may have been added or deleted, with moves into it.
-        componentMovesChanged();
+        StyleProjectionStateKeeper.ViewState captured = stateKeeper.capture();
+        StyleProjectionStateKeeper.ViewState viewState = keepOpenPackages ? captured : captured.viewportOnly();
         String selected = selection.getSelectedFullName();
         keepingOverlays(() -> {
             setArchitectureRoot(currentRootNode, viewState);
-            if (viewStyle == ArchitectureKind.COMPONENT) {
-                whatIfEdit.replayMoves();
-            }
+            whatIfEdit.replayMovesInScene();
         });
         if (selected != null) {
             selection.restoreSelectionWithoutScrolling(selected);
@@ -467,6 +600,12 @@ public class ArchitectureCanvas extends AbstractArchitectureCanvas {
         if (statusMessage != null && !statusMessage.isBlank()) {
             setStatus(statusMessage);
         }
+    }
+
+    /** After moves were taken back: the model and the picture with those that are left. */
+    private void rebuildWithMoves() {
+        projection.rebuildArchitectureProjection();
+        rebuildScene(true, null);
     }
 
     /**
@@ -544,6 +683,7 @@ public class ArchitectureCanvas extends AbstractArchitectureCanvas {
         StackPane contentWithOverlay = new StackPane();
         contentWithOverlay.getChildren().addAll(topLevelContainer, overlayPane);
         installContextMenu(contentWithOverlay);
+        hover.attach(contentWithOverlay);
 
         this.zoomableContent = contentWithOverlay;
 
@@ -608,8 +748,21 @@ public class ArchitectureCanvas extends AbstractArchitectureCanvas {
         return projection.domainModelProperty();
     }
 
+    /** The file a class was read from; {@code null} for a package or if it is not known. */
+    private String originOf(String fqn) {
+        DependencyModel raw = fqn == null ? null : projection.getRawDependencyModel();
+        DependencyModel.ClassInfo info = raw == null ? null : raw.getClass(fqn);
+        return info == null ? null : info.getOrigin();
+    }
+
+    /** The analyzed model; see {@link #getShownModel()}. */
     public DomainModel getDomainModel() {
         return projection.getDomainModel();
+    }
+
+    /** The model this view shows: the analyzed one or, in the plan, that without the cut dependencies. */
+    public DomainModel getShownModel() {
+        return projection.getShownModel();
     }
 
     public void setDomainModel(DomainModel model) {
@@ -676,7 +829,6 @@ public class ArchitectureCanvas extends AbstractArchitectureCanvas {
 
     public void setRawDependencyModel(DependencyModel model) {
         projection.setRawDependencyModelValue(model);
-        whatIfEdit.clearMovedFqns();
         if ((viewStyle == ArchitectureKind.COMPONENT
                 || viewStyle == ArchitectureKind.HEXAGONAL)
                 && projection.getDomainModel() != null) {
@@ -741,6 +893,7 @@ public class ArchitectureCanvas extends AbstractArchitectureCanvas {
         }
         getScene().getRoot().layout();
         overlay.redrawVisibleArrows();
+        matrix.refreshIfShown();
         redrawTick.set(redrawTick.get() + 1);
     }
 
@@ -784,24 +937,21 @@ public class ArchitectureCanvas extends AbstractArchitectureCanvas {
     }
 
     /**
-     * Re-runs the layout for the currently loaded architecture (e.g. after a
-     * package-depth change).
+     * Builds the picture anew, with as many levels of packages open as the
+     * package depth says. Moves, zoom and position stay.
      */
     public void refreshLayout() {
-        resetVisualLayout();
-        whatIfEdit.undoManager().clear();
+        rebuildScene(false, null);
     }
 
-    private void resetVisualLayout() {
-        if (currentRootNode == null) {
+    /** Takes back all moves made in this view. */
+    public void discardMoves() {
+        if (getWhatIfMoves().isEmpty()) {
             return;
         }
-        WhatIfArchitecture wif = projection.getWhatIfArchitecture();
-        if (wif != null) {
-            wif.reset();
-        }
-        whatIfEdit.clearMovedFqns();
-        keepingOverlays(() -> setArchitectureRoot(currentRootNode));
+        whatIfEdit.undoManager().clear();
+        rebuildWithMoves();
+        setStatus("Moves discarded");
     }
 
     /**
@@ -837,12 +987,22 @@ public class ArchitectureCanvas extends AbstractArchitectureCanvas {
      */
     public void resetRefactorings(ArchitectureAnnotations annotations, Set<DependencyEdge> cuts) {
         whatIfEdit.undoManager().clear();
-        whatIfEdit.clearMovedFqns();
         styleView().resetPlanned();
         setAppliedCutEdges(cuts);
         // rebuilds the what-if model along with the projection
         setArchitectureAnnotations(annotations);
         refreshStyleProjection("Refactorings reset");
+    }
+
+    /** Shows what was planned in this view before, for example in a project that was saved. */
+    public void restorePlan(List<WhatIfMove> moves, Map<String, String> plannedPackages, boolean show) {
+        styleView().restorePlanned(plannedPackages);
+        whatIfEdit.undoManager().load(moves);
+        showPlan.set(show);
+        if (!moves.isEmpty() || !plannedPackages.isEmpty()) {
+            projection.rebuildArchitectureProjection();
+            refreshStyleProjection(null);
+        }
     }
 
     public void undoWhatIf() {
@@ -877,6 +1037,19 @@ public class ArchitectureCanvas extends AbstractArchitectureCanvas {
     public void zoomReset() {
         if (zoomController != null) {
             zoomController.resetZoom();
+        }
+    }
+
+    /**
+     * Zooms so that the whole picture is visible and as large as possible. The
+     * scroll bars disappear with that, so the space they take now counts too.
+     */
+    public void zoomToFit() {
+        if (zoomController != null) {
+            Insets insets = scrollPane.getInsets();
+            zoomController.fit(
+                    scrollPane.getWidth() - insets.getLeft() - insets.getRight() - FIT_MARGIN,
+                    scrollPane.getHeight() - insets.getTop() - insets.getBottom() - FIT_MARGIN);
         }
     }
 
@@ -989,6 +1162,19 @@ public class ArchitectureCanvas extends AbstractArchitectureCanvas {
     @Override
     public void setOnNodeSelected(Consumer<String> sink) {
         selection.setOnNodeSelected(sink);
+    }
+
+    /** Set a sink that receives the package whose scope the user wants to open. Pass null to detach. */
+    public void setOnOpenScope(Consumer<String> sink) {
+        openScopeSink = sink == null ? scope -> { } : sink;
+    }
+
+    /**
+     * Set a sink that receives {@code (from, to)} when the user asks for the
+     * dependencies from or to an element; the other one is null. Pass null to detach.
+     */
+    public void setOnFromTo(BiConsumer<String, String> sink) {
+        fromToSink = sink == null ? (from, to) -> { } : sink;
     }
 
     /**

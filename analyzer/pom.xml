@@ -8,7 +8,7 @@
     <parent>
         <groupId>de.weigend</groupId>
         <artifactId>structure202-parent</artifactId>
-        <version>1.6.0</version>
+        <version>1.7.0</version>
         <relativePath>..</relativePath>
     </parent>
 
@@ -20,7 +20,7 @@
 
     <properties>
         <javafx.version>25.0.5.1</javafx.version>
-        <wfx.version>1.4.1</wfx.version>
+        <wfx.version>1.4.2</wfx.version>
         <!-- 9.8 is the first release that reads Java 25 class files -->
         <asm.version>9.11.1</asm.version>
         <avaje.version>11.4</avaje.version>

@@ -21,6 +21,7 @@ import de.weigend.s202.domain.architecture.Violation;
 import de.weigend.s202.domain.StronglyConnectedComponent;
 import io.softwareecg.wfx.lookup.api.Lookup;
 import de.weigend.s202.domain.SCCFinder;
+import de.weigend.s202.ui.core.arrows.LineColors;
 import de.weigend.s202.ui.core.model.ArchitectureNode;
 import io.softwareecg.wfx.windowmanager.api.Position;
 import de.weigend.s202.ui.core.platform.SnapshotView;
@@ -423,12 +424,12 @@ public class ArchitectureView3D implements SnapshotView {
         }
         if (showScc) {
             for (Edge edge : sccEdges()) {
-                lane = addArrow(edge.source(), edge.target(), Color.RED, 1.8, safeCeilingY, lane);
+                lane = addArrow(edge.source(), edge.target(), LineColors.CLASS_CYCLE, 1.8, safeCeilingY, lane);
             }
         }
         if (showViolations && currentArchitecture != null) {
             for (Edge edge : violationEdges()) {
-                lane = addArrow(edge.source(), edge.target(), Color.web("#ff9800"), 2.0, safeCeilingY, lane);
+                lane = addArrow(edge.source(), edge.target(), LineColors.AGAINST_LAYERS, 2.0, safeCeilingY, lane);
             }
         }
     }

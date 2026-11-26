@@ -32,7 +32,7 @@ import java.util.List;
  */
 public class DebugUIPackageLevels {
     public static void main(String[] args) throws Exception {
-        String jarPath = args.length > 0 ? args[0] : "test-example/target/test-example-1.6.0.jar";
+        String jarPath = args.length > 0 ? args[0] : "test-example/target/test-example-1.7.0.jar";
         
         System.out.println("=== TESTING UI PIPELINE WITH: " + jarPath + " ===\n");
         

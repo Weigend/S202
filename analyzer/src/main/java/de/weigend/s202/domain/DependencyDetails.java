@@ -105,7 +105,11 @@ public record DependencyDetails(String from, String to, Set<EdgeKind> kinds, Lis
                 .thenComparing(TypeUse::member)
                 .thenComparing(TypeUse::descriptor, Comparator.nullsFirst(Comparator.naturalOrder()))
                 .thenComparing(TypeUse::detail, Comparator.nullsFirst(Comparator.naturalOrder())));
-        return new DependencyDetails(from, to, source.getKinds(to), calls, typeUses);
+        Set<EdgeKind> kinds = source.getKinds(to);
+        if (kinds.isEmpty()) {
+            kinds = source.externalDependencies.getOrDefault(to, EnumSet.noneOf(EdgeKind.class));
+        }
+        return new DependencyDetails(from, to, kinds, calls, typeUses);
     }
 
     /** Number of calls; for Java the weight of the dependency, unless there are none. */

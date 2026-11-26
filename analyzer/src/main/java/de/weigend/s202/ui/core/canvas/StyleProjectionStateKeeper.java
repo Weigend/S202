@@ -50,6 +50,11 @@ final class StyleProjectionStateKeeper {
             packageExpansionByFqn = Map.copyOf(packageExpansionByFqn);
             styleState = Map.copyOf(styleState);
         }
+
+        /** Dasselbe ohne die aufgeklappten Pakete: Die Pakettiefe entscheidet. */
+        ViewState viewportOnly() {
+            return new ViewState(zoomFactor, horizontalScroll, verticalScroll, Map.of(), Map.of(), Map.of());
+        }
     }
 
     private final ScrollPane scrollPane;

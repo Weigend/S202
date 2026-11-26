@@ -17,8 +17,11 @@ package de.weigend.s202.ui.core.graph;
 
 import javafx.scene.Node;
 
+import java.util.Map;
+
 /**
- * Whether a box is part of the picture or hidden in a collapsed package.
+ * Whether a box is part of the picture or hidden in a collapsed package, and
+ * which box stands for an element that is hidden.
  */
 public final class BoxVisibility {
 
@@ -44,5 +47,42 @@ public final class BoxVisibility {
             }
         }
         return true;
+    }
+
+    /**
+     * The box an arrow from or to the element ends at:
+     * <ul>
+     *   <li>the element's own box, if it is {@link #isShown shown};</li>
+     *   <li>otherwise, inside a collapsed package or component, the nearest
+     *       {@link ContainerBox} around it that is shown.</li>
+     * </ul>
+     *
+     * @return {@code null} when nothing in the view stands for the element
+     */
+    public static Node visibleEndpoint(Map<String, Node> elementRegistry, String fqn, Node content) {
+        Node element = elementRegistry.get(fqn);
+        if (element == null) {
+            // No box yet: the element lies in a collapsed package that builds
+            // its content lazily. That package stands in for it.
+            element = ElementLookup.pendingContainer(elementRegistry, fqn);
+            if (element == null) {
+                return null;
+            }
+        }
+        if (isShown(element, content)) {
+            return element;
+        }
+        for (Node parent = element.getParent(); parent != null; parent = parent.getParent()) {
+            if (parent.getProperties().get("s202.rollupEndpointFqn") instanceof String endpointFqn) {
+                Node endpoint = elementRegistry.get(endpointFqn);
+                if (endpoint != null && isShown(endpoint, content)) {
+                    return endpoint;
+                }
+            }
+            if (parent instanceof ContainerBox && isShown(parent, content)) {
+                return parent;
+            }
+        }
+        return null;
     }
 }

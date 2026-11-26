@@ -132,6 +132,22 @@ class TypeUseRecordingTest {
         assertTrue(targets.stream().noneMatch(target -> target.startsWith("java.")), targets.toString());
     }
 
+    @Test
+    void excludedLibrariesAreKeptApartAsExternalDependencies() throws Exception {
+        DependencyModel.ClassInfo source = analyze();
+
+        assertEquals(Set.of(EdgeKind.USES), source.externalDependencies.get("java.util.List"));
+        assertFalse(source.externalDependencies.containsKey("java.lang.Object"), "every class has it");
+        assertTrue(source.externalDependencies.keySet().stream().allMatch(target -> target.startsWith("java.")),
+                source.externalDependencies.toString());
+        assertTrue(source.dependencies.stream().noneMatch(target -> target.startsWith("java.")));
+    }
+
+    @Test
+    void theOriginIsTheFileTheClassWasReadFrom() throws Exception {
+        assertEquals("type-uses.jar", analyze().getOrigin());
+    }
+
     private DependencyModel.ClassInfo analyze() throws Exception {
         Path jar = directory.resolve("type-uses.jar");
         try (OutputStream out = Files.newOutputStream(jar); JarOutputStream jarOut = new JarOutputStream(out)) {

@@ -15,12 +15,26 @@ lower left, is healthy; red, at the upper right, is not.
 | Fat | How many other classes a class depends on, on average | none | 10 or more |
 | Tangled | The share of the dependencies that lie on a class cycle | none | all |
 
-With a package selected, the point is that of its classes, and *Scope* names it. In a
-[scope](layered-view.md#scopes) tab without a selected package it is that of the classes shown.
+With a package selected, the point is that of its classes, and *Scope* names it. Otherwise it is
+that of the classes the tab shows; *Current view* if they are not all.
 
-The two numbers describe, they do not judge: a small system is fat rather easily, and package
-cycles that are no class cycles do not count for *Tangled*. They are good for comparing packages of
-a system, and states of a system over time.
+Every part is measured like the whole. A dependency counts for the class it starts at, also when it
+leaves the package, and so does a cycle that does. So the whole is the average over its parts.
+
+A third number, **breakout**, stands beside the two when the point is that of a package or of
+everything: the number of dependencies between the direct members, each pair and direction once. It
+says how hard the package is to understand at one look; the [matrix](matrix-view.md) of the package
+has as many filled cells. Unlike the other two it is no average and follows
+[moves](layered-view.md#moving-boxes): whoever puts two packages into one to get rid of their cycle
+pays with it.
+
+To compare all packages at once, sort them in [Hotspots](window.md#hotspots): it measures every
+package the same way, the largest breakout first.
+
+The numbers describe, they do not judge: a small system is fat rather easily, and package cycles
+that are no class cycles do not count for *Tangled*. They are good for comparing packages of a
+system, and states of a system over time. With [Plan](refactoring.md#the-code-and-the-plan) off they
+are those of the analyzed code.
 
 ## The Quality Report
 

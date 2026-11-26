@@ -268,6 +268,86 @@ public class DomainModel {
     }
 
     /**
+     * Derives from the class dependencies what else is said about them: the
+     * package dependencies (source side aggregated up to the target's package,
+     * target side direct) and who depends on a class or package.
+     */
+    public void connectPackagesAndDependents() {
+        for (CalculatedElementInfo cls : classes.values()) {
+            for (String dep : new TreeSet<>(cls.dependencies)) {
+                CalculatedElementInfo target = classes.get(dep);
+                if (target == null) continue;
+                target.addDependent(cls.fullName);
+                String toPkg = ContainerProjection.parentOf(dep);
+                String ancestor = ContainerProjection.parentOf(cls.fullName);
+                while (!ancestor.isEmpty() && packages.containsKey(ancestor) && !ancestor.equals(toPkg)) {
+                    if (packages.containsKey(toPkg)) {
+                        packages.get(ancestor).addDependency(toPkg);
+                        packages.get(toPkg).addDependent(ancestor);
+                    }
+                    ancestor = ContainerProjection.parentOf(ancestor);
+                }
+            }
+        }
+    }
+
+    /**
+     * This model as if the {@code cuts} were gone from the code: without the
+     * class dependencies, their weights and back-edges, and with the tangles
+     * that are left. Levels and the order within the containers stay as they
+     * were analyzed - a plan does not run the layout again.
+     *
+     * @return this model itself when nothing is cut
+     */
+    public DomainModel without(Set<DependencyEdge> cuts, SCCFinder finder) {
+        if (cuts == null || cuts.isEmpty()) {
+            return this;
+        }
+        DomainModel result = new DomainModel();
+        Map<String, Set<String>> graph = new HashMap<>();
+        for (CalculatedElementInfo cls : classes.values()) {
+            Set<String> left = new HashSet<>(cls.dependencies);
+            left.removeIf(dep -> cuts.contains(new DependencyEdge(cls.fullName, dep)));
+            result.addClass(cls.fullName, copy(cls, left));
+            graph.put(cls.fullName, left);
+        }
+        for (CalculatedElementInfo pkg : packages.values()) {
+            result.addPackage(pkg.fullName, copy(pkg, new HashSet<>()));
+        }
+        result.connectPackagesAndDependents();
+
+        Set<String> cutKeys = new HashSet<>();
+        cuts.forEach(cut -> cutKeys.add(cut.from() + "\0" + cut.to()));
+        result.classEdgeWeights = new HashMap<>(classEdgeWeights);
+        result.classEdgeWeights.keySet().removeAll(cutKeys);
+        result.classBackEdgeKeys = new LinkedHashSet<>(classBackEdgeKeys);
+        result.classBackEdgeKeys.removeAll(cutKeys);
+        result.classLevelCutKeys = new LinkedHashSet<>(classLevelCutKeys);
+        result.classLevelCutKeys.removeAll(cutKeys);
+
+        for (String from : new TreeSet<>(graph.keySet())) {
+            for (String to : new TreeSet<>(graph.get(from))) {
+                ContainerProjection.Projection p = classes.containsKey(to) ? ContainerProjection.project(from, to) : null;
+                if (p == null) continue;
+                result.siblingEdgeWeights.computeIfAbsent(p.fromSibling(), k -> new LinkedHashMap<>())
+                        .merge(p.toSibling(), Math.max(1, getClassEdgeWeight(from, to)), Integer::sum);
+                if (containerBackEdgeKeys.contains(p.key())) {
+                    result.containerBackEdgeKeys.add(p.key());
+                }
+            }
+        }
+        result.containerTangles = new ArrayList<>(Placement.OF_THE_CODE.tangles(graph, finder));
+        return result;
+    }
+
+    private static CalculatedElementInfo copy(CalculatedElementInfo element, Set<String> dependencies) {
+        CalculatedElementInfo result = new CalculatedElementInfo(element.fullName, element.simpleName, element.type,
+                element.architectureLevel, dependencies, element.interfaceType);
+        result.setLocalLevel(element.localLevel);
+        return result;
+    }
+
+    /**
      * Gets all elements (classes and packages) grouped by level.
      */
     public Map<Integer, List<CalculatedElementInfo>> getElementsByLevel() {

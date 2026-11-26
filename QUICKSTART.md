@@ -26,7 +26,7 @@ Prerequisite for Maven/Gradle projects: `mvn package` or `gradle build` must alr
 ```bash
 mvn clean package -DskipTests
 mvn javafx:run
-# In the UI: File -> Open JAR... -> analyzer/target/s202-code-analyzer-1.6.0.jar
+# In the UI: File -> Open JAR... -> analyzer/target/s202-code-analyzer-1.7.0.jar
 ```
 
 ## Main Features
@@ -36,7 +36,7 @@ mvn javafx:run
 | **Open JAR / Maven / Gradle** | Load individual JARs or complete multi-module projects |
 | **Package Tree** | Hierarchical package view |
 | **Level Layout** | Packages sorted by dependency depth |
-| **Violations** | Bold dashed arrows show architectural problems (package aggregates use a filled circle for the call count) |
+| **Violations** | Red arrows show architectural problems (package aggregates use a filled circle for the call count) |
 | **Invariant Check** | Five invariants as plausibility alerts; four report algorithm bugs in the level pipeline, while R1-visual shows real architectural violations |
 
 ## Level Meaning

@@ -23,6 +23,7 @@ import de.weigend.s202.project.S202Project;
 import de.weigend.s202.reader.DependencyModel;
 import de.weigend.s202.ui.core.canvas.ArchitectureCanvas;
 import de.weigend.s202.ui.core.model.EdgeKindGroup;
+import de.weigend.s202.ui.core.model.WhatIfMove;
 import de.weigend.s202.ui.core.platform.AnalysisDocument;
 import de.weigend.s202.ui.core.platform.ArchitectureViewManager;
 import de.weigend.s202.ui.core.platform.Dialogs;
@@ -43,6 +44,7 @@ import java.io.File;
 import java.io.IOException;
 import java.nio.file.Path;
 import java.util.Iterator;
+import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
@@ -61,8 +63,8 @@ import java.util.function.Supplier;
  * <p>
  * Zum Dokument gehören seine Tabs: Gespeichert wird zu jedem, was er zeigt
  * (seine {@link ViewDescriptor Beschreibung}) und wie der Benutzer ihn
- * verlassen hat (Pakettiefe, Schalter, Zoom, aufgeklappte Pakete), dazu die
- * Selektion des aktiven Tabs.
+ * verlassen hat (Pakettiefe, Schalter, Zoom, aufgeklappte Pakete, geplante
+ * Moves und Pakete), dazu die Selektion des aktiven Tabs.
  * Beim Laden entsteht jeder Tab auf demselben Weg wie durch die Menü-Aktion,
  * einer nach dem anderen. Wo die Tabs im Fenster lagen, steht nicht in der
  * Datei — die Anordnung gehört dem Fenster, nicht einem Dokument.
@@ -117,7 +119,8 @@ public final class ProjectPersistenceController {
     public void saveProject(AnalysisDocument document, Path target) {
         ArchitectureCanvas activeCanvas = viewManager.activeCanvas();
         List<S202Project.ViewDto> views = viewManager.viewsOf(document).stream()
-                .map(wrapper -> toViewDto(wrapper, wrapper.getArchitectureView() == activeCanvas))
+                .map(wrapper -> toViewDto(wrapper, wrapper.getArchitectureView() == activeCanvas,
+                        viewManager.matrixOf(wrapper.getArchitectureView()) != null))
                 .toList();
         S202Project project = projectMapper().toProject(
                 appVersion.get(),
@@ -240,6 +243,9 @@ public final class ProjectPersistenceController {
                     canvas -> canvas.setPackageDepth(dto.packageDepth()),
                     built -> {
                         restoreState(built.getArchitectureView(), dto);
+                        if (dto.matrix()) {
+                            viewManager.openMatrix(built.getArchitectureView());
+                        }
                         opened[0]++;
                         if (dto.active()) {
                             active[0] = built;
@@ -257,7 +263,7 @@ public final class ProjectPersistenceController {
         }
     }
 
-    private static S202Project.ViewDto toViewDto(ArchitectureWfxView wrapper, boolean active) {
+    private static S202Project.ViewDto toViewDto(ArchitectureWfxView wrapper, boolean active, boolean matrixOpen) {
         ViewDescriptor descriptor = wrapper.getDescriptor();
         ArchitectureCanvas canvas = wrapper.getArchitectureView();
         ArchitectureCanvas.ViewSnapshot snapshot = canvas.captureViewSnapshot();
@@ -281,7 +287,30 @@ public final class ProjectPersistenceController {
                 snapshot == null ? 0.0 : snapshot.verticalScroll(),
                 snapshot == null ? Map.of() : new TreeMap<>(snapshot.packageExpansion()),
                 canvas.getSelectedFullName(),
-                active);
+                active,
+                canvas.getWhatIfMoves().stream().map(ProjectPersistenceController::toMoveDto).toList(),
+                canvas.getPlannedPackages().entrySet().stream()
+                        .map(planned -> new S202Project.PlannedPackageDto(planned.getKey(), planned.getValue()))
+                        .toList(),
+                !canvas.isShowPlan(),
+                matrixOpen,
+                canvas.getMatrix().getOpen().stream().sorted().toList(),
+                canvas.getMatrix().isShowingExternals());
+    }
+
+    private static S202Project.MoveDto toMoveDto(WhatIfMove move) {
+        return switch (move) {
+            case WhatIfMove.InRow m -> new S202Project.MoveDto(
+                    m.fqn(), m.containerFqn(), m.rowIndex(), m.colIndex(), false, m.api());
+            case WhatIfMove.AsNewRow m -> new S202Project.MoveDto(
+                    m.fqn(), m.containerFqn(), m.rowIndex(), 0, true, m.api());
+        };
+    }
+
+    private static WhatIfMove toMove(S202Project.MoveDto dto) {
+        return dto.newRow()
+                ? new WhatIfMove.AsNewRow(dto.element(), dto.container(), dto.row(), dto.api())
+                : new WhatIfMove.InRow(dto.element(), dto.container(), dto.row(), dto.column(), dto.api());
     }
 
     private static ViewDescriptor toDescriptor(S202Project.ViewDto dto) {
@@ -297,6 +326,15 @@ public final class ProjectPersistenceController {
 
     /** Bringt einen frisch gebauten Tab in den Zustand, in dem er gespeichert wurde. */
     private static void restoreState(ArchitectureCanvas canvas, S202Project.ViewDto dto) {
+        // The moves first: they put boxes where the snapshot expects them.
+        Map<String, String> plannedPackages = new LinkedHashMap<>();
+        if (dto.plannedPackages() != null) {
+            dto.plannedPackages().forEach(planned -> plannedPackages.put(planned.id(), planned.name()));
+        }
+        canvas.restorePlan(
+                dto.moves() == null ? List.of()
+                        : dto.moves().stream().map(ProjectPersistenceController::toMove).toList(),
+                plannedPackages, !dto.hidePlan());
         canvas.setShowDependencies(dto.showDependencies());
         canvas.setShowScc(dto.showClassCycles());
         canvas.setShowPackageScc(dto.showPackageCycles());
@@ -306,13 +344,15 @@ public final class ProjectPersistenceController {
                 : dto.hiddenEdgeKinds().stream().map(EdgeKindGroup::valueOf).collect(Collectors.toSet()));
         canvas.restoreViewSnapshot(new ArchitectureCanvas.ViewSnapshot(
                 dto.zoom(), dto.horizontalScroll(), dto.verticalScroll(), dto.expandedPackages()));
+        canvas.getMatrix().setOpen(dto.matrixOpen() == null ? Set.of() : Set.copyOf(dto.matrixOpen()));
+        canvas.getMatrix().setShowingExternals(dto.matrixExternals());
     }
 
     private static S202Project.ViewDto layeredViewOfTheWholeAnalysis() {
         return new S202Project.ViewDto(
                 ViewDescriptor.Kind.LAYERED.name(), null, null, List.of(), List.of(), null, false,
                 ArchitectureCanvas.DEFAULT_PACKAGE_DEPTH, false, false, false, false, false, List.of(),
-                1.0, 0.0, 0.0, Map.of(), null, true);
+                1.0, 0.0, 0.0, Map.of(), null, true, List.of(), List.of(), false, false, List.of(), false);
     }
 
     /** Schließt das aktive Dokument mit allen seinen Tabs; die anderen bleiben offen. */

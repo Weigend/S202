@@ -203,7 +203,9 @@ public class QualityView implements View {
         marker.setCenterY(y);
         marker.setVisible(true);
 
-        valueLabel.setText(String.format("fat=%.2f  tangled=%.2f", fat, tangled));
+        String breakout = metrics.getBreakout() == QualityMetrics.NO_BREAKOUT ? ""
+                : String.format("  breakout=%d", metrics.getBreakout());
+        valueLabel.setText(String.format("fat=%.2f  tangled=%.2f%s", fat, tangled, breakout));
         // Stick value label to the top-left of the plot area, not on top of the dot.
         valueLabel.setLayoutX(PADDING_LEFT + 4);
         valueLabel.setLayoutY(PADDING_TOP + 2);
@@ -230,7 +232,9 @@ public class QualityView implements View {
 
     @Override
     public String getToolTipInfo() {
-        return "Fat (avg deps/class) vs. Tangled (share of cyclic deps)";
+        return "Fat: how many classes a class depends on, on average (1 = 10 or more).\n"
+                + "Tangled: the share of these dependencies that lie on a class cycle.\n"
+                + "Breakout: the dependencies between the direct members of the package.";
     }
 
     @Override

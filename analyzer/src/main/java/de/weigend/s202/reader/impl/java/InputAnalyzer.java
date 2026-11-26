@@ -275,6 +275,7 @@ public class InputAnalyzer implements LanguageAnalyzer {
 
     private int analyzeInto(String jarPath, DependencyModel model, Consumer<AnalysisProgress> progress,
                             int processedClasses, int totalClasses) throws IOException {
+        String origin = Paths.get(jarPath).getFileName().toString();
         try (JarFile jarFile = new JarFile(jarPath)) {
             // Nested classes last: they add to their outer class, which must be there by then.
             List<JarEntry> entries = jarFile.stream()
@@ -293,7 +294,7 @@ public class InputAnalyzer implements LanguageAnalyzer {
                     } else if (entry.getName().endsWith("module-info.class")) {
                         analyzeModule(entry.getName(), classBytes, model);
                     } else {
-                        analyzeClass(entry.getName(), classBytes, model);
+                        analyzeClass(entry.getName(), classBytes, model, origin);
                         processedClasses++;
                         progress.accept(new AnalysisProgress(jarPath, entry.getName(), processedClasses, totalClasses));
                     }
@@ -336,13 +337,13 @@ public class InputAnalyzer implements LanguageAnalyzer {
         }
     }
 
-    private void analyzeClass(String classPath, byte[] bytecode, DependencyModel model) {
+    private void analyzeClass(String classPath, byte[] bytecode, DependencyModel model, String origin) {
         try {
             ClassReader reader = new ClassReader(bytecode);
             if (reader.getClassName().contains("$") && !isNestedClass(reader)) {
                 return; // a generated class that only looks like a nested one, e.g. Foo$DI
             }
-            DependencyExtractor extractor = new DependencyExtractor(model);
+            DependencyExtractor extractor = new DependencyExtractor(model, origin);
             reader.accept(extractor, ClassReader.SKIP_FRAMES);
         } catch (Exception e) {
             System.err.println("Error analyzing class: " + e.getMessage());
@@ -494,9 +495,13 @@ public class InputAnalyzer implements LanguageAnalyzer {
         private String memberPrefix = "";
         private TypeUseRecorder typeUses;
 
-        public DependencyExtractor(DependencyModel model) {
+        /** The file the classes come from. */
+        private final String origin;
+
+        public DependencyExtractor(DependencyModel model, String origin) {
             super(Opcodes.ASM9);
             this.model = model;
+            this.origin = origin;
         }
 
         @Override
@@ -518,6 +523,7 @@ public class InputAnalyzer implements LanguageAnalyzer {
                 this.currentClassInfo = new DependencyModel.ClassInfo(className,
                         className.substring(packageEnd + 1), className.substring(0, packageEnd),
                         (access & Opcodes.ACC_INTERFACE) != 0);
+                currentClassInfo.setOrigin(origin);
                 model.addClass(className, currentClassInfo);
             } else {
                 this.currentClassInfo = model.getClass(outerName);
@@ -544,11 +550,16 @@ public class InputAnalyzer implements LanguageAnalyzer {
 
         private void addInheritance(String className, String superType, EdgeKind kind) {
             String target = outerClassName(superType);
-            if (isSelfDependency(target) || isExternalLibraryClass(target)) {
+            if (isSelfDependency(target)) {
                 return;
             }
             boolean betweenTopLevelClasses = target.equals(superType) && currentClassInfo.fullName.equals(className);
-            currentClassInfo.addDependency(target, betweenTopLevelClasses ? kind : EdgeKind.NESTED_INHERITANCE);
+            EdgeKind edgeKind = betweenTopLevelClasses ? kind : EdgeKind.NESTED_INHERITANCE;
+            if (isExternalLibraryClass(target)) {
+                currentClassInfo.addExternalDependency(target, edgeKind);
+                return;
+            }
+            currentClassInfo.addDependency(target, edgeKind);
         }
 
         @Override
@@ -720,12 +731,21 @@ public class InputAnalyzer implements LanguageAnalyzer {
             super.visitInvokeDynamicInsn(name, descriptor, bootstrapMethod, bootstrapArguments);
         }
 
-        /** Records a call unless it goes to an external library or to the class itself. */
+        /**
+         * Records a call unless it goes to the class itself. A call into an
+         * excluded library is kept as an external dependency only, without
+         * the method.
+         */
         private void addCall(String owner, String name, String descriptor, boolean constructor) {
             String ownerClass = owner.replace("/", ".");
             // Map inner classes to their outer class for dependency tracking
             String dependencyClass = outerClassName(ownerClass);
-            if (isExternalLibraryClass(dependencyClass) || dependencyClass.equals(classInfo.fullName)) {
+            if (dependencyClass.equals(classInfo.fullName) || dependencyClass.startsWith("[")) {
+                return;
+            }
+            EdgeKind kind = constructor ? EdgeKind.INSTANTIATES : EdgeKind.CALLS;
+            if (isExternalLibraryClass(dependencyClass)) {
+                classInfo.addExternalDependency(dependencyClass, kind);
                 return;
             }
             String methodCall = ownerClass + "." + name;
@@ -733,7 +753,7 @@ public class InputAnalyzer implements LanguageAnalyzer {
             methodInfo.methodCallDescriptors
                     .computeIfAbsent(methodCall, k -> new HashSet<>())
                     .add(descriptor);
-            classInfo.addDependency(dependencyClass, constructor ? EdgeKind.INSTANTIATES : EdgeKind.CALLS);
+            classInfo.addDependency(dependencyClass, kind);
         }
 
         /**

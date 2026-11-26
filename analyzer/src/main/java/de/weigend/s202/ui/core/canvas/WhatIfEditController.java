@@ -57,9 +57,10 @@ public final class WhatIfEditController {
     private final Supplier<ArchitectureKind> viewStyle;
     private final Supplier<VBox> rootContainer;
     private final ComponentApiAnnotator apiAnnotator;
-    /** Baut das Layout neu auf (Undo spielt danach die verbliebenen Moves ein). */
-    private final Runnable resetVisualLayout;
-    private final BooleanProperty showWhatIfViolations;
+    /** Baut Modell und Szene mit den Moves neu auf, die jetzt gelten. */
+    private final Runnable rebuild;
+    /** Ob die Ansicht den Plan zeigt; ein Move zeigt ihn. */
+    private final BooleanProperty showPlan;
 
     /** Sinnvoll benannte Teilmenge der API-Drop-Callbacks in die View. */
     public interface ComponentApiAnnotator {
@@ -88,8 +89,8 @@ public final class WhatIfEditController {
                          Supplier<ArchitectureKind> viewStyle,
                          Supplier<VBox> rootContainer,
                          ComponentApiAnnotator apiAnnotator,
-                         Runnable resetVisualLayout,
-                         BooleanProperty showWhatIfViolations) {
+                         Runnable rebuild,
+                         BooleanProperty showPlan) {
         this.viewRoot = viewRoot;
         this.elementRegistry = elementRegistry;
         this.arrowsCoalescer = arrowsCoalescer;
@@ -98,16 +99,12 @@ public final class WhatIfEditController {
         this.viewStyle = viewStyle;
         this.rootContainer = rootContainer;
         this.apiAnnotator = apiAnnotator;
-        this.resetVisualLayout = resetVisualLayout;
-        this.showWhatIfViolations = showWhatIfViolations;
+        this.rebuild = rebuild;
+        this.showPlan = showPlan;
     }
 
     public WhatIfUndoManager undoManager() {
         return undoManager;
-    }
-
-    public void clearMovedFqns() {
-        movedFqns.clear();
     }
 
     public void ensureDropHandlerInstalled() {
@@ -129,6 +126,12 @@ public final class WhatIfEditController {
         }
         String destinationContainerFqcn = resolveDestinationContainer(destinationRow);
         if (destinationContainerFqcn == null) {
+            return;
+        }
+        if (!showPlan.get() && !undoManager.effectiveMoves().isEmpty()) {
+            // Where the box was dropped means something else in the plan.
+            rebuild.run();
+            status.accept("This is the analyzed code. Switch on Plan to go on moving boxes.");
             return;
         }
         boolean componentView = viewStyle.get() == ArchitectureKind.COMPONENT;
@@ -170,6 +173,7 @@ public final class WhatIfEditController {
         }
         movedFqns.add(movedFqcn);
         arrowsCoalescer.markDirty();
+        showPlan.set(true);
         status.accept(buildWhatIfStatusMessage(movedFqcn, destinationContainerFqcn));
     }
 
@@ -240,21 +244,22 @@ public final class WhatIfEditController {
     /* ----- Undo / Redo ------------------------------------------------------ */
 
     public void undo() {
-        if (!canEdit()) return;
-        List<WhatIfMove> remaining = undoManager.decrement();
-        if (remaining == null) return;
-        boolean violations = showWhatIfViolations.get();
-        resetVisualLayout.run();
-        remaining.forEach(this::applyMoveToScene);
-        showWhatIfViolations.set(violations);
-        arrowsCoalescer.markDirty();
+        if (!canEdit() || undoManager.decrement() == null) return;
+        rebuild.run();
     }
 
     public void redo() {
         if (!canEdit()) return;
-        WhatIfMove m = undoManager.increment();
-        if (m == null) return;
-        applyMoveToScene(m);
+        WhatIfMove move = undoManager.increment();
+        if (move == null) return;
+        if (!showPlan.get()) {
+            showPlan.set(true); // rebuilds, with this move
+            return;
+        }
+        if (whatIf.get() != null) {
+            applyToModel(whatIf.get(), move);
+        }
+        applyMoveToScene(move);
         arrowsCoalescer.markDirty();
     }
 
@@ -262,9 +267,27 @@ public final class WhatIfEditController {
         return whatIf.get() != null || viewStyle.get() == ArchitectureKind.COMPONENT;
     }
 
-    /** Draws the recorded moves again after the component view was rebuilt. */
-    public void replayMoves() {
-        undoManager.effectiveMoves().forEach(this::applyMoveToScene);
+    /** Draws the moves that are shown again, after the scene was rebuilt. */
+    public void replayMovesInScene() {
+        movedFqns.clear();
+        if (showPlan.get()) {
+            undoManager.effectiveMoves().forEach(this::applyMoveToScene);
+        }
+    }
+
+    /** Makes the moves that are shown again in a model that has none. */
+    public void replayMovesInModel(WhatIfArchitecture fresh) {
+        if (showPlan.get()) {
+            undoManager.effectiveMoves().forEach(move -> applyToModel(fresh, move));
+        }
+    }
+
+    private static void applyToModel(WhatIfArchitecture model, WhatIfMove move) {
+        if (move instanceof WhatIfMove.AsNewRow) {
+            model.moveElementAsNewRow(move.fqn(), move.containerFqn(), move.rowIndex());
+        } else if (move instanceof WhatIfMove.InRow inRow) {
+            model.moveElement(move.fqn(), move.containerFqn(), inRow.rowIndex(), inRow.colIndex());
+        }
     }
 
     private VBox findRowStack(String containerFqn, boolean api) {
@@ -280,8 +303,7 @@ public final class WhatIfEditController {
         if (node == null) return;
         VBox stack = findRowStack(move.containerFqn(), move.api());
         if (stack == null) return;
-        WhatIfArchitecture wif = whatIf.get();
-        if (wif == null && !canEdit()) return;
+        if (!canEdit()) return;
 
         if (node.getParent() instanceof HBox srcRow) {
             srcRow.getChildren().remove(node);
@@ -301,9 +323,6 @@ public final class WhatIfEditController {
             int idx = Math.max(0, Math.min(asNewRow.rowIndex(), stack.getChildren().size()));
             stack.getChildren().add(idx, newRow);
             newRow.getChildren().add(node);
-            if (wif != null) {
-                wif.moveElementAsNewRow(move.fqn(), move.containerFqn(), asNewRow.rowIndex());
-            }
         } else if (move instanceof WhatIfMove.InRow inRow) {
             while (stack.getChildren().size() <= inRow.rowIndex()) {
                 HBox gap = new HBox(8);
@@ -313,9 +332,6 @@ public final class WhatIfEditController {
             if (!(stack.getChildren().get(inRow.rowIndex()) instanceof HBox targetRow)) return;
             int col = Math.max(0, Math.min(inRow.colIndex(), targetRow.getChildren().size()));
             targetRow.getChildren().add(col, node);
-            if (wif != null) {
-                wif.moveElement(move.fqn(), move.containerFqn(), inRow.rowIndex(), inRow.colIndex());
-            }
         }
 
         movedFqns.add(move.fqn());

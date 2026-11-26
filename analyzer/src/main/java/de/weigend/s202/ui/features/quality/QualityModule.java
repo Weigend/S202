@@ -15,10 +15,13 @@
  */
 package de.weigend.s202.ui.features.quality;
 
-import de.weigend.s202.analysis.quality.QualityMetrics;
+import de.weigend.s202.analysis.quality.QualityCalculator;
 import de.weigend.s202.domain.DomainModel;
+import de.weigend.s202.domain.Placement;
+import de.weigend.s202.domain.SCCFinder;
 import de.weigend.s202.ui.core.canvas.ArchitectureCanvas;
 import de.weigend.s202.ui.core.model.ArchitectureNode;
+import de.weigend.s202.ui.core.model.PlanState;
 import de.weigend.s202.ui.features.outline.OutlineExplorerView;
 import io.softwareecg.wfx.lookup.api.Lookup;
 import io.softwareecg.wfx.lookup.api.LookupContext;
@@ -37,12 +40,11 @@ import java.util.Set;
  * WFX module providing the Quality view — a 2D fat-vs-tangled plot rendered
  * below the outline explorer in the LEFT dock area.
  * <p>
- * Follows {@link WindowManager#getActiveLookup()}: the plot mirrors the
- * metrics of the architecture tab the user works in, also while the focus is
- * in a panel. When the user selects a package in the chart, the plot scopes its
- * metrics to that package's classes. In scope views, class selection or no
- * selection falls back to the currently displayed scope; regular views fall
- * back to JAR-level metrics.
+ * Follows {@link WindowManager#getActiveLookup()}: the plot shows the
+ * architecture tab the user works in, also while the focus is in a panel - the
+ * selected package, otherwise the classes the tab shows. Every part is measured
+ * the same way, see {@link QualityCalculator}, and as the tab shows it: with
+ * the plan or without.
  */
 @Singleton
 @Priority(20)
@@ -51,10 +53,16 @@ public class QualityModule implements Module {
     private QualityView qualityView;
 
     private ArchitectureCanvas boundView;
-    private ChangeListener<QualityMetrics> metricsListener;
+    private ChangeListener<DomainModel> modelListener;
+    private ChangeListener<PlanState> planListener;
     private ChangeListener<String> selectionListener;
     private ChangeListener<ArchitectureNode> rootListener;
     private LookupContext.Subscription activeViewSubscription;
+
+    // What was measured last; measuring a large model takes a moment.
+    private QualityCalculator calculator;
+    private DomainModel measuredModel;
+    private Placement measuredPlacement;
 
     @Override
     public String getName() {
@@ -114,6 +122,8 @@ public class QualityModule implements Module {
         unbind();
 
         if (newBound == null) {
+            calculator = null;
+            measuredModel = null;
             qualityView.setMetrics(null, null);
             return;
         }
@@ -121,38 +131,45 @@ public class QualityModule implements Module {
         boundView = newBound;
         applyCurrentScope();
 
-        metricsListener = (obs, was, isNow) -> applyCurrentScope();
+        modelListener = (obs, was, isNow) -> applyCurrentScope();
+        planListener = (obs, was, isNow) -> applyCurrentScope();
         selectionListener = (obs, was, isNow) -> applyCurrentScope();
         rootListener = (obs, was, isNow) -> applyCurrentScope();
-        newBound.qualityMetricsProperty().addListener(metricsListener);
+        newBound.domainModelProperty().addListener(modelListener);
+        newBound.planProperty().addListener(planListener);
         newBound.selectedFullNameProperty().addListener(selectionListener);
         newBound.architectureRootProperty().addListener(rootListener);
     }
 
-    /**
-     * Pick the right scope based on the current selection and push it to the
-     * view. Package selection ⇒ recompute on the package's class subset.
-     * Scope views otherwise use the displayed class subset; regular views
-     * fall back to JAR-level metrics from the chart.
-     */
     private void applyCurrentScope() {
         if (boundView == null) {
             return;
         }
-        DomainModel model = boundView.getDomainModel();
-        String selected = boundView.getSelectedFullName();
-
-        if (model != null && selected != null && model.getClass(selected) == null) {
-            // Selection is not a known class → treat as a package scope.
-            QualityMetrics scoped = QualityMetrics.computeForPackage(model, selected);
-            qualityView.setMetrics(scoped, selected);
-        } else if (model != null && boundView.getScopeExtensionSourceRoot() != null) {
-            Set<String> scopedClasses = collectClassNames(boundView.getArchitectureRoot());
-            QualityMetrics scoped = QualityMetrics.computeForClasses(model, scopedClasses);
-            qualityView.setMetrics(scoped, "Current view");
-        } else {
-            qualityView.setMetrics(boundView.getQualityMetrics(), null);
+        DomainModel model = boundView.getShownModel();
+        if (model == null) {
+            qualityView.setMetrics(null, null);
+            return;
         }
+        QualityCalculator measured = calculatorFor(model, boundView.getPlan().placement());
+        String selected = boundView.getSelectedFullName();
+        Set<String> shown = collectClassNames(boundView.getArchitectureRoot());
+        if (selected != null && model.getClass(selected) == null) {
+            // Not a class, so a package.
+            qualityView.setMetrics(measured.ofPackage(selected), selected);
+        } else if (!shown.isEmpty() && shown.size() < model.getAllClasses().size()) {
+            qualityView.setMetrics(measured.ofClasses(shown), "Current view");
+        } else {
+            qualityView.setMetrics(measured.ofAll(), null);
+        }
+    }
+
+    private QualityCalculator calculatorFor(DomainModel model, Placement placement) {
+        if (calculator == null || model != measuredModel || !placement.equals(measuredPlacement)) {
+            calculator = new QualityCalculator(model, Lookup.lookup(SCCFinder.class), placement);
+            measuredModel = model;
+            measuredPlacement = placement;
+        }
+        return calculator;
     }
 
     private static Set<String> collectClassNames(ArchitectureNode root) {
@@ -175,8 +192,11 @@ public class QualityModule implements Module {
 
     private void unbind() {
         if (boundView != null) {
-            if (metricsListener != null) {
-                boundView.qualityMetricsProperty().removeListener(metricsListener);
+            if (modelListener != null) {
+                boundView.domainModelProperty().removeListener(modelListener);
+            }
+            if (planListener != null) {
+                boundView.planProperty().removeListener(planListener);
             }
             if (selectionListener != null) {
                 boundView.selectedFullNameProperty().removeListener(selectionListener);
@@ -186,7 +206,8 @@ public class QualityModule implements Module {
             }
         }
         boundView = null;
-        metricsListener = null;
+        modelListener = null;
+        planListener = null;
         selectionListener = null;
         rootListener = null;
     }

@@ -27,6 +27,7 @@ import io.softwareecg.wfx.lookup.api.LookupContext;
 import io.softwareecg.wfx.platform.api.EventBus;
 import io.softwareecg.wfx.windowmanager.api.View;
 import io.softwareecg.wfx.windowmanager.api.ViewKind;
+import io.softwareecg.wfx.windowmanager.api.ViewLifecycle;
 import io.softwareecg.wfx.windowmanager.api.WindowManager;
 
 import java.util.ArrayList;
@@ -143,6 +144,7 @@ public final class ArchitectureViewManager {
     public void registerArchitectureView(ArchitectureWfxView wrapper) {
         Lookup.lookup(WindowManager.class).register(wrapper);
         ArchitectureCanvas view = wrapper.getArchitectureView();
+        closeMatrixWith(view);
         view.architectureAnnotationsProperty().addListener((obs, oldValue, newValue) ->
                 propagateArchitectureAnnotations(wrapper, newValue));
         // "Cut" / "Restore" on a dependency arrow of any architecture view goes
@@ -154,6 +156,10 @@ public final class ArchitectureViewManager {
                 bus.publish(new de.weigend.s202.ui.core.events.CutTangleEdgeEvent(from, to, view)));
         view.setOnDependencyEdgeRestore((from, to) ->
                 bus.publish(new de.weigend.s202.ui.core.events.RestoreTangleEdgeEvent(from, to, view)));
+        view.setOnOpenScope(scope ->
+                bus.publish(new de.weigend.s202.ui.core.events.OpenScopeEvent(scope, view, view)));
+        view.setOnFromTo((from, to) ->
+                bus.publish(new de.weigend.s202.ui.core.events.FromToEvent(from, to, view)));
         // What the user selects among the arrows, for the panels that explain it.
         view.setOnDependencySelected(selection ->
                 bus.publish(new de.weigend.s202.ui.core.events.DependencySelectionEvent(selection, view)));
@@ -447,6 +453,55 @@ public final class ArchitectureViewManager {
     }
 
     /**
+     * Öffnet die Dependency-Matrix zu {@code source} in einem eigenen Tab oder
+     * holt ihren Tab nach vorn. Sie schließt mit dem Tab, zu dem sie gehört.
+     *
+     * @return {@code null}, wenn es zu dem, was der Tab zeigt, keine Matrix gibt
+     */
+    public MatrixWfxView openMatrix(ArchitectureCanvas source) {
+        ArchitectureWfxView wrapper = wrapperOf(source);
+        if (wrapper == null || wrapper.getDocument() == null || !source.hasMatrix()) {
+            return null;
+        }
+        WindowManager wm = Lookup.lookup(WindowManager.class);
+        MatrixWfxView open = matrixOf(source);
+        if (open != null) {
+            wm.showView(open);
+            wm.setFocusedView(open);
+            return open;
+        }
+        MatrixWfxView matrix = new MatrixWfxView(
+                nextViewId(), wrapper.getTitle() + TITLE_SEPARATOR + "Matrix", source, wrapper.getDocument());
+        wm.register(matrix, wrapper);
+        return matrix;
+    }
+
+    /** Der offene Matrix-Tab zu {@code source}; {@code null}, wenn keiner offen ist. */
+    public MatrixWfxView matrixOf(ArchitectureCanvas source) {
+        return Lookup.lookup(WindowManager.class).getRegisteredViews().stream()
+                .filter(MatrixWfxView.class::isInstance)
+                .map(MatrixWfxView.class::cast)
+                .filter(matrix -> matrix.getSource() == source)
+                .findFirst().orElse(null);
+    }
+
+    private void closeMatrixWith(ArchitectureCanvas source) {
+        ViewLifecycle.bind(source, new ViewLifecycle.Hook() {
+            @Override
+            public void attached() {
+            }
+
+            @Override
+            public void detached() {
+                MatrixWfxView matrix = matrixOf(source);
+                if (matrix != null) {
+                    Lookup.lookup(WindowManager.class).closeView(matrix);
+                }
+            }
+        });
+    }
+
+    /**
      * Öffnet einen Scope-Tab für das Paket {@code scope}.
      *
      * @param requestedSourceView der Canvas, in dessen Dokument das Paket
@@ -499,7 +554,6 @@ public final class ArchitectureViewManager {
                 root,
                 buildProgress -> progress.javaFxBuildProgress("Building JavaFX " + what, buildProgress),
                 () -> {
-                    canvas.setQualityMetrics(document.metrics());
                     if (scopeView) {
                         canvas.selectByFullName(descriptor.scope());
                     }

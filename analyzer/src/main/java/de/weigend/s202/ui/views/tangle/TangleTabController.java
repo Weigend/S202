@@ -145,7 +145,6 @@ public final class TangleTabController {
         // starts without context unless its description asks for it.
         ArchitectureNode context = scope.isShowContext() ? TangleFilter.scope(sourceRoot, members, true) : null;
         showRoot(tangleView, context != null ? context : filteredRoot);
-        tangleView.setQualityMetrics(document.metrics());
         legend.refreshCounts();
 
         wm.showView(wrapper);

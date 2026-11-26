@@ -21,11 +21,12 @@ import de.weigend.s202.domain.DependencyEdge;
 import de.weigend.s202.domain.StronglyConnectedComponent;
 import de.weigend.s202.domain.SCCFinder;
 import de.weigend.s202.domain.DomainModel;
+import de.weigend.s202.domain.Placement;
 import de.weigend.s202.reader.DependencyModel;
 import de.weigend.s202.reader.EdgeKind;
 import de.weigend.s202.ui.core.canvas.ArchitectureCanvas;
 import de.weigend.s202.ui.core.model.ArchitectureNode;
-import de.weigend.s202.ui.core.platform.AnalysisDocument;
+import de.weigend.s202.ui.core.model.PlanState;
 import de.weigend.s202.ui.core.platform.ArchitectureViewManager;
 import de.weigend.s202.ui.core.platform.ProgressPublisher;
 import de.weigend.s202.ui.core.platform.ViewDescriptor;
@@ -66,8 +67,8 @@ import java.util.stream.Stream;
  * Follows {@link WindowManager#getActiveLookup()}: when another architecture
  * tab becomes the active one, the view recomputes the top tangles from that
  * tab's domain model, scoped to the current selection (class → enclosing
- * package's subtree, package → its subtree, none → all classes). The preview
- * cuts it takes into account are those of the tab's {@link AnalysisDocument}.
+ * package's subtree, package → its subtree, none → all classes). Cuts and moves
+ * count as the tab shows them, see {@link PlanState}.
  */
 // Priority 25 (after Quality at 20) so we register last and our
 // register-with-outline-sibling slot lands directly under outline,
@@ -86,6 +87,7 @@ public class TopTanglesModule implements Module {
 
     private ArchitectureCanvas boundView;
     private ChangeListener<ArchitectureNode> rootListener;
+    private ChangeListener<PlanState> planListener;
 
     // Last data we pushed into the view. Used to short-circuit repeated
     // applyCurrentScope calls (rebind + architectureRoot fire on
@@ -142,12 +144,16 @@ public class TopTanglesModule implements Module {
                 bus.publish(new OpenTangleEvent(
                         new HashSet<>(req.tangle().members()),
                         req.tangle().key(), req.tangle().title(), tanglesView)));
-        tanglesView.setOnCutEdge((from, to) ->
-                bus.publish(new CutTangleEdgeEvent(from, to, tanglesView)));
+        tanglesView.setOnCutEdge((from, to) -> {
+            showPlan();
+            bus.publish(new CutTangleEdgeEvent(from, to, tanglesView));
+        });
         tanglesView.setOnRestoreEdge((from, to) ->
                 bus.publish(new RestoreTangleEdgeEvent(from, to, tanglesView)));
-        tanglesView.setOnCutAll(edges ->
-                bus.publish(new CutTangleEdgesEvent(edges, tanglesView)));
+        tanglesView.setOnCutAll(edges -> {
+            showPlan();
+            bus.publish(new CutTangleEdgesEvent(edges, tanglesView));
+        });
         // Tangle tabs and preview cuts. A cut belongs to the document of the
         // view it was made in (or, made in this panel, to the active one): it
         // is recorded there and shown in that document's tabs only.
@@ -201,10 +207,11 @@ public class TopTanglesModule implements Module {
         unbind();
     }
 
-    /** The preview cuts of the document the bound view shows. */
-    private Set<DependencyEdge> boundCuts() {
-        AnalysisDocument document = viewManager.documentOf(boundView);
-        return document == null ? Set.of() : document.previewCuts();
+    /** A cut is to be seen where it is made. */
+    private void showPlan() {
+        if (boundView != null) {
+            boundView.setShowPlan(true);
+        }
     }
 
     private void rebindTo(ArchitectureCanvas newBound) {
@@ -226,6 +233,7 @@ public class TopTanglesModule implements Module {
         String activeScope = currentScopeInitialized
                 ? currentScope
                 : scopeFor(boundView, boundView == null ? null : boundView.getDomainModel());
+        boolean samePlan = sameDataset && boundView.getPlan().equals(newBound.getPlan());
         boolean sameTangleScope = sameDataset
                 && Objects.equals(activeScope, scopeFor(newBound, newBound.getDomainModel()));
 
@@ -239,10 +247,14 @@ public class TopTanglesModule implements Module {
         boundView = newBound;
         if (!sameDataset || (!sameTangleScope && newBound.isScopeOwner())) {
             applyCurrentScope(true);
+        } else if (!samePlan) {
+            applyCurrentScope(false);
         }
 
         rootListener = (obs, was, isNow) -> applyCurrentScope(true);
         newBound.architectureRootProperty().addListener(rootListener);
+        planListener = (obs, was, isNow) -> applyCurrentScope(false);
+        newBound.planProperty().addListener(planListener);
     }
 
     private void unbind() {
@@ -250,9 +262,13 @@ public class TopTanglesModule implements Module {
             if (rootListener != null) {
                 boundView.architectureRootProperty().removeListener(rootListener);
             }
+            if (planListener != null) {
+                boundView.planProperty().removeListener(planListener);
+            }
         }
         boundView = null;
         rootListener = null;
+        planListener = null;
     }
 
     /** Empties the panel and forgets what it showed: the next data is shown even if it is the same. */
@@ -296,10 +312,14 @@ public class TopTanglesModule implements Module {
 
         String scope = currentScope;
         String scopeLabel = scope == null ? "All classes" : scope;
-        Set<DependencyEdge> appliedCutEdges = boundCuts();
+        Set<DependencyEdge> appliedCutEdges = boundView.getPlan().cuts();
+        Placement placement = boundView.getPlan().placement();
 
-        List<TopTanglesView.Tangle> tangles = computeTopTangles(
-                model, boundView.getRawDependencyModel(), boundView.getCycleBreakEdges(), appliedCutEdges, scope, TOP_N);
+        // All of them: small cycles that are not listed still count for the hotspots.
+        List<TopTanglesView.Tangle> allTangles = computeTopTangles(
+                model, boundView.getRawDependencyModel(), boundView.getCycleBreakEdges(),
+                appliedCutEdges, placement, scope, Integer.MAX_VALUE);
+        List<TopTanglesView.Tangle> tangles = allTangles.subList(0, Math.min(TOP_N, allTangles.size()));
         List<TopTanglesView.RefactoringPreviewEdge> previewEdges = previewEdgesForScope(appliedCutEdges, scope);
 
         // Skip the setData call when nothing actually changed — records'
@@ -313,11 +333,6 @@ public class TopTanglesModule implements Module {
         lastTangles = tangles;
         lastPreviewEdges = previewEdges;
 
-        // Hotspots are computed from ALL tangles so small cycles outside the
-        // top-N display list still contribute to the method edge count.
-        List<TopTanglesView.Tangle> allTangles = computeTopTangles(
-                model, boundView.getRawDependencyModel(), boundView.getCycleBreakEdges(),
-                appliedCutEdges, scope, Integer.MAX_VALUE);
         tanglesView.setData(scopeLabel, tangles, previewEdges, computeHotspots(allTangles, TOP_N));
     }
 
@@ -364,13 +379,14 @@ public class TopTanglesModule implements Module {
                                                         DependencyModel rawModel,
                                                         Set<DependencyEdge> cycleBreakEdges,
                                                         String scope, int topN) {
-        return computeTopTangles(model, rawModel, cycleBreakEdges, Set.of(), scope, topN);
+        return computeTopTangles(model, rawModel, cycleBreakEdges, Set.of(), Placement.OF_THE_CODE, scope, topN);
     }
 
     static List<TopTanglesView.Tangle> computeTopTangles(DomainModel model,
                                                         DependencyModel rawModel,
                                                         Set<DependencyEdge> cycleBreakEdges,
                                                         Set<DependencyEdge> appliedCutEdges,
+                                                        Placement placement,
                                                         String scope, int topN) {
         Map<String, Set<String>> graph = new HashMap<>();
         for (var entry : model.getAllClasses().entrySet()) {
@@ -382,9 +398,9 @@ public class TopTanglesModule implements Module {
         }
 
         SCCFinder finder = Lookup.lookup(SCCFinder.class);
-        return ContainerProjection.tangles(graph, finder).stream()
+        List<de.weigend.s202.domain.architecture.Tangle> chosen = placement.tangles(graph, finder).stream()
                 .map(de.weigend.s202.domain.architecture.Tangle::new)
-                .filter(t -> t.inScope(scope))
+                .filter(t -> t.inScope(scope, placement))
                 // Package tangles (at least one package member) first — they are the
                 // architectural findings; class-only tangles inside one package follow.
                 .sorted(Comparator.comparing(
@@ -394,36 +410,61 @@ public class TopTanglesModule implements Module {
                                 (de.weigend.s202.domain.architecture.Tangle t) -> t.members().size()).reversed())
                         .thenComparing(t -> tangleKey(new ArrayList<>(t.members()))))
                 .limit(topN)
-                .map(t -> toTangle(t, model, graph, rawModel, cycleBreakEdges, appliedCutEdges))
+                .toList();
+        Map<String, List<DependencyEdge>> edges = edgesByTangle(chosen, graph, placement);
+        return chosen.stream()
+                .map(t -> toTangle(t, edges.getOrDefault(firstMember(t), List.of()),
+                        model, rawModel, cycleBreakEdges, appliedCutEdges, placement))
                 .toList();
     }
 
+    /**
+     * The class dependencies between two members of one tangle, by its first
+     * member: the members are siblings, so each is in one tangle only.
+     */
+    private static Map<String, List<DependencyEdge>> edgesByTangle(
+            List<de.weigend.s202.domain.architecture.Tangle> tangles, Map<String, Set<String>> graph,
+            Placement placement) {
+        Map<String, String> tangleOf = new HashMap<>();
+        tangles.forEach(t -> t.members().forEach(member -> tangleOf.put(member, firstMember(t))));
+        Map<String, List<DependencyEdge>> result = new HashMap<>();
+        graph.forEach((from, targets) -> {
+            for (String to : targets) {
+                ContainerProjection.Projection p = graph.containsKey(to) ? placement.project(from, to) : null;
+                String tangle = p == null ? null : tangleOf.get(p.fromSibling());
+                if (tangle != null && tangle.equals(tangleOf.get(p.toSibling()))) {
+                    result.computeIfAbsent(tangle, k -> new ArrayList<>()).add(new DependencyEdge(from, to));
+                }
+            }
+        });
+        return result;
+    }
+
+    private static String firstMember(de.weigend.s202.domain.architecture.Tangle tangle) {
+        return tangle.members().iterator().next();
+    }
+
     private static TopTanglesView.Tangle toTangle(de.weigend.s202.domain.architecture.Tangle tangle,
+                                                  List<DependencyEdge> between,
                                                   DomainModel model,
-                                                  Map<String, Set<String>> graph,
                                                   DependencyModel rawModel,
                                                   Set<DependencyEdge> cycleBreakEdges,
-                                                  Set<DependencyEdge> appliedCutEdges) {
+                                                  Set<DependencyEdge> appliedCutEdges,
+                                                  Placement placement) {
         List<String> sortedMembers = new ArrayList<>(tangle.members());
         List<TopTanglesView.TangleEdge> edges = new ArrayList<>();
-        for (String from : graph.keySet()) {
-            String fromMember = tangle.memberContaining(from);
-            if (fromMember == null) continue;
-            for (String to : graph.getOrDefault(from, Set.of())) {
-                String toMember = tangle.memberContaining(to);
-                if (toMember == null || toMember.equals(fromMember)) continue;
-                boolean cycleBreakEdge = isCycleBreakEdge(cycleBreakEdges, from, to);
-                boolean appliedCutEdge = isCycleBreakEdge(appliedCutEdges, from, to);
-                edges.add(new TopTanglesView.TangleEdge(
-                        from, to, buildKindEntries(rawModel, from, to), cycleBreakEdge, appliedCutEdge));
-            }
+        for (DependencyEdge edge : between) {
+            edges.add(new TopTanglesView.TangleEdge(
+                    edge.from(), edge.to(), buildKindEntries(rawModel, edge.from(), edge.to()),
+                    isCycleBreakEdge(cycleBreakEdges, edge.from(), edge.to()),
+                    isCycleBreakEdge(appliedCutEdges, edge.from(), edge.to())));
         }
         edges.sort(Comparator.comparing(TopTanglesView.TangleEdge::from)
                 .thenComparing(TopTanglesView.TangleEdge::to));
         return new TopTanglesView.Tangle(
                 sortedMembers.size(),
                 tangleKey(sortedMembers),
-                tangle.label(m -> model.getPackage(m) != null),
+                tangle.label(m -> model.getPackage(m) != null, placement),
                 sortedMembers,
                 edges);
     }

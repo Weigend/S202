@@ -64,13 +64,13 @@ shows everything again.
 ![The dependencies of OrderService](images/layered-selected-class.png)
 
 **4. Ask what breaks the order.** Switch **Show Dependencies** off and **Show Violations** on. Four
-dashed arrows remain. They are the dependencies that run against the layers.
+red arrows remain. They are the dependencies that run against the layers.
 
 ![The four violations of the web shop](images/layered-violations.png)
 
 The panel **Dependencies** at the bottom lists the same four, and below them the three package
-tangles. These black arrows cannot be clicked; a double-click on an entry of the panel opens it
-in a tab of its own.
+tangles. A click on a red arrow shows what carries it; a double-click on an entry of the panel opens
+it in a tab of its own.
 
 **5. Look at a cycle.** Double-click `webshop: order, payment` in the panel **Top Tangles**. A tab
 opens that shows nothing but this tangle: `order` uses `payment` with five calls, `payment` uses

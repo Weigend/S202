@@ -30,11 +30,9 @@ import javafx.scene.paint.Color;
  */
 public record ArrowStyle(Color color, double width, boolean dashed, double opacity) {
 
-    public static final Color BACK_EDGE_COLOR = Color.web("#d32f2f");
-    public static final Color FORWARD_COLOR = Color.rgb(90, 94, 98);
+    public static final Color BACK_EDGE_COLOR = LineColors.AGAINST_LAYERS;
+    public static final Color FORWARD_COLOR = LineColors.USES;
     public static final Color CONTEXT_COLOR = Color.rgb(176, 180, 184);
-    /** Selection colour of styled arrows; red is taken by the back-edges. */
-    public static final Color SELECTED_COLOR = Color.web("#1565c0");
 
     public static final double BACK_EDGE_WIDTH = 1.3;
     public static final double FORWARD_WIDTH = 0.6;

@@ -23,6 +23,7 @@ import java.util.Collection;
 import java.util.HashSet;
 import java.util.Set;
 import java.util.function.BiConsumer;
+import java.util.function.BooleanSupplier;
 import java.util.function.Consumer;
 
 /**
@@ -39,6 +40,10 @@ public final class PreviewCutController implements DependencyEdgeActions {
     private Set<DependencyEdge> cycleBreakEdges = Set.of();
     private final Set<DependencyEdge> appliedCutEdges = new HashSet<>();
 
+    /** Whether the cuts are applied to what the canvas shows. */
+    private BooleanSupplier planShown = () -> true;
+    private Runnable showPlan = () -> { };
+
     private Consumer<DependencySelection> selectionSink = selection -> { /* no-op default */ };
     private BiConsumer<String, String> edgeCutSink = (a, b) -> { /* no-op default */ };
     private BiConsumer<String, String> edgeRestoreSink = (a, b) -> { /* no-op default */ };
@@ -48,8 +53,23 @@ public final class PreviewCutController implements DependencyEdgeActions {
         this.redrawArrows = redrawArrows;
     }
 
+    /** All cuts, whether the canvas shows them or not. */
     public Set<DependencyEdge> appliedCutEdges() {
         return appliedCutEdges;
+    }
+
+    /** The cuts that count in what the canvas shows. */
+    public Set<DependencyEdge> effectiveCutEdges() {
+        return planShown.getAsBoolean() ? appliedCutEdges : Set.of();
+    }
+
+    /**
+     * @param planShown whether the canvas shows what is planned
+     * @param showPlan  makes it do so; a cut the user makes is to be seen
+     */
+    void setPlan(BooleanSupplier planShown, Runnable showPlan) {
+        this.planShown = planShown;
+        this.showPlan = showPlan;
     }
 
     public Set<DependencyEdge> getCycleBreakEdges() {
@@ -61,6 +81,9 @@ public final class PreviewCutController implements DependencyEdgeActions {
     }
 
     public void setAppliedCutEdges(Set<DependencyEdge> cuts) {
+        if (appliedCutEdges.equals(cuts == null ? Set.of() : cuts)) {
+            return;
+        }
         appliedCutEdges.clear();
         if (cuts != null) {
             appliedCutEdges.addAll(cuts);
@@ -114,11 +137,12 @@ public final class PreviewCutController implements DependencyEdgeActions {
 
     @Override
     public boolean isCut(String from, String to) {
-        return appliedCutEdges.contains(new DependencyEdge(from, to));
+        return effectiveCutEdges().contains(new DependencyEdge(from, to));
     }
 
     @Override
     public void cut(String from, String to) {
+        showPlan.run();
         applyEdgeCut(from, to);
         edgeCutSink.accept(from, to);
     }

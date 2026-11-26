@@ -13,7 +13,7 @@
 ## Example
 
 ```bash
-./run-ui.sh test-example/target/test-example-1.6.0.jar
+./run-ui.sh test-example/target/test-example-1.7.0.jar
 ```
 
 ## Requirements

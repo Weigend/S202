@@ -75,6 +75,9 @@ class S202ProjectStoreTest {
         assertNotNull(loadedClass);
         assertEquals(Set.of("com.example.B"), loadedClass.dependencies);
         assertEquals(Set.of(EdgeKind.CALLS), loadedClass.getKinds("com.example.B"));
+        assertEquals(Map.of("java.util.List", java.util.EnumSet.of(EdgeKind.CALLS, EdgeKind.USES)),
+                loadedClass.externalDependencies);
+        assertEquals("example.jar", loadedClass.getOrigin());
         assertEquals(1, loadedClass.methods.size());
         assertEquals(Set.of("()V"),
                 loadedClass.methods.get("run()V").methodCallDescriptors.get("com.example.B.call"));
@@ -205,7 +208,8 @@ class S202ProjectStoreTest {
         S202Project.ViewDto view = new S202Project.ViewDto(
                 "LAYERED", null, null, List.of(), List.of(), null, false,
                 3, true, false, false, false, true, List.of(),
-                1.0, 0.0, 0.0, java.util.Map.of(), null, true);
+                1.0, 0.0, 0.0, java.util.Map.of(), null, true,
+                List.of(), List.of(), false, false, List.of(), false);
         S202Project versionFour = new S202Project(
                 S202Project.FORMAT,
                 4,
@@ -236,6 +240,9 @@ class S202ProjectStoreTest {
         DependencyModel.ClassInfo classInfo = new DependencyModel.ClassInfo(
                 "com.example.A", "A", "com.example", true);
         classInfo.addDependency("com.example.B", EdgeKind.CALLS);
+        classInfo.addExternalDependency("java.util.List", EdgeKind.USES);
+        classInfo.addExternalDependency("java.util.List", EdgeKind.CALLS);
+        classInfo.setOrigin("example.jar");
         DependencyModel.MethodInfo method = new DependencyModel.MethodInfo("run", "()V");
         method.methodCalls.put("com.example.B.call", 3);
         method.methodCallDescriptors.put("com.example.B.call", Set.of("()V"));

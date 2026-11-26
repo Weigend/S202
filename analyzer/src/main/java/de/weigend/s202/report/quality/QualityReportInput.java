@@ -16,6 +16,7 @@
 package de.weigend.s202.report.quality;
 
 import de.weigend.s202.analysis.invariants.LayoutInvariantReport;
+import de.weigend.s202.analysis.quality.QualityCalculator;
 import de.weigend.s202.analysis.quality.QualityMetrics;
 import de.weigend.s202.domain.DomainModel;
 import de.weigend.s202.domain.architecture.ArchitectureAnnotations;
@@ -46,6 +47,6 @@ public record QualityReportInput(
         title = title == null || title.isBlank() ? "S202 Quality Report" : title;
         s202Version = s202Version == null || s202Version.isBlank() ? "dev" : s202Version;
         annotations = annotations == null ? ArchitectureAnnotations.empty() : annotations;
-        qualityMetrics = qualityMetrics == null ? QualityMetrics.compute(domainModel) : qualityMetrics;
+        qualityMetrics = qualityMetrics == null ? QualityCalculator.measure(domainModel) : qualityMetrics;
     }
 }

@@ -53,9 +53,13 @@ public record S202Project(
      * Version 4 added {@link #previewCuts()} and {@link #views()}, version 5
      * {@link ViewDto#limitBoxWidth()}, version 6 {@link ClassInfoDto#typeUses()}
      * and {@link ViewDto#hiddenEdgeKinds()}, version 7 the annotated packages of
-     * {@link DependencyModelDto}; it dropped what is computed on loading.
+     * {@link DependencyModelDto}; it dropped what is computed on loading. Version 8
+     * added {@link ViewDto#moves()}, {@link ViewDto#plannedPackages()},
+     * {@link ViewDto#hidePlan()}, {@link ViewDto#matrix()} and {@link ViewDto#matrixOpen()},
+     * version 9 {@link ClassInfoDto#externalDependencies()}, {@link ClassInfoDto#origin()} and
+     * {@link ViewDto#matrixExternals()}.
      */
-    public static final int FORMAT_VERSION = 7;
+    public static final int FORMAT_VERSION = 9;
 
     public record CreatedWith(String app, String version) {}
 
@@ -75,6 +79,12 @@ public record S202Project(
             List<String> apiPackages,
             List<String> plainPackages) {}
 
+    /**
+     * @param externalDependencies classes outside the analysis the class depends on;
+     *                             files older than version 9 have none
+     * @param origin               the file the class was read from; files older than
+     *                             version 9 do not know it
+     */
     public record ClassInfoDto(
             String fullName,
             String simpleName,
@@ -83,7 +93,9 @@ public record S202Project(
             List<String> dependencies,
             Map<String, List<EdgeKind>> dependencyKinds,
             Map<String, MethodInfoDto> methods,
-            Map<String, List<TypeUseDto>> typeUses) {}
+            Map<String, List<TypeUseDto>> typeUses,
+            Map<String, List<EdgeKind>> externalDependencies,
+            String origin) {}
 
     /** Attributes that do not apply are left out of the file. */
     @JsonInclude(JsonInclude.Include.NON_NULL)
@@ -141,6 +153,19 @@ public record S202Project(
             String elementFqn,
             String role) {}
 
+    /**
+     * A class or package the user moved in a tab.
+     *
+     * @param container the package it was put into, the id of a planned package,
+     *                  or empty for the top level
+     * @param newRow    whether it got a row of its own; {@code column} then says nothing
+     * @param api       put into the API area of a component
+     */
+    public record MoveDto(String element, String container, int row, int column, boolean newRow, boolean api) {}
+
+    /** A package the user planned in a tab. */
+    public record PlannedPackageDto(String id, String name) {}
+
     /** A class dependency cut in the refactoring preview. */
     public record CutDto(String from, String to) {}
 
@@ -164,6 +189,14 @@ public record S202Project(
      *                         files older than version 6 do not have it
      * @param expandedPackages package FQN to open (true) or closed (false)
      * @param active           whether this was the tab the user worked in
+     * @param moves            the moves made in the tab, in order; files older than
+     *                         version 8 do not have them, nor the following
+     * @param plannedPackages  the packages planned in the tab, in order
+     * @param hidePlan         whether the tab shows the analyzed code instead of the plan
+     * @param matrix           whether the dependency matrix of the tab is open in a tab of its own
+     * @param matrixOpen       the packages that are open in the matrix
+     * @param matrixExternals  whether the matrix shows the libraries used; files
+     *                         older than version 9 do not have it
      */
     public record ViewDto(
             String kind,
@@ -185,5 +218,11 @@ public record S202Project(
             double verticalScroll,
             Map<String, Boolean> expandedPackages,
             String selected,
-            boolean active) {}
+            boolean active,
+            List<MoveDto> moves,
+            List<PlannedPackageDto> plannedPackages,
+            boolean hidePlan,
+            boolean matrix,
+            List<String> matrixOpen,
+            boolean matrixExternals) {}
 }

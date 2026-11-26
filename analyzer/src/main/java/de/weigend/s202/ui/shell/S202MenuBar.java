@@ -73,6 +73,7 @@ public class S202MenuBar {
     private static final String VIEW_MENU_TITLE = "View";
     private static final String COMPONENT_VIEW_ITEM_ID = "view.componentView";
     private static final String HEXAGONAL_VIEW_ITEM_ID = "view.hexagonalView";
+    private static final String MATRIX_ITEM_ID = "view.matrix";
 
     private final ApplicationWindow applicationWindow;
     private final EventBus<EventObject> eventBus;
@@ -112,7 +113,11 @@ public class S202MenuBar {
         MenuItem resetItem = MenuUtil.createMenuItem(
                 "edit.resetRefactorings", "Reset Refactorings...",
                 e -> publish(new MenuRequestEvent.ResetRefactorings(this)));
-        editMenu.getItems().addAll(undoItem, redoItem, new SeparatorMenuItem(), resetItem);
+        MenuItem discardMovesItem = MenuUtil.createMenuItem(
+                "edit.discardMoves", "Discard Moves of This View",
+                e -> publish(new MenuRequestEvent.DiscardMoves(this)));
+        discardMovesItem.disableProperty().bind(canUndo.not());
+        editMenu.getItems().addAll(undoItem, redoItem, new SeparatorMenuItem(), discardMovesItem, resetItem);
         applicationWindow.getMenu().add(1, editMenu);
     }
 
@@ -259,6 +264,11 @@ public class S202MenuBar {
                     e -> publish(new MenuRequestEvent.OpenHexagonalView(this)));
             viewMenu.getItems().add(hexagonalViewItem);
         }
+        if (!containsMenuItem(viewMenu, MATRIX_ITEM_ID)) {
+            viewMenu.getItems().add(MenuUtil.createMenuItem(
+                    MATRIX_ITEM_ID, "Dependency Matrix",
+                    e -> publish(new MenuRequestEvent.OpenMatrix(this))));
+        }
     }
 
     private void watchViewMenuItems(Menu viewMenu) {
@@ -268,7 +278,8 @@ public class S202MenuBar {
 
         viewMenu.getItems().addListener((ListChangeListener<MenuItem>) change -> {
             if (!containsMenuItem(viewMenu, COMPONENT_VIEW_ITEM_ID)
-                    || !containsMenuItem(viewMenu, HEXAGONAL_VIEW_ITEM_ID)) {
+                    || !containsMenuItem(viewMenu, HEXAGONAL_VIEW_ITEM_ID)
+                    || !containsMenuItem(viewMenu, MATRIX_ITEM_ID)) {
                 Platform.runLater(this::ensureArchitectureViewMenuItems);
             }
         });

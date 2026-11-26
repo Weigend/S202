@@ -150,7 +150,12 @@ final class TypeUseRecorder {
         if (dollar > 0) {
             target = target.substring(0, dollar);
         }
-        if (!target.equals(classInfo.fullName) && !excluded.test(target)) {
+        if (target.equals(classInfo.fullName)) {
+            return;
+        }
+        if (excluded.test(target)) {
+            classInfo.addExternalDependency(target, EdgeKind.USES);
+        } else {
             classInfo.addTypeUse(target, new TypeUse(kind, member, descriptor, detail));
             classInfo.addDependency(target, EdgeKind.USES);
         }

@@ -83,7 +83,7 @@ not notice. `spi` does the same at the other end: `order` calls `OrderRepository
 
 ## Violations
 
-**Show Violations** draws what breaks the boundaries.
+**Show Violations** draws what breaks the boundaries in black.
 
 ![API bypass and API leak](images/component-violations.png)
 
@@ -92,8 +92,7 @@ not notice. `spi` does the same at the other end: `order` calls `OrderRepository
 | API bypass | Code outside a component uses one of its private classes. | `RefundScreen` → `CardPayments` |
 | API leaks implementation | A public class depends on a private one, so that whoever uses the API depends on the implementation as well. | `CatalogService` → `ProductIndex` |
 
-The second arrow is dashed because it is a [back-edge](concepts.md#violations) as well, the first
-one is dotted. Dependencies against the layers are not violations in this view; look at them in the
+Dependencies against the layers are not violations in this view; look at them in the
 [Layered Architecture View](layered-view.md#violations).
 
 The panel [Dependencies](window.md#dependencies) lists them under *Component violations*:
@@ -142,7 +141,8 @@ was added to the API of `catalog`. Of the two violations the API bypass is left:
 `ProductIndex` is no leak any more. Whether that is a good idea is another question; returning a
 type of the API would be better.
 
-Planned packages and moves are not stored in the project file.
+Planned packages and moves are stored in the project file. With
+[Plan](refactoring.md#the-code-and-the-plan) off, the view shows the code without them.
 
 ## Use cases
 

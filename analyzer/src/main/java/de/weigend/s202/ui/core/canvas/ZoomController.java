@@ -18,6 +18,7 @@ package de.weigend.s202.ui.core.canvas;
 import javafx.application.Platform;
 import javafx.beans.property.ReadOnlyDoubleProperty;
 import javafx.beans.property.ReadOnlyDoubleWrapper;
+import javafx.geometry.Bounds;
 import javafx.scene.layout.Pane;
 
 import java.util.Objects;
@@ -81,6 +82,17 @@ public class ZoomController {
      */
     public void resetZoom() {
         setZoom(1.0);
+    }
+
+    /**
+     * Zooms so that the whole content fits into the given area and fills it in
+     * one direction. No-op while the content or the area has no size.
+     */
+    public void fit(double availableWidth, double availableHeight) {
+        Bounds content = zoomableContent.getBoundsInLocal();
+        if (content.getWidth() > 0 && content.getHeight() > 0 && availableWidth > 0 && availableHeight > 0) {
+            setZoom(Math.min(availableWidth / content.getWidth(), availableHeight / content.getHeight()));
+        }
     }
 
     /**

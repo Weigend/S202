@@ -15,6 +15,8 @@
  */
 package de.weigend.s202.domain.architecture;
 
+import de.weigend.s202.domain.Placement;
+
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Set;
@@ -42,7 +44,11 @@ public record Tangle(Set<String> members) {
 
     /** The container whose children the members are ("" for the root). */
     public String container() {
-        return parentOf(members.iterator().next());
+        return container(Placement.OF_THE_CODE);
+    }
+
+    private String container(Placement placement) {
+        return placement.containerOf(members.iterator().next());
     }
 
     /**
@@ -51,14 +57,18 @@ public record Tangle(Set<String> members) {
      * A {@code null} or blank scope means everything.
      */
     public boolean inScope(String packageScope) {
+        return inScope(packageScope, Placement.OF_THE_CODE);
+    }
+
+    /** {@link #inScope(String)} with every element where {@code placement} says. */
+    public boolean inScope(String packageScope, Placement placement) {
         if (packageScope == null || packageScope.isBlank()) {
             return true;
         }
         if (members.contains(packageScope)) {
             return true;
         }
-        String container = container();
-        return container.equals(packageScope) || container.startsWith(packageScope + ".");
+        return placement.isIn(container(placement), packageScope);
     }
 
     /** Number of member names a {@link #label} spells out before it abbreviates. */
@@ -74,6 +84,11 @@ public record Tangle(Set<String> members) {
      * @param isPackage tells package members from class members
      */
     public String label(Predicate<String> isPackage) {
+        return label(isPackage, Placement.OF_THE_CODE);
+    }
+
+    /** {@link #label(Predicate)} with every element where {@code placement} says. */
+    public String label(Predicate<String> isPackage, Placement placement) {
         List<String> packages = new ArrayList<>();
         List<String> classes = new ArrayList<>();
         for (String m : members) {
@@ -85,7 +100,7 @@ public record Tangle(Set<String> members) {
         if (names.size() > LABEL_MEMBERS) {
             shown += ", … (" + names.size() + ")";
         }
-        String container = container();
+        String container = container(placement);
         return (container.isEmpty() ? "<root>" : simpleName(container)) + ": " + shown;
     }
 

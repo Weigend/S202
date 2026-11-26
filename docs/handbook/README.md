@@ -23,7 +23,7 @@ list of changes that can be given to the developers. The analyzed code is never 
 
 S202 finds the dependencies; the team decides which of them are wrong. The first pages explain this
 reasoning, the others describe every view, panel, menu and dialog with pictures of the running
-application. The handbook describes release 1.6.0.
+application. The handbook describes release 1.7.0.
 
 ![The main window of S202 with an analysis](images/window-overview.png)
 
@@ -53,7 +53,9 @@ application. The handbook describes release 1.6.0.
 | Cycles, API leaks, excessive coupling and what static analysis cannot decide | [Architecture smells](architecture-smells.md) |
 | JARs, Maven and Gradle projects, Python, Go, JavaScript and C source, what is left out | [Loading code](loading-code.md) |
 | The window part by part: menus, toolbar, tabs, panels, status bar | [The window](window.md) |
+| Where to look first: packages by breakout, libraries used, JARs read | [Hotspots](window.md#hotspots) |
 | Reading the layers, arrows, overlays, filters, scopes, moving boxes | [Layered Architecture View](layered-view.md) |
+| The dependencies as a matrix, with the libraries used | [Dependency matrix](matrix-view.md) |
 | Top Tangles, the Tangle View, cutting dependencies | [Tangles](tangle-view.md) |
 | API and implementation, violations of the boundary, planned packages | [Component View](component-view.md) |
 | Core, application and adapters, ports | [Hexagonal View](hexagonal-view.md) |

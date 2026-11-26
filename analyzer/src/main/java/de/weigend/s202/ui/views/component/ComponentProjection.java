@@ -20,6 +20,7 @@ import de.weigend.s202.domain.architecture.ComponentArchitecture;
 import de.weigend.s202.domain.architecture.Element;
 import de.weigend.s202.ui.views.component.ComponentBox;
 import de.weigend.s202.ui.core.canvas.TreeBuilderSupport;
+import de.weigend.s202.ui.core.graph.BoxMenuEvent;
 import de.weigend.s202.ui.core.graph.LevelClassBox;
 import de.weigend.s202.ui.core.model.ArchitectureNode;
 import de.weigend.s202.ui.core.model.ArchitectureNode.NodeType;
@@ -259,6 +260,7 @@ final class ComponentProjection {
             });
 
             ContextMenu menu = new ContextMenu(addToApi, removeFromApi);
+            menu.getItems().addAll(BoxMenuEvent.itemsFor(target, fullName));
             menu.show(target, event.getScreenX(), event.getScreenY());
             event.consume();
         });

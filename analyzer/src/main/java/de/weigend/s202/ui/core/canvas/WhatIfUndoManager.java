@@ -44,7 +44,15 @@ public final class WhatIfUndoManager {
         sync();
     }
 
-    /** Decrements the cursor and returns the moves to replay, or null if nothing to undo. */
+    /** Starts over with moves made before, for example in a project that was saved. */
+    public void load(List<WhatIfMove> moves) {
+        history.clear();
+        history.addAll(moves);
+        cursor = history.size();
+        sync();
+    }
+
+    /** Takes the last move back and returns the moves that are left, or null if there is nothing to undo. */
     public List<WhatIfMove> decrement() {
         if (cursor == 0) return null;
         cursor--;
@@ -52,7 +60,7 @@ public final class WhatIfUndoManager {
         return List.copyOf(history.subList(0, cursor));
     }
 
-    /** Returns the move to apply for redo, or null if nothing to redo. */
+    /** Makes a move again and returns it, or null if there is nothing to redo. */
     public WhatIfMove increment() {
         if (cursor >= history.size()) return null;
         WhatIfMove m = history.get(cursor);

@@ -18,8 +18,11 @@ package de.weigend.s202.ui.shell;
 import de.weigend.s202.ui.core.model.EdgeKindGroup;
 import de.weigend.s202.ui.core.canvas.ArchitectureCanvas;
 import de.weigend.s202.ui.core.graph.ArchitectureViewSettings;
+import de.weigend.s202.ui.core.matrix.MatrixView;
 import de.weigend.s202.ui.core.platform.ArchitectureViewManager;
+import de.weigend.s202.ui.core.platform.MatrixWfxView;
 import io.softwareecg.wfx.lookup.api.Lookup;
+import io.softwareecg.wfx.lookup.api.LookupContext;
 import io.softwareecg.wfx.windowmanager.api.ApplicationWindow;
 import io.softwareecg.wfx.windowmanager.api.WindowManager;
 import javafx.beans.property.BooleanProperty;
@@ -44,9 +47,11 @@ import org.kordamp.ikonli.Ikon;
 import org.kordamp.ikonli.javafx.FontIcon;
 import org.kordamp.ikonli.materialdesign2.MaterialDesignC;
 import org.kordamp.ikonli.materialdesign2.MaterialDesignF;
+import org.kordamp.ikonli.materialdesign2.MaterialDesignG;
 import org.kordamp.ikonli.materialdesign2.MaterialDesignR;
 import org.kordamp.ikonli.materialdesign2.MaterialDesignU;
 
+import java.util.function.Consumer;
 import java.util.stream.Collectors;
 import java.util.Map;
 import java.util.EnumMap;
@@ -67,6 +72,7 @@ public final class ToolbarController {
     private final Runnable resetRefactoringsAction;
 
     private static final String EDGE_KINDS = "Edge Kinds";
+    private static final String PLAN = "Plan";
 
     // Toolbar widgets — shared across all ArchitectureWfxView tabs.
     private Button openJarButton;
@@ -84,12 +90,16 @@ public final class ToolbarController {
     private Button undoButton;
     private Button redoButton;
     private Button resetRefactoringsButton;
+    private CheckBox showPlanCheckbox;
+    private Button matrixButton;
     private Button exportImageButton;
     private Button zoomOutButton;
     private Label zoomLabel;
     private Button zoomInButton;
     private Button zoomResetButton;
+    private Button zoomFitButton;
     private final List<Node> viewDependentToolbarNodes = new ArrayList<>();
+    private final List<Node> pictureOnlyNodes = new ArrayList<>();
 
     // Tracks the focused view's undo/redo capability — bound to the Edit menu items.
     private final SimpleBooleanProperty canUndo = new SimpleBooleanProperty(false);
@@ -97,6 +107,9 @@ public final class ToolbarController {
 
     // Tracks which view we currently mirror so we can unbind on focus change.
     private ArchitectureCanvas boundView;
+    /** The matrix of {@link #boundView}, if the user works in its tab. */
+    private MatrixView boundMatrix;
+    private ReadOnlyDoubleProperty boundZoom;
     // Reusable listener so we can detach it cleanly (no-op when boundView is null).
     private ChangeListener<Number> zoomLabelListener;
     /** Keeps the widgets at what the bound view shows, whoever changes it. */
@@ -150,7 +163,8 @@ public final class ToolbarController {
         refreshButton = new Button("Refresh");
         refreshButton.getStyleClass().add("toolbar-button");
         refreshButton.setGraphic(toolbarIcon(MaterialDesignR.REFRESH));
-        refreshButton.setTooltip(new Tooltip("Rebuild architecture view (re-layout all packages)"));
+        refreshButton.setTooltip(new Tooltip(
+                "Build the picture anew, with as many levels of packages open as Depth says"));
         refreshButton.setOnAction(e -> {
             if (boundView != null) {
                 boundView.refreshLayout();
@@ -176,6 +190,28 @@ public final class ToolbarController {
         resetRefactoringsButton.setTooltip(new Tooltip(
                 "Reset all refactorings of this analysis: moves, API mapping, cuts"));
         resetRefactoringsButton.setOnAction(e -> resetRefactoringsAction.run());
+
+        matrixButton = new Button("Matrix");
+        matrixButton.setId("toolbar.matrix");
+        matrixButton.getStyleClass().add("toolbar-button");
+        matrixButton.setGraphic(toolbarIcon(MaterialDesignG.GRID));
+        matrixButton.setTooltip(new Tooltip(
+                "Open the dependencies of this view as a matrix, in a tab of its own.\n"
+                        + "Layered, scope and tangle views have one."));
+        matrixButton.setOnAction(e -> {
+            if (boundView != null) viewManager.openMatrix(boundView);
+        });
+
+        showPlanCheckbox = new CheckBox(PLAN);
+        showPlanCheckbox.setId("toolbar.showPlan");
+        showPlanCheckbox.setTooltip(new Tooltip(
+                """
+                On: what is planned - moves, planned packages, cuts - is applied, here and in all panels.
+                Off: the code as it was analyzed. The plan is kept.
+                The number says how many changes are planned."""));
+        showPlanCheckbox.selectedProperty().addListener((obs, was, isNow) -> {
+            if (boundView != null) boundView.setShowPlan(isNow);
+        });
 
         exportImageButton = new Button();
         exportImageButton.setId("toolbar.exportImage");
@@ -257,7 +293,7 @@ public final class ToolbarController {
         zoomOutButton = new Button("−");
         zoomOutButton.getStyleClass().add("toolbar-zoom-button");
         zoomOutButton.setTooltip(new Tooltip("Zoom Out (Ctrl+Scroll Down)"));
-        zoomOutButton.setOnAction(e -> { if (boundView != null) boundView.zoomOut(); });
+        zoomOutButton.setOnAction(e -> zoom(ArchitectureCanvas::zoomOut, MatrixView::zoomOut));
 
         zoomLabel = new Label("100%");
         zoomLabel.getStyleClass().add("toolbar-zoom-label");
@@ -265,42 +301,52 @@ public final class ToolbarController {
         zoomInButton = new Button("+");
         zoomInButton.getStyleClass().add("toolbar-zoom-button");
         zoomInButton.setTooltip(new Tooltip("Zoom In (Ctrl+Scroll Up)"));
-        zoomInButton.setOnAction(e -> { if (boundView != null) boundView.zoomIn(); });
+        zoomInButton.setOnAction(e -> zoom(ArchitectureCanvas::zoomIn, MatrixView::zoomIn));
 
         zoomResetButton = new Button("1:1");
         zoomResetButton.getStyleClass().add("toolbar-zoom-button");
         zoomResetButton.setTooltip(new Tooltip("Reset Zoom to 100%"));
-        zoomResetButton.setOnAction(e -> { if (boundView != null) boundView.zoomReset(); });
+        zoomResetButton.setOnAction(e -> zoom(ArchitectureCanvas::zoomReset, matrix -> matrix.setZoom(1.0)));
+
+        zoomFitButton = new Button("Fit");
+        zoomFitButton.getStyleClass().add("toolbar-zoom-button");
+        zoomFitButton.setTooltip(new Tooltip("Zoom so that the whole picture fits into the window"));
+        zoomFitButton.setOnAction(e -> zoom(ArchitectureCanvas::zoomToFit, MatrixView::zoomToFit));
 
         HBox zoomGroup = new HBox(2, zoomOutButton, zoomLabel, zoomInButton);
         zoomGroup.setAlignment(Pos.CENTER_LEFT);
 
+        pictureOnlyNodes.addAll(List.of(depthSpinner, refreshButton, showDependenciesCheckbox,
+                showIconsCheckbox, showArchLevelCheckbox));
+
         // Everything except the Open JAR button is view-dependent.
         viewDependentToolbarNodes.addAll(List.of(
-                depthLabel, depthSpinner, refreshButton,
+                depthLabel, depthSpinner, refreshButton, matrixButton,
                 showDependenciesCheckbox, showSccCheckbox, showPackageSccCheckbox,
                 showWhatIfViolationsCheckbox, showIconsCheckbox, showArchLevelCheckbox,
                 limitBoxWidthCheckbox, edgeKindsButton,
-                zoomOutButton, zoomLabel, zoomInButton, zoomResetButton,
-                resetRefactoringsButton, exportImageButton));
+                zoomOutButton, zoomLabel, zoomInButton, zoomResetButton, zoomFitButton,
+                resetRefactoringsButton, showPlanCheckbox, exportImageButton));
 
         applicationWindow.getToolbarItems().setAll(
                 openJarButton, new Separator(),
-                depthLabel, depthSpinner, refreshButton,
+                depthLabel, depthSpinner, refreshButton, matrixButton,
                 new Separator(),
-                undoButton, redoButton, resetRefactoringsButton,
+                undoButton, redoButton, resetRefactoringsButton, showPlanCheckbox,
                 new Separator(),
                 showDependenciesCheckbox, showSccCheckbox, showPackageSccCheckbox,
                 showWhatIfViolationsCheckbox, showIconsCheckbox, showArchLevelCheckbox,
                 limitBoxWidthCheckbox, edgeKindsButton,
                 new Separator(),
-                zoomGroup, zoomResetButton,
+                zoomGroup, zoomResetButton, zoomFitButton,
                 new Separator(),
                 exportImageButton);
 
         // Retarget the toolbar whenever another architecture tab becomes the active one.
-        Lookup.lookup(WindowManager.class).getActiveLookup()
-                .observe(ArchitectureCanvas.class, canvases -> bindToolbarToFocusedView());
+        LookupContext active = Lookup.lookup(WindowManager.class).getActiveLookup();
+        active.observe(ArchitectureCanvas.class, canvases -> bindToolbarToFocusedView());
+        // From a picture to its matrix and back the canvas is the same one.
+        active.observe(MatrixWfxView.class, matrices -> bindToolbarToFocusedView());
         bindToolbarToFocusedView();
     }
 
@@ -310,13 +356,15 @@ public final class ToolbarController {
      * focused, disable everything except the Open JAR button.
      */
     private void bindToolbarToFocusedView() {
-        if (boundView != null && zoomLabelListener != null && boundView.zoomFactorProperty() != null) {
-            boundView.zoomFactorProperty().removeListener(zoomLabelListener);
+        if (boundZoom != null && zoomLabelListener != null) {
+            boundZoom.removeListener(zoomLabelListener);
         }
         if (boundView != null) {
             settingsOf(boundView).forEach(setting -> setting.removeListener(settingsListener));
         }
         boundView = null;
+        boundMatrix = null;
+        boundZoom = null;
         zoomLabelListener = null;
 
         ArchitectureCanvas view = viewManager.activeCanvas();
@@ -339,6 +387,8 @@ public final class ToolbarController {
         }
 
         boundView = view;
+        MatrixWfxView matrixTab = Lookup.lookup(WindowManager.class).getActiveLookup().lookup(MatrixWfxView.class);
+        boundMatrix = matrixTab == null ? null : matrixTab.getMatrix();
         undoButton.disableProperty().bind(view.canUndoWhatIfProperty().not());
         redoButton.disableProperty().bind(view.canRedoWhatIfProperty().not());
         canUndo.bind(view.canUndoWhatIfProperty());
@@ -347,14 +397,10 @@ public final class ToolbarController {
         settingsOf(view).forEach(setting -> setting.addListener(settingsListener));
         mirrorSettings();
 
-        ReadOnlyDoubleProperty zoomProp = view.zoomFactorProperty();
-        if (zoomProp != null) {
-            updateZoomLabel(zoomProp.get());
-            zoomLabelListener = (obs, was, isNow) -> updateZoomLabel(isNow.doubleValue());
-            zoomProp.addListener(zoomLabelListener);
-        } else {
-            zoomLabel.setText("100%");
-        }
+        boundZoom = boundMatrix == null ? view.zoomFactorProperty() : boundMatrix.zoomProperty();
+        updateZoomLabel(boundZoom.get());
+        zoomLabelListener = (obs, was, isNow) -> updateZoomLabel(isNow.doubleValue());
+        boundZoom.addListener(zoomLabelListener);
     }
 
     /**
@@ -365,7 +411,8 @@ public final class ToolbarController {
         return List.of(view.packageDepthProperty(),
                 view.showDependenciesProperty(), view.showSccProperty(), view.showPackageSccProperty(),
                 view.showWhatIfViolationsProperty(), view.limitBoxWidthProperty(),
-                view.hiddenEdgeKindsProperty(), view.architectureRootProperty());
+                view.hiddenEdgeKindsProperty(), view.architectureRootProperty(),
+                view.planProperty());
     }
 
     private void mirrorSettings() {
@@ -378,10 +425,19 @@ public final class ToolbarController {
         showSccCheckbox.setSelected(view.isShowScc());
         showPackageSccCheckbox.setSelected(view.isShowPackageScc());
         showWhatIfViolationsCheckbox.setSelected(view.isShowWhatIfViolations());
+        showPlanCheckbox.setSelected(view.isShowPlan());
+        int planned = view.getPlan().planned();
+        showPlanCheckbox.setText(planned == 0 ? PLAN : PLAN + " (" + planned + ")");
         // A tangle view draws back-edges and both kinds of cycle in its one
         // arrow layer, explained by its own legend; the overlays would only
         // paint the same dependencies a second time.
-        boolean tangleView = view.getTangleScope() != null;
+        boolean matrix = boundMatrix != null;
+        matrixButton.setDisable(!view.hasMatrix());
+        // What belongs to the picture alone has no effect on the matrix.
+        for (Node pictureOnly : pictureOnlyNodes) {
+            pictureOnly.setDisable(matrix);
+        }
+        boolean tangleView = view.getTangleScope() != null || matrix;
         showSccCheckbox.setDisable(tangleView);
         showPackageSccCheckbox.setDisable(tangleView);
         showWhatIfViolationsCheckbox.setDisable(tangleView);
@@ -392,6 +448,15 @@ public final class ToolbarController {
         showHiddenEdgeKinds();
         showIconsCheckbox.setSelected(ArchitectureViewSettings.isShowIcons());
         showArchLevelCheckbox.setSelected(ArchitectureViewSettings.isShowArchitectureLevel());
+    }
+
+    /** Zooms what the user looks at: the matrix or the picture. */
+    private void zoom(Consumer<ArchitectureCanvas> picture, Consumer<MatrixView> matrix) {
+        if (boundMatrix != null) {
+            matrix.accept(boundMatrix);
+        } else if (boundView != null) {
+            picture.accept(boundView);
+        }
     }
 
     private void applyEdgeKinds() {

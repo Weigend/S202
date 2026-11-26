@@ -15,7 +15,7 @@
  */
 package de.weigend.s202.ui;
 
-import de.weigend.s202.analysis.quality.QualityMetrics;
+import de.weigend.s202.analysis.quality.QualityCalculator;
 import de.weigend.s202.domain.DependencyEdge;
 import de.weigend.s202.domain.DomainComputer;
 import de.weigend.s202.domain.DomainModel;
@@ -28,17 +28,22 @@ import de.weigend.s202.ui.core.arrows.DependencySelection;
 import de.weigend.s202.ui.core.canvas.ArchitectureCanvas;
 import de.weigend.s202.ui.core.events.CutTangleEdgeEvent;
 import de.weigend.s202.ui.core.events.DependencySelectionEvent;
+import de.weigend.s202.ui.core.events.FromToEvent;
 import de.weigend.s202.ui.core.events.OpenTangleEvent;
 import de.weigend.s202.ui.core.events.RestoreTangleEdgeEvent;
 import de.weigend.s202.ui.core.layout.horizontal.HorizontalRowLayoutOptimizer;
 import de.weigend.s202.ui.core.model.ArchitectureNode;
 import de.weigend.s202.ui.core.model.ArchitectureNodeBuilder;
 import de.weigend.s202.ui.core.model.EdgeKindGroup;
+import de.weigend.s202.ui.core.model.WhatIfMove;
 import de.weigend.s202.ui.core.platform.AnalysisDocument;
 import de.weigend.s202.ui.core.platform.ArchitectureViewManager;
 import de.weigend.s202.ui.core.platform.ArchitectureWfxView;
+import de.weigend.s202.ui.core.platform.MatrixWfxView;
 import de.weigend.s202.ui.core.platform.Refactorings;
 import de.weigend.s202.ui.core.platform.ViewDescriptor;
+import de.weigend.s202.ui.features.between.BetweenModule;
+import de.weigend.s202.ui.features.between.BetweenView;
 import de.weigend.s202.ui.features.details.DependencyDetailsModule;
 import de.weigend.s202.ui.features.details.DependencyDetailsView;
 import de.weigend.s202.ui.features.outline.OutlineExplorerModule;
@@ -111,8 +116,8 @@ import static org.junit.jupiter.api.Assertions.fail;
 class MultiDocumentTest {
 
     private static final Duration FX_TIMEOUT = Duration.ofSeconds(20);
-    private static final String EXAMPLE_JAR = "../test-example/target/test-example-1.6.0.jar";
-    private static final String HEXAGON_JAR = "../test-hexagon/target/test-hexagon-1.6.0.jar";
+    private static final String EXAMPLE_JAR = "../test-example/target/test-example-1.7.0.jar";
+    private static final String HEXAGON_JAR = "../test-hexagon/target/test-hexagon-1.7.0.jar";
 
     private static boolean javaFxStarted;
     private static List<Module> panels;
@@ -143,7 +148,8 @@ class MultiDocumentTest {
                 module(all, QualityModule.class),
                 module(all, TopTanglesModule.class),
                 module(all, WhatIfDependenciesModule.class),
-                module(all, DependencyDetailsModule.class));
+                module(all, DependencyDetailsModule.class),
+                module(all, BetweenModule.class));
         for (Module panel : panels) {
             panel.preload();
         }
@@ -196,7 +202,8 @@ class MultiDocumentTest {
     @Test
     void everyPanelIsRegisteredBeforeAnAnalysisIsOpen() {
         assertEquals(Set.of(OutlineExplorerView.VIEW_ID, QualityView.VIEW_ID, TopTanglesView.VIEW_ID,
-                WhatIfDependenciesView.VIEW_ID, DependencyDetailsView.VIEW_ID), Set.copyOf(panelsAtStartup));
+                WhatIfDependenciesView.VIEW_ID, DependencyDetailsView.VIEW_ID,
+                BetweenView.VIEW_ID), Set.copyOf(panelsAtStartup));
     }
 
     /* ----- Welches Dokument ist gemeint? ------------------------------------ */
@@ -274,6 +281,61 @@ class MultiDocumentTest {
 
             bus.publish(new DependencySelectionEvent(DependencySelection.NONE, canvas));
             assertTrue(detailRows().isEmpty());
+        });
+    }
+
+    /**
+     * The matrix is a second view of a tab: in a tab of its own, but the panels
+     * stay with what they show. It is gone when its tab is.
+     */
+    @Test
+    void theMatrixIsATabOfItsOwnThatBelongsToItsView() {
+        onFx(() -> {
+            windowManager.setFocusedView(exampleView);
+            ArchitectureCanvas canvas = exampleView.getArchitectureView();
+
+            MatrixWfxView matrix = viewManager.openMatrix(canvas);
+
+            assertEquals("example.jar \u00b7 Matrix", matrix.getTitle());
+            assertTrue(windowManager.getVisibleViews().contains(matrix), "in front");
+            assertTrue(windowManager.hasRegisteredView(exampleView), "the picture is still there");
+            assertSame(canvas, viewManager.activeCanvas());
+            assertSame(example, viewManager.activeDocument());
+            assertPanelsShow(canvas);
+            assertEquals(1, viewManager.viewsOf(example).size(), "not a view that could be saved on its own");
+
+            assertSame(matrix, viewManager.openMatrix(canvas), "one for each view");
+
+            windowManager.closeView(matrix);
+            assertNull(viewManager.matrixOf(canvas));
+            assertSame(canvas, viewManager.activeCanvas(), "its tab is right beside the picture, which comes back");
+
+            MatrixWfxView again = viewManager.openMatrix(canvas);
+            windowManager.closeView(exampleView);
+            assertFalse(windowManager.hasRegisteredView(again), "it closes with the view it belongs to");
+            assertSame(hexagon, viewManager.activeDocument());
+        });
+    }
+
+    /** An answer of From / To is explained like an arrow, and an arrow shows up there. */
+    @Test
+    void whatLiesBetweenTwoElementsIsExplainedInTheDetails() {
+        DependencyEdge edge = example.domainModel().getClassBackEdges().stream()
+                .min(java.util.Comparator.comparing(DependencyEdge::from).thenComparing(DependencyEdge::to))
+                .orElseThrow();
+        onFx(() -> {
+            ArchitectureCanvas canvas = exampleView.getArchitectureView();
+            windowManager.setFocusedView(exampleView);
+
+            bus.publish(new FromToEvent(edge.from(), null, canvas));
+            assertFalse(detailRows().isEmpty(), "everything it uses");
+            bus.publish(new FromToEvent(null, edge.to(), canvas));
+            assertFalse(detailRows().isEmpty(), "what it uses of the other one");
+            assertTrue(windowManager.getVisibleViews().stream().anyMatch(v -> v.getViewId().equals(BetweenView.VIEW_ID)),
+                    "the panel comes to the front");
+
+            bus.publish(new FromToEvent(edge.to(), null, hexagonView.getArchitectureView()));
+            assertFalse(detailRows().isEmpty(), "a question of another tab changes nothing here");
         });
     }
 
@@ -553,7 +615,7 @@ class MultiDocumentTest {
 
     /* ----- Was die Toolbar anzeigt ------------------------------------------ */
 
-    /** Every rebuild starts at 100 %, and the view says so. */
+    /** A rebuild keeps the zoom, and the view says what it is. */
     @Test
     void theZoomOfAViewIsWhatItsPictureShows() {
         onFx(() -> {
@@ -561,7 +623,7 @@ class MultiDocumentTest {
             canvas.setZoom(0.6);
             assertEquals(0.6, canvas.zoomFactorProperty().get(), 0.001);
             canvas.refreshLayout();
-            assertEquals(1.0, canvas.zoomFactorProperty().get(), 0.001);
+            assertEquals(0.6, canvas.zoomFactorProperty().get(), 0.001);
         });
     }
 
@@ -638,7 +700,10 @@ class MultiDocumentTest {
             String open = expansion.entrySet().stream().filter(Map.Entry::getValue).map(Map.Entry::getKey)
                     .sorted().findFirst().orElseThrow();
             expansion.put(open, false);
+            main.restorePlan(List.of(new WhatIfMove.AsNewRow(selectedClass, addedToScope, 0, false)), Map.of(), false);
             main.restoreViewSnapshot(new ArchitectureCanvas.ViewSnapshot(0.5, 0, 0, expansion));
+            main.getMatrix().setOpen(Set.of(addedToScope));
+            assertNotNull(viewManager.openMatrix(main));
             expansionBefore.set(main.captureViewSnapshot().packageExpansion());
             assertEquals(false, expansionBefore.get().get(open), "the package is closed now");
 
@@ -679,6 +744,13 @@ class MultiDocumentTest {
             assertEquals(Set.of(), tabs.get(1).getArchitectureView().getHiddenEdgeKinds(), "each tab its own");
             assertEquals(expansionBefore.get(), main.captureViewSnapshot().packageExpansion(),
                     "the same packages are open and closed");
+
+            assertEquals(List.of(new WhatIfMove.AsNewRow(selectedClass, addedToScope, 0, false)),
+                    main.getWhatIfMoves(), "the moves of the tab");
+            assertFalse(main.isShowPlan(), "it showed the analyzed code");
+            assertNotNull(viewManager.matrixOf(main), "the matrix is open again");
+            assertEquals(Set.of(addedToScope), main.getMatrix().getOpen());
+            assertNull(viewManager.matrixOf(tabs.get(2).getArchitectureView()), "that of the other tabs is not");
 
             ArchitectureCanvas componentTab = tabs.get(1).getArchitectureView();
             assertEquals(ArchitectureKind.COMPONENT, componentTab.getViewStyle());
@@ -786,7 +858,7 @@ class MultiDocumentTest {
         ArchitectureNode root = new ArchitectureNodeBuilder().build(domain);
         new HorizontalRowLayoutOptimizer().assignHorizontalLayoutOrders(root);
         return new AnalysisDocument(name, new S202Project.Source("JAR", List.of(jar), null),
-                raw, domain, root, QualityMetrics.compute(domain), null, domain.getClassBackEdges());
+                raw, domain, root, QualityCalculator.measure(domain), null, domain.getClassBackEdges());
     }
 
     /** What the analysis pipeline does once a result is there. */
@@ -795,7 +867,6 @@ class MultiDocumentTest {
         viewManager.registerArchitectureView(view);
         viewManager.attach(view, document);
         view.getArchitectureView().setArchitectureRoot(document.rootNode());
-        view.getArchitectureView().setQualityMetrics(document.metrics());
         return view;
     }
 

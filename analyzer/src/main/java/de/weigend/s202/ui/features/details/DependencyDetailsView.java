@@ -22,8 +22,11 @@ import io.softwareecg.wfx.windowmanager.api.Position;
 import io.softwareecg.wfx.windowmanager.api.View;
 import io.softwareecg.wfx.windowmanager.api.ViewAnchor;
 import javafx.beans.property.ReadOnlyObjectWrapper;
+import javafx.geometry.Insets;
+import javafx.geometry.Pos;
 import javafx.scene.Parent;
 import javafx.scene.control.Label;
+import javafx.scene.control.TextField;
 import javafx.scene.control.Tooltip;
 import javafx.scene.control.TreeItem;
 import javafx.scene.control.TreeTableCell;
@@ -31,7 +34,7 @@ import javafx.scene.control.TreeTableColumn;
 import javafx.scene.control.TreeTableView;
 import javafx.scene.input.MouseButton;
 import javafx.scene.layout.BorderPane;
-import javafx.scene.layout.VBox;
+import javafx.scene.layout.FlowPane;
 
 import java.net.URL;
 import java.util.Arrays;
@@ -55,16 +58,24 @@ public final class DependencyDetailsView implements View {
     private final BorderPane root = new BorderPane();
     private final Label title = new Label();
     private final Label summary = new Label();
-    private final VBox header = new VBox(title, summary);
+    private final TextField filter = new TextField();
+    private final FlowPane header = new FlowPane(6, 3, filter, title, summary);
     private final TreeTableView<Row> table = new TreeTableView<>();
 
     private Consumer<Place> revealHandler = place -> { };
+    private DetailContent shown;
 
     public DependencyDetailsView() {
         root.getStyleClass().add("dependency-details");
         title.getStyleClass().add("dependency-details-title");
         summary.getStyleClass().add("dependency-details-summary");
         header.getStyleClass().add("dependency-details-header");
+
+        header.setPadding(new Insets(3, 6, 3, 6));
+        header.setAlignment(Pos.CENTER_LEFT);
+        filter.setPromptText("Filter");
+        filter.setPrefColumnCount(14);
+        filter.textProperty().addListener((obs, was, isNow) -> fill());
 
         table.setShowRoot(false);
         table.setPlaceholder(new Label(HINT));
@@ -88,9 +99,20 @@ public final class DependencyDetailsView implements View {
         header.setManaged(content != null);
         title.setText(content == null ? "" : content.title());
         summary.setText(content == null ? "" : content.summary());
+        shown = content;
+        fill();
+    }
+
+    private void fill() {
+        String wanted = filter.getText().trim().toLowerCase(Locale.ROOT);
         TreeItem<Row> rootItem = new TreeItem<>();
-        if (content != null) {
-            content.rows().forEach(row -> rootItem.getChildren().add(item(row)));
+        if (shown != null) {
+            for (Row row : shown.rows()) {
+                TreeItem<Row> item = item(row, wanted);
+                if (item != null) {
+                    rootItem.getChildren().add(item);
+                }
+            }
         }
         table.setRoot(rootItem);
     }
@@ -100,11 +122,32 @@ public final class DependencyDetailsView implements View {
         this.revealHandler = handler == null ? place -> { } : handler;
     }
 
-    private static TreeItem<Row> item(Row row) {
+    /**
+     * The row with what is in it, as far as it is wanted.
+     *
+     * @return {@code null} when neither the row nor anything in it is wanted
+     */
+    private static TreeItem<Row> item(Row row, String wanted) {
+        boolean all = wanted.isEmpty() || contains(row.from(), wanted) || contains(row.to(), wanted)
+                || contains(row.tooltip(), wanted) && row.style() != Style.REFERENCE && row.style() != Style.GROUP;
         TreeItem<Row> item = new TreeItem<>(row);
-        row.children().forEach(child -> item.getChildren().add(item(child)));
-        item.setExpanded(row.expanded());
+        boolean found = false;
+        for (Row child : row.children()) {
+            TreeItem<Row> childItem = item(child, all ? "" : wanted);
+            if (childItem != null) {
+                item.getChildren().add(childItem);
+                found = true;
+            }
+        }
+        if (!all && !found) {
+            return null;
+        }
+        item.setExpanded(row.expanded() || !all);
         return item;
+    }
+
+    private static boolean contains(String text, String wanted) {
+        return text != null && text.toLowerCase(Locale.ROOT).contains(wanted);
     }
 
     private TreeTableColumn<Row, Row> column(String name, Function<Row, String> text, Function<Row, Place> place) {

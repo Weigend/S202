@@ -74,7 +74,8 @@ class TopTanglesModuleTest {
 
         var cutEdge = new DependencyEdge("a.C", "a.A");
         var tangles = TopTanglesModule.computeTopTangles(
-                model, null, Set.of(cutEdge), Set.of(cutEdge), null, 5);
+                model, null, Set.of(cutEdge), Set.of(cutEdge),
+                de.weigend.s202.domain.Placement.OF_THE_CODE, null, 5);
 
         assertTrue(tangles.isEmpty());
     }

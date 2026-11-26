@@ -33,13 +33,33 @@ Steps 2 to 4 are repeated. Resolve tangles one by one: a resolved one often chan
 
 | Plan | Made by | Belongs to | Stored in the project file |
 | --- | --- | --- | --- |
-| Move of a class or package | dragging it in a layered, scope, component or tangle tab | the tab | no |
-| Planned package | [Component View](component-view.md#moving-and-planning) | the tab | no |
+| Move of a class or package | dragging it in a layered, scope, component or tangle tab | the tab | yes |
+| Planned package | [Component View](component-view.md#moving-and-planning) | the tab | yes |
 | API mark | **Add To Api**, **Remove From Api**, or dragging | the analysis | yes |
 | Role or port | [Hexagonal View](hexagonal-view.md#roles-and-ports) | the analysis | yes |
 | Cut | **Cut**, **Cut All** | the analysis | yes |
 
-What belongs to a tab is lost when the tab is closed. Export the report first.
+What belongs to a tab is lost when the tab is closed. Save the project or export the report first.
+
+### The code and the plan
+
+**Plan** in the toolbar says what a tab shows; the number beside it counts what is planned.
+
+| Plan | The tab shows |
+| --- | --- |
+| on | The code with the moves and planned packages of the tab and the cuts of the analysis. |
+| off | The code as it was analyzed. What is planned is kept. |
+
+Everything in the tab shows the same, and so do the panels: layout, violations and cycles,
+[Dependencies](window.md#dependencies), [Top Tangles](tangle-view.md#top-tangles),
+[Quality](quality.md), [Dependency Details](window.md#dependency-details),
+[From / To](window.md#from--to) and the [matrix](matrix-view.md). So switching it is a comparison of
+before and after. A cut or a first move switches it on; while there are moves, boxes are moved with
+Plan on only.
+
+API marks, roles and ports say how the code is to be read. They belong to both.
+
+A layout is computed once, from the analyzed code. The plan changes it by moves only.
 
 ## Violation report
 
@@ -66,7 +86,7 @@ Component com.webshop.payment
 - com.webshop.ui.RefundScreen -> com.webshop.payment.impl.CardPayments (calls refund; uses)
 ```
 
-Moves are not applied. API marks are, so a leak that was marked away is not reported. A dependency
+The report is about the analyzed code: moves are not applied. API marks are, so a leak that was marked away is not reported. A dependency
 you have cut is listed with `[planned to be removed]`.
 
 ## Refactoring report
@@ -122,7 +142,7 @@ a button to copy it.
 | Ctrl+Z and Ctrl+Shift+Z | One move of the active tab, and again |
 | **Restore** | One cut |
 | **Remove From Api**, **Add To Api** | A mark; the element then has the opposite mark |
-| **Refresh** | All moves of the active tab |
+| **Edit → Discard Moves of This View** | All moves of the active tab |
 | **Edit → Reset Refactorings...**, or **⟲** in the toolbar | Everything planned in the analysis, in all its tabs |
 
 The reset asks first and says what will be lost:

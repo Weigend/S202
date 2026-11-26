@@ -52,6 +52,8 @@ public class LevelPackageBox extends VBox implements GraphSelection.Selectable, 
             "-fx-background-color: #fffacd; -fx-border-color: #1d4ed8; -fx-border-width: 2;";
     private static final String STYLE_MOVED_SELECTED =
             "-fx-background-color: #fff3a0; -fx-border-color: #1d4ed8; -fx-border-width: 3;";
+    private static final String STYLE_CONNECTED =
+            "-fx-background-color: #dcefdc; -fx-border-color: #2e7d32; -fx-border-width: 1;";
     private static final String STYLE_TRANSPARENT =
             "-fx-background-color: transparent; -fx-border-width: 0;";
     // A plain package is icon and name only; opened, a thin frame holds its content together.
@@ -84,6 +86,7 @@ public class LevelPackageBox extends VBox implements GraphSelection.Selectable, 
     private boolean limitRowWidth;
     private boolean selected;
     private boolean virtuallyMoved;
+    private boolean connected;
     private Consumer<String> selectionChangeSink;
     /** Builds the child boxes on first use; {@code null} once they exist. */
     private Runnable lazyContent;
@@ -191,6 +194,8 @@ public class LevelPackageBox extends VBox implements GraphSelection.Selectable, 
             this.setStyle(selected ? STYLE_MOVED_SELECTED : STYLE_MOVED);
         } else if (selected) {
             this.setStyle(STYLE_SELECTED);
+        } else if (connected) {
+            this.setStyle(STYLE_CONNECTED);
         } else if (plain) {
             this.setStyle(isExpanded ? STYLE_PLAIN_EXPANDED : STYLE_PLAIN_COLLAPSED);
         } else {
@@ -322,6 +327,7 @@ public class LevelPackageBox extends VBox implements GraphSelection.Selectable, 
         this.getChildren().add(0, header);
     }
 
+    @Override
     public boolean isExpanded() {
         return isExpanded;
     }
@@ -456,6 +462,14 @@ public class LevelPackageBox extends VBox implements GraphSelection.Selectable, 
     public void applyUnselectedStyle() {
         selected = false;
         applyBaseStyle();
+    }
+
+    @Override
+    public void setConnected(boolean connected) {
+        if (this.connected != connected) {
+            this.connected = connected;
+            applyBaseStyle();
+        }
     }
 
     /**

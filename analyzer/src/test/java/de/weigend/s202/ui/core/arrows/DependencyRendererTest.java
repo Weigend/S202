@@ -281,7 +281,7 @@ class DependencyRendererTest {
 
         area.getOnMouseClicked().handle(click(MouseButton.PRIMARY));
         assertEquals(List.of("q.C>p.D"), actions.clicks);
-        assertEquals(ArrowStyle.SELECTED_COLOR, line.getStroke(), "the visible line shows the selection");
+        assertEquals(LineColors.SELECTED, line.getStroke(), "the visible line shows the selection");
 
         long clickableNumbers = fixture.dependencyPane.getChildren().stream()
                 .filter(node -> node instanceof javafx.scene.Group && node.getOnMouseClicked() != null

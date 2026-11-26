@@ -401,46 +401,95 @@
     -fx-text-fill: #9ab0c8;
 }
 
-/* ===== Dependency Details view (under the editor area, light like the Dependencies panel) ===== */
-.dependency-details,
-.dependency-details-header {
-    -fx-background-color: #f5f5f0;
+/* ===== Dependencies panel (under the editor area, dark like From / To) ===== */
+.dependencies-view,
+.dependencies-view .split-pane,
+.dependencies-view .tree-view,
+.dependencies-view .list-view {
+    -fx-background-color: #1a1a1a;
+    -fx-control-inner-background: #1a1a1a;
+    -fx-control-inner-background-alt: #1a1a1a;
+    -fx-background: #1a1a1a;
 }
 
+.dependencies-view .dependencies-header {
+    -fx-font-weight: bold;
+    -fx-font-size: 12px;
+    -fx-padding: 4 8 4 8;
+    -fx-text-fill: #e0e0e0;
+    -fx-background-color: #14202b;
+    -fx-border-color: #2b3e50;
+    -fx-border-width: 0 0 1 0;
+    -fx-max-width: infinity;
+}
+
+.dependencies-view .tree-cell,
+.dependencies-view .list-cell {
+    -fx-font-size: 11px;
+    -fx-padding: 2 6;
+    -fx-text-fill: #e0e0e0;
+    -fx-background-color: transparent;
+}
+
+.dependencies-view .tree-cell:hover,
+.dependencies-view .list-cell:hover {
+    -fx-background-color: #2b3e50;
+}
+
+.dependencies-view .tree-cell:filled:selected,
+.dependencies-view .list-cell:filled:selected {
+    -fx-background-color: #3d5a80;
+    -fx-text-fill: #ffffff;
+}
+
+.dependencies-view .tree-disclosure-node > .arrow {
+    -fx-background-color: #8a9bb0;
+}
+
+.dependencies-view .split-pane-divider {
+    -fx-background-color: #2b3e50;
+    -fx-padding: 0 0 1 0;
+}
+
+/* ===== Dependency Details view (under the editor area, dark like From / To) ===== */
+.dependency-details,
 .dependency-details-header {
-    -fx-padding: 4 8;
+    -fx-background-color: #1a1a1a;
 }
 
 .dependency-details .dependency-details-title {
-    -fx-font-size: 12px;
+    -fx-font-size: 11px;
     -fx-font-weight: bold;
-    -fx-text-fill: #202020;
+    -fx-text-fill: #e0e0e0;
+    -fx-padding: 0 0 0 8;
 }
 
 .dependency-details .dependency-details-summary {
     -fx-font-size: 11px;
-    -fx-text-fill: #5a5e62;
+    -fx-text-fill: #8a9bb0;
 }
 
 .dependency-details .tree-table-view {
-    -fx-background-color: #f5f5f0;
-    -fx-control-inner-background: #f5f5f0;
-    -fx-control-inner-background-alt: #f5f5f0;
+    -fx-background-color: #1a1a1a;
+    -fx-control-inner-background: #1a1a1a;
+    -fx-control-inner-background-alt: #1a1a1a;
     -fx-table-cell-border-color: transparent;
 }
 
 .dependency-details .tree-table-view > .placeholder > .label {
-    -fx-text-fill: #5a5e62;
+    -fx-text-fill: #8a9bb0;
 }
 
 .dependency-details .column-header-background,
 .dependency-details .column-header,
 .dependency-details .column-header-background .filler {
-    -fx-background-color: #e4e4dc;
+    -fx-background-color: #14202b;
+    -fx-border-color: #2b3e50;
+    -fx-border-width: 0 0 1 0;
 }
 
 .dependency-details .column-header .label {
-    -fx-text-fill: #5a5e62;
+    -fx-text-fill: #b0bccd;
     -fx-font-weight: bold;
     -fx-alignment: center-left;
 }
@@ -448,7 +497,15 @@
 .dependency-details .tree-table-cell {
     -fx-font-size: 11px;
     -fx-padding: 2 6;
-    -fx-text-fill: #202020;
+    -fx-text-fill: #e0e0e0;
+}
+
+.dependency-details .tree-table-row-cell:hover .tree-table-cell {
+    -fx-background-color: #2b3e50;
+}
+
+.dependency-details .tree-disclosure-node > .arrow {
+    -fx-background-color: #8a9bb0;
 }
 
 .dependency-details .dependency-details-group {
@@ -456,11 +513,12 @@
 }
 
 .dependency-details .dependency-details-back-edge {
-    -fx-text-fill: #c62828;
+    -fx-text-fill: #ff8a80;
 }
 
 .dependency-details .dependency-details-reference {
     -fx-font-style: italic;
+    -fx-text-fill: #b0c4de;
 }
 
 .dependency-details .tree-table-row-cell:selected .tree-table-cell {
@@ -703,6 +761,11 @@
     -fx-min-width: 0;
 }
 
+.class-box:connected {
+    -fx-border-color: #2e7d32;
+    -fx-background-color: #dcefdc;
+}
+
 .class-box-selected {
     -fx-font-size: 9px;
     -fx-border-color: #ff6600;
@@ -731,4 +794,158 @@
 .architecture-icon {
     -fx-font-family: "Material Design Icons";
     -fx-icon-size: 14;
+}
+
+/* ===== Dependency matrix ===== */
+.matrix-view {
+    -fx-background-color: #f5f5f0;
+}
+
+.matrix-bar {
+    -fx-background-color: #3c3f41;
+}
+
+.matrix-bar .label, .matrix-bar .check-box {
+    -fx-font-size: 11px;
+    -fx-text-fill: #e0e0e0;
+}
+
+.matrix-button {
+    -fx-font-size: 11px;
+    -fx-padding: 2 8;
+}
+
+.matrix-bar .matrix-legend-against {
+    -fx-font-weight: bold;
+    -fx-text-fill: #d32f2f;
+    -fx-background-color: #ffffff;
+    -fx-padding: 0 4;
+}
+
+.matrix-bar .matrix-legend-class-cycle {
+    -fx-background-color: #e7cfec;
+    -fx-padding: 0 4;
+}
+
+.matrix-bar .matrix-legend-package-cycle {
+    -fx-background-color: #ffe2bf;
+    -fx-padding: 0 4;
+}
+
+/* ===== From / To ===== */
+.between-view {
+    -fx-background-color: #1a1a1a;
+}
+
+.between-view .text-field {
+    -fx-font-size: 11px;
+    -fx-background-color: #2b3038;
+    -fx-text-fill: #e0e0e0;
+    -fx-prompt-text-fill: #8a9bb0;
+}
+
+.between-answer {
+    -fx-font-size: 11px;
+    -fx-text-fill: #e0e0e0;
+    -fx-padding: 0 0 0 8;
+}
+
+.between-button {
+    -fx-font-size: 11px;
+    -fx-padding: 2 8;
+}
+
+.between-tree {
+    -fx-font-size: 12px;
+    -fx-background-color: #1a1a1a;
+    -fx-control-inner-background: #1a1a1a;
+}
+
+.between-tree .tree-cell {
+    -fx-font-size: 12px;
+    -fx-padding: 2 6;
+    -fx-text-fill: #e0e0e0;
+    -fx-background-color: transparent;
+}
+
+.between-tree .tree-cell:hover {
+    -fx-background-color: #2b3e50;
+}
+
+.between-tree .tree-cell:unconnected {
+    -fx-text-fill: #6b7078;
+    -fx-opacity: 0.6;
+}
+
+.between-tree .tree-cell:filled:selected {
+    -fx-background-color: #3d5a80;
+    -fx-text-fill: #ffffff;
+    -fx-opacity: 1;
+}
+
+.dependency-details-header .text-field {
+    -fx-font-size: 11px;
+    -fx-background-color: #2b3038;
+    -fx-text-fill: #e0e0e0;
+    -fx-prompt-text-fill: #8a9bb0;
+}
+
+/* ===== Hotspots (beside From / To, dark like it) ===== */
+.hotspots-view,
+.hotspots-bar {
+    -fx-background-color: #1a1a1a;
+}
+
+.hotspots-summary {
+    -fx-font-size: 11px;
+    -fx-text-fill: #8a9bb0;
+    -fx-padding: 0 0 0 8;
+}
+
+.hotspots-view .table-view {
+    -fx-background-color: #1a1a1a;
+    -fx-control-inner-background: #1a1a1a;
+    -fx-control-inner-background-alt: #1f2226;
+    -fx-table-cell-border-color: transparent;
+}
+
+.hotspots-view .table-view > .placeholder > .label {
+    -fx-text-fill: #8a9bb0;
+}
+
+.hotspots-view .column-header-background,
+.hotspots-view .column-header,
+.hotspots-view .column-header-background .filler {
+    -fx-background-color: #14202b;
+    -fx-border-color: #2b3e50;
+    -fx-border-width: 0 0 1 0;
+}
+
+.hotspots-view .column-header .label {
+    -fx-text-fill: #b0bccd;
+    -fx-font-weight: bold;
+    -fx-alignment: center-left;
+}
+
+.hotspots-view .column-header .arrow {
+    -fx-background-color: #b0bccd;
+}
+
+.hotspots-view .table-cell {
+    -fx-font-size: 11px;
+    -fx-padding: 2 6;
+    -fx-text-fill: #e0e0e0;
+}
+
+.hotspots-view .hotspots-number {
+    -fx-alignment: center-right;
+}
+
+.hotspots-view .table-row-cell:hover .table-cell {
+    -fx-background-color: #2b3e50;
+}
+
+.hotspots-view .table-row-cell:selected .table-cell {
+    -fx-background-color: #3d5a80;
+    -fx-text-fill: #ffffff;
 }

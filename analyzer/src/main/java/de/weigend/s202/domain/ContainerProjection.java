@@ -15,14 +15,7 @@
  */
 package de.weigend.s202.domain;
 
-import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.LinkedHashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.Set;
-import java.util.TreeMap;
-import java.util.TreeSet;
 
 /**
  * Projects class dependencies onto containers — the one rule behind the
@@ -60,40 +53,6 @@ public final class ContainerProjection {
             return null;
         }
         return new Projection(container, fromSibling, toSibling);
-    }
-
-    /**
-     * Container tangles of a class graph: per container, the SCCs of size ≥ 2 in
-     * the projected sibling graph. Deterministic: containers, siblings and
-     * members are visited in sorted order.
-     *
-     * @param classGraph class fqn → dependencies; targets missing from the key set are ignored
-     */
-    public static List<Set<String>> tangles(Map<String, Set<String>> classGraph, SCCFinder finder) {
-        Map<String, Map<String, Set<String>>> siblingGraphs = new TreeMap<>();
-        for (String from : new TreeSet<>(classGraph.keySet())) {
-            for (String to : new TreeSet<>(classGraph.get(from))) {
-                if (!classGraph.containsKey(to)) {
-                    continue;
-                }
-                Projection p = project(from, to);
-                if (p == null) {
-                    continue;
-                }
-                Map<String, Set<String>> graph = siblingGraphs.computeIfAbsent(p.container(), k -> new TreeMap<>());
-                graph.computeIfAbsent(p.fromSibling(), k -> new TreeSet<>()).add(p.toSibling());
-                graph.computeIfAbsent(p.toSibling(), k -> new TreeSet<>());
-            }
-        }
-        List<Set<String>> result = new ArrayList<>();
-        for (Map<String, Set<String>> graph : siblingGraphs.values()) {
-            for (StronglyConnectedComponent scc : finder.findSCCs(new LinkedHashMap<>(graph))) {
-                if (scc.getSize() >= 2) {
-                    result.add(new TreeSet<>(scc.getMembers()));
-                }
-            }
-        }
-        return result;
     }
 
     public static String parentOf(String fqn) {

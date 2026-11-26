@@ -230,8 +230,6 @@ public final class AnalysisPipeline {
 
     private void finishAppliedAnalysisResult(AnalysisInputSummary summary, ArchitectureCanvas view,
                                              AnalysisResult result) {
-        view.setQualityMetrics(result.metrics());
-
         LayoutInvariantReport invariants = result.invariants();
         String invariantSuffix = invariantSuffix(invariants);
         progress.progress(String.format(

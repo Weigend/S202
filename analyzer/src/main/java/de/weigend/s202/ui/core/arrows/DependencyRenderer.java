@@ -19,14 +19,12 @@ import de.weigend.s202.domain.DependencyEdge;
 import de.weigend.s202.domain.EdgeCycleClassifier;
 import de.weigend.s202.domain.EdgeCycleClassifier.CycleKind;
 import de.weigend.s202.ui.core.graph.BoxVisibility;
-import de.weigend.s202.ui.core.graph.ElementLookup;
 import de.weigend.s202.ui.core.graph.GraphSelection;
 import de.weigend.s202.ui.core.graph.LevelClassBox;
 import de.weigend.s202.ui.core.graph.LevelPackageBox;
 import de.weigend.s202.ui.core.graph.ContainerBox;
 import de.weigend.s202.ui.core.model.ArchitectureNode;
 import javafx.scene.Node;
-import javafx.scene.Parent;
 import javafx.scene.control.ScrollPane;
 import javafx.scene.layout.Pane;
 
@@ -96,6 +94,16 @@ public class DependencyRenderer implements DependencyRendererStrategy {
         this.zoomableContent = zoomableContent;
         this.overlayPane = overlayPane;
         this.scrollPane = scrollPane;
+    }
+
+    /** Shares the selected line with the other overlays; call before {@link #setEdgeActions}. */
+    public void setLineSelection(LineSelection selection) {
+        painter.setSelection(selection);
+    }
+
+    /** Lets the arrows of a box stand out; returns the boxes at their other ends. */
+    public List<Node> emphasise(Node box) {
+        return painter.emphasise(box);
     }
 
     /** Selection handling for all arrows, cut and restore for class-to-class ones; {@code null} disables it. */
@@ -313,41 +321,8 @@ public class DependencyRenderer implements DependencyRendererStrategy {
         }
     }
 
-    /**
-     * Finds the visible UI node to use as the arrow target for {@code targetFqn}.
-     * <ul>
-     *   <li>If the element itself is visible → return it directly.</li>
-     *   <li>If it is hidden (inside a collapsed package/component) → walk up
-     *       the JavaFX parent chain and return the nearest visible
-     *       {@link ContainerBox} (package or component box).</li>
-     * </ul>
-     */
     private Node findVisibleTarget(String targetFqn) {
-        Node element = elementRegistry.get(targetFqn);
-        if (element == null) {
-            // No box yet: the target lies in a collapsed package that builds
-            // its content lazily. That package stands in for it.
-            element = ElementLookup.pendingContainer(elementRegistry, targetFqn);
-            if (element == null) return null;
-        }
-        if (isShown(element)) return element;
-
-        // Target is inside a collapsed package/component — roll up to the nearest visible box.
-        Parent parent = element.getParent();
-        while (parent != null) {
-            Object rollup = parent.getProperties().get("s202.rollupEndpointFqn");
-            if (rollup instanceof String endpointFqn) {
-                Node endpoint = elementRegistry.get(endpointFqn);
-                if (endpoint != null && isShown(endpoint)) {
-                    return endpoint;
-                }
-            }
-            if (parent instanceof ContainerBox && isShown(parent)) {
-                return parent;
-            }
-            parent = parent.getParent();
-        }
-        return null;
+        return BoxVisibility.visibleEndpoint(elementRegistry, targetFqn, zoomableContent);
     }
 
     private boolean isCollapsedAggregateEndpoint(Node node) {

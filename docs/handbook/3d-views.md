@@ -20,7 +20,7 @@ The tab follows the switches of the view it shows:
 | --- | --- |
 | Show Dependencies | For the selected element: blue arcs to what it uses, green arcs from what uses it. |
 | Class SCCs | Class cycles, red. |
-| Show Violations | Violations of the layers, orange. |
+| Show Violations | Violations of the layers, red. |
 
 ![The dependencies of OrderService in 3D](images/3d-dependencies.png)
 

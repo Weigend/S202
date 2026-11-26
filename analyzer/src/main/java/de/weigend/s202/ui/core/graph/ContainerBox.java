@@ -35,6 +35,9 @@ public interface ContainerBox {
 
     String getFullName();
 
+    /** Ob der Inhalt zu sehen ist. */
+    boolean isExpanded();
+
     /**
      * Der Zeilenstapel, der die Kinder aufnimmt. Was noch nicht gebaut ist
      * (zugeklappte Pakete), wird dafür gebaut.

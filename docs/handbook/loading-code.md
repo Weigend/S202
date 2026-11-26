@@ -74,6 +74,15 @@ The file is looked for in the working directory and its parent directories. If t
 release uses the copy that comes with it; without any file only the classes of the JDK are left
 out. It is read once, when the first code is analyzed: restart S202 after changing it.
 
+Left out means: no box, no layer, no cycle. What the analyzed classes use of it is still recorded,
+with the kind of use but without the methods called. [From / To](window.md#from--to), the
+[matrix](matrix-view.md#libraries) and [Hotspots](window.md#hotspots) show it as *outside the
+analysis*, as they do classes that are used but were not read at all. A class that is missing in
+a package of the analysis is not counted as a library; that is mostly generated code.
+
+Every class also remembers the JAR it was read from. [Hotspots](window.md#hotspots) lists the JARs
+side by side, and the status bar names the JAR of a selected class.
+
 ## Source code
 
 The readers for source code take a directory. Each file or type becomes a *class* and each

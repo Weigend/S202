@@ -17,6 +17,7 @@ package de.weigend.s202.ui.core.graph;
 
 import javafx.beans.value.ChangeListener;
 import javafx.beans.value.WeakChangeListener;
+import javafx.css.PseudoClass;
 import javafx.geometry.Pos;
 import javafx.scene.Cursor;
 import javafx.scene.control.Label;
@@ -165,6 +166,13 @@ public class LevelClassBox extends HBox implements GraphSelection.Selectable {
         if (!this.getStyleClass().contains("class-box")) {
             this.getStyleClass().add("class-box");
         }
+    }
+
+    private static final PseudoClass CONNECTED = PseudoClass.getPseudoClass("connected");
+
+    @Override
+    public void setConnected(boolean connected) {
+        pseudoClassStateChanged(CONNECTED, connected);
     }
 
     /**

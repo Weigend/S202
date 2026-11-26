@@ -16,7 +16,9 @@
 package de.weigend.s202.ui.core.canvas;
 
 import de.weigend.s202.domain.architecture.WhatIfSource;
+import de.weigend.s202.domain.DependencyEdge;
 import de.weigend.s202.domain.DomainModel;
+import de.weigend.s202.domain.SCCFinder;
 import de.weigend.s202.domain.architecture.Architecture;
 import de.weigend.s202.domain.architecture.ArchitectureAnnotations;
 import de.weigend.s202.domain.architecture.ArchitectureContext;
@@ -32,6 +34,8 @@ import javafx.beans.property.ReadOnlyObjectWrapper;
 import javafx.beans.property.SimpleObjectProperty;
 
 import java.util.List;
+import java.util.Set;
+import java.util.function.Consumer;
 import java.util.function.Supplier;
 
 /**
@@ -54,14 +58,27 @@ final class ArchitectureProjectionModel {
     private final Supplier<ArchitectureKind> viewStyle;
     /** Die Verschiebungen der Component-Ansicht; sie ändern deren Verstöße. */
     private final Supplier<ComponentMoves> componentMoves;
+    /** Die Abhängigkeiten, die als entfernt gelten. */
+    private final Supplier<Set<DependencyEdge>> cuts;
+    /** Spielt die Moves in ein frisches What-If-Modell ein, bevor es jemand sieht. */
+    private final Consumer<WhatIfArchitecture> replayMoves;
     /** Läuft nach jedem Projektion-Rebuild (SCC-Renderer-Tangles nachziehen). */
     private final Runnable afterRebuild;
 
+    /** {@link #domainModel} ohne die geschnittenen Abhängigkeiten. */
+    private DomainModel shownModel;
+    private DomainModel shownModelOf;
+    private Set<DependencyEdge> shownModelCuts = Set.of();
+
     ArchitectureProjectionModel(Supplier<ArchitectureKind> viewStyle,
                                 Supplier<ComponentMoves> componentMoves,
+                                Supplier<Set<DependencyEdge>> cuts,
+                                Consumer<WhatIfArchitecture> replayMoves,
                                 Runnable afterRebuild) {
         this.viewStyle = viewStyle;
         this.componentMoves = componentMoves;
+        this.cuts = cuts;
+        this.replayMoves = replayMoves;
         this.afterRebuild = afterRebuild;
     }
 
@@ -77,6 +94,24 @@ final class ArchitectureProjectionModel {
 
     DomainModel getDomainModel() {
         return domainModel.get();
+    }
+
+    /**
+     * Das Modell, das die Ansicht zeigt: das analysierte, im Plan ohne die
+     * geschnittenen Abhängigkeiten.
+     */
+    DomainModel getShownModel() {
+        DomainModel analyzed = domainModel.get();
+        if (analyzed == null) {
+            return null;
+        }
+        Set<DependencyEdge> effective = cuts.get();
+        if (shownModel == null || shownModelOf != analyzed || !shownModelCuts.equals(effective)) {
+            shownModelOf = analyzed;
+            shownModelCuts = Set.copyOf(effective);
+            shownModel = analyzed.without(shownModelCuts, effective.isEmpty() ? null : Lookup.lookup(SCCFinder.class));
+        }
+        return shownModel;
     }
 
     void setDomainModel(DomainModel model) {
@@ -130,7 +165,7 @@ final class ArchitectureProjectionModel {
     /* ----- Projektion -------------------------------------------------------- */
 
     void rebuildArchitectureProjection() {
-        DomainModel model = domainModel.get();
+        DomainModel model = getShownModel();
         if (model == null) {
             architecture.set(null);
             whatIfArchitecture.set(null);
@@ -150,10 +185,12 @@ final class ArchitectureProjectionModel {
         } else {
             original = requireArchitectureStyle(ArchitectureKind.LAYERED).build(context);
         }
+        WhatIfArchitecture whatIf = original instanceof WhatIfSource source ? source.toWhatIf(model) : null;
+        if (whatIf != null) {
+            replayMoves.accept(whatIf);
+        }
         architecture.set(original);
-        whatIfArchitecture.set(original instanceof WhatIfSource source
-                ? source.toWhatIf(model)
-                : null);
+        whatIfArchitecture.set(whatIf);
         afterRebuild.run();
     }
 

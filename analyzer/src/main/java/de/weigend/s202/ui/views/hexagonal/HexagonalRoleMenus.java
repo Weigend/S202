@@ -15,6 +15,7 @@
  */
 package de.weigend.s202.ui.views.hexagonal;
 
+import de.weigend.s202.ui.core.graph.BoxMenuEvent;
 import de.weigend.s202.domain.architecture.ArchitectureAnnotations;
 import de.weigend.s202.domain.architecture.HexagonalArchitecture;
 import javafx.scene.Node;
@@ -82,6 +83,7 @@ final class HexagonalRoleMenus {
                     "Cleared hexagonal role: " + element.fqn()));
 
             ContextMenu menu = new ContextMenu(inbound, outbound, generic, removePort, core, adapter, clearRole);
+            menu.getItems().addAll(BoxMenuEvent.itemsFor(target, element.fqn()));
             menu.show(target, event.getScreenX(), event.getScreenY());
             event.consume();
         });
@@ -105,6 +107,7 @@ final class HexagonalRoleMenus {
                     "Cleared " + noun + " role: " + fqn));
 
             ContextMenu menu = new ContextMenu(core, adapter, clear);
+            menu.getItems().addAll(BoxMenuEvent.itemsFor(target, fqn));
             menu.show(target, event.getScreenX(), event.getScreenY());
             event.consume();
         });

@@ -58,6 +58,7 @@ public final class EdgeCycleClassifier {
     }
 
     private final DomainModel model;
+    private final Placement placement;
     /** Class fqn → dependencies within the model, without the preview cuts. */
     private final Map<String, Set<String>> graph = new HashMap<>();
     /** Class fqn → id of its class cycle; classes outside any cycle are absent. */
@@ -65,15 +66,25 @@ public final class EdgeCycleClassifier {
     /** Sibling fqn (class or package) → index of its container tangle. */
     private final Map<String, Integer> tangleOf = new HashMap<>();
 
-    private EdgeCycleClassifier(DomainModel model) {
+    private EdgeCycleClassifier(DomainModel model, Placement placement) {
         this.model = model;
+        this.placement = placement;
     }
 
     /**
      * @param cutEdges refactoring-preview cuts, treated as removed; may be {@code null}
      */
     public static EdgeCycleClassifier of(DomainModel model, Set<DependencyEdge> cutEdges, SCCFinder finder) {
-        EdgeCycleClassifier result = new EdgeCycleClassifier(model);
+        return of(model, cutEdges, finder, Placement.OF_THE_CODE);
+    }
+
+    /**
+     * @param cutEdges  refactoring-preview cuts, treated as removed; may be {@code null}
+     * @param placement where the elements sit; decides about package cycles
+     */
+    public static EdgeCycleClassifier of(DomainModel model, Set<DependencyEdge> cutEdges, SCCFinder finder,
+                                         Placement placement) {
+        EdgeCycleClassifier result = new EdgeCycleClassifier(model, placement);
         Map<String, DomainModel.CalculatedElementInfo> classes = model.getAllClasses();
         Map<String, Set<String>> graph = result.graph;
         for (DomainModel.CalculatedElementInfo cls : classes.values()) {
@@ -93,7 +104,7 @@ public final class EdgeCycleClassifier {
                 }
             }
         }
-        List<Set<String>> tangles = ContainerProjection.tangles(graph, finder);
+        List<Set<String>> tangles = placement.tangles(graph, finder);
         for (int i = 0; i < tangles.size(); i++) {
             for (String member : tangles.get(i)) {
                 result.tangleOf.put(member, i);
@@ -135,12 +146,17 @@ public final class EdgeCycleClassifier {
      * tangled with each other.
      */
     public boolean inTangle(String from, String to) {
-        ContainerProjection.Projection p = ContainerProjection.project(from, to);
+        ContainerProjection.Projection p = placement.project(from, to);
         if (p == null) {
             return false;
         }
         Integer tangle = tangleOf.get(p.fromSibling());
         return tangle != null && tangle.equals(tangleOf.get(p.toSibling()));
+    }
+
+    /** The two members {@code from → to} connects; {@code null} when it lies within one. */
+    public ContainerProjection.Projection projectionOf(String from, String to) {
+        return placement.project(from, to);
     }
 
     /** Id of the class cycle {@code classFqn} belongs to, or {@code null} when it is on none. */
@@ -178,7 +194,7 @@ public final class EdgeCycleClassifier {
      * {@link CycleReturnPath#NONE} when they are not tangled.
      */
     public CycleReturnPath packageReturnPath(String from, String to) {
-        ContainerProjection.Projection p = ContainerProjection.project(from, to);
+        ContainerProjection.Projection p = placement.project(from, to);
         if (p == null || !inTangle(from, to)) {
             return CycleReturnPath.NONE;
         }
@@ -186,7 +202,7 @@ public final class EdgeCycleClassifier {
         Map<String, Map<String, List<DependencyEdge>>> steps = new HashMap<>();
         for (Map.Entry<String, Set<String>> entry : graph.entrySet()) {
             for (String target : entry.getValue()) {
-                ContainerProjection.Projection step = ContainerProjection.project(entry.getKey(), target);
+                ContainerProjection.Projection step = placement.project(entry.getKey(), target);
                 if (step != null && tangle.equals(tangleOf.get(step.fromSibling()))
                         && tangle.equals(tangleOf.get(step.toSibling()))) {
                     addStep(steps, step.fromSibling(), step.toSibling(), new DependencyEdge(entry.getKey(), target));

@@ -49,6 +49,15 @@ public class DependencyModel {
          * type. Not every reader records it.
          */
         public final Map<String, Set<TypeUse>> typeUses = new HashMap<>();
+        /**
+         * Classes outside the analysis this class depends on, with the kinds,
+         * as far as the reader leaves them out of {@link #dependencies}: the
+         * JDK and whatever else {@code excluded-prefixes.txt} names. They do
+         * not count for levels or cycles.
+         */
+        public final Map<String, EnumSet<EdgeKind>> externalDependencies = new HashMap<>();
+        /** The file the class was read from, e.g. {@code shop-core-1.0.jar}; {@code null} if unknown. */
+        private String origin;
 
         public ClassInfo(String fullName, String simpleName, String packageName) {
             this(fullName, simpleName, packageName, false);
@@ -77,6 +86,26 @@ public class DependencyModel {
         public Set<EdgeKind> getKinds(String target) {
             EnumSet<EdgeKind> set = dependencyKinds.get(target);
             return set == null ? Set.of() : EnumSet.copyOf(set);
+        }
+
+        /**
+         * Records a dependency on a class outside the analysis, see
+         * {@link #externalDependencies}. {@code java.lang.Object} is left out:
+         * every class has it.
+         */
+        public void addExternalDependency(String target, EdgeKind kind) {
+            if ("java.lang.Object".equals(target)) {
+                return;
+            }
+            externalDependencies.computeIfAbsent(target.intern(), k -> EnumSet.noneOf(EdgeKind.class)).add(kind);
+        }
+
+        public String getOrigin() {
+            return origin;
+        }
+
+        public void setOrigin(String origin) {
+            this.origin = origin == null ? null : origin.intern();
         }
 
         public void addTypeUse(String target, TypeUse use) {

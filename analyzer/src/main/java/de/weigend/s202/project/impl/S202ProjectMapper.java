@@ -106,6 +106,12 @@ public final class S202ProjectMapper implements ProjectMapper {
                     classDto.typeUses().forEach((target, uses) -> uses.forEach(use -> classInfo.addTypeUse(
                             target, new TypeUse(use.kind(), use.member(), use.descriptor(), use.detail()))));
                 }
+                // Projects saved before version 9 have neither.
+                if (classDto.externalDependencies() != null) {
+                    classDto.externalDependencies().forEach((target, kinds) ->
+                            kinds.forEach(kind -> classInfo.addExternalDependency(target, kind)));
+                }
+                classInfo.setOrigin(classDto.origin());
                 model.addClass(classInfo.fullName, classInfo);
             }
         }
@@ -206,7 +212,9 @@ public final class S202ProjectMapper implements ProjectMapper {
                     sorted(info.dependencies),
                     toDependencyKindsDto(info.dependencyKinds),
                     toMethodsDto(info.methods),
-                    toTypeUsesDto(info.typeUses)));
+                    toTypeUsesDto(info.typeUses),
+                    toDependencyKindsDto(info.externalDependencies),
+                    info.getOrigin()));
         }
 
         Map<String, S202Project.PackageInfoDto> packages = new TreeMap<>();

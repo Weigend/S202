@@ -15,16 +15,14 @@
  */
 package de.weigend.s202.ui.features.details;
 
-import de.weigend.s202.domain.DependencyEdge;
 import de.weigend.s202.domain.DomainModel;
 import de.weigend.s202.domain.EdgeCycleClassifier;
 import de.weigend.s202.domain.SCCFinder;
 import de.weigend.s202.ui.core.arrows.DependencySelection;
 import de.weigend.s202.ui.core.canvas.ArchitectureCanvas;
+import de.weigend.s202.ui.core.model.PlanState;
 import de.weigend.s202.ui.core.events.DependencySelectionEvent;
 import de.weigend.s202.ui.core.events.MethodSelectionEvent;
-import de.weigend.s202.ui.core.platform.AnalysisDocument;
-import de.weigend.s202.ui.core.platform.ArchitectureViewManager;
 import de.weigend.s202.ui.features.whatif.WhatIfDependenciesView;
 import io.softwareecg.wfx.lookup.api.Lookup;
 import io.softwareecg.wfx.lookup.api.LookupContext;
@@ -38,14 +36,13 @@ import javafx.beans.value.ChangeListener;
 
 import java.util.EventObject;
 import java.util.Map;
-import java.util.Set;
 import java.util.WeakHashMap;
 
 /**
  * WFX module providing the Dependency Details panel. Follows
  * {@link WindowManager#getActiveLookup()}: the panel explains the arrow last
- * selected in the active architecture tab, and keeps up with the preview cuts
- * of that tab's {@link AnalysisDocument}.
+ * selected in the active architecture tab, and keeps up with what that tab shows
+ * of the plan.
  */
 // Priority 29: after the Dependencies panel (28), beside which this one is docked.
 @Singleton
@@ -53,7 +50,6 @@ import java.util.WeakHashMap;
 public class DependencyDetailsModule implements Module {
 
     private DependencyDetailsView view;
-    private ArchitectureViewManager viewManager;
     private LookupContext.Subscription activeViewSubscription;
 
     private ArchitectureCanvas boundView;
@@ -63,9 +59,9 @@ public class DependencyDetailsModule implements Module {
     private final Map<ArchitectureCanvas, DependencySelection> selections = new WeakHashMap<>();
 
     // What the panel was last filled from: a redraw of the arrows calls for a
-    // new content only when the model or the cuts have changed.
+    // new content only when the model or the plan has changed.
     private DomainModel shownModel;
-    private Set<DependencyEdge> shownCuts = Set.of();
+    private PlanState shownPlan = PlanState.NOTHING_PLANNED;
     private EdgeCycleClassifier cycles;
 
     @Override
@@ -81,7 +77,6 @@ public class DependencyDetailsModule implements Module {
     @Override
     @SuppressWarnings("unchecked")
     public void start() {
-        viewManager = Lookup.lookup(ArchitectureViewManager.class);
         EventBus<EventObject> bus = Lookup.lookup(EventBus.class);
         view.setOnReveal(place -> bus.publish(new MethodSelectionEvent(
                 place.className(), place.method(), place.descriptor(), view)));
@@ -141,7 +136,7 @@ public class DependencyDetailsModule implements Module {
     }
 
     private void refreshIfOutdated() {
-        if (boundView.getDomainModel() != shownModel || !cutsOf(boundView).equals(shownCuts)) {
+        if (boundView.getDomainModel() != shownModel || !planOf(boundView).equals(shownPlan)) {
             showSelection();
         }
     }
@@ -149,10 +144,10 @@ public class DependencyDetailsModule implements Module {
     private void showSelection() {
         DependencySelection selection = boundView == null ? null : selections.get(boundView);
         DomainModel model = boundView == null ? null : boundView.getDomainModel();
-        Set<DependencyEdge> cuts = cutsOf(boundView);
-        if (model != shownModel || !cuts.equals(shownCuts)) {
+        PlanState plan = planOf(boundView);
+        if (model != shownModel || !plan.equals(shownPlan)) {
             shownModel = model;
-            shownCuts = cuts;
+            shownPlan = plan;
             cycles = null;
         }
         if (model == null || selection == null || selection.isEmpty() || boundView.getRawDependencyModel() == null) {
@@ -160,13 +155,12 @@ public class DependencyDetailsModule implements Module {
             return;
         }
         if (cycles == null) {
-            cycles = EdgeCycleClassifier.of(model, cuts, Lookup.lookup(SCCFinder.class));
+            cycles = EdgeCycleClassifier.of(model, plan.cuts(), Lookup.lookup(SCCFinder.class), plan.placement());
         }
-        view.show(new DetailContentBuilder(boundView.getRawDependencyModel(), cycles, cuts).build(selection));
+        view.show(new DetailContentBuilder(boundView.getRawDependencyModel(), cycles, plan.cuts()).build(selection));
     }
 
-    private Set<DependencyEdge> cutsOf(ArchitectureCanvas canvas) {
-        AnalysisDocument document = viewManager.documentOf(canvas);
-        return document == null ? Set.of() : Set.copyOf(document.previewCuts());
+    private static PlanState planOf(ArchitectureCanvas canvas) {
+        return canvas == null ? PlanState.NOTHING_PLANNED : canvas.getPlan();
     }
 }

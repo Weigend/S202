@@ -171,24 +171,8 @@ public class LevelCalculator implements DomainComputer {
         ContainerLevelizer.longestPathLevels(packageGraph)
             .forEach((fqn, level) -> packages.get(fqn).setArchitectureLevel(level));
 
-        // Step 7: package dependencies (source side aggregated up to the target's
-        // package, target side direct) and reverse dependencies for classes and packages.
-        for (CalculatedElementInfo cls : classes.values()) {
-            for (String dep : new TreeSet<>(cls.dependencies)) {
-                CalculatedElementInfo target = classes.get(dep);
-                if (target == null) continue;
-                target.addDependent(cls.fullName);
-                String toPkg = ContainerLevelizer.parentOf(dep);
-                String ancestor = ContainerLevelizer.parentOf(cls.fullName);
-                while (!ancestor.isEmpty() && packages.containsKey(ancestor) && !ancestor.equals(toPkg)) {
-                    if (packages.containsKey(toPkg)) {
-                        packages.get(ancestor).addDependency(toPkg);
-                        packages.get(toPkg).addDependent(ancestor);
-                    }
-                    ancestor = ContainerLevelizer.parentOf(ancestor);
-                }
-            }
-        }
+        // Step 7: package dependencies and reverse dependencies.
+        model.connectPackagesAndDependents();
         return model;
     }
 

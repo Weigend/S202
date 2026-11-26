@@ -17,7 +17,6 @@ package de.weigend.s202.ui.core.canvas;
 
 import de.weigend.s202.ui.core.model.EdgeKindGroup;
 import de.weigend.s202.domain.architecture.ArchitectureKind;
-import de.weigend.s202.analysis.quality.QualityMetrics;
 import de.weigend.s202.ui.core.model.ArchitectureNode;
 import javafx.beans.property.BooleanProperty;
 import javafx.beans.property.IntegerProperty;
@@ -53,11 +52,11 @@ public abstract class AbstractArchitectureCanvas extends BorderPane {
     final BooleanProperty showScc = new SimpleBooleanProperty(false);
     final BooleanProperty showPackageScc = new SimpleBooleanProperty(false);
     final BooleanProperty showWhatIfViolations = new SimpleBooleanProperty(false);
+    final BooleanProperty showPlan = new SimpleBooleanProperty(true);
     final BooleanProperty limitBoxWidth = new SimpleBooleanProperty(false);
     final ReadOnlyObjectWrapper<Set<EdgeKindGroup>> hiddenEdgeKinds = new ReadOnlyObjectWrapper<>(Set.of());
     final ReadOnlyDoubleWrapper zoomFactor = new ReadOnlyDoubleWrapper(1.0);
     final ReadOnlyObjectWrapper<ArchitectureNode> architectureRoot = new ReadOnlyObjectWrapper<>(null);
-    final ReadOnlyObjectWrapper<QualityMetrics> qualityMetrics = new ReadOnlyObjectWrapper<>(null);
 
     private Consumer<String> statusSink = msg -> { /* no-op default */ };
 
@@ -109,23 +108,6 @@ public abstract class AbstractArchitectureCanvas extends BorderPane {
 
     public ArchitectureNode getArchitectureRoot() {
         return architectureRoot.get();
-    }
-
-    /**
-     * Read-only handle to the current quality metrics for this view, or null
-     * if the analysis hasn't computed them yet. Pushed in by the host shell
-     * after each successful analysis.
-     */
-    public ReadOnlyObjectProperty<QualityMetrics> qualityMetricsProperty() {
-        return qualityMetrics.getReadOnlyProperty();
-    }
-
-    public QualityMetrics getQualityMetrics() {
-        return qualityMetrics.get();
-    }
-
-    public void setQualityMetrics(QualityMetrics metrics) {
-        qualityMetrics.set(metrics);
     }
 
     /**
@@ -197,6 +179,23 @@ public abstract class AbstractArchitectureCanvas extends BorderPane {
 
     public void setShowWhatIfViolations(boolean show) {
         showWhatIfViolations.set(show);
+    }
+
+    /**
+     * Whether this view shows what is planned - moves, planned packages, cuts -
+     * or the code as it was analyzed. The API marks, roles and ports say how
+     * the code is to be read and belong to both.
+     */
+    public BooleanProperty showPlanProperty() {
+        return showPlan;
+    }
+
+    public boolean isShowPlan() {
+        return showPlan.get();
+    }
+
+    public void setShowPlan(boolean show) {
+        showPlan.set(show);
     }
 
     /**

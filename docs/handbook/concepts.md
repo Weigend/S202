@@ -123,11 +123,16 @@ implement, and `port` can be both. A component can also be [declared or marked](
 | Orange frame | selected |
 | Dark blue frame | moved by you |
 | Grey arrow | dependency |
-| Green arrow | dependency on what is selected |
-| Black dashed arrow | violation |
-| Black dotted arrow | violation that is not a back-edge, such as one made by a move |
-| Red arrow, thicker than the others | selected; in a Tangle View the selected arrow is blue, and red is a back-edge |
-| Red line | class cycle |
+| Green arrow | dependency on what is selected, or on the box under the mouse |
+| Blue arrow, thicker than the others | selected |
+| Red arrow or number | runs against the layers: a back-edge, or what a move turned round |
+| Purple line | class cycle |
 | Orange line | package cycle |
+| Black arrow | breaks a rule of the Component or the Hexagonal View |
+| Light green arrow | cut |
+| Dashed | lies on a package cycle only |
+| Dotted | exists in the plan only: a cut, or a violation made by a move |
+
+The colours and patterns mean the same in every view and in the [matrix](matrix-view.md).
 
 [Next: Getting started →](getting-started.md)
