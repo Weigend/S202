@@ -1,4 +1,4 @@
-# City3D — The Software City of Structure202
+# City3D — The Software City of S202
 
 *As of July 2026 · branch `feat/city3d-prototype` · code under [`city3d/`](../city3d/)*
 
